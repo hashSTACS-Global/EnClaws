@@ -1,0 +1,293 @@
+/**
+ * User CRUD operations — SQLite implementation.
+ */
+
+import fs from "node:fs";
+import { sqliteQuery, generateUUID } from "../index.js";
+import type {
+  User,
+  SafeUser,
+  CreateUserInput,
+  UpdateUserInput,
+  UserRole,
+  UserStatus,
+} from "../../types.js";
+import { hashPassword } from "../../../auth/password.js";
+import {
+  resolveTenantDevicesDir,
+  resolveTenantCredentialsDir,
+  resolveTenantCronDir,
+} from "../../../config/sessions/tenant-paths.js";
+
+function rowToUser(row: Record<string, unknown>): User {
+  let openIds: string[] = [];
+  if (Array.isArray(row.open_ids)) {
+    openIds = row.open_ids as string[];
+  } else if (typeof row.open_ids === "string") {
+    try { openIds = JSON.parse(row.open_ids); } catch { openIds = []; }
+  }
+
+  return {
+    id: row.id as string,
+    tenantId: row.tenant_id as string,
+    openIds,
+    unionId: (row.union_id as string) ?? null,
+    email: (row.email as string) ?? null,
+    passwordHash: (row.password_hash as string) ?? null,
+    displayName: (row.display_name as string) ?? null,
+    role: row.role as UserRole,
+    status: row.status as UserStatus,
+    avatarUrl: (row.avatar_url as string) ?? null,
+    lastLoginAt: row.last_login_at ? new Date(row.last_login_at as string) : null,
+    settings: (typeof row.settings === "string" ? JSON.parse(row.settings) : row.settings ?? {}) as User["settings"],
+    createdAt: new Date(row.created_at as string),
+    updatedAt: new Date(row.updated_at as string),
+  };
+}
+
+export function toSafeUser(user: User): SafeUser {
+  const { passwordHash: _, ...safe } = user;
+  return safe;
+}
+
+export async function createUser(input: CreateUserInput): Promise<SafeUser> {
+  const id = generateUUID();
+  const passwordHash = input.password ? await hashPassword(input.password) : null;
+
+  sqliteQuery(
+    `INSERT INTO users (id, tenant_id, email, password_hash, display_name, role)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      input.tenantId,
+      input.email ? input.email.toLowerCase().trim() : null,
+      passwordHash,
+      input.displayName ?? null,
+      input.role ?? "member",
+    ],
+  );
+
+  const result = sqliteQuery("SELECT * FROM users WHERE id = ?", [id]);
+  const user = rowToUser(result.rows[0]);
+
+  // Initialize tenant-scoped directories
+  const dirKey = user.unionId ?? user.id;
+  try {
+    const dirs = [
+      resolveTenantDevicesDir(user.tenantId, dirKey),
+      resolveTenantCredentialsDir(user.tenantId, dirKey),
+      resolveTenantCronDir(user.tenantId, dirKey),
+    ];
+    for (const dir of dirs) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  return toSafeUser(user);
+}
+
+export async function getUserById(id: string): Promise<User | null> {
+  const result = sqliteQuery("SELECT * FROM users WHERE id = ?", [id]);
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
+export async function getUserByEmail(
+  tenantId: string,
+  email: string,
+): Promise<User | null> {
+  const result = sqliteQuery(
+    "SELECT * FROM users WHERE tenant_id = ? AND email = ?",
+    [tenantId, email.toLowerCase().trim()],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
+export async function findUserByEmail(email: string): Promise<User | null> {
+  const result = sqliteQuery(
+    `SELECT u.* FROM users u
+     JOIN tenants t ON u.tenant_id = t.id
+     WHERE u.email = ? AND u.status = 'active' AND t.status = 'active'
+     ORDER BY CASE WHEN u.last_login_at IS NULL THEN 1 ELSE 0 END, u.last_login_at DESC
+     LIMIT 1`,
+    [email.toLowerCase().trim()],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
+export async function listUsers(
+  tenantId: string,
+  opts?: { status?: UserStatus; role?: UserRole; limit?: number; offset?: number },
+): Promise<{ users: SafeUser[]; total: number }> {
+  const conditions: string[] = ["tenant_id = ?"];
+  const values: unknown[] = [tenantId];
+
+  if (opts?.status) {
+    conditions.push("status = ?");
+    values.push(opts.status);
+  }
+  if (opts?.role) {
+    conditions.push("role = ?");
+    values.push(opts.role);
+  }
+
+  const where = `WHERE ${conditions.join(" AND ")}`;
+  const limit = opts?.limit ?? 50;
+  const offset = opts?.offset ?? 0;
+
+  const dataResult = sqliteQuery(
+    `SELECT * FROM users ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [...values, limit, offset],
+  );
+  const countResult = sqliteQuery(
+    `SELECT COUNT(*) as count FROM users ${where}`,
+    values,
+  );
+
+  return {
+    users: dataResult.rows.map(rowToUser).map(toSafeUser),
+    total: Number(countResult.rows[0].count),
+  };
+}
+
+export async function updateUser(
+  id: string,
+  updates: UpdateUserInput,
+): Promise<SafeUser | null> {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.displayName !== undefined) {
+    sets.push("display_name = ?");
+    values.push(updates.displayName);
+  }
+  if (updates.role !== undefined) {
+    sets.push("role = ?");
+    values.push(updates.role);
+  }
+  if (updates.status !== undefined) {
+    sets.push("status = ?");
+    values.push(updates.status);
+  }
+  if (updates.settings !== undefined) {
+    sets.push("settings = ?");
+    values.push(JSON.stringify(updates.settings));
+  }
+  if (updates.avatarUrl !== undefined) {
+    sets.push("avatar_url = ?");
+    values.push(updates.avatarUrl);
+  }
+
+  if (sets.length === 0) {
+    const user = await getUserById(id);
+    return user ? toSafeUser(user) : null;
+  }
+
+  values.push(id);
+  sqliteQuery(
+    `UPDATE users SET ${sets.join(", ")} WHERE id = ?`,
+    values,
+  );
+
+  const user = await getUserById(id);
+  return user ? toSafeUser(user) : null;
+}
+
+export async function updateLastLogin(userId: string): Promise<void> {
+  sqliteQuery("UPDATE users SET last_login_at = datetime('now') WHERE id = ?", [userId]);
+}
+
+export async function deleteUser(id: string): Promise<boolean> {
+  const result = sqliteQuery(
+    "UPDATE users SET status = 'deleted' WHERE id = ? AND status != 'deleted'",
+    [id],
+  );
+  return result.rowCount > 0;
+}
+
+export async function findOrCreateUserByOpenId(
+  tenantId: string,
+  openId: string,
+  displayName?: string,
+  unionId?: string,
+): Promise<{ user: User; created: boolean }> {
+  // 1. Try to find by union_id first
+  if (unionId) {
+    const byUnion = sqliteQuery(
+      "SELECT * FROM users WHERE tenant_id = ? AND union_id = ? AND status = 'active'",
+      [tenantId, unionId],
+    );
+    if (byUnion.rows.length > 0) {
+      const user = rowToUser(byUnion.rows[0]);
+      // Append open_id to array if not already present
+      if (openId && !user.openIds.includes(openId)) {
+        const newOpenIds = [...user.openIds, openId];
+        sqliteQuery(
+          "UPDATE users SET open_ids = ? WHERE id = ?",
+          [JSON.stringify(newOpenIds), user.id],
+        );
+        user.openIds.push(openId);
+      }
+      return { user, created: false };
+    }
+  }
+
+  // 2. Fallback: find by open_ids array containment using json_each
+  const byOpenId = sqliteQuery(
+    `SELECT u.* FROM users u
+     WHERE u.tenant_id = ? AND u.status = 'active'
+       AND EXISTS (SELECT 1 FROM json_each(u.open_ids) WHERE json_each.value = ?)`,
+    [tenantId, openId],
+  );
+  if (byOpenId.rows.length > 0) {
+    const user = rowToUser(byOpenId.rows[0]);
+    // Update union_id if missing
+    if (unionId && !user.unionId) {
+      sqliteQuery("UPDATE users SET union_id = ? WHERE id = ?", [unionId, user.id]);
+      user.unionId = unionId;
+    }
+    return { user, created: false };
+  }
+
+  // 3. Create new user
+  const id = generateUUID();
+  try {
+    sqliteQuery(
+      `INSERT INTO users (id, tenant_id, open_ids, union_id, display_name, role)
+       VALUES (?, ?, ?, ?, ?, 'member')`,
+      [id, tenantId, JSON.stringify([openId]), unionId ?? null, displayName ?? openId],
+    );
+    const result = sqliteQuery("SELECT * FROM users WHERE id = ?", [id]);
+    const user = rowToUser(result.rows[0]);
+
+    // Initialize tenant-scoped directories
+    const dirKey = user.unionId ?? openId;
+    try {
+      const dirs = [
+        resolveTenantDevicesDir(user.tenantId, dirKey),
+        resolveTenantCredentialsDir(user.tenantId, dirKey),
+        resolveTenantCronDir(user.tenantId, dirKey),
+      ];
+      for (const dir of dirs) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    } catch {
+      // Non-fatal
+    }
+
+    return { user, created: true };
+  } catch {
+    // Race condition fallback
+    const fallback = sqliteQuery(
+      `SELECT u.* FROM users u
+       WHERE u.tenant_id = ?
+         AND EXISTS (SELECT 1 FROM json_each(u.open_ids) WHERE json_each.value = ?)`,
+      [tenantId, openId],
+    );
+    if (fallback.rows.length > 0) {
+      return { user: rowToUser(fallback.rows[0]), created: false };
+    }
+    throw new Error(`Failed to find or create user for openId=${openId} unionId=${unionId}`);
+  }
+}

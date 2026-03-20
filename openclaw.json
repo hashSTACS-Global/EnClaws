@@ -1,0 +1,49 @@
+{
+  "agents": {
+    "list": [
+      {
+        "id": "claude-supervisor",
+        "default": true,
+        "name": "主核心指挥官",
+        "model": "gpt-4o",
+        "tools": { "allowlist": ["sessions_spawn", "write_todos", "read", "write"] },
+        "subagents": {
+          "allowAgents": ["*"]
+        }
+      },
+      {
+        "id": "research-agent",
+        "name": "资料搜集专员",
+        "model": "gpt-4o-mini",
+        "tools": { "allowlist": ["web_search", "web_fetch"] }
+      },
+      {
+        "id": "coder-agent",
+        "name": "代码编写高级专员",
+        "model": "deepseek-coder",
+        "tools": { "allowlist": ["exec", "apply_patch", "edit"] }
+      }
+    ]
+  },
+  "skills": {
+    "entries": {
+      "dragon-search": {
+        "enabled": true,
+        "env": {
+          "SEARXNG_URL": "http://172.28.1.22:8888",
+          "DEFAULT_LANGUAGE": "zh",
+          "MAX_RESULTS": 10
+        }
+      }
+    }
+  },
+  "approvals": {
+    "exec": {
+      "requireApproval": true,
+      "allowlist": ["echo", "ls", "cat", "git status"]
+    },
+    "sessions_spawn": {
+      "requireApproval": false
+    }
+  }
+}

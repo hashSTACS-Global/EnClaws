@@ -1,0 +1,432 @@
+/**
+ * Tenant LLM interaction traces view.
+ *
+ * Shows a list of user turns (grouped by question) with drill-down
+ * into individual LLM interaction rounds.
+ */
+
+import { html, css, LitElement, nothing } from "lit";
+import { customElement, state, property } from "lit/decorators.js";
+import { tenantRpc } from "./rpc.ts";
+
+interface TurnSummary {
+  turnId: string;
+  userInput: string | null;
+  agentId: string | null;
+  userId: string | null;
+  sessionKey: string | null;
+  provider: string | null;
+  model: string | null;
+  interactionCount: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalDurationMs: number;
+  createdAt: string;
+}
+
+interface InteractionTrace {
+  id: string;
+  turnId: string;
+  turnIndex: number;
+  userInput: string | null;
+  provider: string | null;
+  model: string | null;
+  systemPrompt: string | null;
+  messages: unknown[];
+  tools: unknown[] | null;
+  requestParams: Record<string, unknown> | null;
+  response: unknown;
+  stopReason: string | null;
+  errorMessage: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  durationMs: number | null;
+  createdAt: string;
+}
+
+@customElement("tenant-traces-view")
+export class TenantTracesView extends LitElement {
+  static styles = css`
+    :host {
+      display: block; padding: 1.5rem; color: var(--text, #e5e5e5);
+      font-family: var(--font-sans, system-ui, sans-serif);
+    }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+    .btn {
+      padding: 0.45rem 0.9rem; border: none; border-radius: var(--radius-md, 6px);
+      font-size: 0.85rem; cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-outline { background: transparent; border: 1px solid var(--border, #262626); color: var(--text, #e5e5e5); }
+    .btn-primary { background: var(--accent, #3b82f6); color: #fff; border: none; }
+    .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.78rem; }
+    .filters {
+      display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;
+    }
+    .filters input, .filters select {
+      padding: 0.35rem 0.5rem; background: var(--bg, #0a0a0a);
+      border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px);
+      color: var(--text, #e5e5e5); font-size: 0.8rem; outline: none;
+    }
+    .filters input:focus, .filters select:focus { border-color: var(--accent, #3b82f6); }
+    .filters label { font-size: 0.8rem; color: var(--text-secondary, #a3a3a3); }
+    .error-msg {
+      background: var(--bg-destructive, #2d1215); border: 1px solid var(--border-destructive, #7f1d1d);
+      border-radius: var(--radius-md, 6px); color: var(--text-destructive, #fca5a5);
+      padding: 0.5rem 0.75rem; font-size: 0.8rem; margin-bottom: 1rem;
+    }
+    .loading { text-align: center; padding: 2rem; color: var(--text-muted, #525252); }
+    .empty { text-align: center; padding: 2rem; color: var(--text-muted, #525252); font-size: 0.85rem; }
+
+    /* Turn list */
+    .turn-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .turn-card {
+      background: var(--card, #141414); border: 1px solid var(--border, #262626);
+      border-radius: var(--radius-lg, 8px); padding: 1rem; cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .turn-card:hover { border-color: var(--accent, #3b82f6); }
+    .turn-card.expanded { border-color: var(--accent, #3b82f6); }
+    .turn-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+    .turn-input {
+      font-size: 0.9rem; font-weight: 500; flex: 1;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .turn-meta {
+      display: flex; gap: 0.75rem; font-size: 0.75rem; color: var(--text-secondary, #a3a3a3);
+      margin-top: 0.35rem; flex-wrap: wrap;
+    }
+    .turn-meta span { white-space: nowrap; }
+    .badge {
+      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 10px;
+      font-size: 0.7rem; font-weight: 600;
+    }
+    .badge-rounds { background: #1e3a5f; color: #93c5fd; }
+    .badge-tokens { background: #1a2e1a; color: #86efac; }
+    .badge-time { background: #2d2006; color: #fcd34d; }
+    .badge-error { background: #3b1111; color: #fca5a5; }
+
+    /* Interaction detail (expanded turn) */
+    .interactions { margin-top: 0.75rem; border-top: 1px solid var(--border, #262626); padding-top: 0.75rem; }
+    .interaction {
+      background: var(--bg, #0a0a0a); border: 1px solid var(--border, #262626);
+      border-radius: var(--radius-md, 6px); padding: 0.75rem; margin-bottom: 0.5rem;
+    }
+    .interaction-header {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem;
+    }
+    .interaction-stats {
+      display: flex; gap: 0.5rem; font-size: 0.7rem; color: var(--text-secondary, #a3a3a3);
+    }
+    .collapsible-section {
+      margin-top: 0.5rem;
+    }
+    .collapsible-toggle {
+      background: none; border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px);
+      color: var(--text-secondary, #a3a3a3); padding: 0.25rem 0.6rem;
+      font-size: 0.75rem; cursor: pointer; margin-right: 0.35rem; margin-bottom: 0.35rem;
+    }
+    .collapsible-toggle:hover { color: var(--text, #e5e5e5); border-color: var(--accent, #3b82f6); }
+    .collapsible-toggle.active { color: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); }
+    .code-block {
+      background: #0d0d0d; border: 1px solid var(--border, #262626);
+      border-radius: var(--radius-md, 6px); padding: 0.75rem;
+      font-family: var(--font-mono, "SF Mono", "Consolas", monospace);
+      font-size: 0.75rem; line-height: 1.5; overflow-x: auto;
+      max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+      margin-top: 0.35rem;
+    }
+    .stop-reason {
+      display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px;
+      font-size: 0.7rem; font-weight: 500;
+    }
+    .stop-reason.tool_use { background: #1e3a5f; color: #93c5fd; }
+    .stop-reason.end_turn { background: #1a2e1a; color: #86efac; }
+    .stop-reason.error { background: #3b1111; color: #fca5a5; }
+
+    /* Pagination */
+    .pagination {
+      display: flex; justify-content: center; align-items: center; gap: 0.75rem;
+      margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary, #a3a3a3);
+    }
+  `;
+
+  @property({ type: String }) gatewayUrl = "";
+
+  @state() private turns: TurnSummary[] = [];
+  @state() private total = 0;
+  @state() private loading = false;
+  @state() private error = "";
+  private msgTimer?: ReturnType<typeof setTimeout>;
+  @state() private page = 0;
+  @state() private pageSize = 20;
+
+  // Filters
+  @state() private filterAgentId = "";
+  @state() private filterSince = "";
+  @state() private filterUntil = "";
+
+  // Expanded turn detail
+  @state() private expandedTurnId: string | null = null;
+  @state() private expandedTraces: InteractionTrace[] = [];
+  @state() private expandedLoading = false;
+
+  // Active section per interaction: only one visible at a time per trace
+  @state() private activeSection = new Map<string, string>();
+
+  private showError(msg: string) {
+    this.error = msg;
+    if (this.msgTimer) clearTimeout(this.msgTimer);
+    this.msgTimer = setTimeout(() => (this.error = ""), 5000);
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.loadTurns();
+  }
+
+  private rpc(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    return tenantRpc(method, params, this.gatewayUrl);
+  }
+
+  private async loadTurns() {
+    this.loading = true;
+    this.error = "";
+    try {
+      const result = (await this.rpc("tenant.traces.turns", {
+        agentId: this.filterAgentId || undefined,
+        since: this.filterSince || undefined,
+        until: this.filterUntil || undefined,
+        limit: this.pageSize,
+        offset: this.page * this.pageSize,
+      })) as { turns: TurnSummary[]; total: number };
+      this.turns = result.turns;
+      this.total = result.total;
+    } catch (err) {
+      this.showError(err instanceof Error ? err.message : "加载失败");
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async toggleTurn(turnId: string) {
+    if (this.expandedTurnId === turnId) {
+      this.expandedTurnId = null;
+      this.expandedTraces = [];
+      return;
+    }
+    this.expandedTurnId = turnId;
+    this.expandedLoading = true;
+    this.activeSection = new Map();
+    try {
+      const result = (await this.rpc("tenant.traces.turn", { turnId })) as {
+        turnId: string;
+        traces: InteractionTrace[];
+      };
+      this.expandedTraces = result.traces;
+    } catch (err) {
+      this.showError(err instanceof Error ? err.message : "加载详情失败");
+    } finally {
+      this.expandedLoading = false;
+    }
+  }
+
+  private toggleSection(traceId: string, section: string) {
+    const current = new Map(this.activeSection);
+    if (current.get(traceId) === section) {
+      current.delete(traceId); // toggle off
+    } else {
+      current.set(traceId, section); // switch to this section
+    }
+    this.activeSection = current;
+  }
+
+  private isSectionVisible(traceId: string, section: string): boolean {
+    return this.activeSection.get(traceId) === section;
+  }
+
+  private formatTime(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  private formatTokens(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return String(n);
+  }
+
+  private formatDuration(ms: number): string {
+    if (ms >= 60000) return `${(ms / 60000).toFixed(1)}m`;
+    if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${ms}ms`;
+  }
+
+  private formatJson(data: unknown): string {
+    try {
+      return JSON.stringify(data, null, 2);
+    } catch {
+      return String(data);
+    }
+  }
+
+  private truncate(text: string | null, max = 80): string {
+    if (!text) return "(empty)";
+    return text.length > max ? text.slice(0, max) + "..." : text;
+  }
+
+  private renderTurnCard(turn: TurnSummary) {
+    const isExpanded = this.expandedTurnId === turn.turnId;
+    const totalTokens = turn.totalInputTokens + turn.totalOutputTokens;
+    return html`
+      <div class="turn-card ${isExpanded ? "expanded" : ""}" @click=${() => this.toggleTurn(turn.turnId)}>
+        <div class="turn-header">
+          <div style="flex:1;min-width:0">
+            <div class="turn-input">${this.truncate(turn.userInput, 120) || "(no input)"}</div>
+            <div class="turn-meta">
+              <span>${this.formatTime(turn.createdAt)}</span>
+              ${turn.agentId ? html`<span>Agent: ${turn.agentId}</span>` : nothing}
+              ${turn.model ? html`<span>${turn.provider ? turn.provider + "/" : ""}${turn.model}</span>` : nothing}
+            </div>
+          </div>
+          <div style="display:flex;gap:0.35rem;flex-shrink:0">
+            <span class="badge badge-rounds">${turn.interactionCount} 轮</span>
+            <span class="badge badge-tokens">${this.formatTokens(totalTokens)} tokens</span>
+            <span class="badge badge-time">${this.formatDuration(turn.totalDurationMs)}</span>
+          </div>
+        </div>
+
+        ${isExpanded ? this.renderExpandedTurn() : nothing}
+      </div>
+    `;
+  }
+
+  private renderExpandedTurn() {
+    if (this.expandedLoading) {
+      return html`<div class="interactions"><div class="loading">加载中...</div></div>`;
+    }
+    if (this.expandedTraces.length === 0) {
+      return html`<div class="interactions"><div class="empty">无交互记录</div></div>`;
+    }
+    return html`
+      <div class="interactions" @click=${(e: Event) => e.stopPropagation()}>
+        ${this.expandedTraces.map((trace) => this.renderInteraction(trace))}
+      </div>
+    `;
+  }
+
+  private renderInteraction(trace: InteractionTrace) {
+    const stopClass = trace.errorMessage ? "error" : trace.stopReason === "tool_use" ? "tool_use" : "end_turn";
+    const messagesCount = Array.isArray(trace.messages) ? trace.messages.length : 0;
+    const toolsCount = Array.isArray(trace.tools) ? trace.tools.length : 0;
+
+    return html`
+      <div class="interaction">
+        <div class="interaction-header">
+          <div>
+            <span style="color:var(--accent,#3b82f6)">[轮次 ${trace.turnIndex}]</span>
+            ${trace.provider ? html`<span style="margin-left:0.5rem;color:var(--text-secondary)">${trace.provider}/${trace.model}</span>` : nothing}
+            ${trace.stopReason || trace.errorMessage
+              ? html`<span class="stop-reason ${stopClass}" style="margin-left:0.5rem">${trace.errorMessage ? "error" : trace.stopReason}</span>`
+              : nothing}
+          </div>
+          <div class="interaction-stats">
+            <span>In: ${this.formatTokens(trace.inputTokens)}</span>
+            <span>Out: ${this.formatTokens(trace.outputTokens)}</span>
+            ${trace.cacheReadTokens > 0 ? html`<span>Cache: ${this.formatTokens(trace.cacheReadTokens)}</span>` : nothing}
+            ${trace.durationMs != null ? html`<span>${this.formatDuration(trace.durationMs)}</span>` : nothing}
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.25rem">
+          <button class="collapsible-toggle ${this.isSectionVisible(trace.id, "system") ? "active" : ""}"
+            @click=${() => this.toggleSection(trace.id, "system")}>
+            System Prompt
+          </button>
+          <button class="collapsible-toggle ${this.isSectionVisible(trace.id, "messages") ? "active" : ""}"
+            @click=${() => this.toggleSection(trace.id, "messages")}>
+            Messages (${messagesCount})
+          </button>
+          ${toolsCount > 0 ? html`
+            <button class="collapsible-toggle ${this.isSectionVisible(trace.id, "tools") ? "active" : ""}"
+              @click=${() => this.toggleSection(trace.id, "tools")}>
+              Tools (${toolsCount})
+            </button>
+          ` : nothing}
+          <button class="collapsible-toggle ${this.isSectionVisible(trace.id, "response") ? "active" : ""}"
+            @click=${() => this.toggleSection(trace.id, "response")}>
+            Response
+          </button>
+          ${trace.errorMessage ? html`
+            <button class="collapsible-toggle ${this.isSectionVisible(trace.id, "error") ? "active" : ""}"
+              @click=${() => this.toggleSection(trace.id, "error")}>
+              Error
+            </button>
+          ` : nothing}
+        </div>
+
+        ${this.isSectionVisible(trace.id, "system")
+          ? html`<div class="code-block">${trace.systemPrompt ?? "(none)"}</div>`
+          : nothing}
+        ${this.isSectionVisible(trace.id, "messages")
+          ? html`<div class="code-block">${this.formatJson(trace.messages)}</div>`
+          : nothing}
+        ${this.isSectionVisible(trace.id, "tools")
+          ? html`<div class="code-block">${this.formatJson(trace.tools)}</div>`
+          : nothing}
+        ${this.isSectionVisible(trace.id, "response")
+          ? html`<div class="code-block">${this.formatJson(trace.response)}</div>`
+          : nothing}
+        ${this.isSectionVisible(trace.id, "error")
+          ? html`<div class="code-block" style="color:#fca5a5">${trace.errorMessage}</div>`
+          : nothing}
+      </div>
+    `;
+  }
+
+  render() {
+    return html`
+      <div class="header">
+        <h2>LLM 交互追踪</h2>
+        <button class="btn btn-outline" @click=${() => this.loadTurns()}>刷新</button>
+      </div>
+
+      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
+
+      <div class="filters">
+        <label>Agent:</label>
+        <input type="text" placeholder="agent ID" .value=${this.filterAgentId}
+          @change=${(e: Event) => { this.filterAgentId = (e.target as HTMLInputElement).value; this.page = 0; this.loadTurns(); }} />
+        <label>开始:</label>
+        <input type="date" .value=${this.filterSince}
+          @change=${(e: Event) => { this.filterSince = (e.target as HTMLInputElement).value; this.page = 0; this.loadTurns(); }} />
+        <label>结束:</label>
+        <input type="date" .value=${this.filterUntil}
+          @change=${(e: Event) => { this.filterUntil = (e.target as HTMLInputElement).value; this.page = 0; this.loadTurns(); }} />
+      </div>
+
+      ${this.loading
+        ? html`<div class="loading">加载中...</div>`
+        : this.turns.length === 0
+          ? html`<div class="empty">暂无交互记录。系统与大模型的每次交互都会自动记录在这里。</div>`
+          : html`
+              <div class="turn-list">
+                ${this.turns.map((turn) => this.renderTurnCard(turn))}
+              </div>
+              ${this.total > this.pageSize ? html`
+                <div class="pagination">
+                  <button class="btn btn-sm btn-outline" ?disabled=${this.page === 0}
+                    @click=${() => { this.page--; this.expandedTurnId = null; this.loadTurns(); }}>上一页</button>
+                  <span>${this.page * this.pageSize + 1}-${Math.min((this.page + 1) * this.pageSize, this.total)} / ${this.total}</span>
+                  <button class="btn btn-sm btn-outline" ?disabled=${(this.page + 1) * this.pageSize >= this.total}
+                    @click=${() => { this.page++; this.expandedTurnId = null; this.loadTurns(); }}>下一页</button>
+                </div>
+              ` : nothing}
+            `}
+    `;
+  }
+}

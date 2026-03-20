@@ -1,0 +1,475 @@
+/**
+ * Database types for multi-tenant system.
+ */
+
+// ============================================================
+// Tenant
+// ============================================================
+
+export type TenantPlan = "free" | "pro" | "enterprise";
+export type TenantStatus = "active" | "suspended" | "deleted";
+
+export interface TenantQuotas {
+  maxUsers: number;
+  maxAgents: number;
+  maxChannels: number;
+  maxTokensPerMonth: number;
+}
+
+export interface TenantSettings {
+  defaultModel?: string;
+  allowedModels?: string[];
+  sandboxEnabled?: boolean;
+  [key: string]: unknown;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  plan: TenantPlan;
+  status: TenantStatus;
+  settings: TenantSettings;
+  quotas: TenantQuotas;
+  traceEnabled: boolean;
+  identityPrompt: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateTenantInput {
+  name: string;
+  slug: string;
+  plan?: TenantPlan;
+  settings?: TenantSettings;
+  quotas?: Partial<TenantQuotas>;
+}
+
+// ============================================================
+// User
+// ============================================================
+
+export type UserRole = "owner" | "admin" | "member" | "viewer";
+export type UserStatus = "active" | "invited" | "suspended" | "deleted";
+
+export interface UserSettings {
+  defaultAgent?: string;
+  locale?: string;
+  theme?: "light" | "dark" | "auto";
+  [key: string]: unknown;
+}
+
+export interface User {
+  id: string;
+  tenantId: string;
+  openIds: string[];
+  unionId: string | null;
+  email: string | null;
+  passwordHash: string | null;
+  displayName: string | null;
+  role: UserRole;
+  status: UserStatus;
+  avatarUrl: string | null;
+  lastLoginAt: Date | null;
+  settings: UserSettings;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** User object without password hash, safe to return from API. */
+export type SafeUser = Omit<User, "passwordHash">;
+
+export interface CreateUserInput {
+  tenantId: string;
+  email?: string;
+  password?: string;
+  displayName?: string;
+  role?: UserRole;
+}
+
+export interface UpdateUserInput {
+  displayName?: string;
+  role?: UserRole;
+  status?: UserStatus;
+  settings?: UserSettings;
+  avatarUrl?: string;
+}
+
+// ============================================================
+// JWT Payload
+// ============================================================
+
+export interface JwtPayload {
+  sub: string;       // user ID
+  tid: string;       // tenant ID
+  email: string | null;
+  role: UserRole;
+  tslug: string;     // tenant slug
+}
+
+export interface JwtTokenPair {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;    // seconds
+}
+
+// ============================================================
+// Tenant API Key
+// ============================================================
+
+export interface TenantApiKey {
+  id: string;
+  tenantId: string;
+  provider: string;
+  label: string | null;
+  keyEncrypted: string;
+  isActive: boolean;
+  usageCount: number;
+  lastUsedAt: Date | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ============================================================
+// Tenant Model Config (租户级模型配置)
+// ============================================================
+
+export type ModelApiProtocol =
+  | "openai-completions"
+  | "openai-responses"
+  | "anthropic-messages"
+  | "google-generative-ai"
+  | "bedrock-converse-stream"
+  | "ollama"
+  | "deepseek-web"
+  | "qwen-web";
+
+export type ModelAuthMode = "api-key" | "oauth" | "token" | "none";
+
+export interface TenantModelDefinition {
+  id: string;
+  name: string;
+  reasoning?: boolean;
+  input?: Array<"text" | "image">;
+  contextWindow?: number;
+  maxTokens?: number;
+  cost?: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+  };
+  alias?: string;
+  streaming?: boolean;
+  compat?: Record<string, unknown>;
+}
+
+export interface TenantModel {
+  id: string;
+  tenantId: string;
+  providerType: string;
+  providerName: string;
+  baseUrl: string | null;
+  apiProtocol: ModelApiProtocol;
+  authMode: ModelAuthMode;
+  apiKeyEncrypted: string | null;
+  extraHeaders: Record<string, string>;
+  extraConfig: Record<string, unknown>;
+  models: TenantModelDefinition[];
+  isActive: boolean;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ============================================================
+// Tenant Agent Config
+// ============================================================
+
+export interface ModelConfigEntry {
+  providerId: string;  // tenant_models.id
+  modelId: string;     // tenant_models.models[].id
+  isDefault: boolean;  // true = primary, false = fallback (ordered by array index)
+}
+
+export interface TenantAgent {
+  id: string;
+  tenantId: string;
+  agentId: string;
+  name: string | null;
+  config: Record<string, unknown>;
+  channelAppId: string | null;
+  modelConfig: ModelConfigEntry[];
+  isActive: boolean;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ============================================================
+// Tenant Channel Config
+// ============================================================
+
+export type ChannelPolicy = "open" | "allowlist" | "disabled";
+
+export interface TenantChannelConfig {
+  enabled: boolean;
+  appId: string;
+  appSecret: string;
+  domain: string;
+  connectionMode: string;
+  requireMention: boolean;
+  dmPolicy: string;
+  groupPolicy: string;
+  allowFrom: string[];
+  groupAllowFrom: string[];
+  replyMode: Record<string, string>;
+  uat: Record<string, unknown>;
+  streaming: boolean;
+  [key: string]: unknown;
+}
+
+export interface TenantChannel {
+  id: string;
+  tenantId: string;
+  channelType: string;
+  channelName: string | null;
+  channelPolicy: ChannelPolicy;
+  config: TenantChannelConfig;
+  isActive: boolean;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ============================================================
+// Tenant Channel App
+// ============================================================
+
+export interface TenantChannelApp {
+  id: string;
+  channelId: string;
+  tenantId: string;
+  appId: string;
+  appSecret: string;
+  botName: string;
+  groupPolicy: ChannelPolicy;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ============================================================
+// Tenant Session
+// ============================================================
+
+export interface TenantSession {
+  id: string;
+  tenantId: string;
+  sessionKey: string;
+  agentId: string | null;
+  userId: string | null;
+  channel: string | null;
+  chatType: string | null;
+  metadata: Record<string, unknown>;
+  status: "active" | "archived" | "deleted";
+  lastMessageAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ============================================================
+// Audit Log
+// ============================================================
+
+export interface AuditLog {
+  id: string;
+  tenantId: string;
+  userId: string | null;
+  action: string;
+  resource: string | null;
+  detail: Record<string, unknown>;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: Date;
+}
+
+// ============================================================
+// Usage Record
+// ============================================================
+
+export interface UsageRecord {
+  id: string;
+  tenantId: string;
+  userId: string | null;
+  agentId: string | null;
+  provider: string | null;
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  sessionKey: string | null;
+  recordedAt: Date;
+}
+
+// ============================================================
+// LLM Interaction Trace
+// ============================================================
+
+export interface LlmInteractionTrace {
+  id: string;
+  tenantId: string;
+  userId: string | null;
+  sessionKey: string | null;
+  agentId: string | null;
+  turnId: string;
+  turnIndex: number;
+  userInput: string | null;
+  provider: string | null;
+  model: string | null;
+  systemPrompt: string | null;
+  messages: unknown[];
+  tools: unknown[] | null;
+  requestParams: Record<string, unknown> | null;
+  response: unknown | null;
+  stopReason: string | null;
+  errorMessage: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  durationMs: number | null;
+  createdAt: Date;
+}
+
+// ============================================================
+// System Config (single-row tables)
+// ============================================================
+
+export interface SysGatewayConfigRow {
+  id: number;
+  port: number;
+  mode: string | null;
+  bind: string | null;
+  customBindHost: string | null;
+  tailscale: Record<string, unknown>;
+  remote: Record<string, unknown>;
+  reload: Record<string, unknown>;
+  tls: Record<string, unknown>;
+  http: Record<string, unknown>;
+  nodes: Record<string, unknown>;
+  trustedProxies: string[];
+  allowRealIpFallback: boolean;
+  auth: Record<string, unknown>;
+  tools: Record<string, unknown>;
+  channelHealthCheckMinutes: number | null;
+  multiTenant: Record<string, unknown>;
+  updatedAt: Date;
+}
+
+export interface SysLoggingConfigRow {
+  id: number;
+  level: string | null;
+  file: string | null;
+  maxFileBytes: number | null;
+  consoleLevel: string | null;
+  consoleStyle: string | null;
+  redactSensitive: string | null;
+  redactPatterns: string[];
+  updatedAt: Date;
+}
+
+export interface SysPluginsConfigRow {
+  id: number;
+  enabled: boolean;
+  allow: string[];
+  deny: string[];
+  load: Record<string, unknown>;
+  slots: Record<string, unknown>;
+  entries: Record<string, unknown>;
+  installs: Record<string, unknown>;
+  updatedAt: Date;
+}
+
+export interface SysToolsConfigRow {
+  id: number;
+  allowDangerousToolsOverride: boolean;
+  profile: string | null;
+  allow: string[];
+  alsoAllow: string[];
+  deny: string[];
+  byProvider: Record<string, unknown>;
+  web: Record<string, unknown>;
+  media: Record<string, unknown>;
+  links: Record<string, unknown>;
+  message: Record<string, unknown>;
+  agentToAgent: Record<string, unknown>;
+  sessions: Record<string, unknown>;
+  elevated: Record<string, unknown>;
+  exec: Record<string, unknown>;
+  fs: Record<string, unknown>;
+  loopDetection: Record<string, unknown>;
+  subagents: Record<string, unknown>;
+  sandbox: Record<string, unknown>;
+  updatedAt: Date;
+}
+
+// ============================================================
+// RBAC Permission Definitions
+// ============================================================
+
+export const PERMISSIONS = {
+  // Tenant management
+  "tenant.read": ["owner", "admin"],
+  "tenant.update": ["owner", "admin"],
+  "tenant.delete": ["owner"],
+  "tenant.billing": ["owner"],
+
+  // User management
+  "user.list": ["owner", "admin"],
+  "user.invite": ["owner", "admin"],
+  "user.update": ["owner", "admin"],
+  "user.remove": ["owner", "admin"],
+  "user.role.change": ["owner"],
+
+  // Agent management
+  "agent.list": ["owner", "admin", "member", "viewer"],
+  "agent.create": ["owner", "admin", "member"],
+  "agent.update": ["owner", "admin", "member"],
+  "agent.delete": ["owner", "admin", "member"],
+  "agent.use": ["owner", "admin", "member"],
+
+  // Channel management
+  "channel.list": ["owner", "admin", "member", "viewer"],
+  "channel.create": ["owner", "admin"],
+  "channel.update": ["owner", "admin"],
+  "channel.delete": ["owner", "admin"],
+
+  // Model management
+  "model.list": ["owner", "admin", "member", "viewer"],
+  "model.create": ["owner", "admin"],
+  "model.update": ["owner", "admin"],
+  "model.delete": ["owner", "admin"],
+
+  // Session / Chat
+  "session.list": ["owner", "admin", "member"],
+  "session.own": ["owner", "admin", "member"],
+  "session.all": ["owner", "admin"],
+  "session.delete": ["owner", "admin"],
+
+  // API Key management
+  "apikey.list": ["owner", "admin"],
+  "apikey.create": ["owner", "admin"],
+  "apikey.delete": ["owner", "admin"],
+
+  // Config
+  "config.read": ["owner", "admin", "member"],
+  "config.write": ["owner", "admin"],
+
+  // Audit
+  "audit.read": ["owner", "admin"],
+} as const satisfies Record<string, readonly UserRole[]>;
+
+export type Permission = keyof typeof PERMISSIONS;

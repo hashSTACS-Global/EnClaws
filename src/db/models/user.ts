@@ -1,0 +1,331 @@
+/**
+ * User CRUD operations.
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+import { query, getDbType, DB_SQLITE } from "../index.js";
+import * as sqliteUser from "../sqlite/models/user.js";
+import type {
+  User,
+  SafeUser,
+  CreateUserInput,
+  UpdateUserInput,
+  UserRole,
+  UserStatus,
+} from "../types.js";
+import { hashPassword } from "../../auth/password.js";
+import {
+  resolveTenantDevicesDir,
+  resolveTenantCredentialsDir,
+  resolveTenantCronDir,
+  resolveTenantAgentWorkspaceDir,
+} from "../../config/sessions/tenant-paths.js";
+
+function rowToUser(row: Record<string, unknown>): User {
+  return {
+    id: row.id as string,
+    tenantId: row.tenant_id as string,
+    openIds: Array.isArray(row.open_ids) ? (row.open_ids as string[]) : [],
+    unionId: (row.union_id as string) ?? null,
+    email: (row.email as string) ?? null,
+    passwordHash: (row.password_hash as string) ?? null,
+    displayName: (row.display_name as string) ?? null,
+    role: row.role as UserRole,
+    status: row.status as UserStatus,
+    avatarUrl: (row.avatar_url as string) ?? null,
+    lastLoginAt: (row.last_login_at as Date) ?? null,
+    settings: (row.settings ?? {}) as User["settings"],
+    createdAt: row.created_at as Date,
+    updatedAt: row.updated_at as Date,
+  };
+}
+
+export function toSafeUser(user: User): SafeUser {
+  const { passwordHash: _, ...safe } = user;
+  return safe;
+}
+
+/**
+ * Seed initial files inside tenant-scoped user directories so that
+ * both webchat and Feishu users start with the same baseline state.
+ *
+ * Files created:
+ *   devices/paired.json  → {}
+ *   devices/pending.json → {}
+ *   cron/jobs.json       → { "version": 1, "jobs": [] }
+ */
+export function seedUserDirFiles(tenantId: string, dirKey: string): void {
+  const devicesDir = resolveTenantDevicesDir(tenantId, dirKey);
+  const cronDir = resolveTenantCronDir(tenantId, dirKey);
+
+  const seeds: Array<[string, string]> = [
+    [path.join(devicesDir, "paired.json"), "{}"],
+    [path.join(devicesDir, "pending.json"), "{}"],
+    [path.join(cronDir, "jobs.json"), JSON.stringify({ version: 1, jobs: [] })],
+  ];
+
+  for (const [filePath, content] of seeds) {
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, content, "utf-8");
+    }
+  }
+}
+
+export async function createUser(input: CreateUserInput): Promise<SafeUser> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.createUser(input);
+  const passwordHash = input.password ? await hashPassword(input.password) : null;
+  const result = await query(
+    `INSERT INTO users (tenant_id, email, password_hash, display_name, role)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [
+      input.tenantId,
+      input.email ? input.email.toLowerCase().trim() : null,
+      passwordHash,
+      input.displayName ?? null,
+      input.role ?? "member",
+    ],
+  );
+  const user = rowToUser(result.rows[0]);
+
+  // Initialize tenant-scoped directories and seed initial files (use union_id as folder name)
+  const dirKey = user.unionId ?? user.id;
+  try {
+    const dirs = [
+      resolveTenantDevicesDir(user.tenantId, dirKey),
+      resolveTenantCredentialsDir(user.tenantId, dirKey),
+      resolveTenantCronDir(user.tenantId, dirKey),
+      resolveTenantAgentWorkspaceDir(user.tenantId, undefined, dirKey),
+    ];
+    for (const dir of dirs) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    seedUserDirFiles(user.tenantId, dirKey);
+  } catch {
+    // Non-fatal: directories will be created on first write
+  }
+
+  return toSafeUser(user);
+}
+
+export async function getUserById(id: string): Promise<User | null> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.getUserById(id);
+  const result = await query("SELECT * FROM users WHERE id = $1", [id]);
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
+export async function getUserByEmail(
+  tenantId: string,
+  email: string,
+): Promise<User | null> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.getUserByEmail(tenantId, email);
+  const result = await query(
+    "SELECT * FROM users WHERE tenant_id = $1 AND email = $2",
+    [tenantId, email.toLowerCase().trim()],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
+/**
+ * Find user by email across all tenants (for login with email only).
+ * Returns the first active match. If ambiguous, caller should require tenant slug.
+ */
+export async function findUserByEmail(email: string): Promise<User | null> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.findUserByEmail(email);
+  const result = await query(
+    `SELECT u.* FROM users u
+     JOIN tenants t ON u.tenant_id = t.id
+     WHERE u.email = $1 AND u.status = 'active' AND t.status = 'active'
+     ORDER BY u.last_login_at DESC NULLS LAST
+     LIMIT 1`,
+    [email.toLowerCase().trim()],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
+export async function listUsers(
+  tenantId: string,
+  opts?: { status?: UserStatus; role?: UserRole; limit?: number; offset?: number },
+): Promise<{ users: SafeUser[]; total: number }> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.listUsers(tenantId, opts);
+  const conditions: string[] = ["tenant_id = $1"];
+  const values: unknown[] = [tenantId];
+  let idx = 2;
+
+  if (opts?.status) {
+    conditions.push(`status = $${idx++}`);
+    values.push(opts.status);
+  }
+  if (opts?.role) {
+    conditions.push(`role = $${idx++}`);
+    values.push(opts.role);
+  }
+
+  const where = `WHERE ${conditions.join(" AND ")}`;
+  const limit = opts?.limit ?? 50;
+  const offset = opts?.offset ?? 0;
+
+  const [dataResult, countResult] = await Promise.all([
+    query(
+      `SELECT * FROM users ${where} ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
+      [...values, limit, offset],
+    ),
+    query(`SELECT COUNT(*) as count FROM users ${where}`, values),
+  ]);
+
+  return {
+    users: dataResult.rows.map(rowToUser).map(toSafeUser),
+    total: parseInt(countResult.rows[0].count as string, 10),
+  };
+}
+
+export async function updateUser(
+  id: string,
+  updates: UpdateUserInput,
+): Promise<SafeUser | null> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.updateUser(id, updates);
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (updates.displayName !== undefined) {
+    sets.push(`display_name = $${idx++}`);
+    values.push(updates.displayName);
+  }
+  if (updates.role !== undefined) {
+    sets.push(`role = $${idx++}`);
+    values.push(updates.role);
+  }
+  if (updates.status !== undefined) {
+    sets.push(`status = $${idx++}`);
+    values.push(updates.status);
+  }
+  if (updates.settings !== undefined) {
+    sets.push(`settings = $${idx++}`);
+    values.push(JSON.stringify(updates.settings));
+  }
+  if (updates.avatarUrl !== undefined) {
+    sets.push(`avatar_url = $${idx++}`);
+    values.push(updates.avatarUrl);
+  }
+
+  if (sets.length === 0) {
+    const user = await getUserById(id);
+    return user ? toSafeUser(user) : null;
+  }
+
+  values.push(id);
+  const result = await query(
+    `UPDATE users SET ${sets.join(", ")} WHERE id = $${idx} RETURNING *`,
+    values,
+  );
+  return result.rows.length > 0 ? toSafeUser(rowToUser(result.rows[0])) : null;
+}
+
+export async function updateLastLogin(userId: string): Promise<void> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.updateLastLogin(userId);
+  await query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [userId]);
+}
+
+export async function deleteUser(id: string): Promise<boolean> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.deleteUser(id);
+  const result = await query(
+    "UPDATE users SET status = 'deleted' WHERE id = $1 AND status != 'deleted'",
+    [id],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Find or create a user by their Feishu union_id (primary) or open_id (fallback).
+ *
+ * Lookup order:
+ *   1. By union_id (one user per union_id across apps)
+ *   2. By open_ids array containment (legacy / when union_id is unavailable)
+ *
+ * When found, appends the open_id to the open_ids array if not already present.
+ * Returns the user's union_id for use as the directory key.
+ */
+export async function findOrCreateUserByOpenId(
+  tenantId: string,
+  openId: string,
+  displayName?: string,
+  unionId?: string,
+): Promise<{ user: User; created: boolean }> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.findOrCreateUserByOpenId(tenantId, openId, displayName, unionId);
+  // 1. Try to find by union_id first (preferred, cross-app stable identifier)
+  if (unionId) {
+    const byUnion = await query(
+      "SELECT * FROM users WHERE tenant_id = $1 AND union_id = $2 AND status = 'active'",
+      [tenantId, unionId],
+    );
+    if (byUnion.rows.length > 0) {
+      const user = rowToUser(byUnion.rows[0]);
+      // Append open_id to array if not already present
+      if (openId && !user.openIds.includes(openId)) {
+        await query(
+          "UPDATE users SET open_ids = array_append(open_ids, $1) WHERE id = $2",
+          [openId, user.id],
+        );
+        user.openIds.push(openId);
+      }
+      return { user, created: false };
+    }
+  }
+
+  // 2. Fallback: find by open_ids array containment
+  const byOpenId = await query(
+    "SELECT * FROM users WHERE tenant_id = $1 AND open_ids @> ARRAY[$2]::varchar[] AND status = 'active'",
+    [tenantId, openId],
+  );
+  if (byOpenId.rows.length > 0) {
+    const user = rowToUser(byOpenId.rows[0]);
+    // Update union_id if it was missing and is now available
+    if (unionId && !user.unionId) {
+      await query("UPDATE users SET union_id = $1 WHERE id = $2", [unionId, user.id]);
+      user.unionId = unionId;
+    }
+    return { user, created: false };
+  }
+
+  // 3. Create new user with open_ids array and union_id
+  try {
+    const result = await query(
+      `INSERT INTO users (tenant_id, open_ids, union_id, display_name, role)
+       VALUES ($1, ARRAY[$2]::varchar[], $3, $4, 'member')
+       RETURNING *`,
+      [tenantId, openId, unionId ?? null, displayName ?? openId],
+    );
+    const user = rowToUser(result.rows[0]);
+
+    // Initialize tenant-scoped directories and seed initial files (use union_id as folder name)
+    const dirKey = user.unionId ?? openId;
+    try {
+      const dirs = [
+        resolveTenantDevicesDir(user.tenantId, dirKey),
+        resolveTenantCredentialsDir(user.tenantId, dirKey),
+        resolveTenantCronDir(user.tenantId, dirKey),
+        resolveTenantAgentWorkspaceDir(user.tenantId, undefined, dirKey),
+      ];
+      for (const dir of dirs) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      seedUserDirFiles(user.tenantId, dirKey);
+    } catch {
+      // Non-fatal: directories will be created on first write
+    }
+
+    return { user, created: true };
+  } catch {
+    // Race condition: another request may have created the user
+    const fallback = await query(
+      "SELECT * FROM users WHERE tenant_id = $1 AND open_ids @> ARRAY[$2]::varchar[]",
+      [tenantId, openId],
+    );
+    if (fallback.rows.length > 0) {
+      return { user: rowToUser(fallback.rows[0]), created: false };
+    }
+    throw new Error(`Failed to find or create user for openId=${openId} unionId=${unionId}`);
+  }
+}

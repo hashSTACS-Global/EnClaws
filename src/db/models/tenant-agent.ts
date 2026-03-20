@@ -1,0 +1,179 @@
+/**
+ * Tenant Agent CRUD - stores agent configurations per tenant in PostgreSQL.
+ */
+
+import { query, getDbType, DB_SQLITE } from "../index.js";
+import * as sqliteAgent from "../sqlite/models/tenant-agent.js";
+import type { TenantAgent, ModelConfigEntry } from "../types.js";
+
+function rowToAgent(row: Record<string, unknown>): TenantAgent {
+  return {
+    id: row.id as string,
+    tenantId: row.tenant_id as string,
+    agentId: row.agent_id as string,
+    name: (row.name as string) ?? null,
+    config: (row.config ?? {}) as Record<string, unknown>,
+    channelAppId: (row.channel_app_id as string) ?? null,
+    modelConfig: (row.model_config ?? []) as ModelConfigEntry[],
+    isActive: row.is_active as boolean,
+    createdBy: (row.created_by as string) ?? null,
+    createdAt: row.created_at as Date,
+    updatedAt: row.updated_at as Date,
+  };
+}
+
+export async function createTenantAgent(params: {
+  tenantId: string;
+  agentId: string;
+  name?: string;
+  config?: Record<string, unknown>;
+  channelAppId?: string;
+  modelConfig?: ModelConfigEntry[];
+  createdBy?: string;
+}): Promise<TenantAgent> {
+  if (getDbType() === DB_SQLITE) return sqliteAgent.createTenantAgent(params);
+  const result = await query(
+    `INSERT INTO tenant_agents (tenant_id, agent_id, name, config, channel_app_id, model_config, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), params.channelAppId ?? null, JSON.stringify(params.modelConfig ?? []), params.createdBy ?? null],
+  );
+  return rowToAgent(result.rows[0]);
+}
+
+export async function getTenantAgent(tenantId: string, agentId: string): Promise<TenantAgent | null> {
+  if (getDbType() === DB_SQLITE) return sqliteAgent.getTenantAgent(tenantId, agentId);
+  const result = await query(
+    "SELECT * FROM tenant_agents WHERE tenant_id = $1 AND agent_id = $2",
+    [tenantId, agentId],
+  );
+  return result.rows.length > 0 ? rowToAgent(result.rows[0]) : null;
+}
+
+export async function listTenantAgents(
+  tenantId: string,
+  opts?: { activeOnly?: boolean; createdBy?: string },
+): Promise<TenantAgent[]> {
+  if (getDbType() === DB_SQLITE) return sqliteAgent.listTenantAgents(tenantId, opts);
+  const conditions = ["tenant_id = $1"];
+  const values: unknown[] = [tenantId];
+
+  if (opts?.activeOnly !== false) {
+    conditions.push("is_active = true");
+  }
+
+  if (opts?.createdBy) {
+    values.push(opts.createdBy);
+    conditions.push(`created_by = $${values.length}`);
+  }
+
+  const result = await query(
+    `SELECT * FROM tenant_agents WHERE ${conditions.join(" AND ")} ORDER BY created_at ASC`,
+    values,
+  );
+  return result.rows.map(rowToAgent);
+}
+
+export async function updateTenantAgent(
+  tenantId: string,
+  agentId: string,
+  updates: Partial<Pick<TenantAgent, "name" | "config" | "channelAppId" | "modelConfig" | "isActive">>,
+): Promise<TenantAgent | null> {
+  if (getDbType() === DB_SQLITE) return sqliteAgent.updateTenantAgent(tenantId, agentId, updates);
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (updates.name !== undefined) {
+    sets.push(`name = $${idx++}`);
+    values.push(updates.name);
+  }
+  if (updates.config !== undefined) {
+    sets.push(`config = $${idx++}`);
+    values.push(JSON.stringify(updates.config));
+  }
+  if (updates.channelAppId !== undefined) {
+    sets.push(`channel_app_id = $${idx++}`);
+    values.push(updates.channelAppId);
+  }
+  if (updates.modelConfig !== undefined) {
+    sets.push(`model_config = $${idx++}`);
+    values.push(JSON.stringify(updates.modelConfig));
+  }
+  if (updates.isActive !== undefined) {
+    sets.push(`is_active = $${idx++}`);
+    values.push(updates.isActive);
+  }
+
+  if (sets.length === 0) return getTenantAgent(tenantId, agentId);
+
+  values.push(tenantId, agentId);
+  const result = await query(
+    `UPDATE tenant_agents SET ${sets.join(", ")} WHERE tenant_id = $${idx++} AND agent_id = $${idx}
+     RETURNING *`,
+    values,
+  );
+  return result.rows.length > 0 ? rowToAgent(result.rows[0]) : null;
+}
+
+export async function deleteTenantAgent(tenantId: string, agentId: string): Promise<boolean> {
+  if (getDbType() === DB_SQLITE) return sqliteAgent.deleteTenantAgent(tenantId, agentId);
+  const result = await query(
+    "DELETE FROM tenant_agents WHERE tenant_id = $1 AND agent_id = $2",
+    [tenantId, agentId],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Build a stable, unique provider key for a tenant_models record.
+ * Uses "tm-{id}" to guarantee no collisions with built-in or other providers.
+ */
+export function buildTenantModelProviderKey(tm: import("../types.js").TenantModel): string {
+  return `tm-${tm.id}`;
+}
+
+/**
+ * Convert tenant agents to the OpenClawConfig agents.list format.
+ *
+ * model_config → model.primary + model.fallbacks:
+ *   - isDefault=true entry → model.primary ("tm-{providerId}/{modelId}")
+ *   - isDefault=false entries in array order → model.fallbacks
+ *
+ * If model_config is empty, the agent is output without a model field
+ * (will use the global default model).
+ *
+ * @param agents - tenant agent records
+ * @param tenantModelsMap - map of tenant_models.id → TenantModel (used to validate entries exist)
+ */
+export function toConfigAgentsList(
+  agents: TenantAgent[],
+  tenantModelsMap?: Map<string, import("../types.js").TenantModel>,
+): Array<Record<string, unknown>> {
+  return agents.map((a) => {
+    const modelConfig = a.modelConfig ?? [];
+
+    const defaultEntry = modelConfig.find((e) => e.isDefault);
+    const fallbackEntries = modelConfig.filter((e) => !e.isDefault);
+
+    const toModelRef = (entry: import("../types.js").ModelConfigEntry): string =>
+      `tm-${entry.providerId}/${entry.modelId}`;
+
+    const primary = defaultEntry ? toModelRef(defaultEntry) : undefined;
+    const fallbacks = fallbackEntries.map(toModelRef);
+
+    const modelField =
+      primary
+        ? fallbacks.length > 0
+          ? { primary, fallbacks }
+          : primary          // single model — use plain string form
+        : undefined;
+
+    return {
+      id: a.agentId,
+      name: a.name,
+      ...a.config,
+      ...(modelField !== undefined ? { model: modelField } : {}),
+    };
+  });
+}

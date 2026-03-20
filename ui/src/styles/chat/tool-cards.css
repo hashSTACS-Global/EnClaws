@@ -1,0 +1,472 @@
+/* Tool Card Styles */
+.chat-tool-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 8px;
+  background: var(--card);
+  box-shadow: inset 0 1px 0 var(--card-highlight);
+  transition:
+    border-color 150ms ease-out,
+    background 150ms ease-out;
+  /* Fixed max-height to ensure cards don't expand too much */
+  max-height: 120px;
+  overflow: hidden;
+}
+
+.chat-tool-card:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+/* First tool card in a group - no top margin */
+.chat-tool-card:first-child {
+  margin-top: 0;
+}
+
+.chat-tool-card--clickable {
+  cursor: pointer;
+}
+
+.chat-tool-card--clickable:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Header with title and chevron */
+.chat-tool-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-tool-card__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.chat-tool-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.chat-tool-card__icon svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* "View >" action link */
+.chat-tool-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--accent);
+  opacity: 0.8;
+  transition: opacity 150ms ease-out;
+}
+
+.chat-tool-card__action svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chat-tool-card--clickable:hover .chat-tool-card__action {
+  opacity: 1;
+}
+
+/* Status indicator for completed/empty results */
+.chat-tool-card__status {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ok);
+}
+
+.chat-tool-card__status svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chat-tool-card__status-text {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.chat-tool-card__detail {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Collapsed preview - fixed height with truncation */
+.chat-tool-card__preview {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--secondary);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  overflow: hidden;
+  max-height: 44px;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+}
+
+.chat-tool-card--clickable:hover .chat-tool-card__preview {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+/* Short inline output */
+.chat-tool-card__inline {
+  font-size: 11px;
+  color: var(--text);
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--secondary);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Reading Indicator */
+.chat-reading-indicator {
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 12px;
+  display: inline-flex;
+}
+
+.chat-reading-indicator__dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.chat-reading-indicator__dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: reading-pulse 1.4s ease-in-out infinite;
+}
+
+.chat-reading-indicator__dots span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.chat-reading-indicator__dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.chat-reading-indicator__dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes reading-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ─── Task Planner (write_todos) Cards ──────────────────────────────────────── */
+
+/* Accent borders per action type */
+.chat-tool-card--plan-create {
+  border-left: 3px solid #818cf8;
+}
+
+.chat-tool-card--plan-add {
+  border-left: 3px solid #a78bfa;
+}
+
+.chat-tool-card--plan-update {
+  border-left: 3px solid #38bdf8;
+}
+
+.chat-tool-card--plan-read {
+  border-left: 3px solid var(--muted);
+}
+
+.chat-tool-card--plan-result {
+  border-left: 3px solid #818cf8;
+  max-height: none;
+  overflow: visible;
+}
+
+.chat-tool-card--plan-complete {
+  border-left-color: #10b981;
+  background: color-mix(in srgb, var(--card) 92%, #10b981 8%);
+}
+
+.chat-tool-card__plan-icon {
+  font-size: 14px;
+  line-height: 1;
+  margin-right: 2px;
+}
+
+/* Plan description line */
+.chat-plan-desc {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* Progress count label (e.g. 2/5) */
+.chat-plan-progress-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* Progress bar */
+.chat-plan-progress-bar {
+  height: 5px;
+  background: var(--secondary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.chat-plan-progress-fill {
+  height: 100%;
+  background: #818cf8;
+  border-radius: 4px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-plan-progress-fill--complete {
+  background: #10b981;
+}
+
+/* Todo list */
+.chat-plan-todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.chat-plan-todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  line-height: 1.4;
+  transition: background 0.2s ease;
+}
+
+.chat-plan-todo-item--pending {
+  color: var(--muted);
+  background: var(--secondary);
+}
+
+.chat-plan-todo-item--active {
+  color: var(--text);
+  background: rgba(129, 140, 248, 0.08);
+  border-color: rgba(129, 140, 248, 0.25);
+  font-weight: 600;
+}
+
+.chat-plan-todo-item--done {
+  color: var(--muted);
+  text-decoration: line-through;
+  opacity: 0.6;
+  background: transparent;
+}
+
+.chat-plan-todo-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+  margin-top: 1px;
+}
+
+/* Status badges */
+.chat-plan-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  padding: 2px 6px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+
+.chat-plan-badge--new {
+  background: rgba(129, 140, 248, 0.15);
+  color: #818cf8;
+  border: 1px solid rgba(129, 140, 248, 0.3);
+}
+
+.chat-plan-badge--done {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.chat-plan-badge--active {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+/* ─── Subagent Delegation (sessions_spawn) Cards ────────────────────────────── */
+
+.chat-spawn-card {
+  border-left: 3px solid #f59e0b;
+  max-height: none;
+  overflow: visible;
+}
+
+.chat-spawn-card--result {
+  border-left-color: #10b981;
+}
+
+.chat-spawn-lobster {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* Animated "live" pulse */
+.chat-spawn-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
+  animation: spawn-pulse 1.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spawn-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
+  }
+
+  60% {
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+
+.chat-spawn-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.chat-spawn-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chat-spawn-meta {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chat-spawn-meta code {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  background: var(--secondary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.chat-spawn-task-id {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.chat-spawn-link-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.chat-spawn-task-preview {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+  font-style: italic;
+  margin-top: 2px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-spawn-result-preview {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--secondary);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+/* Light theme adjustments */
+:root[data-theme="light"] .chat-tool-card--plan-complete {
+  background: color-mix(in srgb, var(--card) 90%, #10b981 10%);
+}
+
+:root[data-theme="light"] .chat-plan-todo-item--active {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(99, 102, 241, 0.05);
+}

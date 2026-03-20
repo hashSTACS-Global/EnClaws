@@ -1,0 +1,328 @@
+/**
+ * Gateway RPC handlers for tenant-scoped agent management.
+ *
+ * Methods:
+ *   tenant.agents.list    - List agents for the current tenant
+ *   tenant.agents.create  - Create a new agent for the tenant
+ *   tenant.agents.update  - Update an agent config
+ *   tenant.agents.delete  - Delete an agent
+ *
+ * Agent isolation:
+ *   - owner/admin: can see and manage all agents in the tenant
+ *   - member: can only see and manage their own agents (created_by = userId)
+ *   - viewer: can only list agents they created (read-only)
+ */
+
+import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
+import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { isDbInitialized } from "../../db/index.js";
+import { checkTenantQuota } from "../../db/models/tenant.js";
+import {
+  createTenantAgent,
+  listTenantAgents,
+  getTenantAgent,
+  updateTenantAgent,
+  deleteTenantAgent,
+} from "../../db/models/tenant-agent.js";
+import { listAllTenantChannelApps } from "../../db/models/tenant-channel-app.js";
+import { createAuditLog } from "../../db/models/audit-log.js";
+import { assertPermission, RbacError } from "../../auth/rbac.js";
+import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
+import type { TenantContext } from "../../auth/middleware.js";
+import type { ModelConfigEntry } from "../../db/types.js";
+import { resolveTenantAgentDir } from "../../config/sessions/tenant-paths.js";
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const DEFAULT_IDENTITY_FILENAME = "IDENTITY.md";
+
+/** Sync config.systemPrompt to the agent's IDENTITY.md file on disk. */
+async function syncIdentityFile(tenantId: string, agentId: string, config?: Record<string, unknown>): Promise<void> {
+  const systemPrompt = typeof config?.systemPrompt === "string" ? config.systemPrompt.trim() : "";
+  if (!systemPrompt) return;
+  const agentDir = resolveTenantAgentDir(tenantId, agentId);
+  await fs.mkdir(agentDir, { recursive: true });
+  await fs.writeFile(path.join(agentDir, DEFAULT_IDENTITY_FILENAME), systemPrompt, "utf-8");
+}
+
+function getTenantCtx(
+  client: GatewayRequestHandlerOptions["client"],
+  respond: GatewayRequestHandlerOptions["respond"],
+): TenantContext | null {
+  if (!isDbInitialized()) {
+    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Multi-tenant mode not enabled"));
+    return null;
+  }
+  const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
+  if (!tenant) {
+    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Authentication required"));
+    return null;
+  }
+  return tenant;
+}
+
+/** owner/admin can manage all agents; member/viewer only their own. */
+function isAdminRole(role: string): boolean {
+  return role === "owner" || role === "admin";
+}
+
+export const tenantAgentsHandlers: GatewayRequestHandlers = {
+  "tenant.agents.list": async ({ client, respond }: GatewayRequestHandlerOptions) => {
+    const ctx = getTenantCtx(client, respond);
+    if (!ctx) return;
+
+    try {
+      assertPermission(ctx.role, "agent.list");
+    } catch (err) {
+      if (err instanceof RbacError) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, err.message));
+        return;
+      }
+      throw err;
+    }
+
+    // Admin/owner see all agents; member/viewer see only their own
+    const agents = await listTenantAgents(ctx.tenantId, {
+      createdBy: isAdminRole(ctx.role) ? undefined : ctx.userId,
+    });
+    respond(true, {
+      agents: agents.map((a) => ({
+        id: a.id,
+        agentId: a.agentId,
+        name: a.name,
+        config: a.config,
+        channelAppId: a.channelAppId,
+        modelConfig: a.modelConfig,
+        isActive: a.isActive,
+        createdBy: a.createdBy,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+      })),
+    });
+  },
+
+  "tenant.agents.create": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
+    const ctx = getTenantCtx(client, respond);
+    if (!ctx) return;
+
+    try {
+      assertPermission(ctx.role, "agent.create");
+    } catch (err) {
+      if (err instanceof RbacError) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, err.message));
+        return;
+      }
+      throw err;
+    }
+
+    const { agentId, name, config, channelAppId, modelConfig } = params as {
+      agentId: string;
+      name: string;
+      config?: Record<string, unknown>;
+      channelAppId?: string;
+      modelConfig?: ModelConfigEntry[];
+    };
+
+    if (!agentId || !name) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Missing agentId or name"));
+      return;
+    }
+
+    if (!modelConfig || modelConfig.length === 0) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "modelConfig is required and must not be empty"));
+      return;
+    }
+
+    if (!modelConfig.some((e) => e.isDefault)) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Exactly one model must be set as default"));
+      return;
+    }
+
+    if (!/^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$/.test(agentId)) {
+      respond(false, undefined, errorShape(
+        ErrorCodes.INVALID_PARAMS,
+        "agentId must be lowercase alphanumeric with hyphens/underscores, 1-64 chars",
+      ));
+      return;
+    }
+
+    const quota = await checkTenantQuota(ctx.tenantId, "agents");
+    if (!quota.allowed) {
+      respond(false, undefined, errorShape(
+        ErrorCodes.INVALID_REQUEST,
+        `Agent quota reached (${quota.current}/${quota.max}). Upgrade your plan.`,
+      ));
+      return;
+    }
+
+    const existing = await getTenantAgent(ctx.tenantId, agentId);
+    if (existing) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent '${agentId}' already exists`));
+      return;
+    }
+
+    const agent = await createTenantAgent({
+      tenantId: ctx.tenantId,
+      agentId,
+      name,
+      config,
+      channelAppId,
+      modelConfig,
+      createdBy: ctx.userId,
+    });
+
+    await syncIdentityFile(ctx.tenantId, agentId, config);
+    invalidateTenantConfigCache(ctx.tenantId);
+    await context.reloadDbChannels();
+
+    await createAuditLog({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      action: "agent.create",
+      resource: `agent:${agentId}`,
+      detail: { name },
+    });
+
+    respond(true, {
+      id: agent.id,
+      agentId: agent.agentId,
+      name: agent.name,
+      config: agent.config,
+      channelAppId: agent.channelAppId,
+      modelConfig: agent.modelConfig,
+    });
+  },
+
+  "tenant.agents.update": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
+    const ctx = getTenantCtx(client, respond);
+    if (!ctx) return;
+
+    try {
+      assertPermission(ctx.role, "agent.update");
+    } catch (err) {
+      if (err instanceof RbacError) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, err.message));
+        return;
+      }
+      throw err;
+    }
+
+    const { agentId, name, config, channelAppId, modelConfig, isActive } = params as {
+      agentId: string;
+      name?: string;
+      config?: Record<string, unknown>;
+      channelAppId?: string;
+      modelConfig?: ModelConfigEntry[];
+      isActive?: boolean;
+    };
+
+    if (modelConfig !== undefined) {
+      if (modelConfig.length === 0) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "modelConfig must not be empty"));
+        return;
+      }
+      if (!modelConfig.some((e) => e.isDefault)) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Exactly one model must be set as default"));
+        return;
+      }
+    }
+
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Missing agentId"));
+      return;
+    }
+
+    // Member can only update their own agents
+    if (!isAdminRole(ctx.role)) {
+      const existing = await getTenantAgent(ctx.tenantId, agentId);
+      if (!existing || existing.createdBy !== ctx.userId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Agent not found"));
+        return;
+      }
+    }
+
+    const updated = await updateTenantAgent(ctx.tenantId, agentId, { name, config, channelAppId, modelConfig, isActive });
+    if (!updated) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Agent not found"));
+      return;
+    }
+
+    if (config?.systemPrompt !== undefined) {
+      await syncIdentityFile(ctx.tenantId, agentId, config);
+    }
+    invalidateTenantConfigCache(ctx.tenantId);
+    await context.reloadDbChannels();
+
+    await createAuditLog({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      action: "agent.update",
+      resource: `agent:${agentId}`,
+      detail: { name, isActive },
+    });
+
+    respond(true, {
+      id: updated.id,
+      agentId: updated.agentId,
+      name: updated.name,
+      config: updated.config,
+      isActive: updated.isActive,
+    });
+  },
+
+  "tenant.agents.delete": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
+    const ctx = getTenantCtx(client, respond);
+    if (!ctx) return;
+
+    try {
+      assertPermission(ctx.role, "agent.delete");
+    } catch (err) {
+      if (err instanceof RbacError) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, err.message));
+        return;
+      }
+      throw err;
+    }
+
+    const { agentId } = params as { agentId: string };
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Missing agentId"));
+      return;
+    }
+
+    // Member can only delete their own agents
+    if (!isAdminRole(ctx.role)) {
+      const existing = await getTenantAgent(ctx.tenantId, agentId);
+      if (!existing || existing.createdBy !== ctx.userId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Agent not found"));
+        return;
+      }
+    }
+
+    const deleted = await deleteTenantAgent(ctx.tenantId, agentId);
+
+    invalidateTenantConfigCache(ctx.tenantId);
+    await context.reloadDbChannels();
+
+    await createAuditLog({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      action: "agent.delete",
+      resource: `agent:${agentId}`,
+    });
+
+    respond(true, { deleted });
+  },
+
+  /** List all active channel apps for the tenant (used by agent form dropdown). */
+  "tenant.agents.channel_apps.list": async ({ client, respond }: GatewayRequestHandlerOptions) => {
+    const ctx = getTenantCtx(client, respond);
+    if (!ctx) return;
+    try { assertPermission(ctx.role, "agent.list"); } catch (err) {
+      if (err instanceof RbacError) { respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, err.message)); return; }
+      throw err;
+    }
+    const apps = await listAllTenantChannelApps(ctx.tenantId);
+    respond(true, { channelApps: apps });
+  },
+};

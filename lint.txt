@@ -1,0 +1,162 @@
+
+> openclaw@2026.2.19 lint /Users/opnclaw/Documents/GitHub/openclawWeComzh
+> oxlint --type-aware
+
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[test-qwen-api.ts:38:38]
+ 37 |     for (const line of lines) {
+ 38 |       if (!line.startsWith("data:")) continue;
+    :                                      ^^^^^^^^^
+ 39 |       let dataStr = line.slice(5).trim();
+    `----
+  help: Replace `continue;` with `{continue;}`.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[src/providers/qwen-web-client.ts:98:20]
+ 97 | 
+ 98 |     const bodyObj: any = {
+    :                    ^^^
+ 99 |       model: modelId,
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(no-unused-vars): Type 'StreamFn' is imported but never used.
+   ,-[src/agents/pi-embedded-runner/run/attempt.ts:3:29]
+ 2 | import os from "node:os";
+ 3 | import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
+   :                             ^^^^|^^^
+   :                                 `-- 'StreamFn' is imported here
+ 4 | import type { ImageContent } from "@mariozechner/pi-ai";
+   `----
+  help: Consider removing this import.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[ui/src/ui/controllers/chat.ts:219:21]
+ 218 |       const thinkingParts = m.content
+ 219 |         .filter((p: any) => p.type === "thinking" && typeof p.thinking === "string")
+     :                     ^^^
+ 220 |         .map((p: any) => p.thinking);
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[ui/src/ui/controllers/chat.ts:220:18]
+ 219 |         .filter((p: any) => p.type === "thinking" && typeof p.thinking === "string")
+ 220 |         .map((p: any) => p.thinking);
+     :                  ^^^
+ 221 |       if (thinkingParts.length > 0) {
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[ui/src/ui/controllers/chat.ts:238:24]
+ 237 |       if (streamedText.trim() || streamedThinking.trim()) {
+ 238 |         const content: any[] = [];
+     :                        ^^^
+ 239 |         if (streamedThinking.trim()) {
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[test-qwen-client.ts:45:17]
+ 44 |       const { done, value } = await reader.read();
+ 45 |       if (done) break;
+    :                 ^^^^^^
+ 46 |       const chunk = decoder.decode(value, { stream: true });
+    `----
+  help: Replace `break;` with `{break;}`.
+
+  x eslint(no-unused-vars): Identifier 'fs' is imported but never used.
+   ,-[src/agents/qwen-web-stream.ts:1:13]
+ 1 | import * as fs from "node:fs";
+   :             ^|
+   :              `-- 'fs' is imported here
+ 2 | import type { StreamFn } from "@mariozechner/pi-agent-core";
+   `----
+  help: Consider removing this import.
+
+  x eslint(no-unused-vars): Catch parameter 'e' is caught but never used.
+     ,-[src/agents/qwen-web-stream.ts:497:24]
+ 496 |                 }
+ 497 |               } catch (e) { /* ignore partial */ }
+     :                        |
+     :                        `-- 'e' is declared here
+ 498 |             }
+     `----
+  help: Consider handling this error.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[src/agents/qwen-web-stream.ts:234:27]
+ 233 |         const contentParts: (TextContent | ThinkingContent | ToolCall)[] = [];
+ 234 |         let finalSources: any[] = [];
+     :                           ^^^
+ 235 |         const accumulatedToolCalls: { id: string; name: string; arguments: string; index: number }[] = [];
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[src/agents/qwen-web-stream.ts:260:19]
+ 259 |           };
+ 260 |           (msg as any).thinking_enabled = contentParts.some(p => p.type === "thinking");
+     :                   ^^^
+ 261 |           return msg;
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[src/agents/qwen-web-stream.ts:420:54]
+ 419 |                   // Aggressively find sources
+ 420 |                   const findSourcesRecursive = (obj: any, depth = 0) => {
+     :                                                      ^^^
+ 421 |                     if (!obj || typeof obj !== "object" || depth > 5) {return;}
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[src/agents/qwen-web-stream.ts:504:30]
+ 503 |            const mode = (currentMode as string) === "thinking" ? "thinking" : ((currentMode as string) === "tool_call" ? "toolcall" : "text");
+ 504 |            emitDelta(mode as any, tagBuffer);
+     :                              ^^^
+ 505 |         }
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-unnecessary-type-assertion): This assertion is unnecessary since it does not change the type of the expression.
+     ,-[src/agents/deepseek-web-stream.ts:129:36]
+ 128 |                 if (part.type === "text") {
+ 129 |                   content += (part as TextContent).text;
+     :                               ^^|^ ^^^^^^^^^^^^^^
+     :                                 `-- This expression already has the type 'TextContent'
+ 130 |                 } else if (part.type === "thinking") {
+     `----
+
+  x typescript-eslint(no-unnecessary-type-assertion): This assertion is unnecessary since it does not change the type of the expression.
+     ,-[src/agents/deepseek-web-stream.ts:131:48]
+ 130 |                 } else if (part.type === "thinking") {
+ 131 |                   content += `<think>\n${(part as ThinkingContent).thinking}\n</think>\n`;
+     :                                           ^^|^ ^^^^^^^^^^^^^^^^^^
+     :                                             `-- This expression already has the type 'ThinkingContent'
+ 132 |                 } else if (part.type === "toolCall") {
+     `----
+
+  x typescript-eslint(no-unnecessary-type-assertion): This assertion is unnecessary since it does not change the type of the expression.
+     ,-[src/agents/deepseek-web-stream.ts:133:35]
+ 132 |                 } else if (part.type === "toolCall") {
+ 133 |                   const tc = part as ToolCall;
+     :                             ^^|^^ ^^^^^^^^^^^
+     :                               `-- This expression already has the type 'ToolCall'
+ 134 |                   content += `<tool_call id="${tc.id}" name="${tc.name}">${JSON.stringify(tc.arguments)}</tool_call>`;
+     `----
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[test-qwen-client.ts:62:1]
+ 61 | 
+ 62 | test();
+    : ^^^^^^^
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+Found 0 warnings and 17 errors.
+Finished in 4.2s on 3554 files with 136 rules using 10 threads.
+ ELIFECYCLE  Command failed with exit code 1.

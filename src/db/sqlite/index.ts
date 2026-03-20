@@ -1,0 +1,297 @@
+/**
+ * SQLite connection management and query adapter.
+ *
+ * Uses Node's built-in `node:sqlite` (DatabaseSync).
+ * Provides a query interface compatible with pg's QueryResult shape.
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { requireNodeSqlite } from "../../memory/sqlite.js";
+import { SQLITE_SCHEMA_SQL } from "./schema-sql.js";
+
+type DatabaseSync = InstanceType<ReturnType<typeof requireNodeSqlite>["DatabaseSync"]>;
+
+let db: DatabaseSync | null = null;
+
+export interface SqliteQueryResult<T = Record<string, unknown>> {
+  rows: T[];
+  rowCount: number;
+}
+
+/**
+ * Initialize SQLite database from a sqlite:// URL.
+ * Automatically creates the database file and schema if they don't exist.
+ */
+export function initSqliteDb(url: string): void {
+  if (db) return;
+
+  // Parse sqlite:///path/to/data.db → /path/to/data.db
+  let dbPath: string;
+  if (url.startsWith("sqlite:///")) {
+    dbPath = url.slice("sqlite://".length); // keeps leading /
+  } else if (url.startsWith("sqlite://")) {
+    dbPath = url.slice("sqlite://".length);
+  } else {
+    throw new Error(`[sqlite] Invalid SQLite URL: ${url}`);
+  }
+
+  // On Windows, handle paths like sqlite:///D:/path or sqlite:///D:\path
+  // The path after sqlite:// may start with /D: which needs the leading slash stripped
+  if (process.platform === "win32" && /^\/[A-Za-z]:/.test(dbPath)) {
+    dbPath = dbPath.slice(1);
+  }
+
+  // Ensure parent directory exists
+  const dir = path.dirname(dbPath);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const { DatabaseSync } = requireNodeSqlite();
+  db = new DatabaseSync(dbPath);
+
+  // Enable WAL mode and foreign keys
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA foreign_keys = ON");
+
+  // Initialize schema (inlined as TS constant to survive bundling)
+  db.exec(SQLITE_SCHEMA_SQL);
+
+  console.log(`[sqlite] Database initialized at ${dbPath}`);
+}
+
+/**
+ * Get the active SQLite database. Throws if not initialized.
+ */
+export function getSqliteDb(): DatabaseSync {
+  if (!db) {
+    throw new Error("[sqlite] Database not initialized. Call initSqliteDb() first.");
+  }
+  return db;
+}
+
+/**
+ * Close the SQLite database.
+ */
+export function closeSqliteDb(): void {
+  if (db) {
+    db.close();
+    db = null;
+  }
+}
+
+/**
+ * Convert PostgreSQL-style parameterized query ($1, $2, ...) to SQLite (?, ?, ...).
+ * Also handles NOW() → datetime('now') conversion.
+ */
+function adaptSql(text: string): string {
+  // Replace $N placeholders with ?
+  let adapted = text.replace(/\$\d+/g, "?");
+  // Replace NOW() with datetime('now')
+  adapted = adapted.replace(/\bNOW\(\)/gi, "datetime('now')");
+  // Remove ::text and other PG type casts
+  adapted = adapted.replace(/::\w+(\[\])?/g, "");
+  // Replace RETURNING * — handled at call site
+  return adapted;
+}
+
+/**
+ * Execute a query against SQLite, returning pg-compatible result shape.
+ *
+ * Handles:
+ * - $N → ? parameter conversion
+ * - NOW() → datetime('now')
+ * - RETURNING * → separate SELECT after mutation
+ * - Boolean ↔ integer conversion
+ */
+export function sqliteQuery<T = Record<string, unknown>>(
+  text: string,
+  values?: unknown[],
+): SqliteQueryResult<T> {
+  const database = getSqliteDb();
+  const trimmed = text.trim();
+  const hasReturning = /\bRETURNING\b/i.test(trimmed);
+  let sql = adaptSql(trimmed);
+  const params = values ?? [];
+
+  // Convert boolean values to integers for SQLite
+  const adaptedParams = params.map((v) => {
+    if (v === true) return 1;
+    if (v === false) return 0;
+    if (v instanceof Date) return v.toISOString().replace("T", " ").replace("Z", "");
+    if (v === undefined) return null;
+    return v;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  }) as any[];
+
+  if (hasReturning) {
+    // Remove RETURNING clause (RETURNING *, RETURNING col1, col2, etc.)
+    sql = sql.replace(/\s+RETURNING\s+.+$/im, "");
+
+    const upperSql = sql.trimStart().toUpperCase();
+
+    if (upperSql.startsWith("INSERT")) {
+      // Extract table name from INSERT INTO <table>
+      const tableMatch = sql.match(/INSERT\s+INTO\s+(\w+)/i);
+      const table = tableMatch?.[1];
+
+      const stmt = database.prepare(sql);
+      stmt.run(...adaptedParams);
+
+      // Get the last inserted row
+      if (table) {
+        const selectStmt = database.prepare(
+          `SELECT * FROM ${table} WHERE rowid = last_insert_rowid()`,
+        );
+        const rows = selectStmt.all() as T[];
+        return { rows: rows.map((r) => adaptRow(r) as T), rowCount: rows.length };
+      }
+      return { rows: [], rowCount: 0 };
+    }
+
+    if (upperSql.startsWith("UPDATE")) {
+      // For UPDATE ... RETURNING, we need to find the affected rows first
+      // Extract WHERE clause
+      const whereMatch = sql.match(/\bWHERE\b.+$/is);
+      const tableMatch = sql.match(/UPDATE\s+(\w+)/i);
+      const table = tableMatch?.[1];
+
+      const stmt = database.prepare(sql);
+      const result = stmt.run(...adaptedParams);
+
+      if (table && whereMatch) {
+        // Re-select the updated rows using the same WHERE clause
+        const whereClause = whereMatch[0];
+        // Count how many ? are before the WHERE clause
+        const beforeWhere = sql.slice(0, sql.indexOf(whereClause));
+        const paramsBefore = (beforeWhere.match(/\?/g) || []).length;
+        const whereParams = adaptedParams.slice(paramsBefore);
+
+        const selectStmt = database.prepare(`SELECT * FROM ${table} ${whereClause}`);
+        const rows = selectStmt.all(...whereParams) as T[];
+        return { rows: rows.map((r) => adaptRow(r) as T), rowCount: rows.length };
+      }
+      return { rows: [], rowCount: result.changes as number };
+    }
+  }
+
+  const upperSql = sql.trimStart().toUpperCase();
+
+  if (
+    upperSql.startsWith("SELECT") ||
+    upperSql.startsWith("WITH")
+  ) {
+    const stmt = database.prepare(sql);
+    const rows = stmt.all(...adaptedParams) as T[];
+    return { rows: rows.map((r) => adaptRow(r) as T), rowCount: rows.length };
+  }
+
+  // INSERT, UPDATE, DELETE without RETURNING
+  const stmt = database.prepare(sql);
+  const result = stmt.run(...adaptedParams);
+  return { rows: [] as T[], rowCount: result.changes as number };
+}
+
+/**
+ * Adapt a SQLite row to match PG expectations:
+ * - INTEGER boolean fields → real booleans
+ * - JSON TEXT fields → parsed objects
+ */
+function adaptRow(row: unknown): unknown {
+  if (!row || typeof row !== "object") return row;
+  const r = row as Record<string, unknown>;
+  const adapted: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(r)) {
+    // Convert known boolean columns from integer to boolean
+    if (isBooleanColumn(key) && typeof value === "number") {
+      adapted[key] = value !== 0;
+    }
+    // Parse known JSON columns
+    else if (isJsonColumn(key) && typeof value === "string") {
+      try {
+        adapted[key] = JSON.parse(value);
+      } catch {
+        adapted[key] = value;
+      }
+    } else {
+      adapted[key] = value;
+    }
+  }
+
+  return adapted;
+}
+
+const BOOLEAN_COLUMNS = new Set([
+  "is_active",
+  "revoked",
+  "trace_enabled",
+  "allow_real_ip_fallback",
+  "enabled",
+]);
+
+const JSON_COLUMNS = new Set([
+  "settings",
+  "quotas",
+  "config",
+  "metadata",
+  "detail",
+  "messages",
+  "tools",
+  "request_params",
+  "response",
+  "open_ids",
+  "extra_headers",
+  "extra_config",
+  "models",
+  "tailscale",
+  "remote",
+  "reload",
+  "tls",
+  "http",
+  "nodes",
+  "trusted_proxies",
+  "auth",
+  "multi_tenant",
+  "redact_patterns",
+  "allow",
+  "deny",
+  "load",
+  "slots",
+  "entries",
+  "installs",
+]);
+
+function isBooleanColumn(name: string): boolean {
+  return BOOLEAN_COLUMNS.has(name);
+}
+
+function isJsonColumn(name: string): boolean {
+  return JSON_COLUMNS.has(name);
+}
+
+/**
+ * Run a callback within a SQLite transaction (synchronous, since DatabaseSync is sync).
+ * The callback receives a thin client-like object with a query method.
+ */
+export function withSqliteTransaction<T>(
+  fn: (client: { query: typeof sqliteQuery }) => T,
+): T {
+  const database = getSqliteDb();
+  database.exec("BEGIN");
+  try {
+    const result = fn({ query: sqliteQuery });
+    database.exec("COMMIT");
+    return result;
+  } catch (err) {
+    database.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+/**
+ * Generate a UUID v4 for use as primary key.
+ */
+export function generateUUID(): string {
+  return crypto.randomUUID();
+}

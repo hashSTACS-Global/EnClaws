@@ -1,0 +1,103 @@
+
+> openclaw@2026.3.1 test
+> node scripts/test-parallel.mjs src/agents/pi-tools.create-openclaw-coding-tools.adds-claude-style-aliases-schemas-without-dropping.test.ts
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/Users/opnclaw/Documents/GitHub/openclawWeComzh[39m
+
+[90mstdout[2m | src/agents/pi-tools.create-openclaw-coding-tools.adds-claude-style-aliases-schemas-without-dropping.test.ts[2m > [22m[2mcreateOpenClawCodingTools[2m > [22m[2mavoids anyOf/oneOf/allOf in tool schemas
+[22m[39mREAD SCHEMA: {
+  "type": "object",
+  "required": [
+    "path"
+  ],
+  "properties": {
+    "path": {
+      "description": "Path to the file to read (relative or absolute)",
+      "type": "string"
+    },
+    "offset": {
+      "description": "Line number to start reading from (1-indexed)",
+      "type": "number"
+    },
+    "limit": {
+      "description": "Maximum number of lines to read",
+      "type": "number"
+    },
+    "file_path": {
+      "description": "Path to the file to read (relative or absolute)",
+      "type": "string"
+    }
+  }
+}
+
+ [31m❯[39m src/agents/pi-tools.create-openclaw-coding-tools.adds-claude-style-aliases-schemas-without-dropping.test.ts [2m([22m[2m25 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 34[2mms[22m[39m
+       [32m✓[39m adds Claude-style aliases to schemas without dropping metadata[32m 2[2mms[22m[39m
+       [32m✓[39m normalizes file_path to path and enforces required groups at runtime[32m 2[2mms[22m[39m
+     [32m✓[39m keeps browser tool schema OpenAI-compatible without normalization[32m 0[2mms[22m[39m
+     [32m✓[39m mentions Chrome extension relay in browser tool description[32m 0[2mms[22m[39m
+     [32m✓[39m keeps browser tool schema properties after normalization[32m 0[2mms[22m[39m
+     [32m✓[39m exposes raw for gateway config.apply tool calls[32m 1[2mms[22m[39m
+     [32m✓[39m flattens anyOf-of-literals to enum for provider compatibility[32m 0[2mms[22m[39m
+     [32m✓[39m inlines local $ref before removing unsupported keywords[32m 0[2mms[22m[39m
+     [32m✓[39m cleans tuple items schemas[32m 0[2mms[22m[39m
+     [32m✓[39m drops null-only union variants without flattening other unions[32m 0[2mms[22m[39m
+[31m     [31m×[31m avoids anyOf/oneOf/allOf in tool schemas[39m[32m 6[2mms[22m[39m
+     [32m✓[39m keeps raw core tool schemas union-free[32m 1[2mms[22m[39m
+     [32m✓[39m does not expose provider-specific message tools[32m 1[2mms[22m[39m
+     [32m✓[39m filters session tools for sub-agent sessions by default[32m 1[2mms[22m[39m
+     [32m✓[39m uses stored spawnDepth to apply leaf tool policy for flat depth-2 session keys[32m 3[2mms[22m[39m
+     [32m✓[39m supports allow-only sub-agent tool policy[32m 1[2mms[22m[39m
+     [32m✓[39m applies tool profiles before allow/deny policies[32m 1[2mms[22m[39m
+     [32m✓[39m expands group shorthands in global tool policy[32m 0[2mms[22m[39m
+     [32m✓[39m expands group shorthands in global tool deny policy[32m 0[2mms[22m[39m
+     [32m✓[39m lets agent profiles override global profiles[32m 0[2mms[22m[39m
+     [32m✓[39m removes unsupported JSON Schema keywords for Cloud Code Assist API compatibility[32m 1[2mms[22m[39m
+     [32m✓[39m applies sandbox path guards to file_path alias[32m 2[2mms[22m[39m
+     [32m✓[39m auto-pages read output across chunks when context window budget allows[32m 5[2mms[22m[39m
+     [32m✓[39m adds capped continuation guidance when aggregated read output reaches budget[32m 5[2mms[22m[39m
+     [32m✓[39m strips truncation.content details from read results while preserving other fields[32m 0[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/agents/pi-tools.create-openclaw-coding-tools.adds-claude-style-aliases-schemas-without-dropping.test.ts[2m > [22mcreateOpenClawCodingTools[2m > [22mavoids anyOf/oneOf/allOf in tool schemas
+[31m[1mAssertionError[22m: expected [ { name: 'write_todos', …(2) }, …(2) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   {[39m
+[31m+     "keyword": "anyOf",[39m
+[31m+     "name": "write_todos",[39m
+[31m+     "path": "properties.action.anyOf",[39m
+[31m+   },[39m
+[31m+   {[39m
+[31m+     "keyword": "anyOf",[39m
+[31m+     "name": "write_todos",[39m
+[31m+     "path": "properties.status.anyOf",[39m
+[31m+   },[39m
+[31m+   {[39m
+[31m+     "keyword": "anyOf",[39m
+[31m+     "name": "write_todos",[39m
+[31m+     "path": "properties.format.anyOf",[39m
+[31m+   },[39m
+[31m+ ][39m
+
+[36m [2m❯[22m src/agents/pi-tools.create-openclaw-coding-tools.adds-claude-style-aliases-schemas-without-dropping.test.ts:[2m294:53[22m[39m
+    [90m292| [39m    const readSchema = defaultTools.find(t => t.name === 'read')?.para…
+    [90m293| [39m    console[33m.[39m[34mlog[39m([32m"READ SCHEMA:"[39m[33m,[39m [33mJSON[39m[33m.[39m[34mstringify[39m(readSchema[33m,[39m [35mnull[39m[33m,[39m [34m2[39m))[33m;[39m
+    [90m294| [39m    [34mexpect[39m([34mfindUnionKeywordOffenders[39m(defaultTools))[33m.[39m[34mtoEqual[39m([])[33m;[39m
+    [90m   | [39m                                                    [31m^[39m
+    [90m295| [39m  })[33m;[39m
+    [90m296| [39m  [34mit[39m([32m"keeps raw core tool schemas union-free"[39m[33m,[39m () [33m=>[39m {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m24 passed[39m[22m[90m (25)[39m
+[2m   Start at [22m 05:51:22
+[2m   Duration [22m 8.24s[2m (transform 5.40s, setup 139ms, import 7.99s, tests 34ms, environment 0ms)[22m
+

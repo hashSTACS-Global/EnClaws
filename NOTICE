@@ -1,0 +1,21 @@
+enClaws
+Copyright 2026 hashSTACS and the enClaws contributors
+
+This repository is licensed under the Apache License, Version 2.0.
+You may obtain a copy of the License at:
+https://www.apache.org/licenses/LICENSE-2.0
+
+This repository includes, derives from, or has been materially informed by upstream open source projects, including:
+- openclaw/openclaw
+- luolin-ai/openclawWeComzh
+
+See THIRD_PARTY_NOTICES.md and LICENSES/third-party/ for applicable copyright notices,
+license texts, and provenance information.
+
+Trademark notice:
+"enClaws", "企业龙虾", and related names, logos, and branding are source identifiers used by
+hashSTACS for this project. No trademark rights are granted under the Apache License, Version 2.0.
+Third-party names, logos, and marks mentioned in this repository remain the property of their
+respective owners and are used only for identification, compatibility, attribution, or nominative reference.
+
+The contents of this NOTICE file are for informational purposes only and do not modify the License.
