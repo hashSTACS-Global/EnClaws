@@ -65,6 +65,12 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
     const msgId = event.message?.message_id ?? 'unknown';
     const chatId = event.message?.chat_id ?? '';
     const threadId = event.message?.thread_id || undefined;
+    const senderOpenId = event.sender?.sender_id?.open_id || '';
+    const isGroup = event.message?.chat_type === 'group';
+    // Per-sender queue key for group chats enables concurrent dispatch
+    // across different users. Falls back to chat-level key when senderId
+    // is unavailable (malformed event) or in P2P chats.
+    const senderQueueId = isGroup && senderOpenId ? senderOpenId : undefined;
 
     // Dedup — skip duplicate messages (e.g. from WebSocket reconnects).
     if (!ctx.messageDedup.tryRecord(msgId, accountId)) {
@@ -85,7 +91,7 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
     // card is terminated without waiting for the current task.
     const abortText = extractRawTextFromEvent(event);
     if (abortText && isLikelyAbortText(abortText)) {
-      const queueKey = buildQueueKey(accountId, chatId, threadId);
+      const queueKey = buildQueueKey(accountId, chatId, threadId, senderQueueId);
       if (hasActiveTask(queueKey)) {
         const active = getActiveDispatcher(queueKey);
         if (active) {
@@ -102,6 +108,7 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
       accountId,
       chatId,
       threadId,
+      senderId: senderQueueId,
       task: async () => {
         try {
           await withTicket(
@@ -110,7 +117,7 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
               chatId,
               accountId,
               startTime: Date.now(),
-              senderOpenId: event.sender?.sender_id?.open_id || '',
+              senderOpenId,
               chatType: (event.message?.chat_type as 'p2p' | 'group') || undefined,
               threadId,
             },

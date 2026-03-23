@@ -93,7 +93,7 @@ async function dispatchNormalMessage(
 
   // Register the active dispatcher so the monitor abort fast-path can
   // terminate the streaming card before this task completes.
-  const queueKey = buildQueueKey(dc.account.accountId, dc.ctx.chatId, dc.ctx.threadId);
+  const queueKey = buildQueueKey(dc.account.accountId, dc.ctx.chatId, dc.ctx.threadId, dc.isGroup ? dc.ctx.senderId : undefined);
   registerActiveDispatcher(queueKey, { abortCard, abortController });
 
   const effectiveSessionKey = dc.threadSessionKey ?? dc.route.sessionKey;
@@ -123,7 +123,11 @@ async function dispatchNormalMessage(
     markFullyComplete();
     markDispatchIdle();
 
-    // Clean up consumed history entries
+    // Clean up consumed history entries.
+    // NOTE: With per-sender concurrent dispatch, multiple senders may read
+    // the same history snapshot and clear concurrently. This is acceptable:
+    // duplicate context is redundant but not harmful, and entries arriving
+    // during dispatch belong to subsequent turns anyway.
     if (dc.isGroup && historyKey && chatHistories) {
       clearHistoryEntriesIfEnabled({
         historyMap: chatHistories,

@@ -8,7 +8,9 @@
  * across channel, messaging, tools, and card layers as a process-level
  * singleton. Consumers: monitor.ts, dispatch.ts, oauth.ts, auto-auth.ts.
  *
- * Ensures tasks targeting the same account+chat are executed serially.
+ * Ensures tasks targeting the same queue key are executed serially.
+ * In group chats, the key includes the sender ID so different users
+ * are dispatched concurrently. P2P chats use account+chat only.
  * Used by both websocket inbound messages and synthetic message paths.
  */
 
@@ -30,8 +32,11 @@ export function threadScopedKey(base: string, threadId?: string): string {
   return threadId ? `${base}:thread:${threadId}` : base;
 }
 
-export function buildQueueKey(accountId: string, chatId: string, threadId?: string): string {
-  return threadScopedKey(`${accountId}:${chatId}`, threadId);
+export function buildQueueKey(accountId: string, chatId: string, threadId?: string, senderId?: string): string {
+  const base = senderId
+    ? `${accountId}:${chatId}:sender:${senderId}`
+    : `${accountId}:${chatId}`;
+  return threadScopedKey(base, threadId);
 }
 
 export function registerActiveDispatcher(key: string, entry: ActiveDispatcherEntry): void {
@@ -55,10 +60,11 @@ export function enqueueFeishuChatTask(params: {
   accountId: string;
   chatId: string;
   threadId?: string;
+  senderId?: string;
   task: () => Promise<void>;
 }): { status: QueueStatus; promise: Promise<void> } {
-  const { accountId, chatId, threadId, task } = params;
-  const key = buildQueueKey(accountId, chatId, threadId);
+  const { accountId, chatId, threadId, senderId, task } = params;
+  const key = buildQueueKey(accountId, chatId, threadId, senderId);
   const prev = chatQueues.get(key) ?? Promise.resolve();
   const status: QueueStatus = chatQueues.has(key) ? 'queued' : 'immediate';
   const next = prev.then(task, task); // continue queue even if previous task failed
