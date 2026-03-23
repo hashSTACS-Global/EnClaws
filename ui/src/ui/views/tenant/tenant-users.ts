@@ -251,14 +251,15 @@ export class TenantUsersView extends LitElement {
     }
   }
 
-  private async handleToggleStatus(userId: string, email: string, currentStatus: string) {
+  private async handleToggleStatus(userId: string, displayName: string | null, email: string | null, currentStatus: string) {
+    const label = displayName || email || userId;
     const newStatus = currentStatus === "active" ? "suspended" : "active";
     const action = newStatus === "suspended" ? "禁用" : "启用";
-    if (!confirm(`确定要${action}用户 ${email} 吗？`)) return;
+    if (!confirm(`确定要${action}用户 ${label} 吗？`)) return;
     this.error = "";
     try {
       await this.rpc("tenant.users.update", { userId, status: newStatus });
-      this.showSuccess(`已${action} ${email}`);
+      this.showSuccess(`已${action} ${label}`);
       await this.loadUsers();
     } catch (err) {
       this.showError(err instanceof Error ? err.message : `${action}失败`);
@@ -338,7 +339,7 @@ export class TenantUsersView extends LitElement {
           <tbody>
             ${this.users.map(user => html`
               <tr>
-                <td>${user.email}</td>
+                <td>${user.email ?? "-"}</td>
                 <td>${user.displayName ?? "-"}</td>
                 <td>
                   <span class="role-badge ${user.role}">${this.roleLabel(user.role)}</span>
@@ -361,10 +362,10 @@ export class TenantUsersView extends LitElement {
                       ` : nothing}
                       ${user.status === "active" ? html`
                         <button class="btn btn-warn btn-sm"
-                          @click=${() => this.handleToggleStatus(user.id, user.email, user.status)}>禁用</button>
+                          @click=${() => this.handleToggleStatus(user.id, user.displayName, user.email, user.status)}>禁用</button>
                       ` : html`
                         <button class="btn btn-success btn-sm"
-                          @click=${() => this.handleToggleStatus(user.id, user.email, user.status)}>启用</button>
+                          @click=${() => this.handleToggleStatus(user.id, user.displayName, user.email, user.status)}>启用</button>
                       `}
                     ` : nothing}
                   </div>
