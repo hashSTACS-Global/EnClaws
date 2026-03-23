@@ -28,7 +28,15 @@ export function deriveSessionKey(scope: SessionScope, ctx: MsgContext) {
 export function resolveSessionKey(scope: SessionScope, ctx: MsgContext, mainKey?: string) {
   const explicit = ctx.SessionKey?.trim();
   if (explicit) {
-    return explicit.toLowerCase();
+    const key = explicit.toLowerCase();
+    // Multi-tenant direct chat: append tenant user ID so each user
+    // gets an isolated session. Group keys (containing :group: or
+    // :channel:) are left untouched to keep the shared group session.
+    const tenantUser = ctx.TenantUserId?.trim();
+    if (tenantUser && !key.includes(":group:") && !key.includes(":channel:")) {
+      return `${key}:user:${tenantUser.toLowerCase()}`;
+    }
+    return key;
   }
   const raw = deriveSessionKey(scope, ctx);
   if (scope === "global") {

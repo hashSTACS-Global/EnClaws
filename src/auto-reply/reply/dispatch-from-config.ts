@@ -28,6 +28,20 @@ import { enrichTenantContext } from "./tenant-enrich.js";
 
 const AUDIO_PLACEHOLDER_RE = /^<media:audio>(\s*\([^)]*\))?$/i;
 const AUDIO_HEADER_RE = /^\[Audio\b/i;
+
+/** Compute the effective session key for logging (appends tenant user ID for direct chats). */
+function resolveEffectiveSessionKey(
+  sessionKey: string | undefined,
+  ctx: { TenantUserId?: string; ChatType?: string },
+): string {
+  if (!sessionKey) return "unknown";
+  const key = sessionKey.toLowerCase();
+  const tenantUser = ctx.TenantUserId?.trim();
+  if (tenantUser && !key.includes(":group:") && !key.includes(":channel:")) {
+    return `${key}:user:${tenantUser.toLowerCase()}`;
+  }
+  return key;
+}
 const normalizeMediaType = (value: string): string => value.split(";")[0]?.trim().toLowerCase();
 
 const isInboundAudioContext = (ctx: FinalizedMsgContext): boolean => {
@@ -179,7 +193,7 @@ export async function dispatchReplyFromConfig(params: {
       `to=${ctx.To ?? "unknown"}`,
       `senderId=${ctx.SenderId ?? "unknown"}`,
       `senderName=${ctx.SenderName ?? "unknown"}`,
-      `sessionKey=${sessionKey ?? "unknown"}`,
+      `sessionKey=${resolveEffectiveSessionKey(sessionKey, ctx)}`,
       `agentId=${agentId}`,
       `accountId=${ctx.AccountId ?? "default"}`,
       `messageId=${messageId ?? "unknown"}`,
