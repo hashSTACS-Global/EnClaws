@@ -240,6 +240,22 @@ export async function deleteUser(id: string): Promise<boolean> {
 }
 
 /**
+ * Update display_name for a user identified by open_id, but only if the
+ * current display_name looks like a placeholder (ou_/on_ prefix or empty).
+ */
+export async function updateDisplayNameByOpenId(openId: string, displayName: string): Promise<void> {
+  if (getDbType() === DB_SQLITE) {
+    return sqliteUser.updateDisplayNameByOpenId(openId, displayName);
+  }
+  await query(
+    `UPDATE users SET display_name = $1, updated_at = NOW()
+     WHERE open_ids @> ARRAY[$2]::varchar[] AND status = 'active'
+       AND (display_name IS NULL OR display_name LIKE 'ou\\_%' OR display_name LIKE 'on\\_%')`,
+    [displayName, openId],
+  );
+}
+
+/**
  * Find or create a user by their Feishu union_id (primary) or open_id (fallback).
  *
  * Lookup order:
@@ -272,6 +288,13 @@ export async function findOrCreateUserByOpenId(
         );
         user.openIds.push(openId);
       }
+      // Update display_name if a real name is now available
+      if (displayName && displayName !== user.displayName && !displayName.startsWith("ou_")) {
+        if (!user.displayName || user.displayName.startsWith("ou_") || user.displayName.startsWith("on_")) {
+          await query("UPDATE users SET display_name = $1, updated_at = NOW() WHERE id = $2", [displayName, user.id]);
+          user.displayName = displayName;
+        }
+      }
       return { user, created: false };
     }
   }
@@ -287,6 +310,13 @@ export async function findOrCreateUserByOpenId(
     if (unionId && !user.unionId) {
       await query("UPDATE users SET union_id = $1 WHERE id = $2", [unionId, user.id]);
       user.unionId = unionId;
+    }
+    // Update display_name if a real name is now available
+    if (displayName && displayName !== user.displayName && !displayName.startsWith("ou_")) {
+      if (!user.displayName || user.displayName.startsWith("ou_") || user.displayName.startsWith("on_")) {
+        await query("UPDATE users SET display_name = $1, updated_at = NOW() WHERE id = $2", [displayName, user.id]);
+        user.displayName = displayName;
+      }
     }
     return { user, created: false };
   }

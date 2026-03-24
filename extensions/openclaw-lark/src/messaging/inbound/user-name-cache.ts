@@ -255,7 +255,6 @@ export async function resolveUserName(params: {
 
   const cache = getUserNameCache(account.accountId);
   if (cache.has(openId)) return { name: cache.get(openId) ?? '' };
-
   try {
     const client = LarkClient.fromAccount(account).sdk;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
