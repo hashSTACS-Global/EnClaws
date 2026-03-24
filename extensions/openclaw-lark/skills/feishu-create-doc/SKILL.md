@@ -12,7 +12,7 @@ description: |
 
 ```json
 {
-  "tool_actions": ["feishu_get_user.default", "feishu_search_user.default", "feishu_create_doc.default", "feishu_doc_media.insert"]
+  "tool_actions": ["feishu_get_user.default", "feishu_search_user.default", "feishu_create_doc.default", "feishu_doc_media.insert", "feishu_drive_file.copy", "feishu_drive_file.move", "feishu_drive_file.delete", "feishu_drive_file.upload", "feishu_drive_file.download", "feishu_drive_file.list", "feishu_drive_file.get_meta"]
 }
 ```
 
