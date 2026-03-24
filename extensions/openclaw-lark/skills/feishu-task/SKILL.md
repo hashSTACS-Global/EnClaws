@@ -20,7 +20,7 @@ description: |
 
 ```json
 {
-  "tool_actions": ["feishu_search_user.default", "feishu_task_task.create", "feishu_task_task.get", "feishu_task_task.list", "feishu_task_task.patch", "feishu_task_tasklist.create", "feishu_task_tasklist.get", "feishu_task_tasklist.list", "feishu_task_tasklist.tasks", "feishu_task_tasklist.patch", "feishu_task_tasklist.delete", "feishu_task_tasklist.add_members", "feishu_task_tasklist.remove_members", "feishu_task_comment.create", "feishu_task_comment.list", "feishu_task_comment.get", "feishu_task_subtask.create", "feishu_task_subtask.list", "feishu_calendar_event.create"]
+  "tool_actions": ["feishu_get_user.default", "feishu_search_user.default", "feishu_task_task.create", "feishu_task_task.get", "feishu_task_task.list", "feishu_task_task.patch", "feishu_task_task.add_members", "feishu_task_task.remove_members", "feishu_task_tasklist.create", "feishu_task_tasklist.get", "feishu_task_tasklist.list", "feishu_task_tasklist.tasks", "feishu_task_tasklist.patch", "feishu_task_tasklist.delete", "feishu_task_tasklist.add_members", "feishu_task_tasklist.remove_members", "feishu_task_comment.create", "feishu_task_comment.list", "feishu_task_comment.get", "feishu_task_subtask.create", "feishu_task_subtask.list", "feishu_calendar_event.create"]
 }
 ```
 

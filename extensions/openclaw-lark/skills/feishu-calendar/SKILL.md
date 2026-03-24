@@ -12,7 +12,7 @@ description: |
 
 ```json
 {
-  "tool_actions": ["feishu_search_user.default", "feishu_calendar_calendar.list", "feishu_calendar_calendar.get", "feishu_calendar_calendar.primary", "feishu_calendar_event.create", "feishu_calendar_event.list", "feishu_calendar_event.get", "feishu_calendar_event.patch", "feishu_calendar_event.delete", "feishu_calendar_event.search", "feishu_calendar_event.reply", "feishu_calendar_event.instances", "feishu_calendar_event.instance_view", "feishu_calendar_event_attendee.create", "feishu_calendar_event_attendee.list", "feishu_calendar_event_attendee.batch_delete", "feishu_calendar_freebusy.list"]
+  "tool_actions": ["feishu_get_user.default", "feishu_search_user.default", "feishu_calendar_calendar.list", "feishu_calendar_calendar.get", "feishu_calendar_calendar.primary", "feishu_calendar_event.create", "feishu_calendar_event.list", "feishu_calendar_event.get", "feishu_calendar_event.patch", "feishu_calendar_event.delete", "feishu_calendar_event.search", "feishu_calendar_event.reply", "feishu_calendar_event.instances", "feishu_calendar_event.instance_view", "feishu_calendar_event_attendee.create", "feishu_calendar_event_attendee.list", "feishu_calendar_event_attendee.batch_delete", "feishu_calendar_freebusy.list"]
 }
 ```
 

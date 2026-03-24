@@ -27,6 +27,7 @@ import {
 import { registerCommands } from './src/commands/index';
 import { larkLogger } from './src/core/lark-logger';
 import { emitSecurityWarnings } from './src/core/security-check';
+import { getPreAuthToolActions, expandToSkillActions, SKILL_TOOL_ACTIONS } from './src/core/skill-scopes';
 
 const log = larkLogger('plugin');
 
@@ -125,17 +126,164 @@ const plugin = {
     // Register pre-auth tool (proactive permission check before skill execution)
     registerFeishuPreAuthTool(api);
 
-    // ---- Tool call hooks (auto-trace AI tool invocations) ----
+    // ---- L1: Prompt injection — train AI to call feishu_pre_auth proactively ----
 
-    api.on('before_tool_call', (event) => {
-      log.info(`tool call: ${event.toolName} params=${JSON.stringify(event.params)}`);
+    api.on('before_prompt_build', () => {
+      // 动态构建 skill → tool_actions 查找表，让 AI 根据意图选择正确的参数
+      const skillEntries = Object.entries(SKILL_TOOL_ACTIONS);
+      if (skillEntries.length === 0) return;
+
+      const table = skillEntries
+        .map(([name, actions]) => `- ${name}: \`{"tool_actions": ${JSON.stringify(actions)}}\``)
+        .join('\n');
+
+      return {
+        prependContext: [
+          '## 飞书工具权限预检（必读）',
+          '',
+          '在使用任何 feishu_ 开头的工具之前，**必须**先调用 `feishu_pre_auth` 工具进行权限预检。',
+          '',
+          '### 步骤',
+          '1. 根据用户意图，从下方查找表中选择对应的 Skill',
+          '2. 调用 `feishu_pre_auth`，传入该 Skill 的 tool_actions',
+          '3. 返回 `all_authorized: true` → 继续执行；否则按指引完成授权',
+          '',
+          '### Skill 查找表',
+          table,
+          '',
+          '### 示例',
+          '',
+          '用户：帮我创建一个日程',
+          '',
+          '正确流程：',
+          '1. 意图 → 日历 → 选择 feishu-calendar',
+          '2. 先调用 `feishu_pre_auth({"tool_actions": ["feishu_search_user.default", "feishu_calendar_calendar.list", "feishu_calendar_event.create", ...]})`',
+          '3. 确认 all_authorized: true 后，再调用 feishu_calendar_event.create',
+          '',
+          '错误流程（禁止）：',
+          '1. 直接调用 feishu_calendar_event.create → ❌ 会被拦截',
+          '',
+          '⚠️ 每个会话只需预检一次，同 Skill 内的工具无需重复预检。',
+          '⚠️ 跳过预检会导致多次弹出授权弹窗，严重影响用户体验。',
+        ].join('\n'),
+      };
     });
 
-    api.on('after_tool_call', (event) => {
+    // ---- L2: Tool call hooks (pre-auth enforcement fallback + tracing) ----
+
+    // 按 sessionKey 跟踪已预检的 tool_actions，避免重复弹授权
+    const preAuthedActions = new Map<string, Set<string>>();
+    const MAX_TRACKED_SESSIONS = 200;
+    // 暂存 pre-auth 调用的参数，等 after_tool_call 确认成功后再记录
+    const pendingPreAuth = new Map<string, { sessionKey: string; actions: string[] }>();
+    // 拦截计数器：同一 session 同一 apiName 被 block 超过阈值后放行，避免死循环
+    const blockCounts = new Map<string, Map<string, number>>();
+    const MAX_BLOCKS_BEFORE_FALLBACK = 2;
+
+    api.on('before_tool_call', (event, ctx: { sessionKey?: string } | undefined) => {
+      const sessionKey = ctx?.sessionKey ?? '__default__';
+
+      log.warn(`[pre-auth-debug] before_tool_call: ${event.toolName} session=${sessionKey}`);
+
+      // 1. feishu_pre_auth 调用：暂存参数（不重置 blockCounts，等 after_tool_call 确认成功后再清）
+      if (event.toolName === 'feishu_pre_auth') {
+        const actions = event.params?.tool_actions;
+        if (Array.isArray(actions)) {
+          pendingPreAuth.set(sessionKey, { sessionKey, actions: actions as string[] });
+          log.warn(`[pre-auth-debug] stored pending: ${actions.length} actions session=${sessionKey}`);
+        }
+        return;
+      }
+
+      // 2. 仅对 feishu_ 开头的工具强制预检
+      if (!event.toolName.startsWith('feishu_')) return;
+
+      // 3. 构造 tool_action key
+      const action = (event.params?.action as string) ?? 'default';
+      const apiName = `${event.toolName}.${action}`;
+
+      // 4. 查找 tool_actions（仅 1-2 个 skill 的工具可确定，共享工具放行）
+      const toolActions = getPreAuthToolActions(apiName);
+      if (!toolActions) return;
+
+      // 5. 已预检 → 放行
+      const set = preAuthedActions.get(sessionKey);
+      if (set?.has(apiName)) {
+        log.warn(`[pre-auth-debug] ${apiName} already pre-authed, letting through`);
+        return;
+      }
+
+      log.warn(`[pre-auth-debug] ${apiName} NOT pre-authed. sessions=[${[...(preAuthedActions.keys())]}] set=${set?.size ?? 'none'}`);
+
+      // 6. 安全阀：block 超过阈值后放行，退化为 auto-auth
+      let sessionBlocks = blockCounts.get(sessionKey);
+      if (!sessionBlocks) {
+        sessionBlocks = new Map();
+        blockCounts.set(sessionKey, sessionBlocks);
+      }
+      const count = (sessionBlocks.get(apiName) ?? 0) + 1;
+      sessionBlocks.set(apiName, count);
+      if (count > MAX_BLOCKS_BEFORE_FALLBACK) {
+        log.warn(`[pre-auth-debug] safety valve: ${apiName} count=${count}, letting through`);
+        return;
+      }
+
+      // 7. 未预检 → 阻止，提示 AI 先调 feishu_pre_auth
+      log.warn(`[pre-auth-debug] BLOCKING ${apiName} (${count}/${MAX_BLOCKS_BEFORE_FALLBACK})`);
+      return {
+        block: true,
+        blockReason:
+          `请先调用 feishu_pre_auth({"tool_actions": ${JSON.stringify(toolActions)}}) 进行权限预检。`,
+      };
+    });
+
+    api.on('after_tool_call', (event, ctx: { sessionKey?: string } | undefined) => {
       if (event.error) {
         log.error(`tool fail: ${event.toolName} ${event.error} (${event.durationMs ?? 0}ms)`);
       } else {
         log.info(`tool done: ${event.toolName} ok (${event.durationMs ?? 0}ms)`);
+      }
+
+      // feishu_pre_auth 执行后，记录 tool_actions 为已预检
+      if (event.toolName === 'feishu_pre_auth') {
+        const ctxSessionKey = ctx?.sessionKey ?? '__default__';
+        // 优先按 ctxSessionKey 查找；若未命中则遍历 pending 列表（平台 bug：after_tool_call 的 ctx 可能缺少 sessionKey）
+        let pending = pendingPreAuth.get(ctxSessionKey);
+        if (pending) {
+          pendingPreAuth.delete(ctxSessionKey);
+        } else {
+          for (const [key, value] of pendingPreAuth) {
+            pending = value;
+            pendingPreAuth.delete(key);
+            break;
+          }
+        }
+
+        log.warn(`[pre-auth-debug] after_tool_call: pre_auth ctxSession=${ctxSessionKey} realSession=${pending?.sessionKey} error=${!!event.error} pending=${!!pending}`);
+
+        if (!pending) return;
+
+        // pre-auth 无报错即记录（包括返回 OAuth 卡片的情况）
+        if (event.error) {
+          log.warn(`[pre-auth-debug] pre_auth had error, NOT recording`);
+          return;
+        }
+
+        // 使用 before_tool_call 记录的真实 sessionKey，而非 after_tool_call 的 ctx
+        const realSessionKey = pending.sessionKey;
+        let set = preAuthedActions.get(realSessionKey);
+        if (!set) {
+          if (preAuthedActions.size >= MAX_TRACKED_SESSIONS) {
+            const oldest = preAuthedActions.keys().next().value;
+            if (oldest !== undefined) preAuthedActions.delete(oldest);
+          }
+          set = new Set();
+          preAuthedActions.set(realSessionKey, set);
+        }
+        const expanded = expandToSkillActions(pending.actions);
+        for (const a of expanded) set.add(a);
+        blockCounts.delete(realSessionKey);
+        log.warn(`[pre-auth-debug] RECORDED ${expanded.length} actions for session=${realSessionKey}`);
       }
     });
 

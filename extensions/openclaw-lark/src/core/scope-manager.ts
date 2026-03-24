@@ -131,20 +131,27 @@ export function getActionsForScope(scope: string): ToolActionKey[] {
 }
 
 /**
- * 获取同一工具族下所有动作的合并 scopes。
+ * 工具族前缀覆盖映射
  *
- * 从 apiName（如 "feishu_calendar_calendar.primary"）提取工具族前缀
- * （如 "feishu_calendar_"），然后收集所有匹配该前缀的 tool action 的 scopes。
+ * 某些工具的 2 段前缀（如 "feishu_search_"）会匹配到不相关的工具
+ * （如 feishu_search_user 与 feishu_search_doc_wiki），导致 scope 过度扩展。
+ * 此映射为这些工具指定更精确的前缀。
  *
- * 用于 token 完全失效时一次性请求足够广的 scope，避免多次授权弹窗。
+ * Key: 工具名（apiName 去掉 ".action" 的部分）
+ * Value: 精确的族前缀（用 "." 结尾匹配该工具自身的 action）
  */
+const FAMILY_PREFIX_OVERRIDES: Record<string, string> = {
+  feishu_search_user: 'feishu_search_user.',
+  feishu_search_doc_wiki: 'feishu_search_doc_wiki.',
+};
+
 export function getToolFamilyScopes(apiName: string): string[] {
   // apiName = "feishu_calendar_calendar.primary" → toolName = "feishu_calendar_calendar"
   const toolName = apiName.split('.')[0];
   // 提取族前缀：取前两个 "_" 分隔段 → "feishu_calendar_"
   const parts = toolName.split('_');
   if (parts.length < 3) return [];
-  const familyPrefix = parts.slice(0, 2).join('_') + '_';
+  const familyPrefix = FAMILY_PREFIX_OVERRIDES[toolName] ?? parts.slice(0, 2).join('_') + '_';
 
   // 收集本族 + 关联族的所有前缀
   const prefixes = [familyPrefix, ...(RELATED_TOOL_FAMILIES[familyPrefix] ?? [])];

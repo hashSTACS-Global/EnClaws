@@ -130,10 +130,12 @@ export type ToolActionKey =
   | 'feishu_task_comment.list'
   | 'feishu_task_subtask.create'
   | 'feishu_task_subtask.list'
+  | 'feishu_task_task.add_members'
   | 'feishu_task_task.create'
   | 'feishu_task_task.get'
   | 'feishu_task_task.list'
   | 'feishu_task_task.patch'
+  | 'feishu_task_task.remove_members'
   | 'feishu_task_tasklist.add_members'
   | 'feishu_task_tasklist.create'
   | 'feishu_task_tasklist.delete'
@@ -233,10 +235,12 @@ export const TOOL_SCOPES: ToolScopeMapping = {
   'feishu_calendar_event_attendee.list': ['calendar:calendar.event:read'],
   'feishu_calendar_event_attendee.batch_delete': ['calendar:calendar.event:read', 'calendar:calendar.event:update'],
   'feishu_calendar_freebusy.list': ['calendar:calendar.free_busy:read'],
+  'feishu_task_task.add_members': ['task:task:write', 'task:task:writeonly'],
   'feishu_task_task.create': ['task:task:write', 'task:task:writeonly'],
   'feishu_task_task.get': ['task:task:read', 'task:task:write'],
   'feishu_task_task.list': ['task:task:read', 'task:task:write'],
   'feishu_task_task.patch': ['task:task:write', 'task:task:writeonly'],
+  'feishu_task_task.remove_members': ['task:task:write', 'task:task:writeonly'],
   'feishu_task_tasklist.create': ['task:tasklist:write'],
   'feishu_task_tasklist.get': ['task:tasklist:read', 'task:tasklist:write'],
   'feishu_task_tasklist.list': ['task:tasklist:read', 'task:tasklist:write'],
@@ -511,17 +515,20 @@ export function filterSensitiveScopes(scopes: string[]): string[] {
  * 定义常被一起使用的工具族。当某个工具族触发用户授权时，
  * 自动把关联族的 scope 一并请求，避免多次授权弹窗。
  *
- * Key: 工具族前缀（如 "feishu_task_"）
+ * Key: 工具族前缀（如 "feishu_task_"）或精确工具前缀（如 "feishu_search_user."）
  * Value: 关联的工具族前缀列表
  *
- * 示例：创建任务后通常会创建日历提醒 + 搜索用户，
- *       所以 feishu_task_ 关联 feishu_calendar_ 和 feishu_search_。
+ * 注意：
+ * - 使用 "feishu_search_user."（带点号）而非 "feishu_search_"（带下划线），
+ *   避免误匹配 feishu_search_doc_wiki 等不相关工具。
+ * - 反向映射（如 search_user → calendar）不再需要，已由 skill-scopes.ts
+ *   的 getSkillScopesForTool 在 auto-auth 中按 skill 粒度自动覆盖。
  *
- * 最后更新: 2026-03-20
+ * 最后更新: 2026-03-23
  */
 export const RELATED_TOOL_FAMILIES: Record<string, string[]> = {
-  'feishu_task_': ['feishu_calendar_', 'feishu_search_'],
-  'feishu_calendar_': ['feishu_search_'],
+  'feishu_task_': ['feishu_calendar_', 'feishu_search_user.'],
+  'feishu_calendar_': ['feishu_search_user.'],
 };
 
 // ===== 统计信息 =====

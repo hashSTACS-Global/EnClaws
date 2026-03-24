@@ -20,7 +20,7 @@ description: |
 
 ```json
 {
-  "tool_actions": ["feishu_im_user_get_messages.default", "feishu_im_user_search_messages.default", "feishu_im_user_fetch_resource.default"]
+  "tool_actions": ["feishu_get_user.default", "feishu_search_user.default", "feishu_im_user_get_messages.default", "feishu_im_user_search_messages.default", "feishu_im_user_fetch_resource.default"]
 }
 ```
 

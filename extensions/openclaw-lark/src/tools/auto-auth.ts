@@ -41,6 +41,7 @@ import { UserAuthRequiredError, UserScopeInsufficientError, AppScopeMissingError
 import { isUatPolicyError } from '../core/uat-access-guard';
 import { invalidateAppScopeCache, getAppGrantedScopes, isAppScopeSatisfied } from '../core/app-scope-checker';
 import { getToolFamilyScopes } from '../core/scope-manager';
+import { getSkillScopesForTool } from '../core/skill-scopes';
 import { LarkClient } from '../core/lark-client';
 import { createCardEntity, sendCardByCardId, updateCardKitCardForAuth } from '../card/cardkit';
 import { executeAuthorize } from './oauth';
@@ -985,18 +986,31 @@ export async function handleInvokeErrorWithAutoAuth(err: unknown, cfg: ClawdbotC
         try {
           const acct = getLarkAccount(cfg, ticket.accountId);
           if (acct.configured) {
-            // ★ 扩展 scope：工具内部可能有多个 invoke 调用需要不同 scope
-            //   （如 resolveCalendarId 需要 calendar:calendar:read，
-            //   而 create 需要 calendar:calendar.event:create/update）。
-            //   通过工具族前缀收集所有相关 scope，一次性授权，避免多次弹卡片。
+            // ★ 扩展 scope：优先按 skill 粒度扩展，回退到工具族粒度。
+            //
+            //   Skill 级扩展：如果该工具属于某个 skill（如 feishu-calendar），
+            //   则一次性收集该 skill 声明的所有 tool_actions 的 scope，
+            //   确保即使 AI 跳过了 feishu_pre_auth，也能一次弹窗搞定。
+            //
+            //   工具族级扩展（回退）：如果不属于任何 skill，
+            //   则按工具族前缀收集相关 scope（原有逻辑）。
             {
-              const familyScopes = getToolFamilyScopes(err.apiName);
-              if (familyScopes.length > scopes.length) {
+              const skillScopes = getSkillScopesForTool(err.apiName);
+              if (skillScopes.length > scopes.length) {
                 log.info(
                   `expanding scopes from [${scopes.join(', ')}] ` +
-                    `to tool family [${familyScopes.join(', ')}]`,
+                    `to skill scopes [${skillScopes.join(', ')}]`,
                 );
-                scopes = familyScopes;
+                scopes = skillScopes;
+              } else {
+                const familyScopes = getToolFamilyScopes(err.apiName);
+                if (familyScopes.length > scopes.length) {
+                  log.info(
+                    `expanding scopes from [${scopes.join(', ')}] ` +
+                      `to tool family [${familyScopes.join(', ')}]`,
+                  );
+                  scopes = familyScopes;
+                }
               }
             }
 
