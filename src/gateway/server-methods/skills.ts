@@ -9,6 +9,9 @@ import { loadWorkspaceSkillEntries, type SkillEntry } from "../../agents/skills.
 import { listAgentWorkspaceDirs } from "../../agents/workspace-dirs.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
+import { loadTenantConfig } from "../../config/tenant-config.js";
+import { resolveTenantSkillsDir } from "../../config/sessions/tenant-paths.js";
+import { isDbInitialized } from "../../db/index.js";
 import { getRemoteSkillEligibility } from "../../infra/skills-remote.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
 import { normalizeSecretInput } from "../../utils/normalize-secret-input.js";
@@ -21,7 +24,27 @@ import {
   validateSkillsStatusParams,
   validateSkillsUpdateParams,
 } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import type { TenantContext } from "../../auth/middleware.js";
+import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
+
+/**
+ * Resolve config for the current request. When a tenant context is present,
+ * returns the tenant-scoped config merged with global defaults; otherwise
+ * returns the plain global config.
+ */
+async function resolveRequestConfig(
+  client: GatewayRequestHandlerOptions["client"],
+): Promise<{ cfg: OpenClawConfig; tenant?: TenantContext }> {
+  const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
+  if (tenant && isDbInitialized()) {
+    const cfg = await loadTenantConfig(tenant.tenantId, {
+      userId: tenant.userId,
+      userRole: tenant.role,
+    });
+    return { cfg, tenant };
+  }
+  return { cfg: loadConfig() };
+}
 
 function collectSkillBins(entries: SkillEntry[]): string[] {
   const bins = new Set<string>();
@@ -55,7 +78,7 @@ function collectSkillBins(entries: SkillEntry[]): string[] {
 }
 
 export const skillsHandlers: GatewayRequestHandlers = {
-  "skills.status": ({ params, respond }) => {
+  "skills.status": async ({ params, client, respond }) => {
     if (!validateSkillsStatusParams(params)) {
       respond(
         false,
@@ -67,7 +90,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const cfg = loadConfig();
+    const { cfg, tenant } = await resolveRequestConfig(client);
     const agentIdRaw = typeof params?.agentId === "string" ? params.agentId.trim() : "";
     const agentId = agentIdRaw ? normalizeAgentId(agentIdRaw) : resolveDefaultAgentId(cfg);
     if (agentIdRaw) {
@@ -82,13 +105,19 @@ export const skillsHandlers: GatewayRequestHandlers = {
       }
     }
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const tenantSkillsDir = tenant ? resolveTenantSkillsDir(tenant.tenantId) : undefined;
+    const entries = loadWorkspaceSkillEntries(workspaceDir, {
+      config: cfg,
+      tenantSkillsDir,
+    });
     const report = buildWorkspaceSkillStatus(workspaceDir, {
       config: cfg,
+      entries,
       eligibility: { remote: getRemoteSkillEligibility() },
     });
     respond(true, report, undefined);
   },
-  "skills.bins": ({ params, respond }) => {
+  "skills.bins": async ({ params, client, respond }) => {
     if (!validateSkillsBinsParams(params)) {
       respond(
         false,
@@ -100,18 +129,19 @@ export const skillsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const cfg = loadConfig();
+    const { cfg, tenant } = await resolveRequestConfig(client);
+    const tenantSkillsDir = tenant ? resolveTenantSkillsDir(tenant.tenantId) : undefined;
     const workspaceDirs = listAgentWorkspaceDirs(cfg);
     const bins = new Set<string>();
     for (const workspaceDir of workspaceDirs) {
-      const entries = loadWorkspaceSkillEntries(workspaceDir, { config: cfg });
+      const entries = loadWorkspaceSkillEntries(workspaceDir, { config: cfg, tenantSkillsDir });
       for (const bin of collectSkillBins(entries)) {
         bins.add(bin);
       }
     }
     respond(true, { bins: [...bins].toSorted() }, undefined);
   },
-  "skills.install": async ({ params, respond }) => {
+  "skills.install": async ({ params, client, respond }) => {
     if (!validateSkillsInstallParams(params)) {
       respond(
         false,
@@ -128,7 +158,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
       installId: string;
       timeoutMs?: number;
     };
-    const cfg = loadConfig();
+    const { cfg } = await resolveRequestConfig(client);
     const workspaceDirRaw = resolveAgentWorkspaceDir(cfg, resolveDefaultAgentId(cfg));
     const result = await installSkill({
       workspaceDir: workspaceDirRaw,
@@ -143,7 +173,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
       result.ok ? undefined : errorShape(ErrorCodes.UNAVAILABLE, result.message),
     );
   },
-  "skills.update": async ({ params, respond }) => {
+  "skills.update": async ({ params, client, respond }) => {
     if (!validateSkillsUpdateParams(params)) {
       respond(
         false,

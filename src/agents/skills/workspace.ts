@@ -336,23 +336,30 @@ function loadSkillEntries(
   });
   const mergedExtraDirs = [...extraDirs, ...pluginSkillDirs];
 
+  // In multi-tenant mode, tenants see bundled (system default) skills
+  // plus their own tenant skills. Other global sources (managed/extra/
+  // workspace/personal) are not visible — each tenant manages its own set.
   const bundledSkills = bundledSkillsDir
     ? loadSkills({
         dir: bundledSkillsDir,
         source: "openclaw-bundled",
       })
     : [];
-  const extraSkills = mergedExtraDirs.flatMap((dir) => {
-    const resolved = resolveUserPath(dir);
-    return loadSkills({
-      dir: resolved,
-      source: "openclaw-extra",
-    });
-  });
-  const managedSkills = loadSkills({
-    dir: managedSkillsDir,
-    source: "openclaw-managed",
-  });
+  const extraSkills = hasTenantSkillsDir
+    ? []
+    : mergedExtraDirs.flatMap((dir) => {
+        const resolved = resolveUserPath(dir);
+        return loadSkills({
+          dir: resolved,
+          source: "openclaw-extra",
+        });
+      });
+  const managedSkills = hasTenantSkillsDir
+    ? []
+    : loadSkills({
+        dir: managedSkillsDir,
+        source: "openclaw-managed",
+      });
 
   // Multi-tenant mode: skills live in tenantDir/skills/, NOT workspace/skills/
   // Single-tenant mode: skills live in workspace/skills/ and .agents/skills/
