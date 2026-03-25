@@ -341,6 +341,8 @@ export async function dispatchCronDelivery(
         timeoutMs: params.timeoutMs,
         cleanup: params.job.deleteAfterRun ? "delete" : "keep",
         roundOneReply: synthesizedText,
+        tenantId: params.tenantId,
+        tenantUserId: params.userId,
         // Cron output is a finished completion message: send it directly to the
         // target channel via the completion-direct-send path rather than injecting
         // a trigger message into the (likely idle) main agent session.
@@ -428,6 +430,8 @@ export async function dispatchCronDelivery(
           deliver: false,
           bestEffortDeliver: true,
           idempotencyKey: `cron-announce:${params.job.id}:${params.runSessionId}`,
+          ...(params.tenantId && { _tenantId: params.tenantId }),
+          ...(params.userId && { _tenantUserId: params.userId }),
         },
         expectFinal: true,
         timeoutMs: params.timeoutMs,

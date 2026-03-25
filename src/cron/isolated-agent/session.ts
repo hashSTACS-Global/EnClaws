@@ -7,6 +7,7 @@ import {
   resolveStorePath,
   type SessionEntry,
 } from "../../config/sessions.js";
+import { resolveTenantSessionStorePath } from "../../config/sessions/tenant-paths.js";
 
 export function resolveCronSession(params: {
   cfg: OpenClawConfig;
@@ -14,11 +15,13 @@ export function resolveCronSession(params: {
   nowMs: number;
   agentId: string;
   forceNew?: boolean;
+  tenantId?: string;
+  userId?: string;
 }) {
   const sessionCfg = params.cfg.session;
-  const storePath = resolveStorePath(sessionCfg?.store, {
-    agentId: params.agentId,
-  });
+  const storePath = params.tenantId
+    ? resolveTenantSessionStorePath(params.tenantId, params.agentId, params.userId)
+    : resolveStorePath(sessionCfg?.store, { agentId: params.agentId });
   const store = loadSessionStore(storePath);
   const entry = store[params.sessionKey];
 

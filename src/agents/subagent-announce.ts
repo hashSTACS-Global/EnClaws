@@ -853,6 +853,8 @@ async function sendSubagentAnnounceDirectly(params: {
   directOrigin?: DeliveryContext;
   requesterIsSubagent: boolean;
   signal?: AbortSignal;
+  tenantId?: string;
+  tenantUserId?: string;
 }): Promise<SubagentAnnounceDeliveryResult> {
   if (params.signal?.aborted) {
     return {
@@ -983,6 +985,8 @@ async function sendSubagentAnnounceDirectly(params: {
             to: shouldDeliverExternally ? directTo : undefined,
             threadId: shouldDeliverExternally ? threadId : undefined,
             idempotencyKey: params.directIdempotencyKey,
+            ...(params.tenantId && { _tenantId: params.tenantId }),
+            ...(params.tenantUserId && { _tenantUserId: params.tenantUserId }),
           },
           expectFinal: true,
           timeoutMs: announceTimeoutMs,
@@ -1021,6 +1025,8 @@ async function deliverSubagentAnnouncement(params: {
   spawnMode?: SpawnSubagentMode;
   directIdempotencyKey: string;
   signal?: AbortSignal;
+  tenantId?: string;
+  tenantUserId?: string;
 }): Promise<SubagentAnnounceDeliveryResult> {
   return await runSubagentAnnounceDispatch({
     expectsCompletionMessage: params.expectsCompletionMessage,
@@ -1051,6 +1057,8 @@ async function deliverSubagentAnnouncement(params: {
         expectsCompletionMessage: params.expectsCompletionMessage,
         signal: params.signal,
         bestEffortDeliver: params.bestEffortDeliver,
+        tenantId: params.tenantId,
+        tenantUserId: params.tenantUserId,
       }),
   });
 }
@@ -1250,6 +1258,9 @@ export async function runSubagentAnnounceFlow(params: {
   spawnMode?: SpawnSubagentMode;
   signal?: AbortSignal;
   bestEffortDeliver?: boolean;
+  /** Multi-tenant context for tenant-scoped session storage. */
+  tenantId?: string;
+  tenantUserId?: string;
 }): Promise<boolean> {
   let didAnnounce = false;
   const expectsCompletionMessage = params.expectsCompletionMessage === true;
@@ -1595,6 +1606,8 @@ export async function runSubagentAnnounceFlow(params: {
       spawnMode: params.spawnMode,
       directIdempotencyKey,
       signal: params.signal,
+      tenantId: params.tenantId,
+      tenantUserId: params.tenantUserId,
     });
     // Cron delivery state should only be marked as delivered when we have a
     // direct path result. Queue/steer means "accepted for later processing",

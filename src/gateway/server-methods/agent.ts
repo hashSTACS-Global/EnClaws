@@ -57,6 +57,27 @@ import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./typ
 
 const RESET_COMMAND_RE = /^\/(new|reset)(?:\s+([\s\S]*))?$/i;
 
+/**
+ * Strip internal tenant params (`_tenantId`, `_tenantUserId`) from the
+ * request params so they don't trip `additionalProperties: false` in the
+ * protocol validators.  The original `params` object is returned unmodified
+ * when no tenant fields are present.
+ */
+function stripTenantParams(params: Record<string, unknown>): {
+  cleaned: Record<string, unknown>;
+  tenantId?: string;
+  tenantUserId?: string;
+} {
+  const tenantId = typeof params._tenantId === "string" ? params._tenantId.trim() : undefined;
+  const tenantUserId =
+    typeof params._tenantUserId === "string" ? params._tenantUserId.trim() : undefined;
+  if (!("_tenantId" in params) && !("_tenantUserId" in params)) {
+    return { cleaned: params, tenantId, tenantUserId };
+  }
+  const { _tenantId: _, _tenantUserId: __, ...rest } = params;
+  return { cleaned: rest, tenantId, tenantUserId };
+}
+
 function resolveSenderIsOwnerFromClient(client: GatewayRequestHandlerOptions["client"]): boolean {
   const scopes = Array.isArray(client?.connect?.scopes) ? client.connect.scopes : [];
   return scopes.includes(ADMIN_SCOPE);
@@ -161,7 +182,8 @@ async function runSessionResetFromAgent(params: {
 
 export const agentHandlers: GatewayRequestHandlers = {
   agent: async ({ params, respond, context, client, isWebchatConnect }) => {
-    const p = params;
+    const { cleaned: p, tenantId: paramTenantId, tenantUserId: paramTenantUserId } =
+      stripTenantParams(params);
     if (!validateAgentParams(p)) {
       respond(
         false,
@@ -367,7 +389,14 @@ export const agentHandlers: GatewayRequestHandlers = {
     }
 
     if (requestedSessionKey) {
-      const { cfg, storePath, entry, canonicalKey } = loadSessionEntry(requestedSessionKey);
+      const tenantOverride =
+        paramTenantId && paramTenantUserId
+          ? { tenantId: paramTenantId, userId: paramTenantUserId }
+          : undefined;
+      const { cfg, storePath, entry, canonicalKey } = loadSessionEntry(
+        requestedSessionKey,
+        tenantOverride,
+      );
       cfgForAgent = cfg;
       const now = Date.now();
       const sessionId = entry?.sessionId ?? randomUUID();
@@ -638,6 +667,8 @@ export const agentHandlers: GatewayRequestHandlers = {
         senderIsOwner,
         toolsOverride: request.tools,
         skillsOverride: request.skills,
+        tenantId: paramTenantId,
+        tenantUserId: paramTenantUserId,
       },
       defaultRuntime,
       context.deps,

@@ -20,6 +20,7 @@ import {
   resolveStorePath,
   type SessionEntry,
 } from "../../config/sessions.js";
+import { resolveTenantSessionStorePath } from "../../config/sessions/tenant-paths.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 
 export type SessionResolution = {
@@ -45,6 +46,8 @@ export function resolveSessionKeyForRequest(opts: {
   sessionId?: string;
   sessionKey?: string;
   agentId?: string;
+  tenantId?: string;
+  tenantUserId?: string;
 }): SessionKeyResolution {
   const sessionCfg = opts.cfg.session;
   const scope = sessionCfg?.scope ?? "per-sender";
@@ -56,9 +59,10 @@ export function resolveSessionKeyForRequest(opts: {
       agentId: opts.agentId,
     });
   const storeAgentId = resolveAgentIdFromSessionKey(explicitSessionKey);
-  const storePath = resolveStorePath(sessionCfg?.store, {
-    agentId: storeAgentId,
-  });
+  const storePath =
+    opts.tenantId && opts.tenantUserId
+      ? resolveTenantSessionStorePath(opts.tenantId, storeAgentId, opts.tenantUserId)
+      : resolveStorePath(sessionCfg?.store, { agentId: storeAgentId });
   const sessionStore = loadSessionStore(storePath);
 
   const ctx: MsgContext | undefined = opts.to?.trim() ? { From: opts.to } : undefined;
@@ -113,6 +117,8 @@ export function resolveSession(opts: {
   sessionId?: string;
   sessionKey?: string;
   agentId?: string;
+  tenantId?: string;
+  tenantUserId?: string;
 }): SessionResolution {
   const sessionCfg = opts.cfg.session;
   const { sessionKey, sessionStore, storePath } = resolveSessionKeyForRequest({
@@ -121,6 +127,8 @@ export function resolveSession(opts: {
     sessionId: opts.sessionId,
     sessionKey: opts.sessionKey,
     agentId: opts.agentId,
+    tenantId: opts.tenantId,
+    tenantUserId: opts.tenantUserId,
   });
   const now = Date.now();
 

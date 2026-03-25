@@ -23,11 +23,13 @@ import {
   type SessionScope,
 } from "../config/sessions.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
+import { extractTenantFromSessionKey } from "../auth/middleware.js";
 import {
   normalizeAgentId,
   normalizeMainKey,
   parseAgentSessionKey,
 } from "../routing/session-key.js";
+import { resolveRequestStorePath } from "./tenant-session-utils.js";
 import { isCronRunSessionKey } from "../sessions/session-key-utils.js";
 import {
   AVATAR_MAX_BYTES,
@@ -175,12 +177,23 @@ export function deriveSessionTitle(
   return undefined;
 }
 
-export function loadSessionEntry(sessionKey: string) {
+export function loadSessionEntry(
+  sessionKey: string,
+  tenantOverride?: { tenantId?: string; userId?: string },
+) {
   const cfg = loadConfig();
   const sessionCfg = cfg.session;
   const canonicalKey = resolveSessionStoreKey({ cfg, sessionKey });
   const agentId = resolveSessionStoreAgentId(cfg, canonicalKey);
-  const storePath = resolveStorePath(sessionCfg?.store, { agentId });
+
+  // Resolve tenant context: explicit override > embedded in session key.
+  const tenantId = tenantOverride?.tenantId || extractTenantFromSessionKey(sessionKey)?.tenantId;
+  const userId = tenantOverride?.userId;
+  const storePath =
+    tenantId && userId
+      ? resolveRequestStorePath(cfg, agentId, tenantId, userId)
+      : resolveStorePath(sessionCfg?.store, { agentId });
+
   const store = loadSessionStore(storePath);
   const match = findStoreMatch(store, canonicalKey, sessionKey.trim());
   const legacyKey = match?.key !== canonicalKey ? match?.key : undefined;

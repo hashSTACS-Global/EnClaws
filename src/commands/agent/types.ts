@@ -86,4 +86,7 @@ export type AgentCommandOpts = {
   toolsOverride?: string[];
   /** Explicit list of skills to grant to the agent. */
   skillsOverride?: string[];
+  /** Multi-tenant context for tenant-scoped session storage. */
+  tenantId?: string;
+  tenantUserId?: string;
 };

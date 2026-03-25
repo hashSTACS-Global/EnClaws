@@ -481,6 +481,8 @@ export function buildTenantCronService(params: {
         deliver: false,
         bestEffortDeliver: true,
         idempotencyKey,
+        _tenantId: params.tenantId,
+        _tenantUserId: params.userId,
       },
       expectFinal: true,
       timeoutMs: 30_000,

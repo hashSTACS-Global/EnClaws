@@ -57,6 +57,7 @@ import {
   resolveSessionFilePath,
   resolveSessionFilePathOptions,
   resolveSessionTranscriptPath,
+  resolveSessionTranscriptPathInDir,
   type SessionEntry,
   updateSessionStore,
 } from "../config/sessions.js";
@@ -414,6 +415,8 @@ export async function agentCommand(
     sessionId: opts.sessionId,
     sessionKey: opts.sessionKey,
     agentId: agentIdOverride,
+    tenantId: opts.tenantId,
+    tenantUserId: opts.tenantUserId,
   });
 
   const {
@@ -789,11 +792,17 @@ export async function agentCommand(
     if (sessionStore && sessionKey) {
       const threadIdFromSessionKey = parseSessionThreadInfo(sessionKey).threadId;
       const fallbackSessionFile = !sessionEntry?.sessionFile
-        ? resolveSessionTranscriptPath(
-            sessionId,
-            sessionAgentId,
-            opts.threadId ?? threadIdFromSessionKey,
-          )
+        ? sessionPathOpts?.sessionsDir
+          ? resolveSessionTranscriptPathInDir(
+              sessionId,
+              sessionPathOpts.sessionsDir,
+              opts.threadId ?? threadIdFromSessionKey,
+            )
+          : resolveSessionTranscriptPath(
+              sessionId,
+              sessionAgentId,
+              opts.threadId ?? threadIdFromSessionKey,
+            )
         : undefined;
       const resolvedSessionFile = await resolveAndPersistSessionFile({
         sessionId,

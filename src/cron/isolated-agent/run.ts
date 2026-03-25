@@ -30,6 +30,7 @@ import {
   resolveTenantAgentWorkspaceDir,
   resolveTenantAgentDir,
   resolveTenantSessionStorePath,
+  resolveTenantSessionTranscriptPath,
 } from "../../config/sessions/tenant-paths.js";
 import {
   normalizeThinkLevel,
@@ -255,6 +256,8 @@ export async function runCronIsolatedAgentTurn(params: {
     nowMs: now,
     // Isolated cron runs must not carry prior turn context across executions.
     forceNew: params.job.sessionTarget === "isolated",
+    tenantId: params.tenantId,
+    userId: params.userId,
   });
   const runSessionId = cronSession.sessionEntry.sessionId;
   const runSessionKey = baseSessionKey.startsWith("cron:")
@@ -549,7 +552,9 @@ export async function runCronIsolatedAgentTurn(params: {
   const runStartedAt = Date.now();
   let runEndedAt = runStartedAt;
   try {
-    const sessionFile = resolveSessionTranscriptPath(cronSession.sessionEntry.sessionId, agentId);
+    const sessionFile = params.tenantId
+      ? resolveTenantSessionTranscriptPath(params.tenantId, cronSession.sessionEntry.sessionId, agentId, undefined, params.userId)
+      : resolveSessionTranscriptPath(cronSession.sessionEntry.sessionId, agentId);
     const resolvedVerboseLevel =
       normalizeVerboseLevel(cronSession.sessionEntry.verboseLevel) ??
       normalizeVerboseLevel(agentCfg?.verboseDefault) ??
