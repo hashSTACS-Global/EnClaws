@@ -6,6 +6,10 @@
  * configuration from the account-scoped config and auto-provisions the user,
  * injecting TenantId and TenantUserId into the message context.
  *
+ * Also resolves sender display names when the channel plugin fails (e.g. due
+ * to contact scope limitations). Uses DB cache first, then falls back to the
+ * Feishu chat members API with tenant_access_token (no user OAuth needed).
+ *
  * This allows external plugins to work unmodified in multi-tenant deployments.
  */
 
@@ -44,11 +48,21 @@ export async function enrichTenantContext(
         });
         if (provisioned) {
           ctx.TenantUserRole = provisioned.role;
+          // Backfill sender name from DB if plugin didn't resolve it
+          if (isMissingSenderName(ctx) && provisioned.displayName && !isPlaceholderName(provisioned.displayName)) {
+            ctx.SenderName = provisioned.displayName;
+            logVerbose(`[tenant-enrich] backfilled SenderName from DB: ${provisioned.displayName}`);
+          }
         }
       }
     } catch {
       // Non-fatal: continue without role
     }
+  }
+
+  // If sender name is still missing, try resolving via Feishu chat members API
+  if (ctx.TenantId && isMissingSenderName(ctx)) {
+    await resolveFeishuSenderName(ctx, cfg);
   }
 
   // Skip if the plugin already injected tenant info (e.g. the old built-in feishu plugin)
@@ -81,6 +95,11 @@ export async function enrichTenantContext(
       ctx.TenantId = tenantId;
       ctx.TenantUserId = provisioned.unionId;
       ctx.TenantUserRole = provisioned.role;
+      // Backfill sender name from DB if plugin didn't resolve it
+      if (isMissingSenderName(ctx) && provisioned.displayName && !isPlaceholderName(provisioned.displayName)) {
+        ctx.SenderName = provisioned.displayName;
+        logVerbose(`[tenant-enrich] backfilled SenderName from DB: ${provisioned.displayName}`);
+      }
       logVerbose(
         `[tenant-enrich] auto-provisioned: provider=${provider} senderId=${senderId} ` +
         `userId=${provisioned.userId} unionId=${provisioned.unionId} role=${provisioned.role} created=${provisioned.userCreated}`,
@@ -90,5 +109,82 @@ export async function enrichTenantContext(
     // Non-fatal: log and continue without tenant context.
     // The message will be processed in single-tenant mode.
     logVerbose(`[tenant-enrich] auto-provision failed for ${provider}/${senderId}: ${String(err)}`);
+  }
+
+  // If sender name is still missing, try resolving via Feishu chat members API
+  if (ctx.TenantId && isMissingSenderName(ctx)) {
+    await resolveFeishuSenderName(ctx, cfg);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sender name resolution helpers
+// ---------------------------------------------------------------------------
+
+function isPlaceholderName(name: string): boolean {
+  return !name || name.startsWith("ou_") || name.startsWith("on_");
+}
+
+function isMissingSenderName(ctx: FinalizedMsgContext): boolean {
+  return !ctx.SenderName || isPlaceholderName(ctx.SenderName);
+}
+
+/**
+ * Extract chatId from ctx.To (Feishu format: "chat:{chatId}" or "user:{openId}").
+ * Returns undefined for p2p chats — the API layer will resolve via openId instead.
+ */
+function extractChatId(ctx: FinalizedMsgContext): string | undefined {
+  const to = (ctx as Record<string, unknown>).To as string | undefined;
+  if (!to) return undefined;
+  if (to.startsWith("chat:")) return to.slice(5);
+  return undefined;
+}
+
+/**
+ * Resolve sender name via Feishu chat members API (tenant_access_token).
+ * On success, updates ctx.SenderName and persists to DB.
+ */
+async function resolveFeishuSenderName(
+  ctx: FinalizedMsgContext,
+  cfg: OpenClawConfig,
+): Promise<void> {
+  const provider = (ctx.Provider ?? ctx.Surface ?? "").toLowerCase();
+  if (provider !== "feishu") return;
+
+  const senderId = ctx.SenderId;
+  if (!senderId) return;
+
+  const chatId = extractChatId(ctx);
+
+  try {
+    const { resolveFeishuUserName, extractFeishuCredentials } = await import("../../infra/feishu-user-resolve.js");
+
+    const accountId = (ctx as Record<string, unknown>).AccountId as string | undefined;
+    const creds = extractFeishuCredentials(cfg as unknown as Record<string, unknown>, provider, accountId);
+    if (!creds) return;
+
+    const name = await resolveFeishuUserName({
+      appId: creds.appId,
+      appSecret: creds.appSecret,
+      chatId: chatId ?? undefined,
+      openId: senderId,
+    });
+
+    if (name && !isPlaceholderName(name)) {
+      ctx.SenderName = name;
+      logVerbose(`[tenant-enrich] resolved SenderName via Feishu API: ${name}`);
+
+      // Persist to DB so future messages don't need API calls
+      if (ctx.TenantId) {
+        try {
+          const { updateDisplayNameByOpenId } = await import("../../db/models/user.js");
+          await updateDisplayNameByOpenId(senderId, name);
+        } catch {
+          // Non-fatal
+        }
+      }
+    }
+  } catch (err) {
+    logVerbose(`[tenant-enrich] Feishu name resolve failed: ${String(err)}`);
   }
 }

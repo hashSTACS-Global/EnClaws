@@ -28,7 +28,6 @@ import type { LarkAccount } from '../../core/types';
 import type { PermissionError } from './permission';
 import { PERMISSION_ERROR_COOLDOWN_MS, permissionErrorNotifiedAt } from './permission';
 import { resolveUserName } from './user-name-cache';
-import { LarkClient } from '../../core/lark-client';
 import { downloadResources, buildFeishuMediaPayload } from './media-resolver';
 import { getMessageFeishu } from '../outbound/fetch';
 import { getUserNameCache, batchResolveUserNames } from './user-name-cache';
@@ -67,23 +66,8 @@ export async function resolveSenderInfo(params: {
   if (senderResult.name) {
     ctx = { ...ctx, senderName: senderResult.name };
     log(`sender resolved: ${senderResult.name}`);
-  } else {
-    if (senderResult.permissionError) {
-      log(`sender resolve failed: permission error code=${senderResult.permissionError.code}`);
-    }
-    // Fallback: resolve name from chat members API (works without contact scope)
-    if (ctx.chatId && ctx.senderId) {
-      const fallbackName = await resolveSenderNameFromChatMembers({
-        account,
-        chatId: ctx.chatId,
-        senderId: ctx.senderId,
-        log,
-      });
-      if (fallbackName) {
-        ctx = { ...ctx, senderName: fallbackName };
-        log(`sender resolved via chat members: ${fallbackName}`);
-      }
-    }
+  } else if (senderResult.permissionError) {
+    log(`sender resolve failed: permission error code=${senderResult.permissionError.code}`);
   }
 
   // Track permission errors (with cooldown)
@@ -295,42 +279,4 @@ export async function resolveQuotedContent(params: {
     log(`feishu[${account.accountId}]: failed to fetch quoted message: ${String(err)}`);
     return undefined;
   }
-}
-
-/**
- * Fallback: resolve sender display name from the chat members API.
- * This uses the bot's tenant_access_token and only requires im:chat:readonly,
- * avoiding the contact scope visibility limitation.
- */
-async function resolveSenderNameFromChatMembers(params: {
-  account: LarkAccount;
-  chatId: string;
-  senderId: string;
-  log: (...args: unknown[]) => void;
-}): Promise<string | undefined> {
-  const { account, chatId, senderId, log } = params;
-  if (!account.configured) return undefined;
-
-  try {
-    const client = LarkClient.fromAccount(account).sdk;
-    const response = await client.im.v1.chatMembers.get({
-      path: { chat_id: chatId },
-      params: { member_id_type: 'open_id', page_size: 100 },
-    });
-
-    const items = (response?.data as any)?.items;
-    if (!items || !Array.isArray(items)) return undefined;
-
-    for (const item of items) {
-      if (item.member_id === senderId && item.name) {
-        // Cache the resolved name so future messages skip the API call
-        const cache = getUserNameCache(account.accountId);
-        cache.set(senderId, item.name);
-        return item.name;
-      }
-    }
-  } catch (err) {
-    log(`feishu: chat members fallback failed for ${chatId}: ${String(err)}`);
-  }
-  return undefined;
 }

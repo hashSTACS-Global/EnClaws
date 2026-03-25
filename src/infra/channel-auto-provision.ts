@@ -10,7 +10,7 @@
 import { isDbInitialized } from "../db/index.js";
 
 /** In-memory cache to avoid repeated DB lookups within the same process. */
-const provisionedCache = new Map<string, { userId: string; unionId: string; role: string }>(); // key → result
+const provisionedCache = new Map<string, { userId: string; unionId: string; role: string; displayName?: string }>(); // key → result
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const provisionedExpiry = new Map<string, number>();
 
@@ -25,6 +25,8 @@ export type AutoProvisionResult = {
   userCreated: boolean;
   /** User role for permission checks. */
   role: string;
+  /** Display name from DB (may be a real name resolved from a previous session). */
+  displayName?: string;
 };
 
 /**
@@ -51,7 +53,7 @@ export async function autoProvisionTenantUser(params: {
   const cached = provisionedCache.get(key);
   const expiry = provisionedExpiry.get(key);
   if (cached && expiry && expiry > Date.now()) {
-    return { userId: cached.userId, unionId: cached.unionId, userCreated: false, role: cached.role };
+    return { userId: cached.userId, unionId: cached.unionId, userCreated: false, role: cached.role, displayName: cached.displayName };
   }
 
   const { findOrCreateUserByOpenId } = await import("../db/models/user.js");
@@ -67,10 +69,11 @@ export async function autoProvisionTenantUser(params: {
   const effectiveUnionId = user.unionId ?? openId;
 
   // Update cache
-  provisionedCache.set(key, { userId: user.id, unionId: effectiveUnionId, role: user.role });
+  const resolvedDisplayName = user.displayName ?? undefined;
+  provisionedCache.set(key, { userId: user.id, unionId: effectiveUnionId, role: user.role, displayName: resolvedDisplayName });
   provisionedExpiry.set(key, Date.now() + CACHE_TTL_MS);
 
-  return { userId: user.id, unionId: effectiveUnionId, userCreated, role: user.role };
+  return { userId: user.id, unionId: effectiveUnionId, userCreated, role: user.role, displayName: resolvedDisplayName };
 }
 
 /**
