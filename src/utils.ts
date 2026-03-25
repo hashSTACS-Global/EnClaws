@@ -309,7 +309,7 @@ export function resolveConfigDir(
   if (override) {
     return resolveUserPath(override);
   }
-  const newDir = path.join(resolveRequiredHomeDir(env, homedir), ".openclaw");
+  const newDir = path.join(resolveRequiredHomeDir(env, homedir), ".enclaws");
   try {
     const hasNew = fs.existsSync(newDir);
     if (hasNew) {

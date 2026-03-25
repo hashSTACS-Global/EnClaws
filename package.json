@@ -1,5 +1,5 @@
 {
-  "name": "openclaw",
+  "name": "enclaws",
   "version": "2026.3.1",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
@@ -14,16 +14,18 @@
     "url": "git+https://github.com/openclaw/openclaw.git"
   },
   "bin": {
-    "openclaw": "openclaw.mjs"
+    "enclaws": "enclaws.mjs"
   },
   "directories": {
     "doc": "docs",
     "test": "test"
   },
   "files": [
+    ".env.example",
     "CHANGELOG.md",
     "LICENSE",
-    "openclaw.mjs",
+    "enclaws.mjs",
+    "scripts/postinstall.js",
     "README-header.png",
     "README.md",
     "assets/",
@@ -44,7 +46,7 @@
       "types": "./dist/plugin-sdk/account-id.d.ts",
       "default": "./dist/plugin-sdk/account-id.js"
     },
-    "./cli-entry": "./openclaw.mjs"
+    "./cli-entry": "./enclaws.mjs"
   },
   "scripts": {
     "android:assemble": "cd apps/android && ./gradlew :app:assembleDebug",
@@ -62,6 +64,8 @@
     "check:docs": "pnpm format:docs:check && pnpm lint:docs && pnpm docs:check-links",
     "check:host-env-policy:swift": "node scripts/generate-host-env-security-policy-swift.mjs --check",
     "check:loc": "node --import tsx scripts/check-ts-max-loc.ts --max 500",
+    "db:migrate": "node --import tsx src/db/migrate.ts",
+    "db:migrate:status": "node --import tsx src/db/migrate.ts --status",
     "deadcode:ci": "pnpm deadcode:report:ci:knip && pnpm deadcode:report:ci:ts-prune && pnpm deadcode:report:ci:ts-unused",
     "deadcode:knip": "pnpm dlx knip --no-progress",
     "deadcode:report": "pnpm deadcode:knip; pnpm deadcode:ts-prune; pnpm deadcode:ts-unused",
@@ -70,8 +74,6 @@
     "deadcode:report:ci:ts-unused": "mkdir -p .artifacts/deadcode && pnpm deadcode:ts-unused > .artifacts/deadcode/ts-unused-exports.txt 2>&1 || true",
     "deadcode:ts-prune": "pnpm dlx ts-prune src extensions scripts",
     "deadcode:ts-unused": "pnpm dlx ts-unused-exports tsconfig.json --ignoreTestFiles --exitWithCount",
-    "db:migrate": "node --import tsx src/db/migrate.ts",
-    "db:migrate:status": "node --import tsx src/db/migrate.ts --status",
     "dev": "node scripts/run-node.mjs",
     "docs:bin": "node scripts/build-docs-list.mjs",
     "docs:check-links": "node scripts/docs-link-audit.mjs",
@@ -115,6 +117,7 @@
     "openclaw": "node scripts/run-node.mjs",
     "openclaw:rpc": "node scripts/run-node.mjs agent --mode rpc --json",
     "plugins:sync": "node --import tsx scripts/sync-plugin-versions.ts",
+    "postinstall": "node scripts/postinstall.js",
     "prepack": "pnpm build && pnpm ui:build",
     "prepare": "command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git config core.hooksPath git-hooks || exit 0",
     "protocol:check": "pnpm protocol:gen && pnpm protocol:gen:swift && git diff --exit-code -- dist/protocol.schema.json apps/macos/Sources/OpenClawProtocol/GatewayModels.swift",
@@ -174,7 +177,6 @@
     "@slack/bolt": "^4.6.0",
     "@slack/web-api": "^7.14.1",
     "@snazzah/davey": "^0.1.9",
-    "@whiskeysockets/baileys": "7.0.0-rc.9",
     "ajv": "^8.18.0",
     "bcryptjs": "^3.0.3",
     "chalk": "^5.6.2",
@@ -246,7 +248,8 @@
     "node-llama-cpp": "3.16.2"
   },
   "optionalDependencies": {
-    "@discordjs/opus": "^0.10.0"
+    "@discordjs/opus": "^0.10.0",
+    "@whiskeysockets/baileys": "7.0.0-rc.9"
   },
   "engines": {
     "node": ">=22.12.0"
