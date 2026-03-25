@@ -118,12 +118,17 @@ async function recordLoopOutcome(args: {
   }
 }
 
+/** File-level tools that directly write/modify files. */
+const FILE_WRITE_TOOLS = new Set(["write", "edit", "apply_patch"]);
+
 /**
- * Check if a tool call targets a skills directory and the user lacks permission.
- * Returns a block reason if denied, or null if allowed.
+ * Destructive shell verbs that modify/delete files.
+ * Covers both Unix (rm, mv, cp …) and PowerShell (Remove-Item, Move-Item …)
+ * to distinguish "exec runs a skill script" (allowed for member)
+ * from "exec deletes/modifies skill files" (blocked for member).
  */
-/** Tools that can modify the filesystem. */
-const WRITE_TOOLS = new Set(["write", "edit", "apply_patch", "exec", "process"]);
+const DESTRUCTIVE_EXEC_PATTERN =
+  /\b(rm|rmdir|del|mv|cp|unlink|chmod|chown|truncate|shred|Remove-Item|Move-Item|Copy-Item|Rename-Item|Set-Content|Clear-Content|ri|mi|ci|rni)\b/i;
 
 /**
  * Resolve role for the current tool call.
@@ -137,12 +142,7 @@ function resolveRoleForToolCall(toolName: string, params: unknown, ctx?: HookCon
   const p = params as Record<string, unknown> | undefined;
   if (!p) return { role: undefined, isTenantPath: false };
 
-  let pathStr = "";
-  if (toolName === "exec" || toolName === "process") {
-    pathStr = String(p.command ?? p.cmd ?? "");
-  } else {
-    pathStr = String(p.file_path ?? p.filePath ?? p.path ?? "");
-  }
+  const pathStr = String(p.file_path ?? p.filePath ?? p.path ?? p.command ?? p.cmd ?? "");
 
   const tenantId = extractTenantIdFromPath(pathStr);
   if (!tenantId) return { role: undefined, isTenantPath: false };
@@ -164,29 +164,28 @@ function resolveRoleForToolCall(toolName: string, params: unknown, ctx?: HookCon
 }
 
 /**
- * Detect if an exec/process command targets a skills directory.
- * Matches any command containing a skills path — regardless of the specific
- * write verb, since there are too many ways to modify files (sed, python, node,
- * perl, shell redirection, etc.) to maintain a reliable allowlist.
+ * Check if a tool call targets a skills directory and the user lacks permission.
+ *
+ * For file-level tools (write/edit/apply_patch): any operation on a skills path
+ * is treated as a write and subject to role checks.
+ *
+ * For exec/process: only destructive commands (rm, mv, etc.) targeting skills
+ * paths are blocked. Running a skill script from the skills directory is allowed.
  */
-function execCommandTargetsSkills(command: string): boolean {
-  return /[/\\]skills[/\\]/i.test(command);
-}
-
 function checkSkillWritePermission(toolName: string, params: unknown, ctx?: HookContext): string | null {
-  if (!WRITE_TOOLS.has(toolName)) return null;
-
   const p = params as Record<string, unknown> | undefined;
   if (!p) return null;
 
-  // Check if the operation targets a skills directory
   let targetsSkills = false;
-  if (toolName === "exec" || toolName === "process") {
-    const command = String(p.command ?? p.cmd ?? "");
-    targetsSkills = execCommandTargetsSkills(command);
-  } else {
+
+  if (FILE_WRITE_TOOLS.has(toolName)) {
+    // File-level tool: check file path
     const targetPath = String(p.file_path ?? p.filePath ?? p.path ?? "");
     targetsSkills = /[/\\]skills[/\\]/i.test(targetPath);
+  } else if (toolName === "exec" || toolName === "process") {
+    // Shell command: only block destructive operations targeting skills paths
+    const command = String(p.command ?? p.cmd ?? "");
+    targetsSkills = /[/\\]skills[/\\]/i.test(command) && DESTRUCTIVE_EXEC_PATTERN.test(command);
   }
 
   if (!targetsSkills) return null;
