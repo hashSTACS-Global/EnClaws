@@ -283,33 +283,52 @@ function loadSkillEntries(
 
     const loadedSkills: Skill[] = [];
 
-    // Only consider immediate subfolders that look like skills (have SKILL.md) and are under size cap.
-    for (const name of limitedChildren) {
-      const skillDir = path.join(baseDir, name);
+    const tryLoadSkillDir = (skillDir: string, skillName: string): boolean => {
       const skillMd = path.join(skillDir, "SKILL.md");
       if (!fs.existsSync(skillMd)) {
-        continue;
+        return false;
       }
       try {
         const size = fs.statSync(skillMd).size;
         if (size > limits.maxSkillFileBytes) {
           skillsLogger.warn("Skipping skill due to oversized SKILL.md.", {
-            skill: name,
+            skill: skillName,
             filePath: skillMd,
             size,
             maxSkillFileBytes: limits.maxSkillFileBytes,
           });
-          continue;
+          return true; // exists but skipped
         }
       } catch {
-        continue;
+        return true;
       }
 
       const loaded = loadSkillsFromDir({ dir: skillDir, source: params.source });
       loadedSkills.push(...unwrapLoadedSkills(loaded));
+      return true;
+    };
 
+    // Consider immediate subfolders that are either skills (have SKILL.md)
+    // or category directories (no SKILL.md) whose children contain skills.
+    // This enables two-level layouts like: skills/feishu/create-doc/SKILL.md
+    for (const name of limitedChildren) {
       if (loadedSkills.length >= limits.maxSkillsLoadedPerSource) {
         break;
+      }
+
+      const skillDir = path.join(baseDir, name);
+      if (tryLoadSkillDir(skillDir, name)) {
+        // Direct skill directory — already loaded
+        continue;
+      }
+
+      // No SKILL.md here — treat as category directory and scan its children
+      const subDirs = listChildDirectories(skillDir);
+      for (const subName of subDirs) {
+        if (loadedSkills.length >= limits.maxSkillsLoadedPerSource) {
+          break;
+        }
+        tryLoadSkillDir(path.join(skillDir, subName), `${name}/${subName}`);
       }
     }
 

@@ -177,8 +177,9 @@ export function ensureSkillsWatcher(params: { workspaceDir: string; config?: Ope
       stabilityThreshold: debounceMs,
       pollInterval: 100,
     },
-    // Only watch 2 levels deep: skillsRoot/SKILL.md and skillsRoot/<name>/SKILL.md
-    depth: 1,
+    // Watch 3 levels deep to support category directories:
+    // skillsRoot/SKILL.md, skillsRoot/<name>/SKILL.md, and skillsRoot/<category>/<name>/SKILL.md
+    depth: 2,
     // Avoid FD exhaustion on macOS when a workspace contains huge trees.
     // This watcher only needs to react to SKILL.md changes.
     ignored: DEFAULT_SKILLS_WATCH_IGNORED,
