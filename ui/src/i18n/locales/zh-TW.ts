@@ -213,6 +213,7 @@ export const zh_TW: TranslationMap = {
     agent: "代理",
     connectionStatus: "連線狀態",
     online: "線上",
+    connecting: "連線中",
     offline: "離線",
     feishuScanCreate: "掃碼建立機器人",
     feishuManualBind: "綁定機器人",

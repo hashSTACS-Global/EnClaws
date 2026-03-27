@@ -266,11 +266,11 @@ export class TenantChannelsView extends LitElement {
     }
     .info-value.mono { font-family: monospace; font-size: 0.78rem; }
     .info-muted { font-size: 0.72rem; color: var(--text-muted, #525252); font-weight: 400; }
-    .info-divider { height: 0; margin: 0.3rem 0; border-top: 1px dashed var(--border, #262626); }
+    .info-divider { height: 0; margin: 0.6rem 0; border-top: 1px solid var(--text-muted, #525252); }
     .connection-badge {
+      font-size: 0.68rem; padding: 0.15rem 0.5rem; border-radius: 4px;
+      font-weight: 500; letter-spacing: 0.02em;
       display: inline-flex; align-items: center; gap: 0.3rem;
-      font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.55rem;
-      border-radius: 10px; letter-spacing: 0.03em;
     }
     .connection-badge.online { background: #16a34a; color: #fff; }
     .connection-badge.offline { background: #71717a; color: #fff; }
@@ -1080,8 +1080,6 @@ export class TenantChannelsView extends LitElement {
   private renderChannelCard(ch: TenantChannel) {
     const typeName = this.channelTypes.find((ct) => ct.value === ch.channelType)?.label ?? ch.channelType;
     const policyLabel = this.policyOptions.find((p) => p.value === ch.channelPolicy)?.label ?? ch.channelPolicy;
-    const anyConnected = ch.apps?.some((a) => a.connectionStatus?.connected) ?? false;
-    const hasConnectionInfo = ch.apps?.some((a) => a.connectionStatus) ?? false;
     return html`
       <div class="channel-card">
         <div class="channel-header">
@@ -1095,15 +1093,6 @@ export class TenantChannelsView extends LitElement {
           </div>
         </div>
         <div class="channel-card-body">
-          ${hasConnectionInfo ? html`
-            <div class="info-row">
-              <span class="info-label">${t("tenantChannels.connectionStatus")}</span>
-              <span class="connection-badge ${anyConnected ? "online" : "offline"}">
-                <span class="status-dot ${anyConnected ? "active" : "inactive"}"></span>
-                ${anyConnected ? t("tenantChannels.online") : t("tenantChannels.offline")}
-              </span>
-            </div>
-          ` : nothing}
           ${ch.apps && ch.apps.length > 0 ? ch.apps.map((app, idx) => html`
             <div class="info-row">
               <span class="info-label">${t("tenantChannels.botName")}</span>
@@ -1116,6 +1105,15 @@ export class TenantChannelsView extends LitElement {
               <span class="info-label">${t("tenantChannels.appId")}</span>
               <span class="info-value mono">${app.appId}</span>
             </div>
+            ${app.connectionStatus ? html`
+              <div class="info-row">
+                <span class="info-label">${t("tenantChannels.connectionStatus")}</span>
+                <span class="connection-badge ${app.connectionStatus.connected ? "online" : "offline"}">
+                  <span class="status-dot ${app.connectionStatus.connected ? "active" : "inactive"}"></span>
+                  ${app.connectionStatus.connected ? t("tenantChannels.online") : t("tenantChannels.offline")}
+                </span>
+              </div>
+            ` : nothing}
             ${app.agent ? html`
               <div class="info-row">
                 <span class="info-label">${t("tenantChannels.agent")}</span>

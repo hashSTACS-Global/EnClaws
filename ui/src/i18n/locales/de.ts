@@ -217,6 +217,7 @@ export const de: TranslationMap = {
     agent: "Agent",
     connectionStatus: "Verbindung",
     online: "Online",
+    connecting: "Verbinden",
     offline: "Offline",
     feishuScanCreate: "QR-Code scannen, um Bot zu erstellen",
     feishuManualBind: "Bot binden",

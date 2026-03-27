@@ -64,13 +64,26 @@ OpenClaw 专注于个人助理体验，而 EnClaws 则聚焦于数字AI员工的
 
 ## 快速开始
 
-### 方式一 — 一行命令安装（macOS / Linux）
+### 方式一 — npm 安装（全平台）
+
+```bash
+npm install -g enclaws
+enclaws gateway
+```
+
+### 方式二 — Windows 一键安装包
+
+从 [Releases](https://github.com/hashSTACS-Global/EnClaws/releases) 下载 `EnClaws-Setup-x.x.x.exe`，双击安装即可。无需管理员权限，内置 Node.js 运行时，完全离线安装。
+
+安装后双击桌面快捷方式 "EnClaws" 或在新终端中运行 `enclaws gateway`。
+
+### 方式三 — 一行命令安装（macOS / Linux）
 
 ```bash
 curl -fsSL --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/hashSTACS-Global/EnClaws/main/install.sh | bash
 ```
 
-### 方式二 — 从源码构建
+### 方式四 — 从源码构建
 
 **前置条件：** 已安装 [Node.js](https://nodejs.org/) >= 22.12.0 及 [pnpm](https://pnpm.io/)。
 
@@ -83,12 +96,11 @@ cd EnClaws
 pnpm install
 pnpm build
 
-# 3. 创建环境变量文件
-cp .env.example .env
-# 编辑 .env —— 至少设置 OPENCLAW_GATEWAY_TOKEN 以及一个模型提供商的 API Key
+# 3. 注册 enclaws 全局命令
+npm link
 
 # 4. 启动 Gateway
-node --env-file=.env dist/index.js gateway --port 18789
+enclaws gateway
 ```
 
 启动完成后，Gateway 默认可通过 `http://localhost:18789` 访问。

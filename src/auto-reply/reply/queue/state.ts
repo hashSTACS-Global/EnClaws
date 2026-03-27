@@ -63,6 +63,11 @@ export function getFollowupQueue(key: string, settings: QueueSettings): Followup
   return created;
 }
 
+/** Return a snapshot of all active followup queues (key → items + metadata). */
+export function getAllFollowupQueues(): ReadonlyMap<string, Readonly<FollowupQueueState>> {
+  return FOLLOWUP_QUEUES;
+}
+
 export function clearFollowupQueue(key: string): number {
   const cleaned = key.trim();
   const queue = getExistingFollowupQueue(cleaned);

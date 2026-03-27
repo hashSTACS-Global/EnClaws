@@ -552,6 +552,7 @@ export const en: TranslationMap = {
     agent: "Agent",
     connectionStatus: "Connection",
     online: "Online",
+    connecting: "Connecting",
     offline: "Offline",
     feishuScanCreate: "Scan to Create Bot",
     feishuManualBind: "Bind Bot",

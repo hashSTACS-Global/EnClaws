@@ -1,0 +1,457 @@
+/**
+ * FeishuTestClient — self-contained Feishu API client for test simulation.
+ *
+ * No dependencies on src/ or extensions/ — all Feishu API calls are direct HTTP.
+ * Token is cached locally in a JSON file to avoid re-authorization between runs.
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+
+const FEISHU_BASE = "https://open.feishu.cn/open-apis";
+const FEISHU_ACCOUNTS = "https://accounts.feishu.cn";
+
+export type FeishuTestClientOptions = {
+  appId: string;
+  appSecret: string;
+  userOpenId: string;
+  /** Token cache directory (default: test/feishu-simulator/.token-cache) */
+  tokenCacheDir?: string;
+  replyTimeoutMs?: number;
+  pollIntervalMs?: number;
+};
+
+export type FeishuReplyMeta = {
+  msgType: string;
+  fileKey?: string;
+  fileName?: string;
+  imageKey?: string;
+};
+
+export type FeishuSendResult = {
+  text: string;
+  messageId: string;
+  durationMs: number;
+  reply: FeishuReplyMeta;
+};
+
+type StoredToken = {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  refreshExpiresAt: number;
+  scope: string;
+};
+
+export class FeishuTestClient {
+  private opts: FeishuTestClientOptions;
+  private tenantToken: string | null = null;
+  private userToken: string | null = null;
+  private botOpenId: string | null = null;
+  private p2pChatId: string | null = null;
+  private cacheDir: string;
+
+  constructor(opts: FeishuTestClientOptions) {
+    this.opts = opts;
+    this.cacheDir = opts.tokenCacheDir
+      ?? path.resolve(new URL(".", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1"), ".token-cache");
+  }
+
+  async init(): Promise<void> {
+    // 1. Get tenant access token (bot identity)
+    this.tenantToken = await this.getTenantToken();
+
+    // 2. Get bot info
+    const botInfo = await this.feishu("GET", "/bot/v3/info", null, this.tenantToken);
+    this.botOpenId = botInfo.bot?.open_id;
+    if (!this.botOpenId) throw new Error("Failed to get bot open_id");
+    console.log(`  Bot: ${botInfo.bot?.app_name ?? this.botOpenId}`);
+
+    // 3. Get or obtain user access token
+    this.userToken = await this.loadOrAuthorize();
+
+    // 4. P2P chat will be resolved on first send (using bot open_id as receive_id)
+  }
+
+  async send(message: string): Promise<FeishuSendResult> {
+    if (!this.userToken || !this.botOpenId) {
+      throw new Error("Client not initialized. Call init() first.");
+    }
+
+    const startedAt = Date.now();
+
+    // Get latest message before sending (if we already know the chat)
+    const beforeMsgId = this.p2pChatId ? await this.getLatestMessageId() : null;
+
+    // Send as user to bot's open_id — Feishu auto-creates P2P chat if needed
+    const sendRes = await this.feishu("POST", `/im/v1/messages?receive_id_type=open_id`, {
+      receive_id: this.botOpenId,
+      msg_type: "text",
+      content: JSON.stringify({ text: message }),
+    }, this.userToken);
+
+    const userMsgId = sendRes.message_id;
+    if (!userMsgId) throw new Error(`Send failed: ${JSON.stringify(sendRes)}`);
+
+    // Extract chat_id from send response (for polling replies)
+    if (!this.p2pChatId && sendRes.chat_id) {
+      this.p2pChatId = sendRes.chat_id;
+      console.log(`  P2P chat: ${this.p2pChatId}`);
+    }
+
+    if (!this.p2pChatId) {
+      throw new Error("Could not determine chat_id from send response");
+    }
+
+    // Poll for bot reply
+    const timeoutMs = this.opts.replyTimeoutMs ?? 60_000;
+    const pollMs = this.opts.pollIntervalMs ?? 1000;
+    const replyData = await this.waitForBotReply(userMsgId, beforeMsgId, timeoutMs, pollMs);
+
+    return { text: replyData.text, messageId: userMsgId, durationMs: Date.now() - startedAt, reply: replyData.meta };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Feishu API helpers
+  // ---------------------------------------------------------------------------
+
+  private async feishu(method: string, endpoint: string, body: unknown, token: string): Promise<Record<string, any>> {
+    const url = `${FEISHU_BASE}${endpoint}`;
+    const res = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        Authorization: `Bearer ${token}`,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const json = await res.json() as Record<string, any>;
+    if (json.code && json.code !== 0) {
+      throw new Error(`Feishu API error [${endpoint}]: code=${json.code} msg=${json.msg}`);
+    }
+    return json.data ?? json;
+  }
+
+  private async getTenantToken(): Promise<string> {
+    const res = await fetch(`${FEISHU_BASE}/auth/v3/tenant_access_token/internal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ app_id: this.opts.appId, app_secret: this.opts.appSecret }),
+    });
+    const json = await res.json() as Record<string, any>;
+    if (json.code !== 0 || !json.tenant_access_token) {
+      throw new Error(`Failed to get tenant token: ${json.msg ?? JSON.stringify(json)}`);
+    }
+    return json.tenant_access_token;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Token management
+  // ---------------------------------------------------------------------------
+
+  private get tokenCachePath(): string {
+    return path.join(this.cacheDir, `${this.opts.appId}_${this.opts.userOpenId}.json`);
+  }
+
+  private loadCachedToken(): StoredToken | null {
+    try {
+      if (!fs.existsSync(this.tokenCachePath)) return null;
+      return JSON.parse(fs.readFileSync(this.tokenCachePath, "utf-8")) as StoredToken;
+    } catch {
+      return null;
+    }
+  }
+
+  private saveCachedToken(token: StoredToken): void {
+    fs.mkdirSync(this.cacheDir, { recursive: true });
+    fs.writeFileSync(this.tokenCachePath, JSON.stringify(token, null, 2), "utf-8");
+  }
+
+  private async loadOrAuthorize(): Promise<string> {
+    const cached = this.loadCachedToken();
+    if (cached) {
+      // Access token still valid
+      if (cached.expiresAt > Date.now()) {
+        console.log(`  Using cached user token (expires: ${new Date(cached.expiresAt).toISOString()})`);
+        return cached.accessToken;
+      }
+      // Access token expired but refresh token still valid — auto refresh
+      if (cached.refreshToken && (cached.refreshExpiresAt ?? 0) > Date.now()) {
+        console.log(`  Access token expired, refreshing...`);
+        return await this.refreshAccessToken(cached.refreshToken);
+      }
+    }
+
+    console.log(`  No valid token found, initiating Device Flow authorization...`);
+    return await this.authorize();
+  }
+
+  private async refreshAccessToken(refreshToken: string): Promise<string> {
+    const res = await fetch(`${FEISHU_BASE}/authen/v2/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: this.opts.appId,
+        client_secret: this.opts.appSecret,
+      }).toString(),
+    });
+    const data = await res.json() as Record<string, any>;
+    if (data.error || !data.access_token) {
+      console.log(`  Refresh failed: ${data.error_description ?? data.error ?? data.msg}, falling back to Device Flow...`);
+      return await this.authorize();
+    }
+    const stored: StoredToken = {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token ?? refreshToken,
+      expiresAt: Date.now() + (data.expires_in ?? 7200) * 1000,
+      refreshExpiresAt: Date.now() + (data.refresh_token_expires_in ?? 604800) * 1000,
+      scope: data.scope ?? "",
+    };
+    this.saveCachedToken(stored);
+    console.log(`  Token refreshed (expires: ${new Date(stored.expiresAt).toISOString()})`);
+    return stored.accessToken;
+  }
+
+  private async authorize(): Promise<string> {
+    // Step 1: Request device code
+    const basicAuth = Buffer.from(`${this.opts.appId}:${this.opts.appSecret}`).toString("base64");
+    const authRes = await fetch(`${FEISHU_ACCOUNTS}/oauth/v1/device_authorization`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${basicAuth}`,
+      },
+      body: new URLSearchParams({
+        client_id: this.opts.appId,
+        scope: "im:message im:message.send_as_user offline_access",
+      }).toString(),
+    });
+    const authData = await authRes.json() as Record<string, any>;
+    if (authData.error) throw new Error(`Device auth failed: ${authData.error_description ?? authData.error}`);
+
+    const deviceCode = authData.device_code as string;
+    const userCode = authData.user_code as string;
+    const verifyUrl = authData.verification_uri_complete ?? authData.verification_uri;
+    const expiresIn = (authData.expires_in as number) ?? 240;
+    let interval = (authData.interval as number) ?? 5;
+
+    console.log(`\n  ========================================`);
+    console.log(`  Please authorize in your browser:`);
+    console.log(`  ${verifyUrl}`);
+    console.log(`  User code: ${userCode}`);
+    console.log(`  Expires in: ${expiresIn}s`);
+    console.log(`  ========================================\n`);
+
+    // Step 2: Poll for token
+    const deadline = Date.now() + expiresIn * 1000;
+    while (Date.now() < deadline) {
+      await sleep(interval * 1000);
+
+      const tokenRes = await fetch(`${FEISHU_BASE}/authen/v2/oauth/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+          device_code: deviceCode,
+          client_id: this.opts.appId,
+          client_secret: this.opts.appSecret,
+        }).toString(),
+      });
+      const tokenData = await tokenRes.json() as Record<string, any>;
+      console.log(`  Poll response: ${JSON.stringify(tokenData).slice(0, 500)}`);
+
+      // Feishu v2 may wrap in { code, data: { access_token, ... } } or return flat
+      const flat = tokenData.access_token ? tokenData : tokenData.data;
+      const error = tokenData.error ?? (tokenData.code && tokenData.code !== 0 ? "api_error" : undefined);
+
+      if (!error && flat?.access_token) {
+        const now = Date.now();
+        const stored: StoredToken = {
+          accessToken: flat.access_token,
+          refreshToken: flat.refresh_token ?? "",
+          expiresAt: now + (flat.expires_in ?? 7200) * 1000,
+          refreshExpiresAt: now + (flat.refresh_token_expires_in ?? 604800) * 1000,
+          scope: flat.scope ?? "",
+        };
+        this.saveCachedToken(stored);
+        console.log(`  Authorization successful! Token cached.`);
+        return stored.accessToken;
+      }
+
+      const errCode = error ?? tokenData.msg ?? "";
+      if (errCode === "authorization_pending" || String(tokenData.code) === "20018") continue;
+      if (errCode === "slow_down") { interval += 5; continue; }
+      if (errCode === "access_denied") throw new Error("User denied authorization");
+      if (errCode === "expired_token") throw new Error("Device code expired");
+      // Unknown but non-terminal — keep polling
+      if (tokenData.code && tokenData.code !== 0) continue;
+    }
+
+    throw new Error("Authorization timed out");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Chat helpers
+  // ---------------------------------------------------------------------------
+
+  private async getLatestMessageId(): Promise<string | null> {
+    if (!this.p2pChatId) return null;
+    try {
+      const data = await this.feishu(
+        "GET",
+        `/im/v1/messages?container_id_type=chat&container_id=${this.p2pChatId}&page_size=1&sort_type=ByCreateTimeDesc`,
+        null,
+        this.tenantToken!,
+      );
+      return data.items?.[0]?.message_id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async waitForBotReply(
+    userMsgId: string,
+    beforeMsgId: string | null,
+    timeoutMs: number,
+    pollMs: number,
+  ): Promise<{ text: string; meta: FeishuReplyMeta }> {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      await sleep(pollMs);
+
+      try {
+        const data = await this.feishu(
+          "GET",
+          `/im/v1/messages?container_id_type=chat&container_id=${this.p2pChatId}&page_size=10&sort_type=ByCreateTimeDesc&card_msg_content_type=raw_card_content`,
+          null,
+          this.tenantToken!,
+        );
+
+        for (const msg of (data.items ?? [])) {
+          if (msg.message_id === userMsgId) continue;
+          if (beforeMsgId && msg.message_id === beforeMsgId) break;
+          // Match bot reply by parent_id (reply to our user message)
+          if (msg.sender?.sender_type === "app" && msg.parent_id === userMsgId) {
+            // Check if card is still streaming — if so, keep polling
+            if (msg.msg_type === "interactive" && this.isCardStreaming(msg)) {
+              break; // wait for streaming to finish
+            }
+            return this.extractReply(msg);
+          }
+        }
+      } catch {
+        // keep polling
+      }
+    }
+
+    throw new Error(`Timeout (${timeoutMs}ms) waiting for bot reply`);
+  }
+
+  private isCardStreaming(msg: any): boolean {
+    try {
+      const content = JSON.parse(msg.body?.content ?? "{}");
+      if (content.json_card) {
+        const card = typeof content.json_card === "string" ? JSON.parse(content.json_card) : content.json_card;
+        return card.config?.streamingMode === true;
+      }
+    } catch { /* not streaming */ }
+    return false;
+  }
+
+  private extractCardText(card: any): string {
+    // CardKit v2 raw_card_content: json_card contains the card JSON string
+    if (card.json_card) {
+      try {
+        const parsed = typeof card.json_card === "string" ? JSON.parse(card.json_card) : card.json_card;
+        // Prefer summary — it's the plain-text digest the card builder already computed
+        const summary = parsed.config?.summary?.content;
+        if (summary) return summary;
+        // Fallback: walk plain_text elements
+        return this.walkCardElements(parsed);
+      } catch { /* fall through */ }
+    }
+    // Legacy card format
+    return this.walkCardElements(card);
+  }
+
+  private walkCardElements(node: any): string {
+    const parts: string[] = [];
+    const walk = (n: any) => {
+      if (!n) return;
+      if (typeof n === "string") return;
+      if (n.tag === "plain_text" && n.property?.content) parts.push(n.property.content);
+      if (n.tag === "markdown" && n.content) parts.push(n.content);
+      if (n.tag === "div" && n.text?.content) parts.push(n.text.content);
+      if (Array.isArray(n.property?.elements)) n.property.elements.forEach(walk);
+      if (Array.isArray(n.elements)) n.elements.forEach(walk);
+      if (Array.isArray(n)) n.forEach(walk);
+    };
+    walk(node.body ?? node);
+    return parts.join("").trim();
+  }
+
+  private extractReply(msg: { msg_type?: string; body?: { content?: string } }): { text: string; meta: FeishuReplyMeta } {
+    const msgType = msg.msg_type ?? "unknown";
+    const meta: FeishuReplyMeta = { msgType };
+
+    if (!msg.body?.content) return { text: "", meta };
+    try {
+      const content = JSON.parse(msg.body.content);
+
+      if (msgType === "text") {
+        return { text: content.text ?? "", meta };
+      }
+
+      if (msgType === "post") {
+        const locale = (content.zh_cn ?? content.en_us ?? Object.values(content)[0]) as any;
+        if (!locale?.content) return { text: msg.body.content, meta };
+        const parts: string[] = [];
+        for (const para of locale.content) {
+          for (const el of para) {
+            if (el.text) parts.push(el.text);
+          }
+        }
+        return { text: parts.join("\n").trim(), meta };
+      }
+
+      if (msgType === "interactive") {
+        return { text: this.extractCardText(content), meta };
+      }
+
+      if (msgType === "file") {
+        meta.fileKey = content.file_key ?? "";
+        meta.fileName = content.file_name ?? "";
+        return { text: content.file_name ?? "", meta };
+      }
+
+      if (msgType === "image") {
+        meta.imageKey = content.image_key ?? "";
+        return { text: "", meta };
+      }
+
+      if (msgType === "audio") {
+        return { text: "", meta };
+      }
+
+      if (msgType === "media") {
+        meta.fileKey = content.file_key ?? "";
+        meta.fileName = content.file_name ?? "";
+        meta.imageKey = content.image_key ?? "";
+        return { text: content.file_name ?? "", meta };
+      }
+
+      return { text: msg.body.content, meta };
+    } catch {
+      return { text: msg.body.content ?? "", meta };
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

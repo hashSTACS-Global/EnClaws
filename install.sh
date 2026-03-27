@@ -1207,8 +1207,9 @@ ensure_user_local_bin_on_path() {
 
     # shellcheck disable=SC2016
     local path_line='export PATH="$HOME/.local/bin:$PATH"'
-    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        if [[ -f "$rc" ]] && ! grep -q ".local/bin" "$rc"; then
+    for rc in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$HOME/.zshrc" "$HOME/.zprofile"; do
+        touch "$rc"
+        if ! grep -q ".local/bin" "$rc"; then
             echo "$path_line" >> "$rc"
         fi
     done
@@ -1370,16 +1371,6 @@ exec node "${repo_dir}/dist/entry.js" "\$@"
 WRAPPER
     chmod +x "$bin_dir/enclaws"
 
-    # Gateway startup script
-    cat > "$bin_dir/enclaws-gateway" <<WRAPPER
-#!/usr/bin/env bash
-set -euo pipefail
-cd "${repo_dir}"
-exec node --env-file=.env dist/index.js gateway --port 18789 --allow-unconfigured "\$@"
-WRAPPER
-    chmod +x "$bin_dir/enclaws-gateway"
-    ui_success "Gateway startup script: $bin_dir/enclaws-gateway"
-
     # Ensure ~/.enclaws/bin is on PATH
     ensure_enclaws_bin_on_path
     ensure_user_local_bin_on_path
@@ -1387,14 +1378,16 @@ WRAPPER
     # Add ~/.enclaws/bin to shell profile if not already there
     # shellcheck disable=SC2016
     local path_line='export PATH="$HOME/.enclaws/bin:$PATH"'
-    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        if [[ -f "$rc" ]] && ! grep -q ".enclaws/bin" "$rc"; then
+    for rc in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$HOME/.zshrc" "$HOME/.zprofile"; do
+        touch "$rc"
+        if ! grep -q ".enclaws/bin" "$rc"; then
             echo "$path_line" >> "$rc"
         fi
     done
 
     ui_success "Enclaws wrapper installed to $bin_dir/enclaws"
-    ui_info "This checkout uses pnpm — run pnpm install (or corepack pnpm install) for deps"
+    ui_success "PATH configured in shell profiles (bashrc/bash_profile/profile/zshrc/zprofile)"
+    ui_info "Start gateway: enclaws gateway"
 }
 
 # ─── SQLite default configuration ────────────────────────────────────────────
@@ -1478,8 +1471,8 @@ print_install_summary() {
     ui_kv "Checkout" "$repo_dir"
     ui_kv "Config" "$repo_dir/.env"
     ui_kv "Database" "SQLite ($HOME/.enclaws/data.db)"
-    ui_kv "Start gateway" "enclaws-gateway"
-    ui_kv "Custom start" "enclaws-gateway --bind lan --token YOUR_TOKEN"
+    ui_kv "Start gateway" "enclaws gateway"
+    ui_kv "Custom start" "enclaws gateway --bind lan --token YOUR_TOKEN"
     ui_kv "Update" "cd $repo_dir && git pull && pnpm install && pnpm build"
 }
 
@@ -1511,7 +1504,7 @@ start_gateway_after_install() {
     if [[ ! -f "$entry" ]]; then
         ui_warn "Gateway entry not found; skipping auto-start"
         ui_info "Build first: cd $repo_dir && pnpm build"
-        ui_info "Then start: enclaws-gateway"
+        ui_info "Then start: enclaws gateway"
         return 0
     fi
 
@@ -1522,7 +1515,7 @@ start_gateway_after_install() {
     ui_info "URL: ${gateway_url}"
     ui_info "Press Ctrl+C to stop"
     echo ""
-    ui_success "以后启动只需运行: enclaws-gateway"
+    ui_success "以后启动只需运行: enclaws gateway"
     echo ""
 
     # Wait for the gateway to be ready, then open browser (background)

@@ -1,0 +1,30 @@
+{
+  "ownerEmail": "zhangbo@stacs.cn",
+  "ownerPassword": "Aa123456!",
+  "email": "test123@stacs.cn",
+  "password": "Aa123456!",
+  "agentId": "agent1",
+  "cases": [
+    {
+      "name": "基本问候",
+      "message": "你好！"
+    },
+    {
+      "name": "带断言的问候",
+      "message": "你是谁？",
+      "assert": {
+        "contains": "EnClaws AI 助手",
+        "notContains": "error",
+        "minLength": 2,
+        "maxLength": 500
+      }
+    },
+    {
+      "name": "正则匹配",
+      "message": "1+1等于几？",
+      "assert": {
+        "matches": "2|二"
+      }
+    }
+  ]
+}

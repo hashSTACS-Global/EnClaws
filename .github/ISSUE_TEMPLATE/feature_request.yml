@@ -1,0 +1,20 @@
+name: Feature request
+description: Propose a new capability or product improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-line statement of the requested capability.
+      placeholder: |
+        Provide a detailed description of the Feature, including the following content
+        1. Problems to be solved:
+        2. Suggested solution:
+        3. Scope of impact:
+        4. Relevant materials:
+        5. Other additional information:
+    validations:
+      required: true

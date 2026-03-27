@@ -1,0 +1,22 @@
+name: Bug report
+description: Report defects, including regressions, crashes, and behavior bugs.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-sentence statement of what is broken.
+      placeholder: |
+        Provide a detailed description of the bug, including the following content
+        1. Operation steps:
+        2. expected result:
+        3. Actual results:
+        4. operating system:
+        5. EnClaws version:
+        6. database version:
+        7. Log, screenshot:
+    validations:
+      required: true

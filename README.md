@@ -64,13 +64,26 @@ If OpenClaw is the personal operator, EnClaws is the operating system for enterp
 
 ## Quick start
 
-### Option 1 — One-line install (macOS / Linux)
+### Option 1 — npm install (all platforms)
+
+```bash
+npm install -g enclaws
+enclaws gateway
+```
+
+### Option 2 — Windows one-click installer
+
+Download `EnClaws-Setup-x.x.x.exe` from [Releases](https://github.com/hashSTACS-Global/EnClaws/releases), double-click to install. No admin rights required, Node.js runtime included, fully offline.
+
+After installation, open the desktop shortcut "EnClaws" or run `enclaws gateway` in a new terminal.
+
+### Option 3 — One-line install (macOS / Linux)
 
 ```bash
 curl -fsSL --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/hashSTACS-Global/EnClaws/main/install.sh | bash
 ```
 
-### Option 2 — Build from source
+### Option 4 — Build from source
 
 **Prerequisites:** [Node.js](https://nodejs.org/) >= 22.12.0 and [pnpm](https://pnpm.io/).
 
@@ -83,12 +96,11 @@ cd EnClaws
 pnpm install
 pnpm build
 
-# 3. Create your environment file
-cp .env.example .env
-# Edit .env — at minimum set OPENCLAW_GATEWAY_TOKEN and at least one model provider API key
+# 3. Register the enclaws command globally
+npm link
 
 # 4. Start the Gateway
-node --env-file=.env dist/index.js gateway --port 18789
+enclaws gateway
 ```
 
 After startup, the Gateway is available at `http://localhost:18789`.

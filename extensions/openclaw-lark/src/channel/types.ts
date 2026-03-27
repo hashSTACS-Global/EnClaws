@@ -21,6 +21,7 @@ export interface MonitorFeishuOpts {
   runtime?: RuntimeEnv;
   abortSignal?: AbortSignal;
   accountId?: string;
+  onConnectionChange?: (connected: boolean) => void;
 }
 
 // ---------------------------------------------------------------------------

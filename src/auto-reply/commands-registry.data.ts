@@ -173,6 +173,14 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "status",
     }),
     defineChatCommand({
+      key: "tasks",
+      nativeName: "tasks",
+      description: "Show active and queued tasks per agent.",
+      textAlias: "/tasks",
+      acceptsArgs: true,
+      category: "status",
+    }),
+    defineChatCommand({
       key: "allowlist",
       description: "List/add/remove allowlist entries.",
       textAlias: "/allowlist",

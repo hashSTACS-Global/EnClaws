@@ -216,6 +216,7 @@ export const pt_BR: TranslationMap = {
     agent: "Agente",
     connectionStatus: "Conexão",
     online: "Online",
+    connecting: "Conectando",
     offline: "Offline",
     feishuScanCreate: "Escanear para Criar Bot",
     feishuManualBind: "Vincular Bot",

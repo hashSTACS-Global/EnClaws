@@ -24,7 +24,6 @@ interface MigrationRecord {
 
 async function ensureMigrationsTable(): Promise<void> {
   if (getDbType() === DB_SQLITE) {
-    // SQLite schema.sql already creates _migrations table
     // But ensure it exists in case of fresh db without schema init
     sqliteQuery(`
       CREATE TABLE IF NOT EXISTS _migrations (
@@ -59,7 +58,6 @@ function getPendingMigrations(applied: Set<string>): string[] {
 async function runMigrations(): Promise<void> {
   initDb();
 
-  // For SQLite, the initial schema is applied via schema.sql during initSqliteDb().
   // Migrations here are incremental changes applied after the initial schema.
   // Skip 001_init.sql for SQLite since it's PG-specific (schema.sql is the SQLite equivalent).
 
@@ -69,7 +67,6 @@ async function runMigrations(): Promise<void> {
 
   if (getDbType() === DB_SQLITE) {
     // Filter out PG-specific migrations
-    // 001_init.sql is handled by schema.sql, mark as applied if not already
     if (!applied.has("001_init.sql") && pending.includes("001_init.sql")) {
       sqliteQuery("INSERT OR IGNORE INTO _migrations (name) VALUES (?)", ["001_init.sql"]);
       pending = pending.filter((f) => f !== "001_init.sql");

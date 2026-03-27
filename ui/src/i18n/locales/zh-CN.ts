@@ -545,6 +545,7 @@ export const zh_CN: TranslationMap = {
     agent: "代理",
     connectionStatus: "连接状态",
     online: "在线",
+    connecting: "连接中",
     offline: "离线",
     feishuScanCreate: "扫码创建机器人",
     feishuManualBind: "绑定机器人",

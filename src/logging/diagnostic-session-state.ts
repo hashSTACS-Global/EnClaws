@@ -102,6 +102,12 @@ export function getDiagnosticSessionState(ref: SessionRef): SessionState {
   return created;
 }
 
+/** Return all session states that are currently processing or have queued items. */
+export function getActiveDiagnosticSessions(): ReadonlyMap<string, Readonly<SessionState>> {
+  pruneDiagnosticSessionStates();
+  return diagnosticSessionStates;
+}
+
 export function getDiagnosticSessionStateCountForTest(): number {
   return diagnosticSessionStates.size;
 }

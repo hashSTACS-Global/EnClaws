@@ -1,0 +1,28 @@
+{
+  "appId": "cli_a92530d1887b5cbb",
+  "appSecret": "0j5IghJlW1H3FXcnN43yKfjx8tC11FNT",
+  "userOpenId": "ou_0d59bb9bedc61b8f5e09e3f73617a344",
+  "cases": [
+    {
+      "name": "基本问候",
+      "message": "你好！"
+    },
+    {
+      "name": "带断言的问候",
+      "message": "你是谁？",
+      "assert": {
+        "contains": "EnClaws AI 助手",
+        "notContains": "error",
+        "minLength": 2,
+        "maxLength": 500
+      }
+    },
+    {
+      "name": "正则匹配",
+      "message": "1+1等于几？",
+      "assert": {
+        "matches": "2|二"
+      }
+    }
+  ]
+}

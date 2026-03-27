@@ -133,3 +133,9 @@ dist/protocol.schema.json
 
 # Synthing
 **/.stfolder/
+
+# Installer build artifacts
+installer/node-portable/
+installer/app-bundle/
+installer/Output/
+installer/*.zip

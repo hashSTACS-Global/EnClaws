@@ -364,6 +364,21 @@ export async function dispatchReplyFromConfig(params: {
 
   markProcessing();
 
+  // ── Early card creation ──────────────────────────────────────
+  // Trigger eager streaming card creation BEFORE any LLM/agent work
+  // begins, so the user gets instant visual feedback (loading indicator)
+  // while the model and tools are still loading.
+  // Calling onReasoningStream triggers ensureCardCreated() in the streaming
+  // controller; the acknowledgment text is shown as a thinking indicator.
+  const processingAckText = process.env.OPENCLAW_PROCESSING_ACK_TEXT?.trim() ?? "任务已接收，处理中";
+  if (params.replyOptions?.onReasoningStream && processingAckText) {
+    try {
+      await params.replyOptions.onReasoningStream({ text: processingAckText });
+    } catch (err) {
+      logVerbose(`dispatch-from-config: early card creation failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   // ── Input content filter ────────────────────────────────────
   const filterResult = checkInputFilter({
     text: content,
