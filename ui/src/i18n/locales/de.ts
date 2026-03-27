@@ -352,6 +352,7 @@ export const de: TranslationMap = {
     missingEnv: "Fehlende Umgebungsvariable: {env}",
     enabled: "Aktiviert",
     justDisabled: "Deaktiviert",
+    installing: "Installiere...",
     installSuccess: "Installation erfolgreich",
     sourceWorkspace: "Arbeitsbereich-Skills",
     sourceManaged: "Installierte Skills",

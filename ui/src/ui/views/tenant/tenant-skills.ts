@@ -304,6 +304,13 @@ export class TenantSkillsView extends LitElement {
           ${msg ? html`<div class="muted" style="margin-top: 0.4rem; color: ${msg.kind === "error" ? "var(--text-destructive, #fca5a5)" : "#4ade80"};">${msg.text}</div>` : nothing}
         </div>
         <div class="skill-actions">
+          ${canInstall ? skill.install.map((inst) => html`
+            <button class="btn btn-sm btn-outline"
+              ?disabled=${busy}
+              @click=${() => this._installSkill(skill.skillKey, skill.name, inst.id)}>
+              ${busy ? t("tenantSkills.installing") : inst.label}
+            </button>
+          `) : nothing}
         </div>
       </div>
     `;

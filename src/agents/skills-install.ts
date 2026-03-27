@@ -22,6 +22,7 @@ export type SkillInstallRequest = {
   installId: string;
   timeoutMs?: number;
   config?: OpenClawConfig;
+  tenantSkillsDir?: string;
 };
 
 export type SkillInstallResult = {
@@ -408,7 +409,10 @@ async function executeInstallCommand(params: {
 export async function installSkill(params: SkillInstallRequest): Promise<SkillInstallResult> {
   const timeoutMs = Math.min(Math.max(params.timeoutMs ?? 300_000, 1_000), 900_000);
   const workspaceDir = resolveUserPath(params.workspaceDir);
-  const entries = loadWorkspaceSkillEntries(workspaceDir);
+  const entries = loadWorkspaceSkillEntries(workspaceDir, {
+    config: params.config,
+    tenantSkillsDir: params.tenantSkillsDir,
+  });
   const entry = entries.find((item) => item.skill.name === params.skillName);
   if (!entry) {
     return {

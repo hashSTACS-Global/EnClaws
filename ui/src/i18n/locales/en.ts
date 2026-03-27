@@ -687,6 +687,7 @@ export const en: TranslationMap = {
     missingEnv: "Missing env: {env}",
     enabled: "Enabled",
     justDisabled: "Disabled",
+    installing: "Installing...",
     installSuccess: "Install successful",
     sourceWorkspace: "Workspace Skills",
     sourceManaged: "Installed Skills",

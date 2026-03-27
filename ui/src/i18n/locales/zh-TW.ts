@@ -348,6 +348,7 @@ export const zh_TW: TranslationMap = {
     missingEnv: "缺少環境變數: {env}",
     enabled: "已啟用",
     justDisabled: "已停用",
+    installing: "安裝中...",
     installSuccess: "安裝成功",
     sourceWorkspace: "工作區技能",
     sourceManaged: "已安裝技能",

@@ -4,8 +4,10 @@ import chokidar, { type FSWatcher } from "chokidar";
 import type { OpenClawConfig } from "../../config/config.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { CONFIG_DIR, resolveUserPath } from "../../utils.js";
+import { precheckSkill, resolveSkillNameFromPath } from "../skills-precheck.js";
 import { getTenantBootstrapContext } from "../workspace.js";
 import { resolvePluginSkillDirs } from "./plugin-skills.js";
+import { loadWorkspaceSkillEntries } from "./workspace.js";
 
 type SkillsChangeEvent = {
   workspaceDir?: string;
@@ -215,4 +217,31 @@ export function ensureSkillsWatcher(params: { workspaceDir: string; config?: Ope
   });
 
   watchers.set(workspaceDir, state);
+
+  // 为此工作区注册预检查监听器（每个工作区仅注册一次）
+  const precheckListenerKey = `precheck:${workspaceDir}`;
+  if (!watchers.has(precheckListenerKey)) {
+    registerSkillsChangeListener((event) => {
+      if (event.reason !== "watch" || !event.changedPath || !event.workspaceDir) return;
+      if (event.workspaceDir !== workspaceDir) return;
+
+      const entries = loadWorkspaceSkillEntries(workspaceDir, { config: params.config });
+      let skillName = resolveSkillNameFromPath(event.changedPath, entries);
+
+      // 新技能：重新加载条目后再匹配
+      if (!skillName) {
+        const reloaded = loadWorkspaceSkillEntries(workspaceDir, { config: params.config });
+        skillName = resolveSkillNameFromPath(event.changedPath, reloaded);
+      }
+
+      if (!skillName) return;
+
+      void precheckSkill({
+        workspaceDir,
+        skillName,
+        config: params.config,
+        notify: (msg) => log.info(`[skill-precheck] ${msg}`),
+      });
+    });
+  }
 }

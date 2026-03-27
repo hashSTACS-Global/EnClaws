@@ -181,6 +181,15 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "status",
     }),
     defineChatCommand({
+      key: "install-skill",
+      nativeName: "install_skill",
+      description: "Check skill dependencies and show install options.",
+      textAlias: "/install-skill",
+      acceptsArgs: true,
+      args: [{ name: "name", description: "Skill name", type: "string" as const, required: true }],
+      category: "tools",
+    }),
+    defineChatCommand({
       key: "allowlist",
       description: "List/add/remove allowlist entries.",
       textAlias: "/allowlist",

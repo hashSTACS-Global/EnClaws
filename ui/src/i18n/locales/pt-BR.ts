@@ -351,6 +351,7 @@ export const pt_BR: TranslationMap = {
     missingEnv: "Variavel de ambiente faltando: {env}",
     enabled: "Ativado",
     justDisabled: "Desativado",
+    installing: "Instalando...",
     installSuccess: "Instalacao bem-sucedida",
     sourceWorkspace: "Skills do Workspace",
     sourceManaged: "Skills Instalados",

@@ -4,6 +4,7 @@ import {
   resolveDefaultAgentId,
 } from "../../agents/agent-scope.js";
 import { installSkill } from "../../agents/skills-install.js";
+import { precheckSkill } from "../../agents/skills-precheck.js";
 import { buildWorkspaceSkillStatus } from "../../agents/skills-status.js";
 import { loadWorkspaceSkillEntries, type SkillEntry } from "../../agents/skills.js";
 import { listAgentWorkspaceDirs } from "../../agents/workspace-dirs.js";
@@ -158,15 +159,45 @@ export const skillsHandlers: GatewayRequestHandlers = {
       installId: string;
       timeoutMs?: number;
     };
-    const { cfg } = await resolveRequestConfig(client);
+    const { cfg, tenant } = await resolveRequestConfig(client);
     const workspaceDirRaw = resolveAgentWorkspaceDir(cfg, resolveDefaultAgentId(cfg));
+    const tenantSkillsDir = tenant ? resolveTenantSkillsDir(tenant.tenantId) : undefined;
+
+    // 加载技能条目（含租户技能目录）用于查找和安装
+    const entries = loadWorkspaceSkillEntries(workspaceDirRaw, {
+      config: cfg,
+      tenantSkillsDir,
+    });
+    const entry = entries.find((e) => e.skill.name === p.name);
+    if (!entry) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Skill not found: ${p.name}`));
+      return;
+    }
+
     const result = await installSkill({
       workspaceDir: workspaceDirRaw,
       skillName: p.name,
       installId: p.installId,
       timeoutMs: p.timeoutMs,
       config: cfg,
+      tenantSkillsDir,
     });
+
+    // 安装后运行依赖预检查
+    const precheckWarnings: string[] = [];
+    if (result.ok) {
+      const precheck = await precheckSkill({
+        workspaceDir: workspaceDirRaw,
+        skillName: p.name,
+        config: cfg,
+        notify: (msg) => { precheckWarnings.push(msg); },
+        _entries: entries,
+      });
+      if (!precheck.ok && precheckWarnings.length > 0) {
+        result.warnings = [...(result.warnings ?? []), ...precheckWarnings];
+      }
+    }
+
     respond(
       result.ok,
       result,
