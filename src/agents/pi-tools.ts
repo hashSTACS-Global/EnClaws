@@ -171,6 +171,54 @@ export function resolveToolLoopDetectionConfig(params: {
   };
 }
 
+/**
+ * Build the extraEnv record for the exec tool.
+ *
+ * Injects process-isolated environment variables so that tenant skill scripts
+ * can read context without relying on shared files or model parameter passing:
+ *   - OPENCLAW_TENANT_ID / OPENCLAW_TENANT_USER_ID — multi-tenant identity
+ *   - FEISHU_APP_ID / FEISHU_APP_SECRET — channel app credentials (concurrency-safe)
+ *   - ENCLAWS_CHAT_ID — current chat id for auth card routing
+ */
+function buildExecExtraEnv(options?: {
+  tenantId?: string;
+  tenantUserId?: string;
+  messageTo?: string;
+  messageProvider?: string;
+  agentAccountId?: string;
+  config?: OpenClawConfig;
+}): Record<string, string> | undefined {
+  const env: Record<string, string> = {};
+
+  // Tenant identity
+  if (options?.tenantId) env.OPENCLAW_TENANT_ID = options.tenantId;
+  if (options?.tenantUserId) env.OPENCLAW_TENANT_USER_ID = options.tenantUserId;
+
+  // Chat ID — extract from "chat:{chatId}" format in messageTo
+  if (options?.messageTo?.startsWith("chat:")) {
+    env.ENCLAWS_CHAT_ID = options.messageTo.slice(5);
+  }
+
+  // Feishu app credentials — only for feishu provider, resolved from channel config
+  const provider = options?.messageProvider?.toLowerCase();
+  if (provider === "feishu" && options?.config) {
+    try {
+      const { extractFeishuCredentials } = require("../infra/feishu-user-resolve.js");
+      const creds = extractFeishuCredentials(
+        options.config as unknown as Record<string, unknown>,
+        provider,
+        options.agentAccountId,
+      ) as { appId: string; appSecret: string } | null;
+      if (creds?.appId) env.FEISHU_APP_ID = creds.appId;
+      if (creds?.appSecret) env.FEISHU_APP_SECRET = creds.appSecret;
+    } catch {
+      // Non-fatal — skill scripts fall back to config.json / openclaw.json
+    }
+  }
+
+  return Object.keys(env).length > 0 ? env : undefined;
+}
+
 export const __testing = {
   cleanToolSchemaForGemini,
   normalizeToolParams,
@@ -418,13 +466,7 @@ export function createOpenClawCodingTools(options?: {
           env: sandbox.docker.env,
         }
       : undefined,
-    extraEnv:
-      options?.tenantId && options?.tenantUserId
-        ? {
-            OPENCLAW_TENANT_ID: options.tenantId,
-            OPENCLAW_TENANT_USER_ID: options.tenantUserId,
-          }
-        : undefined,
+    extraEnv: buildExecExtraEnv(options),
   });
   const processTool = createProcessTool({
     cleanupMs: cleanupMsOverride ?? execConfig.cleanupMs,

@@ -195,6 +195,13 @@ function syncFeishuSkillConfig(
 
     const { resolveTenantSkillsDir } = require("../../config/sessions/tenant-paths.js");
     const sharedDir = path.join(resolveTenantSkillsDir(tenantId), "feishu-auth");
+
+    // Only sync when feishu-auth skill is installed — don't create the directory
+    if (!fs.existsSync(sharedDir)) {
+      skillConfigSynced.add(cacheKey);
+      return;
+    }
+
     const cfgPath = path.join(sharedDir, "config.json");
 
     // Check if already up-to-date
@@ -207,8 +214,6 @@ function syncFeishuSkillConfig(
     } catch {
       // File missing or unparseable — will write below
     }
-
-    fs.mkdirSync(sharedDir, { recursive: true });
     fs.writeFileSync(
       cfgPath,
       JSON.stringify({ appId: creds.appId, appSecret: creds.appSecret, brand: "feishu" }, null, 2),
