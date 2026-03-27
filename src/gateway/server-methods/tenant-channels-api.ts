@@ -117,7 +117,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
               groupPolicy: a.groupPolicy,
               isActive: a.isActive,
               connectionStatus: accountSnapshot ? {
-                connected: accountSnapshot.running === true,
+                connected: accountSnapshot.connected === true,
                 lastConnectedAt: accountSnapshot.lastStartAt ?? null,
                 lastDisconnectedAt: accountSnapshot.lastStopAt ?? null,
                 lastError: accountSnapshot.lastError ?? null,

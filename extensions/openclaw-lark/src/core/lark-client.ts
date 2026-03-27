@@ -319,8 +319,9 @@ export class LarkClient {
     handlers: Record<string, (data: unknown) => Promise<void>>;
     abortSignal?: AbortSignal;
     autoProbe?: boolean;
+    onConnectionChange?: (connected: boolean) => void;
   }): Promise<void> {
-    const { handlers, abortSignal, autoProbe = true } = opts;
+    const { handlers, abortSignal, autoProbe = true, onConnectionChange } = opts;
 
     if (autoProbe) await this.probe();
 
@@ -343,11 +344,22 @@ export class LarkClient {
       this._wsClient = null;
     }
 
+    // Build a logger that intercepts SDK connection state messages.
+    // SDK logs '[ws] ws client ready' on success, '[ws] connect failed' on failure.
+    const sdkLogger = onConnectionChange ? {
+      info: (...msg: unknown[]) => { console.log('[info]:', ...msg); if (msg[0] === '[ws]' && msg[1] === 'ws client ready') onConnectionChange(true); },
+      error: (...msg: unknown[]) => { console.log('[error]:', ...msg); if (msg[0] === '[ws]' && msg[1] === 'connect failed') onConnectionChange(false); },
+      warn: (...msg: unknown[]) => { console.warn('[warn]:', ...msg); },
+      debug: (...msg: unknown[]) => { console.log('[debug]:', ...msg); },
+      trace: (...msg: unknown[]) => { console.log('[trace]:', ...msg); },
+    } : undefined;
+
     this._wsClient = new Lark.WSClient({
       appId,
       appSecret,
       domain: resolveBrand(this.account.brand),
       loggerLevel: Lark.LoggerLevel.info,
+      ...(sdkLogger ? { logger: sdkLogger } : {}),
     });
 
     // SDK 的 handleEventData 只处理 type="event"，card action 回调是 type="card" 会被丢弃。

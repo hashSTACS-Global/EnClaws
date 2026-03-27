@@ -44,6 +44,7 @@ async function monitorSingleAccount(params: {
   account: ReturnType<typeof getLarkAccount>;
   runtime?: RuntimeEnv;
   abortSignal?: AbortSignal;
+  onConnectionChange?: (connected: boolean) => void;
 }): Promise<void> {
   const { account, runtime, abortSignal } = params;
   const { accountId } = account;
@@ -104,6 +105,7 @@ async function monitorSingleAccount(params: {
         handleCardActionEvent(ctx, data)) as any,
     },
     abortSignal,
+    onConnectionChange: params.onConnectionChange,
   });
 
   // startWS resolves when abortSignal fires — probe result is logged inside startWS.
@@ -144,6 +146,7 @@ export async function monitorFeishuProvider(opts: MonitorFeishuOpts = {}): Promi
       account,
       runtime: opts.runtime,
       abortSignal: opts.abortSignal,
+      onConnectionChange: opts.onConnectionChange,
     });
     await drainShutdownHooks({ log });
     return;

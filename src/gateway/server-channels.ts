@@ -207,7 +207,7 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
         const trackedPromise = Promise.resolve(task)
           .catch((err) => {
             const message = formatErrorMessage(err);
-            setRuntime(channelId, id, { accountId: id, lastError: message });
+            setRuntime(channelId, id, { accountId: id, running: false, lastError: message });
             log.error?.(`[${id}] channel exited: ${message}`);
           })
           .finally(() => {
