@@ -6,6 +6,27 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ============================================================
+-- Drop all tables (reverse dependency order)
+-- ============================================================
+DROP FUNCTION IF EXISTS update_updated_at_column CASCADE;
+DROP TABLE IF EXISTS _migrations CASCADE;
+DROP TABLE IF EXISTS llm_interaction_traces CASCADE;
+DROP TABLE IF EXISTS usage_records CASCADE;
+DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS refresh_tokens CASCADE;
+DROP TABLE IF EXISTS tenant_agents CASCADE;
+DROP TABLE IF EXISTS tenant_channel_apps CASCADE;
+DROP TABLE IF EXISTS tenant_channels CASCADE;
+DROP TABLE IF EXISTS tenant_api_keys CASCADE;
+DROP TABLE IF EXISTS tenant_models CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS tenants CASCADE;
+DROP TABLE IF EXISTS sys_gateway_config CASCADE;
+DROP TABLE IF EXISTS sys_logging_config CASCADE;
+DROP TABLE IF EXISTS sys_plugins_config CASCADE;
+DROP TABLE IF EXISTS sys_tools_config CASCADE;
+
+-- ============================================================
 -- 1. Tenants (租户/企业)
 -- ============================================================
 CREATE TABLE tenants (
@@ -45,7 +66,7 @@ CREATE TABLE users (
   status      VARCHAR(32)  NOT NULL DEFAULT 'active', -- active | invited | suspended | deleted
   avatar_url  VARCHAR(1024),
   last_login_at TIMESTAMPTZ,
-  channel_id  UUID         REFERENCES tenant_channels(id) ON DELETE SET NULL,
+  channel_id  UUID,
   settings    JSONB        NOT NULL DEFAULT '{}',  -- user-level preferences
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
@@ -95,6 +116,10 @@ CREATE TABLE tenant_channels (
 );
 
 CREATE INDEX idx_channels_tenant ON tenant_channels (tenant_id);
+
+-- Deferred FK: users.channel_id → tenant_channels (avoids circular dependency)
+ALTER TABLE users ADD CONSTRAINT fk_users_channel
+  FOREIGN KEY (channel_id) REFERENCES tenant_channels(id) ON DELETE SET NULL;
 
 -- ============================================================
 -- 5. Channel Apps (频道下的应用配置)
