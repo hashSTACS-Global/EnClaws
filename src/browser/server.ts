@@ -87,8 +87,9 @@ export async function startBrowserControlServerFromConfig(): Promise<BrowserServ
     onWarn: (message) => logServer.warn(message),
   });
 
-  const authMode = browserAuth.token ? "token" : browserAuth.password ? "password" : "off";
-  logServer.info(`Browser control listening on http://127.0.0.1:${port}/ (auth=${authMode})`);
+  // const authMode = browserAuth.token ? "token" : browserAuth.password ? "password" : "off";
+  // logServer.info(`Browser control listening on http://127.0.0.1:${port}/ (auth=${authMode})`);
+  logServer.info(`Browser control ready. Open dashboard: http://127.0.0.1:${process.env.OPENCLAW_GATEWAY_PORT ?? port}/`);
   return state;
 }
 
