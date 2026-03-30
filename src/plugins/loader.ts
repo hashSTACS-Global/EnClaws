@@ -17,6 +17,7 @@ import {
 } from "./config-state.js";
 import { discoverOpenClawPlugins } from "./discovery.js";
 import { initializeGlobalHookRunner } from "./hook-runner-global.js";
+import { registerFeishuMediaDownloadHook } from "./builtin-hooks/feishu-media-download.js";
 import { loadPluginManifestRegistry } from "./manifest-registry.js";
 import { isPathInside, safeStatSync } from "./path-safety.js";
 import { createPluginRegistry, type PluginRecord, type PluginRegistry } from "./registry.js";
@@ -712,6 +713,7 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
     registryCache.set(cacheKey, registry);
   }
   setActivePluginRegistry(registry, cacheKey);
+  registerFeishuMediaDownloadHook(registry);
   initializeGlobalHookRunner(registry);
   return registry;
 }
