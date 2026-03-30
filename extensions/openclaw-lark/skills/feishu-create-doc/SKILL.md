@@ -6,19 +6,6 @@ description: |
 
 # feishu_mcp_create_doc
 
-## 🔑 执行前权限预检
-
-**在使用本 Skill 的任何工具之前，必须先调用 `feishu_pre_auth` 工具进行权限预检：**
-
-```json
-{
-  "tool_actions": ["feishu_get_user.default", "feishu_search_user.default", "feishu_create_doc.default", "feishu_doc_media.insert", "feishu_drive_file.copy", "feishu_drive_file.move", "feishu_drive_file.delete", "feishu_drive_file.upload", "feishu_drive_file.download", "feishu_drive_file.list", "feishu_drive_file.get_meta"]
-}
-```
-
-- 如果返回 `all_authorized: true`，继续执行后续操作。
-- 否则按返回结果的指引完成授权后再继续。
-
 通过 MCP 调用 `create-doc`，从 Lark-flavored Markdown 内容创建一个新的飞书云文档。
 
 # 返回值

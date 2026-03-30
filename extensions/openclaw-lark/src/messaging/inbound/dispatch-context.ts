@@ -10,7 +10,7 @@
  */
 
 import type { ClawdbotConfig, RuntimeEnv } from 'openclaw/plugin-sdk';
-import { resolveThreadSessionKeys } from 'openclaw/plugin-sdk';
+import { resolveThreadSessionKeys } from 'openclaw/plugin-sdk/routing';
 import type { MessageContext } from '../types';
 import type { LarkAccount } from '../../core/types';
 import { LarkClient } from '../../core/lark-client';
@@ -98,10 +98,7 @@ export function buildDispatchContext(params: {
     accountId: account.accountId,
     peer: {
       kind: isGroup ? 'group' : 'direct',
-      // Include sender in group peerId so multi-tenant cron jobs can
-      // resolve the @mention target from the session key.
-      // Format: oc_xxx:sender:ou_xxx
-      id: isGroup ? `${ctx.chatId}:sender:${ctx.senderId}` : ctx.senderId,
+      id: isGroup ? ctx.chatId : ctx.senderId,
     },
   });
 

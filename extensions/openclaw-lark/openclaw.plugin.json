@@ -6,5 +6,12 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "channelConfigs": {
+    "feishu": {
+      "schema": {
+        "type": "object"
+      }
+    }
   }
 }

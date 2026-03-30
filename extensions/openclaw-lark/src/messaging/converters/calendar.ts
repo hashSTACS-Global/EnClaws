@@ -9,7 +9,7 @@
  */
 
 import type { ContentConverterFn } from './types';
-import { safeParse, millisToDatetime } from './utils';
+import { millisToDatetime, safeParse } from './utils';
 
 interface CalendarBody {
   summary?: string;

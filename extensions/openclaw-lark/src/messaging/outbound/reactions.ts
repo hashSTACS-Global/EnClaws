@@ -318,7 +318,7 @@ export async function addReactionFeishu(params: {
     const errCode = e.code ?? e.response?.data?.code;
     if (errCode === 231001) {
       const validTypes = Array.from(VALID_FEISHU_EMOJI_TYPES).join(', ');
-      throw new Error(`Emoji type "${emojiType}" is not a valid Feishu reaction. Valid types: ${validTypes}`);
+      throw new Error(`Emoji type "${emojiType}" is not a valid Feishu reaction. Valid types: ${validTypes}`, { cause: err });
     }
     throw err;
   }

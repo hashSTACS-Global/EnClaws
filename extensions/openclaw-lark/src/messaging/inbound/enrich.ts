@@ -23,14 +23,13 @@
  */
 
 import type { ClawdbotConfig } from 'openclaw/plugin-sdk';
-import type { MessageContext, FeishuMediaInfo } from '../types';
+import type { FeishuMediaInfo, MessageContext } from '../types';
 import type { LarkAccount } from '../../core/types';
+import { getMessageFeishu } from '../outbound/fetch';
 import type { PermissionError } from './permission';
 import { PERMISSION_ERROR_COOLDOWN_MS, permissionErrorNotifiedAt } from './permission';
-import { resolveUserName } from './user-name-cache';
-import { downloadResources, buildFeishuMediaPayload } from './media-resolver';
-import { getMessageFeishu } from '../outbound/fetch';
-import { getUserNameCache, batchResolveUserNames } from './user-name-cache';
+import { batchResolveUserNames, getUserNameCache, resolveUserName  } from './user-name-cache';
+import { buildFeishuMediaPayload, downloadResources } from './media-resolver';
 
 // ---------------------------------------------------------------------------
 // Phase 1: Sender info (lightweight, before gate)

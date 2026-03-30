@@ -1,19 +1,23 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2023",
     "module": "ES2022",
     "moduleResolution": "bundler",
-    "esModuleInterop": true,
+    "lib": ["ES2023"],
+    "types": ["node"],
+
     "strict": true,
     "noEmit": true,
+    "declaration": true,
     "skipLibCheck": true,
-    "lib": ["ES2022"],
-    "types": ["node"],
-    "outDir": "dist",
-    "rootDir": ".",
+    "esModuleInterop": true,
     "resolveJsonModule": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true,
+
+    "outDir": "dist"
   },
-  "include": ["index.ts", "src/**/*.ts"],
+  "include": ["index.ts", "src/**/*.ts", "tests/**/*.ts", "*.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

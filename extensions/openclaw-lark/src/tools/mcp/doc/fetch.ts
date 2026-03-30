@@ -7,7 +7,7 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import { Type, type Static } from '@sinclair/typebox';
+import { type Static, Type } from '@sinclair/typebox';
 import { registerMcpTool } from '../shared';
 
 // Schema 定义
@@ -34,8 +34,8 @@ type FetchDocParams = Static<typeof FetchDocSchema>;
 /**
  * 注册 fetch-doc 工具
  */
-export function registerFetchDocTool(api: OpenClawPluginApi) {
-  registerMcpTool<FetchDocParams>(api, {
+export function registerFetchDocTool(api: OpenClawPluginApi): boolean {
+  return registerMcpTool<FetchDocParams>(api, {
     name: 'feishu_fetch_doc',
     mcpToolName: 'fetch-doc',
     toolActionKey: 'feishu_fetch_doc.default',

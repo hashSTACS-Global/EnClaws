@@ -17,17 +17,19 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
 import {
-  json,
-  createToolContext,
+  StringEnum,
   assertLarkOk,
+  createToolContext,
   handleInvokeErrorWithAutoAuth,
+  json,
+  registerTool,
 } from '../helpers';
-import type { DriveFileListData, DriveFileData, DriveTaskData } from '../sdk-types';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import type { DriveFileData, DriveFileListData, DriveTaskData } from '../sdk-types';
 
 // 分片上传配置
 const SMALL_FILE_THRESHOLD = 15 * 1024 * 1024; // 15MB，小于此大小使用一次上传
@@ -59,12 +61,12 @@ const FeishuDriveFileSchema = Type.Union([
       }),
     ),
     order_by: Type.Optional(
-      Type.Union([Type.Literal('EditedTime'), Type.Literal('CreatedTime')], {
+      StringEnum(['EditedTime', 'CreatedTime'], {
         description: '排序方式：EditedTime（编辑时间）、CreatedTime（创建时间）',
       }),
     ),
     direction: Type.Optional(
-      Type.Union([Type.Literal('ASC'), Type.Literal('DESC')], {
+      StringEnum(['ASC', 'DESC'], {
         description: '排序方向：ASC（升序）、DESC（降序）',
       }),
     ),
@@ -294,13 +296,14 @@ type FeishuDriveFileParams =
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuDriveFileTool(api: OpenClawPluginApi) {
-  if (!api.config) return;
+export function registerFeishuDriveFileTool(api: OpenClawPluginApi): boolean {
+  if (!api.config) return false;
   const cfg = api.config;
 
   const { toolClient, log } = createToolContext(api, 'feishu_drive_file');
 
-  api.registerTool(
+  return registerTool(
+    api,
     {
       name: 'feishu_drive_file',
       label: 'Feishu Drive Files',
@@ -455,11 +458,11 @@ export function registerFeishuDriveFileTool(api: OpenClawPluginApi) {
               assertLarkOk(res);
 
               const data = res.data as DriveTaskData | undefined;
-              log.info(`move: task_id=${data?.task_id}`);
+              log.info(`move: success${data?.task_id ? `, task_id=${data.task_id}` : ''}`);
 
               return json({
                 success: true,
-                task_id: data?.task_id,
+                ...(data?.task_id ? { task_id: data.task_id } : {}),
                 file_token: p.file_token,
                 target_folder_token: p.folder_token,
               });
@@ -488,11 +491,11 @@ export function registerFeishuDriveFileTool(api: OpenClawPluginApi) {
               assertLarkOk(res);
 
               const data = res.data as DriveTaskData | undefined;
-              log.info(`delete: task_id=${data?.task_id}`);
+              log.info(`delete: success${data?.task_id ? `, task_id=${data.task_id}` : ''}`);
 
               return json({
                 success: true,
-                task_id: data?.task_id,
+                ...(data?.task_id ? { task_id: data.task_id } : {}),
                 file_token: p.file_token,
               });
             }
@@ -740,6 +743,4 @@ export function registerFeishuDriveFileTool(api: OpenClawPluginApi) {
     },
     { name: 'feishu_drive_file' },
   );
-
-  api.logger.info?.('feishu_drive_file: Registered feishu_drive_file tool');
 }

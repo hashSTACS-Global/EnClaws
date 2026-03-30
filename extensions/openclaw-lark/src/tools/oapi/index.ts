@@ -9,24 +9,25 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import { registerFeishuImTools as registerFeishuImBotTools } from '../tat/im/index';
 import {
   registerFeishuCalendarCalendarTool,
-  registerFeishuCalendarEventTool,
   registerFeishuCalendarEventAttendeeTool,
+  registerFeishuCalendarEventTool,
   registerFeishuCalendarFreebusyTool,
 } from './calendar/index';
 import {
-  registerFeishuTaskTaskTool,
-  registerFeishuTaskTasklistTool,
   registerFeishuTaskCommentTool,
   registerFeishuTaskSubtaskTool,
+  registerFeishuTaskTaskTool,
+  registerFeishuTaskTasklistTool,
 } from './task/index';
 import {
-  registerFeishuBitableAppTool,
-  registerFeishuBitableAppTableTool,
-  registerFeishuBitableAppTableRecordTool,
   registerFeishuBitableAppTableFieldTool,
+  registerFeishuBitableAppTableRecordTool,
+  registerFeishuBitableAppTableTool,
   registerFeishuBitableAppTableViewTool,
+  registerFeishuBitableAppTool,
 } from './bitable/index';
 import { registerGetUserTool, registerSearchUserTool } from './common/index';
 // import { registerFeishuMailTools } from "./mail/index";
@@ -34,13 +35,12 @@ import { registerFeishuSearchTools } from './search/index';
 import { registerFeishuDriveTools } from './drive/index';
 import { registerFeishuWikiTools } from './wiki/index';
 
-import { registerFeishuImTools as registerFeishuImBotTools } from '../tat/im/index';
 import { registerFeishuSheetsTools } from './sheets/index';
 // import { registerFeishuOkrTools } from "./okr/index";
 import { registerFeishuChatTools } from './chat/index';
 import { registerFeishuImTools as registerFeishuImUserTools } from './im/index';
 
-export function registerOapiTools(api: OpenClawPluginApi) {
+export function registerOapiTools(api: OpenClawPluginApi): void {
   // Common tools
   registerGetUserTool(api);
   registerSearchUserTool(api);
@@ -85,5 +85,5 @@ export function registerOapiTools(api: OpenClawPluginApi) {
   // IM tools (bot identity)
   registerFeishuImBotTools(api);
 
-  api.logger.info?.('Registered all OAPI tools (calendar, task, bitable, search, drive, wiki, sheets, im)');
+  api.logger.debug?.('Registered all OAPI tools (calendar, task, bitable, search, drive, wiki, sheets, im)');
 }

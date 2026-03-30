@@ -10,13 +10,12 @@
  * 全部以用户身份（user_access_token）调用，scope 来自 real-scope.json。
  */
 
-import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import { buildRandomTempFilePath } from 'openclaw/plugin-sdk';
-import { Type } from '@sinclair/typebox';
-import { json, createToolContext, handleInvokeErrorWithAutoAuth } from '../helpers';
-import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import { buildRandomTempFilePath } from 'openclaw/plugin-sdk/temp-path';
+import { Type } from '@sinclair/typebox';
+import { StringEnum, createToolContext, handleInvokeErrorWithAutoAuth, json, registerTool } from '../helpers';
 
 // ---------------------------------------------------------------------------
 // Helper: MIME type to extension mapping
@@ -69,7 +68,7 @@ const FetchResourceSchema = Type.Object({
   file_key: Type.String({
     description: '资源 Key，从消息体中获取。图片消息的 image_key（img_xxx）或文件消息的 file_key（file_xxx）',
   }),
-  type: Type.Union([Type.Literal('image'), Type.Literal('file')], {
+  type: StringEnum(['image', 'file'], {
     description: '资源类型：image（图片消息中的图片）、file（文件/音频/视频消息中的文件）',
   }),
 });
@@ -88,13 +87,14 @@ interface FetchResourceParams {
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuImUserFetchResourceTool(api: OpenClawPluginApi) {
-  if (!api.config) return;
+export function registerFeishuImUserFetchResourceTool(api: OpenClawPluginApi): boolean {
+  if (!api.config) return false;
   const cfg = api.config;
 
   const { toolClient, log } = createToolContext(api, 'feishu_im_user_fetch_resource');
 
-  api.registerTool(
+  return registerTool(
+    api,
     {
       name: 'feishu_im_user_fetch_resource',
       label: 'Feishu: IM Fetch Resource',
@@ -150,24 +150,18 @@ export function registerFeishuImUserFetchResourceTool(api: OpenClawPluginApi) {
           const contentType = res.headers?.['content-type'] || '';
           log.info(`fetch_resource: content-type=${contentType}`);
 
-          // 从 Content-Type 推断扩展名
+          // 从 Content-Type 推断扩展名，自动生成保存路径
           const mimeType = contentType ? contentType.split(';')[0].trim() : '';
           const mimeExt = mimeType ? MIME_TO_EXT[mimeType] : undefined;
-          const ext = mimeExt ? `.${mimeExt}` : '';
-          const fileName = `im-resource-${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext}`;
 
-          // 优先保存到用户工作空间的 download 目录（agent 运行期间 cwd 已设为 workspace）
-          let finalPath: string;
-          const wsDownloadDir = path.join(process.cwd(), 'download');
-          try {
-            await fs.mkdir(wsDownloadDir, { recursive: true });
-            finalPath = path.join(wsDownloadDir, fileName);
-          } catch {
-            // 回退到临时目录
-            finalPath = buildRandomTempFilePath({ prefix: 'im-resource', extension: mimeExt });
-            await fs.mkdir(path.dirname(finalPath), { recursive: true });
-          }
+          const finalPath = buildRandomTempFilePath({
+            prefix: 'im-resource',
+            extension: mimeExt,
+          });
           log.info(`fetch_resource: saving to ${finalPath}`);
+
+          // 确保父目录存在
+          await fs.mkdir(path.dirname(finalPath), { recursive: true });
 
           // 保存文件
           try {
@@ -195,6 +189,4 @@ export function registerFeishuImUserFetchResourceTool(api: OpenClawPluginApi) {
     },
     { name: 'feishu_im_user_fetch_resource' },
   );
-
-  api.logger.info?.('feishu_im_user_fetch_resource: Registered feishu_im_user_fetch_resource tool');
 }

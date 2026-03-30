@@ -23,6 +23,8 @@ export {
   getFirstAccount,
   validateRequiredParams,
   validateEnum,
+  checkToolRegistration,
+  registerTool,
 } from '../helpers';
 
 export type { ToolResult, ClientGetter, ToolContext } from '../helpers';
@@ -52,7 +54,10 @@ export type {
 // OAPI 专用：客户端便捷创建
 // ---------------------------------------------------------------------------
 
-import { createClientGetter } from '../helpers';
+import { Type } from '@sinclair/typebox';
+import type { SchemaOptions, TUnsafe } from '@sinclair/typebox';
+import type { ToolResult } from '../helpers';
+import { createClientGetter, formatToolResult } from '../helpers';
 
 /**
  * 从配置直接创建飞书客户端（OAPI 工具常用模式）
@@ -86,7 +91,6 @@ export function createFeishuClientFromConfig(config: ClawdbotConfig): LarkClient
 // OAPI 专用：返回值格式化（简化版）
 // ---------------------------------------------------------------------------
 
-import { formatToolResult } from '../helpers';
 
 /**
  * 格式化返回值为 JSON（OAPI 工具常用简化接口）
@@ -102,7 +106,7 @@ import { formatToolResult } from '../helpers';
  * return json({ error: "Invalid parameter" });
  * ```
  */
-export function json(data: unknown) {
+export function json(data: unknown): ToolResult {
   return formatToolResult(data);
 }
 
@@ -370,7 +374,7 @@ export function pad2(value: number): string {
  * @returns e.g. `"2026-02-25T14:30:00+08:00"`, or `null` on invalid input
  */
 export function unixTimestampToISO8601(raw: string | number | undefined): string | null {
-  if (raw === undefined || raw === null) return null;
+  if (raw === undefined || raw == null) return null;
 
   const text = typeof raw === 'number' ? String(raw) : String(raw).trim();
   if (!/^-?\d+$/.test(text)) return null;
@@ -408,7 +412,6 @@ export { assertLarkOk, formatLarkError } from '../../core/api-error';
 // ---------------------------------------------------------------------------
 
 import { AppScopeMissingError, UserAuthRequiredError, UserScopeInsufficientError } from '../../core/tool-client';
-import { isUatPolicyError } from '../../core/uat-access-guard';
 
 /**
  * Check whether an error is a structured invoke-level auth/permission error.
@@ -423,8 +426,7 @@ export function isInvokeError(err: unknown): boolean {
   return (
     err instanceof UserAuthRequiredError ||
     err instanceof AppScopeMissingError ||
-    err instanceof UserScopeInsufficientError ||
-    isUatPolicyError(err)
+    err instanceof UserScopeInsufficientError
   );
 }
 
@@ -433,3 +435,19 @@ export function isInvokeError(err: unknown): boolean {
 // ---------------------------------------------------------------------------
 
 export { handleInvokeErrorWithAutoAuth } from '../auto-auth';
+
+// ---------------------------------------------------------------------------
+// Schema 辅助：LLM 友好的字符串枚举
+// ---------------------------------------------------------------------------
+
+
+/**
+ * 创建 LLM 友好的字符串枚举 schema。
+ *
+ * 与 `Type.Union([Type.Literal('a'), Type.Literal('b')])` 不同，
+ * 本函数生成 `{ type: 'string', enum: ['a', 'b'] }` 格式，
+ * 兼容性更好。
+ */
+export function StringEnum<T extends string>(values: T[], options?: SchemaOptions): TUnsafe<T> {
+  return Type.Unsafe<T>({ type: 'string', enum: values, ...options });
+}

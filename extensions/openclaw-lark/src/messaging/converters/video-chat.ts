@@ -6,7 +6,7 @@
  */
 
 import type { ContentConverterFn } from './types';
-import { safeParse, millisToDatetime } from './utils';
+import { millisToDatetime, safeParse } from './utils';
 
 export const convertVideoChat: ContentConverterFn = (raw) => {
   const parsed = safeParse(raw) as

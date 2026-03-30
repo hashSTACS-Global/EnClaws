@@ -10,7 +10,7 @@
 
 import type { ResourceDescriptor } from '../types';
 import type { ContentConverterFn, ConvertContext, PostElement } from './types';
-import { resolveMentions } from './content-converter';
+import { resolveMentions } from './content-converter-helpers';
 import { safeParse } from './utils';
 
 /** Preferred locale order for multi-language post unwrapping. */

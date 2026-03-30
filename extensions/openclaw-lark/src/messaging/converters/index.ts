@@ -20,7 +20,7 @@ import { convertMergeForward } from './merge-forward';
 import { convertFolder } from './folder';
 import { convertSystem } from './system';
 import { convertHongbao } from './hongbao';
-import { convertShareCalendarEvent, convertCalendar, convertGeneralCalendar } from './calendar';
+import { convertCalendar, convertGeneralCalendar, convertShareCalendarEvent } from './calendar';
 import { convertVideoChat } from './video-chat';
 import { convertTodo } from './todo';
 import { convertVote } from './vote';

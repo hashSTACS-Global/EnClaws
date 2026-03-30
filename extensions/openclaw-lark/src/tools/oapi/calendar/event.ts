@@ -17,12 +17,14 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
 import {
-  json,
-  createToolContext,
-  parseTimeToTimestamp,
+  StringEnum,
   assertLarkOk,
-  handleInvokeErrorWithAutoAuth,
+  createToolContext,
   formatLarkError,
+  handleInvokeErrorWithAutoAuth,
+  json,
+  parseTimeToTimestamp,
+  registerTool,
   unixTimestampToISO8601,
 } from '../helpers';
 import type { CalendarPrimaryData, PaginatedData } from '../sdk-types';
@@ -65,12 +67,7 @@ const FeishuCalendarEventSchema = Type.Union([
     attendees: Type.Optional(
       Type.Array(
         Type.Object({
-          type: Type.Union([
-            Type.Literal('user'),
-            Type.Literal('chat'),
-            Type.Literal('resource'),
-            Type.Literal('third_party'),
-          ]),
+          type: StringEnum(['user', 'chat', 'resource', 'third_party']),
           id: Type.String({
             description: 'Attendee open_id, chat_id, resource_id, or email',
           }),
@@ -85,13 +82,13 @@ const FeishuCalendarEventSchema = Type.Union([
       Type.Object(
         {
           vc_type: Type.Optional(
-            Type.Union([Type.Literal('vc'), Type.Literal('third_party'), Type.Literal('no_meeting')], {
+            StringEnum(['vc', 'third_party', 'no_meeting'], {
               description:
                 '视频会议类型：vc（飞书视频会议）、third_party（第三方链接）、no_meeting（无视频会议）。默认为空，首次添加参与人时自动生成飞书视频会议。',
             }),
           ),
           icon_type: Type.Optional(
-            Type.Union([Type.Literal('vc'), Type.Literal('live'), Type.Literal('default')], {
+            StringEnum(['vc', 'live', 'default'], {
               description: '第三方视频会议 icon 类型（仅 vc_type=third_party 时有效）。',
             }),
           ),
@@ -112,19 +109,14 @@ const FeishuCalendarEventSchema = Type.Union([
       ),
     ),
     visibility: Type.Optional(
-      Type.Union([Type.Literal('default'), Type.Literal('public'), Type.Literal('private')], {
+      StringEnum(['default', 'public', 'private'], {
         description:
           '日程公开范围。default（默认，跟随日历权限）、public（公开详情）、private（私密，仅自己可见）。默认值：default。',
       }),
     ),
     attendee_ability: Type.Optional(
-      Type.Union(
-        [
-          Type.Literal('none'),
-          Type.Literal('can_see_others'),
-          Type.Literal('can_invite_others'),
-          Type.Literal('can_modify_event'),
-        ],
+      StringEnum(
+        ['none', 'can_see_others', 'can_invite_others', 'can_modify_event'],
         {
           description:
             '参与人权限。none（无法编辑、邀请、查看）、can_see_others（可查看参与人列表）、can_invite_others（可邀请其他人）、can_modify_event（可编辑日程）。默认值：none。',
@@ -132,7 +124,7 @@ const FeishuCalendarEventSchema = Type.Union([
       ),
     ),
     free_busy_status: Type.Optional(
-      Type.Union([Type.Literal('busy'), Type.Literal('free')], {
+      StringEnum(['busy', 'free'], {
         description: '日程占用的忙闲状态。busy（忙碌）、free（空闲）。默认值：busy。',
       }),
     ),
@@ -305,7 +297,7 @@ const FeishuCalendarEventSchema = Type.Union([
         description: 'Calendar ID (optional; primary calendar used if omitted)',
       }),
     ),
-    rsvp_status: Type.Union([Type.Literal('accept'), Type.Literal('decline'), Type.Literal('tentative')]),
+    rsvp_status: StringEnum(['accept', 'decline', 'tentative']),
   }),
 
   // INSTANCES (P1)
@@ -455,7 +447,7 @@ type FeishuCalendarEventParams =
     };
 
 function normalizeCalendarTimeValue(value: unknown): string | undefined {
-  if (value === null || value === undefined) return undefined;
+  if (value == null || value === undefined) return undefined;
 
   if (typeof value === 'string') {
     const iso = unixTimestampToISO8601(value);
@@ -507,7 +499,7 @@ function normalizeEventListTimeFields(
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuCalendarEventTool(api: OpenClawPluginApi) {
+export function registerFeishuCalendarEventTool(api: OpenClawPluginApi): void {
   if (!api.config) return;
   const cfg = api.config;
 
@@ -538,7 +530,8 @@ export function registerFeishuCalendarEventTool(api: OpenClawPluginApi) {
     return resolved;
   };
 
-  api.registerTool(
+  registerTool(
+    api,
     {
       name: 'feishu_calendar_event',
       label: 'Feishu Calendar Events',
@@ -664,7 +657,7 @@ export function registerFeishuCalendarEventTool(api: OpenClawPluginApi) {
                         {
                           path: {
                             calendar_id: calendarId,
-                            event_id: res.data?.event?.event_id!,
+                            event_id: res.data?.event?.event_id ?? '',
                           },
                           params: { user_id_type: 'open_id' as any },
                           data: {
@@ -1089,5 +1082,4 @@ export function registerFeishuCalendarEventTool(api: OpenClawPluginApi) {
     { name: 'feishu_calendar_event' },
   );
 
-  api.logger.info?.('feishu_calendar_event: Registered feishu_calendar_event tool');
 }

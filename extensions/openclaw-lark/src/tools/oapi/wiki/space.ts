@@ -16,10 +16,11 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
 
 import {
-  json,
-  createToolContext,
   assertLarkOk,
+  createToolContext,
   handleInvokeErrorWithAutoAuth,
+  json,
+  registerTool,
 } from '../helpers';
 import type { PaginatedData } from '../sdk-types';
 
@@ -93,13 +94,14 @@ type FeishuWikiSpaceParams =
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuWikiSpaceTool(api: OpenClawPluginApi) {
-  if (!api.config) return;
+export function registerFeishuWikiSpaceTool(api: OpenClawPluginApi): boolean {
+  if (!api.config) return false;
   const cfg = api.config;
 
   const { toolClient, log } = createToolContext(api, 'feishu_wiki_space');
 
-  api.registerTool(
+  return registerTool(
+    api,
     {
       name: 'feishu_wiki_space',
       label: 'Feishu Wiki Spaces',
@@ -210,6 +212,4 @@ export function registerFeishuWikiSpaceTool(api: OpenClawPluginApi) {
     },
     { name: 'feishu_wiki_space' },
   );
-
-  api.logger.info?.('feishu_wiki_space: Registered feishu_wiki_space tool');
 }

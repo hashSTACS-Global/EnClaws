@@ -14,8 +14,8 @@
  */
 
 import type { RuntimeLogger } from 'openclaw/plugin-sdk';
-import { LarkClient } from './lark-client';
 import { getTicket } from './lark-ticket';
+import { tryGetLarkRuntime } from './runtime-store';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -59,7 +59,9 @@ function consoleFallback(subsystem: string): RuntimeLogger {
 
 function resolveRuntimeLogger(subsystem: string): RuntimeLogger | null {
   try {
-    return LarkClient.runtime.logging.getChildLogger({
+    const runtime = tryGetLarkRuntime();
+    if (!runtime) return null;
+    return runtime.logging.getChildLogger({
       subsystem: `feishu/${subsystem}`,
     });
   } catch {
@@ -122,7 +124,7 @@ function formatMessage(message: string, meta: Record<string, unknown> | undefine
   if (!meta || Object.keys(meta).length === 0) return `${prefix} ${message}`;
   const parts = Object.entries(meta)
     .map(([k, v]) => {
-      if (v === undefined || v === null) return null;
+      if (v === undefined || v == null) return null;
       if (typeof v === 'object') return `${k}=${JSON.stringify(v)}`;
       return `${k}=${v}`;
     })

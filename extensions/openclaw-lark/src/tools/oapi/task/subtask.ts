@@ -15,11 +15,13 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
 
 import {
-  json,
-  createToolContext,
-  parseTimeToTimestampMs,
+  StringEnum,
   assertLarkOk,
+  createToolContext,
   handleInvokeErrorWithAutoAuth,
+  json,
+  parseTimeToTimestampMs,
+  registerTool,
 } from '../helpers';
 import type { PaginatedData } from '../sdk-types';
 
@@ -54,7 +56,7 @@ const FeishuTaskSubtaskSchema = Type.Union([
       Type.Array(
         Type.Object({
           id: Type.String({ description: '成员 open_id' }),
-          role: Type.Optional(Type.Union([Type.Literal('assignee'), Type.Literal('follower')])),
+          role: Type.Optional(StringEnum(['assignee', 'follower'])),
         }),
         { description: '子任务成员列表（assignee=负责人，follower=关注人）' },
       ),
@@ -95,13 +97,14 @@ type FeishuTaskSubtaskParams =
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuTaskSubtaskTool(api: OpenClawPluginApi) {
+export function registerFeishuTaskSubtaskTool(api: OpenClawPluginApi): void {
   if (!api.config) return;
   const cfg = api.config;
 
   const { toolClient, log } = createToolContext(api, 'feishu_task_subtask');
 
-  api.registerTool(
+  registerTool(
+    api,
     {
       name: 'feishu_task_subtask',
       label: 'Feishu Task Subtasks',
@@ -239,5 +242,4 @@ export function registerFeishuTaskSubtaskTool(api: OpenClawPluginApi) {
     { name: 'feishu_task_subtask' },
   );
 
-  api.logger.info?.('feishu_task_subtask: Registered feishu_task_subtask tool');
 }

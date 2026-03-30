@@ -15,17 +15,17 @@
  */
 
 import * as crypto from 'node:crypto';
-import type { ClawdbotConfig, RuntimeEnv, HistoryEntry } from 'openclaw/plugin-sdk';
-import { DEFAULT_GROUP_HISTORY_LIMIT } from 'openclaw/plugin-sdk';
-import type { FeishuReactionCreatedEvent } from '../types';
-import type { MessageContext } from '../types';
+import type { ClawdbotConfig, RuntimeEnv } from 'openclaw/plugin-sdk';
+import type { HistoryEntry } from 'openclaw/plugin-sdk/reply-history';
+import { DEFAULT_GROUP_HISTORY_LIMIT } from 'openclaw/plugin-sdk/reply-history';
+import type { FeishuReactionCreatedEvent, MessageContext  } from '../types';
 import { getLarkAccount } from '../../core/accounts';
-import { getMessageFeishu, type FeishuMessageInfo } from '../shared/message-lookup';
-import { isThreadCapableGroup, getChatTypeFeishu } from '../../core/chat-info-cache';
+import { type FeishuMessageInfo, getMessageFeishu } from '../shared/message-lookup';
+import { getChatTypeFeishu, isThreadCapableGroup } from '../../core/chat-info-cache';
+import { larkLogger } from '../../core/lark-logger';
 import { resolveUserName } from './user-name-cache';
 import { dispatchToAgent } from './dispatch';
 import { resolveFeishuGroupConfig } from './policy';
-import { larkLogger } from '../../core/lark-logger';
 
 const logger = larkLogger('inbound/reaction-handler');
 
@@ -114,13 +114,13 @@ export async function resolveReactionContext(params: {
     return null;
   }
 
-  // The mget API returns app_id (cli_xxx) as sender.id for bot messages,
-  // not the bot's open_id (ou_xxx). Match against the account's appId.
+  // mget API returns app_id (cli_xxx) as sender.id for bot messages.
   const isBotMessage = msg.senderType === 'app' && msg.senderId === account.appId;
-  if (reactionMode === 'own' && !isBotMessage) {
-    log(
-      `feishu[${accountId}]: reaction on non-bot message ${messageId}, skipping (senderId=${msg.senderId}, senderType=${msg.senderType}, botOpenId=${botOpenId}, appId=${account.appId})`,
-    );
+  const isOtherBotMessage = msg.senderType === 'app' && account.appId && msg.senderId !== account.appId;
+
+  // 'own': only react to this bot's messages; 'all': also skip other bots' messages.
+  if ((reactionMode === 'own' && !isBotMessage) || (reactionMode === 'all' && isOtherBotMessage)) {
+    log(`feishu[${accountId}]: reaction on ${isOtherBotMessage ? 'other bot' : 'non-bot'} message ${messageId}, skipping`);
     return null;
   }
 
@@ -198,7 +198,7 @@ export async function handleFeishuReaction(params: {
   const log = runtime?.log ?? ((...args: unknown[]) => logger.info(args.map(String).join(' ')));
   const error = runtime?.error ?? ((...args: unknown[]) => logger.error(args.map(String).join(' ')));
 
-  const emojiType = event.reaction_type?.emoji_type!;
+  const emojiType = event.reaction_type?.emoji_type ?? '';
   const messageId = event.message_id;
   const operatorOpenId = event.user_id?.open_id ?? '';
 
@@ -212,7 +212,7 @@ export async function handleFeishuReaction(params: {
 
   // ---- Step B: Build MessageContext directly ----
   const excerpt =
-    preResolved.msg.content.length > 200 ? preResolved.msg.content.slice(0, 200) + '…' : preResolved.msg.content;
+    preResolved.msg.content.length > 200 ? `${preResolved.msg.content.slice(0, 200)}…` : preResolved.msg.content;
   const syntheticText = excerpt
     ? `[reacted with ${emojiType} to message ${messageId}: "${excerpt}"]`
     : `[reacted with ${emojiType} to message ${messageId}]`;
@@ -227,6 +227,7 @@ export async function handleFeishuReaction(params: {
     contentType: 'text',
     resources: [],
     mentions: [],
+    mentionAll: false,
     threadId: preResolved.threadId,
     rawMessage: {
       message_id: syntheticMessageId,

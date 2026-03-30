@@ -8,6 +8,7 @@
  * 不维护独立缓存，完全依赖 app-scope-checker 的 30s 缓存。
  */
 
+import type * as Lark from '@larksuiteoapi/node-sdk';
 import type { ConfiguredLarkAccount } from './types';
 import { getAppInfo } from './app-scope-checker';
 import { larkLogger } from './lark-logger';
@@ -30,8 +31,7 @@ const log = larkLogger('core/app-owner-fallback');
  */
 export async function getAppOwnerFallback(
   account: ConfiguredLarkAccount,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sdk: any,
+  sdk: Lark.Client,
 ): Promise<string | undefined> {
   const { appId } = account;
 

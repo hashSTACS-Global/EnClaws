@@ -11,7 +11,7 @@
 
 import type { ClawdbotConfig, WizardPrompter } from 'openclaw/plugin-sdk';
 import type { FeishuConfig, FeishuGroupConfig } from '../core/types';
-import { setFeishuGroups, setFeishuGroupAllowFrom } from './onboarding-config';
+import { setFeishuGroupAllowFrom, setFeishuGroups } from './onboarding-config';
 
 /**
  * Detect and migrate legacy chat_id entries in groupAllowFrom.

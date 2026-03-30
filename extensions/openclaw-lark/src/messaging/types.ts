@@ -168,6 +168,8 @@ export interface MessageContext {
   resources: ResourceDescriptor[];
   /** All @mentions in the message (including bot). */
   mentions: MentionInfo[];
+  /** Whether an @all / @所有人 mention was detected in the message. */
+  mentionAll: boolean;
 
   // Message relationships
   rootId?: string;

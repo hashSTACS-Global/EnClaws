@@ -6,11 +6,12 @@
  */
 
 import type { ClawdbotConfig } from 'openclaw/plugin-sdk';
-import type { FeishuSendResult } from '../messaging/types';
 import { LarkClient } from '../core/lark-client';
 import { larkLogger } from '../core/lark-logger';
-import { normalizeFeishuTarget, normalizeMessageId, resolveReceiveIdType } from '../core/targets';
 import { runWithMessageUnavailableGuard } from '../core/message-unavailable';
+import { normalizeFeishuTarget, normalizeMessageId, resolveReceiveIdType } from '../core/targets';
+import type { FeishuSendResult } from '../messaging/types';
+import { CardKitApiError } from './card-error';
 
 const log = larkLogger('card/cardkit');
 
@@ -45,8 +46,13 @@ function logCardKitResponse(params: { resp: CardKitResponse; api: string; contex
   const { code, msg } = resp;
   log.info(`cardkit ${api} response`, { code, msg, context });
   if (code && code !== 0) {
-    log.warn(`cardkit ${api} FAILED`, { code, msg, context, fullResponse: resp });
-    throw new Error(`cardkit ${api} FAILED: code=${code}, msg=${msg ?? ''}, ${context}`);
+    log.warn(`cardkit ${api} FAILED`, {
+      code,
+      msg,
+      context,
+      fullResponse: resp,
+    });
+    throw new CardKitApiError({ api, code, msg: msg ?? '', context });
   }
 }
 
@@ -80,7 +86,11 @@ export async function createCardEntity(params: {
   // 兼容不同 SDK 包装层：优先 data.card_id，回退顶层 card_id
   const cardId =
     ((response.data?.card_id ?? (response as Record<string, unknown>).card_id) as string | undefined) ?? null;
-  logCardKitResponse({ resp: response, api: 'card.create', context: `cardId=${cardId}` });
+  logCardKitResponse({
+    resp: response,
+    api: 'card.create',
+    context: `cardId=${cardId}`,
+  });
   return cardId;
 }
 
@@ -198,7 +208,11 @@ export async function sendCardByCardId(params: {
       fn: () =>
         client.im.message.reply({
           path: { message_id: normalizedId! },
-          data: { content: contentPayload, msg_type: 'interactive', reply_in_thread: replyInThread },
+          data: {
+            content: contentPayload,
+            msg_type: 'interactive',
+            reply_in_thread: replyInThread,
+          },
         }),
     });
     return {

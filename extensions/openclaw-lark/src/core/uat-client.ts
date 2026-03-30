@@ -11,19 +11,19 @@
 
 import type { LarkBrand } from './types';
 import {
-  getStoredToken,
-  setStoredToken,
-  removeStoredToken,
-  tokenStatus,
-  maskToken,
   type StoredUAToken,
+  getStoredToken,
+  maskToken,
+  removeStoredToken,
+  setStoredToken,
+  tokenStatus,
 } from './token-store';
 import { resolveOAuthEndpoints } from './device-flow';
 import { larkLogger } from './lark-logger';
 
 const log = larkLogger('core/uat-client');
 import { feishuFetch } from './feishu-fetch';
-import { REFRESH_TOKEN_IRRECOVERABLE, TOKEN_RETRY_CODES, NeedAuthorizationError } from './auth-errors';
+import { NeedAuthorizationError, REFRESH_TOKEN_RETRYABLE, TOKEN_RETRY_CODES } from './auth-errors';
 
 // Re-export for backward compatibility
 export { NeedAuthorizationError };
@@ -75,19 +75,23 @@ async function doRefreshToken(opts: UATCallOptions, stored: StoredUAToken): Prom
   }
 
   const endpoints = resolveOAuthEndpoints(opts.domain);
+  const requestBody = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: stored.refreshToken,
+    client_id: opts.appId,
+    client_secret: opts.appSecret,
+  }).toString();
 
-  const resp = await feishuFetch(endpoints.token, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: stored.refreshToken,
-      client_id: opts.appId,
-      client_secret: opts.appSecret,
-    }).toString(),
-  });
+  const callEndpoint = async () => {
+    const resp = await feishuFetch(endpoints.token, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: requestBody,
+    });
+    return (await resp.json()) as Record<string, unknown>;
+  };
 
-  const data = (await resp.json()) as Record<string, unknown>;
+  let data = await callEndpoint();
 
   // Feishu v2 token endpoint returns `code: 0` on success.
   // Some responses use `error` field instead (standard OAuth).
@@ -96,16 +100,25 @@ async function doRefreshToken(opts: UATCallOptions, stored: StoredUAToken): Prom
 
   if ((code !== undefined && code !== 0) || error) {
     const errCode = code ?? error;
-    const errMsg = (data.error_description as string) ?? (data.msg as string) ?? 'unknown';
 
-    // Known irrecoverable codes: invalid/expired/missing refresh_token
-    if (REFRESH_TOKEN_IRRECOVERABLE.has(code as number)) {
+    // Transient server error: retry once, then clear.
+    if (REFRESH_TOKEN_RETRYABLE.has(code as number)) {
+      log.warn(`refresh transient error (code=${errCode}) for ${opts.userOpenId}, retrying once`);
+      data = await callEndpoint();
+      const retryCode = data.code as number | undefined;
+      const retryError = data.error as string | undefined;
+      if ((retryCode !== undefined && retryCode !== 0) || retryError) {
+        const retryErrCode = retryCode ?? retryError;
+        log.warn(`refresh failed after retry (code=${retryErrCode}), clearing token for ${opts.userOpenId}`);
+        await removeStoredToken(opts.appId, opts.userOpenId);
+        return null;
+      }
+    } else {
+      // Any other error (invalid/expired/revoked token, or unknown): clear and force re-auth.
       log.warn(`refresh failed (code=${errCode}), clearing token for ${opts.userOpenId}`);
       await removeStoredToken(opts.appId, opts.userOpenId);
       return null;
     }
-
-    throw new Error(`Token refresh failed (code=${errCode}): ${errMsg}`);
   }
 
   if (!data.access_token) {
@@ -168,7 +181,7 @@ async function refreshWithLock(opts: UATCallOptions, stored: StoredUAToken): Pro
  * **The returned token must never be exposed to the AI layer.**
  */
 export async function getValidAccessToken(opts: UATCallOptions): Promise<string> {
-  // All users may use their own granted UAT; owner-only gating is intentionally disabled.
+  // Owner 检查已迁移到 owner-policy.ts（由 tool-client.ts 的 invokeAsUser 调用）
   const stored = await getStoredToken(opts.appId, opts.userOpenId);
   if (!stored) {
     throw new NeedAuthorizationError(opts.userOpenId);
@@ -203,26 +216,12 @@ export async function callWithUAT<T>(opts: UATCallOptions, apiCall: (accessToken
   } catch (err: unknown) {
     // Retry once if the server reports token invalid/expired.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawCode = (err as any)?.code;
-    // Prefer numeric code; Axios errors set `code` to a string (e.g. "ERR_BAD_RESPONSE"),
-    // so fall back to response.data.code for the Feishu error code.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const code = typeof rawCode === 'number' ? rawCode : (err as any)?.response?.data?.code;
+    const code = (err as any)?.code ?? (err as any)?.response?.data?.code;
     if (TOKEN_RETRY_CODES.has(code as number)) {
       log.warn(`API call failed (code=${code}), refreshing and retrying`);
       const stored = await getStoredToken(opts.appId, opts.userOpenId);
       if (!stored) throw new NeedAuthorizationError(opts.userOpenId);
-      // Wrap refreshWithLock: any refresh failure (throw or null) means re-auth needed.
-      // doRefreshToken may throw a generic Error for non-standard refresh error codes
-      // (not in REFRESH_TOKEN_IRRECOVERABLE), which must still surface as NeedAuthorizationError
-      // so that auto-auth can send the authorization card.
-      let refreshed: StoredUAToken | null;
-      try {
-        refreshed = await refreshWithLock(opts, stored);
-      } catch (refreshErr) {
-        log.warn(`token refresh failed: ${refreshErr}, requiring re-authorization`);
-        throw new NeedAuthorizationError(opts.userOpenId);
-      }
+      const refreshed = await refreshWithLock(opts, stored);
       if (!refreshed) throw new NeedAuthorizationError(opts.userOpenId);
       return await apiCall(refreshed.accessToken);
     }

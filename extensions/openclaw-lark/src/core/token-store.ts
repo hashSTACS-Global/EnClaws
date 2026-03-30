@@ -20,10 +20,10 @@
 
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, unlink, readFile, writeFile, chmod } from 'node:fs/promises';
+import { chmod, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { larkLogger } from './lark-logger';
 
 const log = larkLogger('core/token-store');

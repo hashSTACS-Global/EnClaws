@@ -7,14 +7,15 @@
  * 提供所有工具通用的模式，减少重复代码。
  */
 
-import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import type { ClawdbotConfig } from 'openclaw/plugin-sdk';
+import type { ClawdbotConfig, OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { Client as LarkSdkClient } from '@larksuiteoapi/node-sdk';
 import { getEnabledLarkAccounts, getLarkAccount } from '../core/accounts';
-import { LarkClient } from '../core/lark-client';
+import { LarkClient, getResolvedConfig } from '../core/lark-client';
 import type { LarkAccount } from '../core/types';
 import { getTicket } from '../core/lark-ticket';
-import { ToolClient, createToolClient } from '../core/tool-client';
+import type { ToolClient } from '../core/tool-client';
+import { createToolClient } from '../core/tool-client';
+import { shouldRegisterTool } from '../core/tools-config';
 
 // ---------------------------------------------------------------------------
 // 类型定义
@@ -34,6 +35,16 @@ export interface ToolResult {
 export type ClientGetter = () => LarkSdkClient;
 
 /**
+ * 工具日志记录器接口
+ */
+export interface ToolLogger {
+  info: (msg: string) => void;
+  warn: (msg: string) => void;
+  error: (msg: string) => void;
+  debug: (msg: string) => void;
+}
+
+/**
  * 工具上下文对象，包含所有常用的辅助工具
  */
 export interface ToolContext {
@@ -42,8 +53,16 @@ export interface ToolContext {
   /** 获取当前请求对应的 {@link ToolClient} 实例 */
   toolClient: () => ToolClient;
   /** 工具日志记录器 */
-  log: ReturnType<typeof createToolLogger>;
+  log: ToolLogger;
 }
+
+// ---------------------------------------------------------------------------
+// 配置解析
+// ---------------------------------------------------------------------------
+
+// getResolvedConfig is defined in lark-client.ts (core layer) so that both
+// tool-client.ts and this file can use it without a circular dependency.
+export { getResolvedConfig } from '../core/lark-client';
 
 // ---------------------------------------------------------------------------
 // 客户端管理
@@ -80,17 +99,20 @@ export interface ToolContext {
  */
 export function createClientGetter(config: ClawdbotConfig, accountIndex = 0): ClientGetter {
   return () => {
+    // `config` may be stale after a hot-reload; use live config for account resolution.
+    const resolveConfig = getResolvedConfig(config);
+
     // 优先使用 LarkTicket 中的 accountId 进行动态账号解析
     const ticket = getTicket();
     if (ticket?.accountId) {
-      const account = getLarkAccount(config, ticket.accountId);
+      const account = getLarkAccount(resolveConfig, ticket.accountId);
       if (account.enabled && account.configured) {
         return LarkClient.fromAccount(account).sdk;
       }
     }
 
     // 回退：使用 accountIndex 指定的账号
-    const accounts = getEnabledLarkAccounts(config);
+    const accounts = getEnabledLarkAccounts(resolveConfig);
 
     if (accounts.length === 0) {
       throw new Error(
@@ -124,17 +146,20 @@ export function createClientGetter(config: ClawdbotConfig, accountIndex = 0): Cl
  * ```
  */
 export function getFirstAccount(config: ClawdbotConfig): LarkAccount {
+  // `config` may be stale after a hot-reload; use live config for account resolution.
+  const resolveConfig = getResolvedConfig(config);
+
   // 优先使用 LarkTicket 中的 accountId
   const ticket = getTicket();
   if (ticket?.accountId) {
-    const account = getLarkAccount(config, ticket.accountId);
+    const account = getLarkAccount(resolveConfig, ticket.accountId);
     if (account.enabled && account.configured) {
       return account;
     }
   }
 
   // 回退到第一个启用的账号
-  const accounts = getEnabledLarkAccounts(config);
+  const accounts = getEnabledLarkAccounts(resolveConfig);
 
   if (accounts.length === 0) {
     throw new Error(
@@ -194,6 +219,84 @@ export function createToolContext(
     toolClient: () => createToolClient(config, accountIndex),
     log: createToolLogger(api, toolName),
   };
+}
+
+// ---------------------------------------------------------------------------
+// 工具注册检查
+// ---------------------------------------------------------------------------
+
+/**
+ * 检查工具是否应该被注册（根据 channels.feishu.tools.deny 配置）。
+ *
+ * 在工具注册函数开头调用此函数，如果返回 `false` 则应该直接 return。
+ *
+ * @param api - OpenClaw Plugin API
+ * @param toolName - 工具名称
+ * @returns `true` 如果应该继续注册，`false` 如果应该跳过
+ *
+ * @example
+ * ```typescript
+ * export function registerMyTool(api: OpenClawPluginApi) {
+ *   if (!checkToolRegistration(api, 'feishu_my_tool')) {
+ *     return;
+ *   }
+ *
+ *   const { toolClient, log } = createToolContext(api, 'feishu_my_tool');
+ *   api.registerTool({ ... });
+ * }
+ * ```
+ */
+export function checkToolRegistration(api: OpenClawPluginApi, toolName: string): boolean {
+  if (!api.config) return false;
+
+  if (!shouldRegisterTool(api.config, toolName)) {
+    api.logger.debug?.(`${toolName}: Skipped registration (in deny list)`);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * 包装的工具注册函数，自动检查 channels.feishu.tools.deny 配置。
+ *
+ * 用法：将 `api.registerTool(...)` 替换为 `registerTool(api, ...)`。
+ *
+ * @param api - OpenClaw Plugin API
+ * @param tool - 工具配置对象或工具工厂函数
+ * @param opts - 可选的工具注册选项
+ *
+ * @example
+ * ```typescript
+ * // 旧代码：
+ * api.registerTool({ name: 'feishu_my_tool', ... });
+ *
+ * // 新代码：
+ * registerTool(api, { name: 'feishu_my_tool', ... });
+ * ```
+ */
+export function registerTool(
+  api: OpenClawPluginApi,
+  tool: Parameters<OpenClawPluginApi['registerTool']>[0],
+  opts?: Parameters<OpenClawPluginApi['registerTool']>[1],
+): boolean {
+  // 提取工具名称
+  const toolName = typeof tool === 'function' ? tool.name : (tool as { name?: string }).name;
+
+  if (!toolName) {
+    // 如果无法提取工具名，直接注册（不拦截）
+    api.registerTool(tool, opts);
+    return true;
+  }
+
+  // 检查是否应该注册
+  if (!checkToolRegistration(api, toolName)) {
+    return false;
+  }
+
+  // 通过检查，调用原始的 registerTool
+  api.registerTool(tool, opts);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +388,7 @@ export function formatToolError(error: unknown, context?: Record<string, unknown
  * }
  * ```
  */
-export function createToolLogger(api: OpenClawPluginApi, toolName: string) {
+export function createToolLogger(api: OpenClawPluginApi, toolName: string): ToolLogger {
   const prefix = `${toolName}:`;
 
   return {
@@ -339,7 +442,7 @@ export function validateRequiredParams(
 ): { error: string; missing: string[] } | null {
   const missing = requiredFields.filter((field) => {
     const value = params[field];
-    return value === undefined || value === null || value === '';
+    return value === undefined || value == null || value === '';
   });
 
   if (missing.length > 0) {

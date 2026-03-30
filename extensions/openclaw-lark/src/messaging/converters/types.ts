@@ -72,6 +72,13 @@ export interface ConvertContext {
    * and returns `<forwarded_messages/>` when not provided.
    */
   fetchSubMessages?: (messageId: string) => Promise<ApiMessageItem[]>;
+  /**
+   * Recursive dispatcher used by converters such as merge_forward.
+   *
+   * Injected by `convertMessageContent()` so converter modules do not need
+   * to import the main dispatcher directly.
+   */
+  convertMessageContent?: (raw: string, messageType: string, ctx: ConvertContext) => Promise<ConvertResult>;
   /** 是否删除机器人 mention（事件推送场景=true，历史消息读取=false） */
   stripBotMentions?: boolean;
 }

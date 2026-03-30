@@ -111,6 +111,7 @@ export const EMPTY_REPLY_FALLBACK_TEXT = 'Done.';
 export interface CreateFeishuReplyDispatcherParams {
   cfg: ClawdbotConfig;
   agentId: string;
+  sessionKey: string;
   chatId: string;
   replyToMessageId?: string;
   /** Account ID for multi-account support. */
@@ -152,16 +153,26 @@ export interface FeishuReplyDispatcherResult {
   markDispatchIdle: () => void;
   markFullyComplete: () => void;
   abortCard: () => Promise<void>;
-  /** Get the streaming card's Feishu message ID (for abort reply targeting). */
-  getCardMessageId: () => string | undefined;
 }
 
 // ---------------------------------------------------------------------------
 // StreamingCardController dependencies (injected via constructor)
 // ---------------------------------------------------------------------------
 
+export interface FooterSessionMetrics {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  totalTokens?: number;
+  totalTokensFresh?: boolean;
+  contextTokens?: number;
+  model?: string;
+}
+
 export interface StreamingCardDeps {
   cfg: ClawdbotConfig;
+  sessionKey: string;
   accountId: string | undefined;
   chatId: string;
   replyToMessageId: string | undefined;

@@ -4,26 +4,26 @@
  *
  * feishu_task_task tool -- Manage Feishu tasks.
  *
- * P0 Actions: create, get, list, patch, add_members, remove_members
+ * P0 Actions: create, get, list, patch
  *
  * Uses the Feishu Task v2 API:
- *   - create:         POST  /open-apis/task/v2/tasks
- *   - get:            GET   /open-apis/task/v2/tasks/:task_guid
- *   - list:           GET   /open-apis/task/v2/tasks
- *   - patch:          PATCH /open-apis/task/v2/tasks/:task_guid
- *   - add_members:    POST  /open-apis/task/v2/tasks/:task_guid/add_members
- *   - remove_members: POST  /open-apis/task/v2/tasks/:task_guid/remove_members
+ *   - create: POST /open-apis/task/v2/tasks
+ *   - get:    GET  /open-apis/task/v2/tasks/:task_guid
+ *   - list:   GET  /open-apis/task/v2/tasks
+ *   - patch:  PATCH /open-apis/task/v2/tasks/:task_guid
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
 import {
-  json,
-  createToolContext,
-  parseTimeToTimestampMs,
+  StringEnum,
   assertLarkOk,
+  createToolContext,
   handleInvokeErrorWithAutoAuth,
+  json,
+  parseTimeToTimestampMs,
+  registerTool,
 } from '../helpers';
 import type { PaginatedData, TaskCreateData } from '../sdk-types';
 
@@ -79,22 +79,10 @@ const FeishuTaskTaskSchema = Type.Union([
           id: Type.String({
             description: '成员 open_id',
           }),
-          role: Type.Optional(Type.Union([Type.Literal('assignee'), Type.Literal('follower')])),
+          role: Type.Optional(StringEnum(['assignee', 'follower'])),
         }),
         {
           description: '任务成员列表（assignee=负责人，follower=关注人）',
-        },
-      ),
-    ),
-    reminders: Type.Optional(
-      Type.Array(
-        Type.Object({
-          relative_fire_minute: Type.Number({
-            description: '相对于截止时间的提醒分钟数（>=0），例如 30 表示截止前 30 分钟提醒',
-          }),
-        }),
-        {
-          description: '任务提醒列表（最多 1 个，需同时设置截止时间）',
         },
       ),
     ),
@@ -121,7 +109,7 @@ const FeishuTaskTaskSchema = Type.Union([
       ),
     ),
     user_id_type: Type.Optional(
-      Type.Union([Type.Literal('open_id'), Type.Literal('union_id'), Type.Literal('user_id')]),
+      StringEnum(['open_id', 'union_id', 'user_id']),
     ),
   }),
 
@@ -132,7 +120,7 @@ const FeishuTaskTaskSchema = Type.Union([
       description: 'Task GUID',
     }),
     user_id_type: Type.Optional(
-      Type.Union([Type.Literal('open_id'), Type.Literal('union_id'), Type.Literal('user_id')]),
+      StringEnum(['open_id', 'union_id', 'user_id']),
     ),
   }),
 
@@ -155,7 +143,7 @@ const FeishuTaskTaskSchema = Type.Union([
       }),
     ),
     user_id_type: Type.Optional(
-      Type.Union([Type.Literal('open_id'), Type.Literal('union_id'), Type.Literal('user_id')]),
+      StringEnum(['open_id', 'union_id', 'user_id']),
     ),
   }),
 
@@ -205,57 +193,26 @@ const FeishuTaskTaskSchema = Type.Union([
           "完成时间。支持三种格式：1) ISO 8601 / RFC 3339 格式（包含时区），例如 '2024-01-01T00:00:00+08:00'（设为已完成）；2) '0'（反完成，任务变为未完成）；3) 毫秒时间戳字符串。",
       }),
     ),
+    members: Type.Optional(
+      Type.Array(
+        Type.Object({
+          id: Type.String({
+            description: '成员 open_id',
+          }),
+          role: Type.Optional(StringEnum(['assignee', 'follower'])),
+        }),
+        {
+          description: '新的任务成员列表',
+        },
+      ),
+    ),
     repeat_rule: Type.Optional(
       Type.String({
         description: '新的重复规则（RRULE 格式）',
       }),
     ),
     user_id_type: Type.Optional(
-      Type.Union([Type.Literal('open_id'), Type.Literal('union_id'), Type.Literal('user_id')]),
-    ),
-  }),
-
-  // ADD_MEMBERS
-  Type.Object({
-    action: Type.Literal('add_members'),
-    task_guid: Type.String({
-      description: 'Task GUID',
-    }),
-    members: Type.Array(
-      Type.Object({
-        id: Type.String({
-          description: '成员 open_id',
-        }),
-        role: Type.Optional(Type.Union([Type.Literal('assignee'), Type.Literal('follower')])),
-      }),
-      {
-        description: '要添加的任务成员列表（assignee=负责人，follower=关注人）',
-      },
-    ),
-    user_id_type: Type.Optional(
-      Type.Union([Type.Literal('open_id'), Type.Literal('union_id'), Type.Literal('user_id')]),
-    ),
-  }),
-
-  // REMOVE_MEMBERS
-  Type.Object({
-    action: Type.Literal('remove_members'),
-    task_guid: Type.String({
-      description: 'Task GUID',
-    }),
-    members: Type.Array(
-      Type.Object({
-        id: Type.String({
-          description: '成员 open_id',
-        }),
-        role: Type.Optional(Type.Union([Type.Literal('assignee'), Type.Literal('follower')])),
-      }),
-      {
-        description: '要移除的任务成员列表',
-      },
-    ),
-    user_id_type: Type.Optional(
-      Type.Union([Type.Literal('open_id'), Type.Literal('union_id'), Type.Literal('user_id')]),
+      StringEnum(['open_id', 'union_id', 'user_id']),
     ),
   }),
 ]);
@@ -282,7 +239,6 @@ type FeishuTaskTaskParams =
         id: string;
         role?: 'assignee' | 'follower';
       }>;
-      reminders?: Array<{ relative_fire_minute: number }>;
       repeat_rule?: string;
       tasklists?: Array<{
         tasklist_guid: string;
@@ -316,25 +272,11 @@ type FeishuTaskTaskParams =
         is_all_day?: boolean;
       };
       completed_at?: string;
+      members?: Array<{
+        id: string;
+        role?: 'assignee' | 'follower';
+      }>;
       repeat_rule?: string;
-      user_id_type?: 'open_id' | 'union_id' | 'user_id';
-    }
-  | {
-      action: 'add_members';
-      task_guid: string;
-      members: Array<{
-        id: string;
-        role?: 'assignee' | 'follower';
-      }>;
-      user_id_type?: 'open_id' | 'union_id' | 'user_id';
-    }
-  | {
-      action: 'remove_members';
-      task_guid: string;
-      members: Array<{
-        id: string;
-        role?: 'assignee' | 'follower';
-      }>;
       user_id_type?: 'open_id' | 'union_id' | 'user_id';
     };
 
@@ -342,18 +284,19 @@ type FeishuTaskTaskParams =
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuTaskTaskTool(api: OpenClawPluginApi) {
+export function registerFeishuTaskTaskTool(api: OpenClawPluginApi): void {
   if (!api.config) return;
   const cfg = api.config;
 
   const { toolClient, log } = createToolContext(api, 'feishu_task_task');
 
-  api.registerTool(
+  registerTool(
+    api,
     {
       name: 'feishu_task_task',
       label: 'Feishu Task Management',
       description:
-        "【以用户身份】飞书任务管理工具。用于创建、查询、更新任务及管理成员。Actions: create（创建任务）, get（获取任务详情）, list（查询任务列表，仅返回我负责的任务）, patch（更新任务属性）, add_members（添加负责人/关注人）, remove_members（移除成员）。时间参数使用ISO 8601 / RFC 3339 格式（包含时区），例如 '2024-01-01T00:00:00+08:00'。注意：添加/移除成员必须使用 add_members/remove_members，patch 不支持修改成员。",
+        "【以用户身份】飞书任务管理工具。用于创建、查询、更新任务。Actions: create（创建任务）, get（获取任务详情）, list（查询任务列表，仅返回我负责的任务）, patch（更新任务）。时间参数使用ISO 8601 / RFC 3339 格式（包含时区），例如 '2024-01-01T00:00:00+08:00'。",
       parameters: FeishuTaskTaskSchema,
       async execute(_toolCallId: string, params: unknown) {
         const p = params as FeishuTaskTaskParams;
@@ -407,7 +350,6 @@ export function registerFeishuTaskTaskTool(api: OpenClawPluginApi) {
               }
 
               if (p.members) taskData.members = p.members;
-              if (p.reminders) taskData.reminders = p.reminders;
               if (p.repeat_rule) taskData.repeat_rule = p.repeat_rule;
               if (p.tasklists) taskData.tasklists = p.tasklists;
 
@@ -430,13 +372,8 @@ export function registerFeishuTaskTaskTool(api: OpenClawPluginApi) {
               const data = res.data as TaskCreateData | undefined;
               log.info(`create: task created: task_guid=${data?.task?.guid}`);
 
-              const task = data?.task;
-              if (task?.guid && task?.task_id) {
-                task.task_url = `https://applink.feishu.cn/client/todo/detail?guid=${task.guid}&suite_entity_num=${task.task_id}`;
-              }
-
               return json({
-                task,
+                task: res.data?.task,
               });
             }
 
@@ -570,6 +507,7 @@ export function registerFeishuTaskTaskTool(api: OpenClawPluginApi) {
                 }
               }
 
+              if (p.members) updateData.members = p.members;
               if (p.repeat_rule) updateData.repeat_rule = p.repeat_rule;
 
               // Build update_fields list (required by Task API)
@@ -601,94 +539,6 @@ export function registerFeishuTaskTaskTool(api: OpenClawPluginApi) {
                 task: res.data?.task,
               });
             }
-
-            // -----------------------------------------------------------------
-            // ADD_MEMBERS
-            // -----------------------------------------------------------------
-            case 'add_members': {
-              if (!p.members || p.members.length === 0) {
-                return json({
-                  error: 'members is required and cannot be empty',
-                });
-              }
-
-              log.info(`add_members: task_guid=${p.task_guid}, members_count=${p.members.length}`);
-
-              const memberData = p.members.map((m) => ({
-                id: m.id,
-                type: 'user' as const,
-                role: m.role || 'follower',
-              }));
-
-              const res = await client.invoke(
-                'feishu_task_task.add_members',
-                (sdk, opts) =>
-                  sdk.task.v2.task.addMembers(
-                    {
-                      path: { task_guid: p.task_guid },
-                      params: {
-                        user_id_type: (p.user_id_type || 'open_id') as any,
-                      },
-                      data: {
-                        members: memberData,
-                      },
-                    },
-                    opts,
-                  ),
-                { as: 'user' },
-              );
-              assertLarkOk(res);
-
-              log.info(`add_members: added ${p.members.length} members to task ${p.task_guid}`);
-
-              return json({
-                task: res.data?.task,
-              });
-            }
-
-            // -----------------------------------------------------------------
-            // REMOVE_MEMBERS
-            // -----------------------------------------------------------------
-            case 'remove_members': {
-              if (!p.members || p.members.length === 0) {
-                return json({
-                  error: 'members is required and cannot be empty',
-                });
-              }
-
-              log.info(`remove_members: task_guid=${p.task_guid}, members_count=${p.members.length}`);
-
-              const memberData = p.members.map((m) => ({
-                id: m.id,
-                type: 'user' as const,
-                role: m.role || 'follower',
-              }));
-
-              const res = await client.invoke(
-                'feishu_task_task.remove_members',
-                (sdk, opts) =>
-                  sdk.task.v2.task.removeMembers(
-                    {
-                      path: { task_guid: p.task_guid },
-                      params: {
-                        user_id_type: (p.user_id_type || 'open_id') as any,
-                      },
-                      data: {
-                        members: memberData,
-                      },
-                    },
-                    opts,
-                  ),
-                { as: 'user' },
-              );
-              assertLarkOk(res);
-
-              log.info(`remove_members: removed ${p.members.length} members from task ${p.task_guid}`);
-
-              return json({
-                task: res.data?.task,
-              });
-            }
           }
         } catch (err) {
           return await handleInvokeErrorWithAutoAuth(err, cfg);
@@ -698,5 +548,4 @@ export function registerFeishuTaskTaskTool(api: OpenClawPluginApi) {
     { name: 'feishu_task_task' },
   );
 
-  api.logger.info?.('feishu_task_task: Registered feishu_task_task tool');
 }

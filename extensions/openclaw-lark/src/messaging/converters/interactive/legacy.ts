@@ -30,7 +30,7 @@ function extractTexts(elements: unknown[], out: string[]): void {
   if (!Array.isArray(elements)) return;
 
   for (const el of elements) {
-    if (typeof el !== 'object' || el === null) continue;
+    if (typeof el !== 'object' || el == null) continue;
     const elem = el as Obj;
 
     if (elem.tag === 'markdown' && typeof elem.content === 'string') {

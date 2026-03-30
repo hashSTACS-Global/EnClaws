@@ -13,9 +13,171 @@
  * 全部以用户身份（user_access_token）调用，scope 来自 real-scope.json。
  */
 
-import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import type { ClawdbotConfig, OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
-import { json, createToolContext, assertLarkOk, handleInvokeErrorWithAutoAuth } from '../helpers';
+import { createAccountScopedConfig } from '../../../core/accounts';
+import { LarkClient } from '../../../core/lark-client';
+import {
+  StringEnum,
+  assertLarkOk,
+  createToolContext,
+  handleInvokeErrorWithAutoAuth,
+  json,
+  registerTool,
+} from '../helpers';
+
+interface FeishuPostContentBlock {
+  tag?: string;
+  text?: string;
+  [key: string]: unknown;
+}
+
+interface FeishuPostLocaleContent {
+  title?: string;
+  content?: FeishuPostContentBlock[][];
+  [key: string]: unknown;
+}
+
+const FEISHU_POST_LOCALE_PRIORITY = ['zh_cn', 'en_us', 'ja_jp'] as const;
+
+/**
+ * Check whether a value is a non-null object whose properties can be read.
+ *
+ * @param value - The value to check
+ * @returns Whether the value is a non-null object
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object';
+}
+
+/**
+ * Collect post content bodies from a parsed Feishu post payload.
+ * Handles both flat (title/content at root) and multi-locale wrapper structures.
+ *
+ * @param parsed - The parsed JSON object
+ * @returns List of post content bodies to process
+ */
+function collectPostContents(parsed: Record<string, unknown>): FeishuPostLocaleContent[] {
+  if ('title' in parsed || 'content' in parsed) {
+    return [parsed as FeishuPostLocaleContent];
+  }
+
+  const bodies: FeishuPostLocaleContent[] = [];
+  const seen = new Set<FeishuPostLocaleContent>();
+
+  // Process well-known locales first
+  for (const locale of FEISHU_POST_LOCALE_PRIORITY) {
+    const localeContent = parsed[locale];
+    if (!isRecord(localeContent)) {
+      continue;
+    }
+
+    const body = localeContent as FeishuPostLocaleContent;
+    if (!seen.has(body)) {
+      bodies.push(body);
+      seen.add(body);
+    }
+  }
+
+  // Process remaining locales
+  for (const value of Object.values(parsed)) {
+    if (!isRecord(value)) {
+      continue;
+    }
+
+    const body = value as FeishuPostLocaleContent;
+    if (!seen.has(body)) {
+      bodies.push(body);
+      seen.add(body);
+    }
+  }
+
+  return bodies;
+}
+
+/**
+ * Convert markdown tables to the Feishu-compatible list format.
+ *
+ * Reuses the channel runtime's existing converter so the tool send path
+ * behaves identically to the main reply path.
+ *
+ * @param cfg - Current tool configuration
+ * @param text - Raw markdown text
+ * @returns Converted text, or the original text when runtime is unavailable
+ */
+function convertMarkdownTablesForLark(cfg: ClawdbotConfig, text: string): string {
+  try {
+    const runtime = LarkClient.runtime;
+    if (runtime?.channel?.text?.convertMarkdownTables && runtime.channel.text.resolveMarkdownTableMode) {
+      const tableMode = runtime.channel.text.resolveMarkdownTableMode({
+        cfg,
+        channel: 'feishu',
+      });
+      return runtime.channel.text.convertMarkdownTables(text, tableMode);
+    }
+  } catch {
+    // Runtime converter unavailable -- keep text as-is.
+  }
+
+  return text;
+}
+
+/**
+ * Pre-process `tag="md"` text nodes inside `post` messages so the tool send
+ * path also renders markdown tables correctly.
+ *
+ * @param cfg - Current tool configuration
+ * @param msgType - Feishu message type
+ * @param content - The JSON string from tool parameters
+ * @returns Pre-processed JSON string
+ */
+function preprocessPostContent(cfg: ClawdbotConfig, msgType: string, content: string): string {
+  if (msgType !== 'post') {
+    return content;
+  }
+
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (!isRecord(parsed)) {
+      return content;
+    }
+
+    const postContents = collectPostContents(parsed);
+    if (postContents.length === 0) {
+      return content;
+    }
+
+    let changed = false;
+
+    for (const postContent of postContents) {
+      if (!postContent.content || !Array.isArray(postContent.content)) {
+        continue;
+      }
+
+      for (const line of postContent.content) {
+        if (!Array.isArray(line)) {
+          continue;
+        }
+
+        for (const block of line) {
+          if (!isRecord(block) || block.tag !== 'md' || typeof block.text !== 'string') {
+            continue;
+          }
+
+          const convertedText = convertMarkdownTablesForLark(cfg, block.text);
+          if (convertedText !== block.text) {
+            block.text = convertedText;
+            changed = true;
+          }
+        }
+      }
+    }
+
+    return changed ? JSON.stringify(parsed) : content;
+  } catch {
+    return content;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -25,24 +187,14 @@ const FeishuImMessageSchema = Type.Union([
   // SEND
   Type.Object({
     action: Type.Literal('send'),
-    receive_id_type: Type.Union([Type.Literal('open_id'), Type.Literal('chat_id')], {
+    receive_id_type: StringEnum(['open_id', 'chat_id'], {
       description: '接收者 ID 类型：open_id（私聊，ou_xxx）、chat_id（群聊，oc_xxx）',
     }),
     receive_id: Type.String({
       description: "接收者 ID，与 receive_id_type 对应。open_id 填 'ou_xxx'，chat_id 填 'oc_xxx'",
     }),
-    msg_type: Type.Union(
-      [
-        Type.Literal('text'),
-        Type.Literal('post'),
-        Type.Literal('image'),
-        Type.Literal('file'),
-        Type.Literal('audio'),
-        Type.Literal('media'),
-        Type.Literal('interactive'),
-        Type.Literal('share_chat'),
-        Type.Literal('share_user'),
-      ],
+    msg_type: StringEnum(
+      ['text', 'post', 'image', 'file', 'audio', 'media', 'interactive', 'share_chat', 'share_user'],
       {
         description:
           '消息类型：text（纯文本）、post（富文本）、image（图片）、file（文件）、interactive（消息卡片）、share_chat（群名片）、share_user（个人名片）等',
@@ -69,18 +221,8 @@ const FeishuImMessageSchema = Type.Union([
     message_id: Type.String({
       description: '被回复消息的 ID（om_xxx 格式）',
     }),
-    msg_type: Type.Union(
-      [
-        Type.Literal('text'),
-        Type.Literal('post'),
-        Type.Literal('image'),
-        Type.Literal('file'),
-        Type.Literal('audio'),
-        Type.Literal('media'),
-        Type.Literal('interactive'),
-        Type.Literal('share_chat'),
-        Type.Literal('share_user'),
-      ],
+    msg_type: StringEnum(
+      ['text', 'post', 'image', 'file', 'audio', 'media', 'interactive', 'share_chat', 'share_user'],
       {
         description: '消息类型：text（纯文本）、post（富文本）、image（图片）、interactive（消息卡片）等',
       },
@@ -127,13 +269,13 @@ type FeishuImMessageParams =
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuImUserMessageTool(api: OpenClawPluginApi) {
-  if (!api.config) return;
+export function registerFeishuImUserMessageTool(api: OpenClawPluginApi): boolean {
+  if (!api.config) return false;
   const cfg = api.config;
-
   const { toolClient, log } = createToolContext(api, 'feishu_im_user_message');
 
-  api.registerTool(
+  return registerTool(
+    api,
     {
       name: 'feishu_im_user_message',
       label: 'Feishu: IM User Message',
@@ -161,6 +303,8 @@ export function registerFeishuImUserMessageTool(api: OpenClawPluginApi) {
               log.info(
                 `send: receive_id_type=${p.receive_id_type}, receive_id=${p.receive_id}, msg_type=${p.msg_type}`,
               );
+              const accountScopedCfg = createAccountScopedConfig(cfg, client.account.accountId);
+              const processedContent = preprocessPostContent(accountScopedCfg, p.msg_type, p.content);
 
               const res = await client.invoke(
                 'feishu_im_user_message.send',
@@ -171,7 +315,7 @@ export function registerFeishuImUserMessageTool(api: OpenClawPluginApi) {
                       data: {
                         receive_id: p.receive_id,
                         msg_type: p.msg_type,
-                        content: p.content,
+                        content: processedContent,
                         uuid: p.uuid,
                       },
                     },
@@ -201,6 +345,8 @@ export function registerFeishuImUserMessageTool(api: OpenClawPluginApi) {
               log.info(
                 `reply: message_id=${p.message_id}, msg_type=${p.msg_type}, reply_in_thread=${p.reply_in_thread ?? false}`,
               );
+              const accountScopedCfg = createAccountScopedConfig(cfg, client.account.accountId);
+              const processedContent = preprocessPostContent(accountScopedCfg, p.msg_type, p.content);
 
               const res = await client.invoke(
                 'feishu_im_user_message.reply',
@@ -209,7 +355,7 @@ export function registerFeishuImUserMessageTool(api: OpenClawPluginApi) {
                     {
                       path: { message_id: p.message_id },
                       data: {
-                        content: p.content,
+                        content: processedContent,
                         msg_type: p.msg_type,
                         reply_in_thread: p.reply_in_thread,
                         uuid: p.uuid,
@@ -241,6 +387,4 @@ export function registerFeishuImUserMessageTool(api: OpenClawPluginApi) {
     },
     { name: 'feishu_im_user_message' },
   );
-
-  api.logger.info?.('feishu_im_user_message: Registered feishu_im_user_message tool');
 }

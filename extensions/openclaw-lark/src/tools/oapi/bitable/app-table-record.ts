@@ -21,7 +21,7 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
 
-import { json, createToolContext, assertLarkOk, handleInvokeErrorWithAutoAuth } from '../helpers';
+import { StringEnum, assertLarkOk, createToolContext, handleInvokeErrorWithAutoAuth, json, registerTool } from '../helpers';
 import type { PaginatedData } from '../sdk-types';
 
 // ---------------------------------------------------------------------------
@@ -116,25 +116,14 @@ const FeishuBitableAppTableRecordSchema = Type.Union([
     filter: Type.Optional(
       Type.Object(
         {
-          conjunction: Type.Union([Type.Literal('and'), Type.Literal('or')], {
+          conjunction: StringEnum(['and', 'or'], {
             description: '条件逻辑：and（全部满足）or（任一满足）',
           }),
           conditions: Type.Array(
             Type.Object({
               field_name: Type.String({ description: '字段名' }),
-              operator: Type.Union(
-                [
-                  Type.Literal('is'),
-                  Type.Literal('isNot'),
-                  Type.Literal('contains'),
-                  Type.Literal('doesNotContain'),
-                  Type.Literal('isEmpty'),
-                  Type.Literal('isNotEmpty'),
-                  Type.Literal('isGreater'),
-                  Type.Literal('isGreaterEqual'),
-                  Type.Literal('isLess'),
-                  Type.Literal('isLessEqual'),
-                ],
+              operator: StringEnum(
+                ['is', 'isNot', 'contains', 'doesNotContain', 'isEmpty', 'isNotEmpty', 'isGreater', 'isGreaterEqual', 'isLess', 'isLessEqual'],
                 { description: '运算符' },
               ),
               value: Type.Optional(
@@ -253,13 +242,14 @@ type FeishuBitableAppTableRecordParams =
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuBitableAppTableRecordTool(api: OpenClawPluginApi) {
+export function registerFeishuBitableAppTableRecordTool(api: OpenClawPluginApi): void {
   if (!api.config) return;
   const cfg = api.config;
 
   const { toolClient, log } = createToolContext(api, 'feishu_bitable_app_table_record');
 
-  api.registerTool(
+  registerTool(
+    api,
     {
       name: 'feishu_bitable_app_table_record',
       label: 'Feishu Bitable Records',
@@ -684,5 +674,4 @@ export function registerFeishuBitableAppTableRecordTool(api: OpenClawPluginApi) 
     { name: 'feishu_bitable_app_table_record' },
   );
 
-  api.logger.info?.('feishu_bitable_app_table_record: Registered feishu_bitable_app_table_record tool');
 }

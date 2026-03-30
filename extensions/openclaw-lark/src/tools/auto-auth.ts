@@ -30,25 +30,25 @@
  */
 
 import type { ClawdbotConfig } from 'openclaw/plugin-sdk';
-import type { ConfiguredLarkAccount } from '../core/types';
+import type { ConfiguredLarkAccount, LarkBrand } from '../core/types';
 import type { LarkTicket } from '../core/lark-ticket';
 import { getTicket } from '../core/lark-ticket';
 import { larkLogger } from '../core/lark-logger';
 
 const log = larkLogger('tools/auto-auth');
+import { formatLarkError } from '../core/api-error';
 import { getLarkAccount } from '../core/accounts';
-import { UserAuthRequiredError, UserScopeInsufficientError, AppScopeMissingError } from '../core/tool-client';
-import { isUatPolicyError } from '../core/uat-access-guard';
-import { invalidateAppScopeCache, getAppGrantedScopes, isAppScopeSatisfied } from '../core/app-scope-checker';
-import { getToolFamilyScopes } from '../core/scope-manager';
-import { getSkillScopesForTool } from '../core/skill-scopes';
+import { AppScopeMissingError, UserAuthRequiredError, UserScopeInsufficientError } from '../core/tool-client';
+import { getAppGrantedScopes, invalidateAppScopeCache, isAppScopeSatisfied } from '../core/app-scope-checker';
 import { LarkClient } from '../core/lark-client';
 import { createCardEntity, sendCardByCardId, updateCardKitCardForAuth } from '../card/cardkit';
+import { OwnerAccessDeniedError } from '../core/owner-policy';
+import { dispatchSyntheticTextMessage } from '../messaging/inbound/synthetic-message';
 import { executeAuthorize } from './oauth';
-import { formatLarkError, json } from './oapi/helpers';
-import { enqueueFeishuChatTask } from '../channel/chat-queue';
-import { handleFeishuMessage } from '../messaging/inbound/handler';
-import { withTicket } from '../core/lark-ticket';
+import { formatToolResult, getResolvedConfig } from './helpers';
+import type { ToolResult } from './helpers';
+
+const json = formatToolResult;
 
 // ---------------------------------------------------------------------------
 // Debounce + scope merge — 防抖缓冲区（两阶段）
@@ -440,114 +440,98 @@ function addToDeferredUserAuth(
 }
 
 // ---------------------------------------------------------------------------
-// Card builders — CardKit v2 格式
+// Card builders — CardKit v2 格式 + i18n_content 多语言
 // ---------------------------------------------------------------------------
+
+/** v2 卡片 i18n 配置 */
+const I18N_CONFIG = {
+  update_multi: true,
+  locales: ['zh_cn', 'en_us'],
+};
 
 /**
  * 构建应用权限引导卡片。
  *
- * 蓝色 header，列出缺失的 scope，提供权限管理链接和"我已完成，继续授权"按钮。
+ * 橙色 header，列出缺失的 scope，提供权限管理链接和"已完成"按钮。
  */
 function buildAppScopeMissingCard(params: {
   missingScopes: string[];
   appId?: string;
   operationId: string;
-  tokenType?: 'user' | 'tenant';
+  brand?: LarkBrand;
 }): Record<string, unknown> {
-  const { missingScopes, appId, operationId, tokenType } = params;
-  const urlTokenType = tokenType === 'tenant' ? 'tenant' : 'user';
+  const { missingScopes, appId, operationId, brand } = params;
+  const openDomain = brand === 'lark' ? 'https://open.larksuite.com' : 'https://open.feishu.cn';
   const authUrl = appId
-    ? `https://open.feishu.cn/app/${appId}/auth?q=${encodeURIComponent(missingScopes.join(','))}&op_from=feishu-openclaw&token_type=${urlTokenType}`
-    : 'https://open.feishu.cn/';
-  const multiUrl = { url: authUrl, pc_url: authUrl, android_url: authUrl, ios_url: authUrl };
+    ? `${openDomain}/app/${appId}/auth?q=${encodeURIComponent(missingScopes.join(','))}&op_from=feishu-openclaw&token_type=user`
+    : `${openDomain}/`;
+  const multiUrl = { url: authUrl, pc_url: '', android_url: '', ios_url: '' };
 
   const scopeList = missingScopes.map((s) => `• ${s}`).join('\n');
 
   return {
     schema: '2.0',
-    config: { wide_screen_mode: true },
+    config: { wide_screen_mode: true, ...I18N_CONFIG },
     header: {
-      title: { tag: 'plain_text', content: '🔐 需要申请权限才能继续' },
+      title: {
+        tag: 'plain_text',
+        content: '🔐 Permissions required to continue',
+        i18n_content: {
+          zh_cn: '🔐 需要申请权限才能继续',
+          en_us: '🔐 Permissions required to continue',
+        },
+      },
       template: 'orange',
     },
     body: {
       elements: [
         {
           tag: 'markdown',
-          content: '调用前，请你先申请以下**所有**权限：',
+          content: `Please request **all** the following permissions to proceed:\n\n${scopeList}`,
+          i18n_content: {
+            zh_cn: `调用前，请你先申请以下**所有**权限：\n\n${scopeList}`,
+            en_us: `Please request **all** the following permissions to proceed:\n\n${scopeList}`,
+          },
           text_size: 'normal',
-        },
-        {
-          tag: 'column_set',
-          flex_mode: 'none',
-          background_style: 'grey',
-          horizontal_spacing: 'default',
-          columns: [
-            {
-              tag: 'column',
-              width: 'weighted',
-              weight: 1,
-              vertical_align: 'center',
-              elements: [{ tag: 'markdown', content: scopeList }],
-            },
-          ],
         },
         { tag: 'hr' },
         {
-          tag: 'column_set',
-          flex_mode: 'none',
-          horizontal_spacing: 'default',
-          columns: [
-            {
-              tag: 'column',
-              width: 'weighted',
-              weight: 3,
-              vertical_align: 'center',
-              elements: [{ tag: 'markdown', content: '**第一步：申请所有权限**' }],
-            },
-            {
-              tag: 'column',
-              width: 'weighted',
-              weight: 1,
-              vertical_align: 'center',
-              elements: [
-                {
-                  tag: 'button',
-                  text: { tag: 'plain_text', content: '去申请' },
-                  type: 'primary',
-                  multi_url: multiUrl,
-                },
-              ],
-            },
-          ],
+          tag: 'markdown',
+          content: '**Step 1: Request all permissions**',
+          i18n_content: {
+            zh_cn: '**第一步：申请所有权限**',
+            en_us: '**Step 1: Request all permissions**',
+          },
+          text_size: 'normal',
         },
         {
-          tag: 'column_set',
-          flex_mode: 'none',
-          horizontal_spacing: 'default',
-          columns: [
-            {
-              tag: 'column',
-              width: 'weighted',
-              weight: 3,
-              vertical_align: 'center',
-              elements: [{ tag: 'markdown', content: '**第二步：创建版本并审核通过**' }],
-            },
-            {
-              tag: 'column',
-              width: 'weighted',
-              weight: 1,
-              vertical_align: 'center',
-              elements: [
-                {
-                  tag: 'button',
-                  text: { tag: 'plain_text', content: '已完成' },
-                  type: 'default',
-                  value: { action: 'app_auth_done', operation_id: operationId },
-                },
-              ],
-            },
-          ],
+          tag: 'button',
+          text: {
+            tag: 'plain_text',
+            content: 'Request Now',
+            i18n_content: { zh_cn: '去申请', en_us: 'Request Now' },
+          },
+          type: 'primary',
+          multi_url: multiUrl,
+        },
+        {
+          tag: 'markdown',
+          content: '**Step 2: Create version and get approval**',
+          i18n_content: {
+            zh_cn: '**第二步：创建版本并审核通过**',
+            en_us: '**Step 2: Create version and get approval**',
+          },
+          text_size: 'normal',
+        },
+        {
+          tag: 'button',
+          text: {
+            tag: 'plain_text',
+            content: 'Done',
+            i18n_content: { zh_cn: '已完成', en_us: 'Done' },
+          },
+          type: 'default',
+          value: { action: 'app_auth_done', operation_id: operationId },
         },
       ],
     },
@@ -560,9 +544,16 @@ function buildAppScopeMissingCard(params: {
 function buildAppAuthProgressCard(): Record<string, unknown> {
   return {
     schema: '2.0',
-    config: { wide_screen_mode: false },
+    config: { wide_screen_mode: false, ...I18N_CONFIG },
     header: {
-      title: { tag: 'plain_text', content: '应用权限已开通' },
+      title: {
+        tag: 'plain_text',
+        content: 'Permissions enabled',
+        i18n_content: {
+          zh_cn: '应用权限已开通',
+          en_us: 'Permissions enabled',
+        },
+      },
       subtitle: { tag: 'plain_text', content: '' },
       template: 'green',
       padding: '12px 12px 12px 12px',
@@ -572,7 +563,11 @@ function buildAppAuthProgressCard(): Record<string, unknown> {
       elements: [
         {
           tag: 'markdown',
-          content: '您的应用权限已开通，正在为您发起用户授权',
+          content: 'App permissions ready. Starting user authorization...',
+          i18n_content: {
+            zh_cn: '你的应用权限已开通，正在为你发起用户授权',
+            en_us: 'App permissions ready. Starting user authorization...',
+          },
           text_size: 'normal',
         },
       ],
@@ -626,7 +621,7 @@ async function sendAppScopeCard(params: {
     const { operationId: activeOpId, flow: activeFlow } = activeEntry;
     // 更新已有卡片的内容（合并后的 scope）
     const newOperationId = Date.now().toString(36) + Math.random().toString(36).slice(2);
-    const card = buildAppScopeMissingCard({ missingScopes, appId, operationId: newOperationId, tokenType });
+    const card = buildAppScopeMissingCard({ missingScopes, appId, operationId: newOperationId, brand: account.brand });
     const newSeq = activeFlow.sequence + 1;
 
     // TOCTOU 修复：先原子迁移（同步操作），再 await 更新卡片
@@ -675,7 +670,7 @@ async function sendAppScopeCard(params: {
 
   const operationId = Date.now().toString(36) + Math.random().toString(36).slice(2);
 
-  const card = buildAppScopeMissingCard({ missingScopes, appId, operationId, tokenType });
+  const card = buildAppScopeMissingCard({ missingScopes, appId, operationId, brand: account.brand });
 
   // 创建 CardKit 卡片实体
   const cardId = await createCardEntity({ cfg, card, accountId });
@@ -687,7 +682,9 @@ async function sendAppScopeCard(params: {
       message:
         `应用缺少以下权限：${missingScopes.join(', ')}，` +
         `请管理员在开放平台开通后重试。` +
-        (appId ? `\n权限管理：https://open.feishu.cn/app/${appId}/permission` : ''),
+        (appId
+          ? `\n权限管理：${account.brand === 'lark' ? 'https://open.larksuite.com' : 'https://open.feishu.cn'}/app/${appId}/permission`
+          : ''),
     });
   }
 
@@ -849,12 +846,7 @@ export async function handleCardAction(data: unknown, cfg: ClawdbotConfig, accou
       }
 
       // 收集所有来源的 scope（过滤 offline_access：仅 app 级需要，device-flow 自动追加）
-      // tenant-token 工具不需要用户 OAuth 授权，其 requiredScopes 不应加入 mergedScopes
-      const mergedScopes = new Set(
-        flow.tokenType === 'tenant'
-          ? [] // tenant 工具只需要应用权限，无需用户授权
-          : flow.requiredScopes.filter((s) => s !== 'offline_access'),
-      );
+      const mergedScopes = new Set(flow.requiredScopes.filter((s) => s !== 'offline_access'));
 
       // 来源 1: 延迟用户授权队列（已在同步路径中提前取出，见 consumedDeferred）
       if (consumedDeferred) {
@@ -875,51 +867,22 @@ export async function handleCardAction(data: unknown, cfg: ClawdbotConfig, accou
         // 重试时工具会自然发现需要用户授权并发起正确的 OAuth 流程。
         log.info('no business scopes to authorize after app auth, sending synthetic message for retry');
         const syntheticMsgId = `${flow.ticket.messageId}:app-auth-complete`;
-        const syntheticEvent = {
-          sender: { sender_id: { open_id: flow.ticket.senderOpenId } },
-          message: {
-            message_id: syntheticMsgId,
-            chat_id: flow.ticket.chatId,
-            chat_type: flow.ticket.chatType ?? ('p2p' as const),
-            message_type: 'text',
-            content: JSON.stringify({ text: '应用权限已开通，请继续执行之前的操作。' }),
-            thread_id: flow.ticket.threadId,
-          },
-        };
         const syntheticRuntime = {
           log: (msg: string) => log.info(msg),
           error: (msg: string) => log.error(msg),
         };
-        const { promise } = enqueueFeishuChatTask({
+        await dispatchSyntheticTextMessage({
+          cfg: flow.cfg,
           accountId: flow.accountId,
           chatId: flow.ticket.chatId,
+          senderOpenId: flow.ticket.senderOpenId!,
+          text: '应用权限已开通，请继续执行之前的操作。',
+          syntheticMessageId: syntheticMsgId,
+          replyToMessageId: flow.ticket.messageId,
+          chatType: flow.ticket.chatType,
           threadId: flow.ticket.threadId,
-          task: async () => {
-            await withTicket(
-              {
-                messageId: syntheticMsgId,
-                chatId: flow.ticket.chatId,
-                accountId: flow.accountId,
-                startTime: Date.now(),
-                senderOpenId: flow.ticket.senderOpenId!,
-                chatType: flow.ticket.chatType,
-                threadId: flow.ticket.threadId,
-              },
-              () =>
-                handleFeishuMessage({
-                  cfg: flow.cfg,
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  event: syntheticEvent as any,
-                  accountId: flow.accountId,
-                  forceMention: true,
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  runtime: syntheticRuntime as any,
-                  replyToMessageId: flow.ticket.messageId,
-                }),
-            );
-          },
+          runtime: syntheticRuntime,
         });
-        await promise;
         log.info('synthetic message dispatched after app-auth-only completion');
       } else {
         await executeAuthorize({
@@ -965,55 +928,35 @@ export async function handleCardAction(data: unknown, cfg: ClawdbotConfig, accou
  * @param err - invoke() 或其他逻辑抛出的错误
  * @param cfg - OpenClaw 配置对象（从工具注册函数的闭包中获取）
  */
-export async function handleInvokeErrorWithAutoAuth(err: unknown, cfg: ClawdbotConfig) {
+export async function handleInvokeErrorWithAutoAuth(err: unknown, cfg: ClawdbotConfig): Promise<ToolResult> {
+  // `cfg` is the closure-captured snapshot from plugin registration and may be
+  // stale after a hot-reload.  Use getResolvedConfig() to always get the live config.
+  cfg = getResolvedConfig(cfg);
+
   const ticket = getTicket();
+
+  // --- Path 0：Owner 访问拒绝 → 直接返回友好提示 ---
+  if (err instanceof OwnerAccessDeniedError) {
+    return json({
+      error: 'permission_denied',
+      message: '当前应用仅限所有者（App Owner）使用。您没有权限使用相关功能。',
+      user_open_id: err.userOpenId,
+      // 注意：不序列化 err.appOwnerId，避免泄露 owner 的 open_id
+    });
+  }
 
   if (ticket) {
     const senderOpenId = ticket.senderOpenId;
-
-    // --- Path 0：UAT 策略错误 → 直接返回结构化错误，不触发 auto-auth ---
-    if (isUatPolicyError(err)) {
-      log.info(`UatPolicyError (${(err as Error).name}), skipping auto-auth`);
-      return json({ error: (err as Error).message });
-    }
 
     // --- Path 1：用户授权类错误 → 防抖合并后发起 OAuth ---
 
     if (senderOpenId) {
       // 1a. 用户未授权或 token scope 不足（且 app scope 已验证）
       if (err instanceof UserAuthRequiredError && err.appScopeVerified) {
-        let scopes = err.requiredScopes;
+        const scopes = err.requiredScopes;
         try {
           const acct = getLarkAccount(cfg, ticket.accountId);
           if (acct.configured) {
-            // ★ 扩展 scope：优先按 skill 粒度扩展，回退到工具族粒度。
-            //
-            //   Skill 级扩展：如果该工具属于某个 skill（如 feishu-calendar），
-            //   则一次性收集该 skill 声明的所有 tool_actions 的 scope，
-            //   确保即使 AI 跳过了 feishu_pre_auth，也能一次弹窗搞定。
-            //
-            //   工具族级扩展（回退）：如果不属于任何 skill，
-            //   则按工具族前缀收集相关 scope（原有逻辑）。
-            {
-              const skillScopes = getSkillScopesForTool(err.apiName);
-              if (skillScopes.length > scopes.length) {
-                log.info(
-                  `expanding scopes from [${scopes.join(', ')}] ` +
-                    `to skill scopes [${skillScopes.join(', ')}]`,
-                );
-                scopes = skillScopes;
-              } else {
-                const familyScopes = getToolFamilyScopes(err.apiName);
-                if (familyScopes.length > scopes.length) {
-                  log.info(
-                    `expanding scopes from [${scopes.join(', ')}] ` +
-                      `to tool family [${familyScopes.join(', ')}]`,
-                  );
-                  scopes = familyScopes;
-                }
-              }
-            }
-
             // ★ 延迟检查：如果同一消息有未完成的应用权限流程，
             //   将用户授权 scope 收集到延迟队列，等应用授权完成后统一发起 OAuth
             if (hasActiveAppAuthForMessage(ticket)) {

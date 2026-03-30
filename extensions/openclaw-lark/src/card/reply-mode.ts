@@ -9,6 +9,7 @@
  */
 
 import type { FeishuConfig } from '../core/types';
+import { FEISHU_CARD_TABLE_LIMIT, findMarkdownTablesOutsideCodeBlocks } from './card-error';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,12 +76,17 @@ export function expandAutoMode(params: {
  * markdown tables).
  */
 export function shouldUseCard(text: string): boolean {
+  // Table limit takes priority -- even with code blocks, too many tables will fail
+  const tableMatches = findMarkdownTablesOutsideCodeBlocks(text);
+  if (tableMatches.length > FEISHU_CARD_TABLE_LIMIT) {
+    return false;
+  }
   // Fenced code blocks
   if (/```[\s\S]*?```/.test(text)) {
     return true;
   }
   // Markdown tables (header + separator rows separated by pipes)
-  if (/\|.+\|[\r\n]+\|[-:| ]+\|/.test(text)) {
+  if (tableMatches.length > 0) {
     return true;
   }
   return false;

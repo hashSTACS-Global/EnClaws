@@ -54,7 +54,7 @@
  * - "feishu_calendar_event.create"
  * - "feishu_bitable_app_table_record.update"
  *
- * 总计：98 个工具动作
+ * 总计：96 个工具动作
  */
 export type ToolActionKey =
   | 'feishu_bitable_app.copy'
@@ -63,9 +63,7 @@ export type ToolActionKey =
   | 'feishu_bitable_app.list'
   | 'feishu_bitable_app.patch'
   | 'feishu_bitable_app_table.batch_create'
-  | 'feishu_bitable_app_table.batch_delete'
   | 'feishu_bitable_app_table.create'
-  | 'feishu_bitable_app_table.delete'
   | 'feishu_bitable_app_table.list'
   | 'feishu_bitable_app_table.patch'
   | 'feishu_bitable_app_table_field.create'
@@ -80,7 +78,6 @@ export type ToolActionKey =
   | 'feishu_bitable_app_table_record.list'
   | 'feishu_bitable_app_table_record.update'
   | 'feishu_bitable_app_table_view.create'
-  | 'feishu_bitable_app_table_view.delete'
   | 'feishu_bitable_app_table_view.get'
   | 'feishu_bitable_app_table_view.list'
   | 'feishu_bitable_app_table_view.patch'
@@ -96,7 +93,6 @@ export type ToolActionKey =
   | 'feishu_calendar_event.patch'
   | 'feishu_calendar_event.reply'
   | 'feishu_calendar_event.search'
-  | 'feishu_calendar_event_attendee.batch_delete'
   | 'feishu_calendar_event_attendee.create'
   | 'feishu_calendar_event_attendee.list'
   | 'feishu_calendar_freebusy.list'
@@ -117,6 +113,7 @@ export type ToolActionKey =
   | 'feishu_drive_file.move'
   | 'feishu_drive_file.upload'
   | 'feishu_fetch_doc.default'
+  | 'feishu_get_user.basic_batch'
   | 'feishu_get_user.default'
   | 'feishu_im_user_fetch_resource.default'
   | 'feishu_im_user_get_messages.default'
@@ -130,19 +127,15 @@ export type ToolActionKey =
   | 'feishu_task_comment.list'
   | 'feishu_task_subtask.create'
   | 'feishu_task_subtask.list'
-  | 'feishu_task_task.add_members'
   | 'feishu_task_task.create'
   | 'feishu_task_task.get'
   | 'feishu_task_task.list'
   | 'feishu_task_task.patch'
-  | 'feishu_task_task.remove_members'
   | 'feishu_task_tasklist.add_members'
   | 'feishu_task_tasklist.create'
-  | 'feishu_task_tasklist.delete'
   | 'feishu_task_tasklist.get'
   | 'feishu_task_tasklist.list'
   | 'feishu_task_tasklist.patch'
-  | 'feishu_task_tasklist.remove_members'
   | 'feishu_task_tasklist.tasks'
   | 'feishu_update_doc.default'
   | 'feishu_wiki_space.create'
@@ -184,7 +177,7 @@ export type ToolScopeMapping = Record<ToolActionKey, string[]>;
  *
  * ```typescript
  * TOOL_SCOPES["feishu_calendar_event.create"]
- * // 返回: ["calendar:calendar:read", "calendar:calendar.event:create", "calendar:calendar.event:update"]
+ * // 返回: ["calendar:calendar.event:create", "calendar:calendar.event:update"]
  * ```
  *
  * @see {@link ToolActionKey} 所有可用的工具动作键
@@ -198,9 +191,7 @@ export const TOOL_SCOPES: ToolScopeMapping = {
   'feishu_bitable_app_table.create': ['base:table:create'],
   'feishu_bitable_app_table.list': ['base:table:read'],
   'feishu_bitable_app_table.patch': ['base:table:update'],
-  'feishu_bitable_app_table.delete': ['base:table:delete'],
   'feishu_bitable_app_table.batch_create': ['base:table:create'],
-  'feishu_bitable_app_table.batch_delete': ['base:table:delete'],
   'feishu_bitable_app_table_record.create': ['base:record:create'],
   'feishu_bitable_app_table_record.update': ['base:record:update'],
   'feishu_bitable_app_table_record.delete': ['base:record:delete'],
@@ -216,39 +207,31 @@ export const TOOL_SCOPES: ToolScopeMapping = {
   'feishu_bitable_app_table_view.get': ['base:view:read'],
   'feishu_bitable_app_table_view.list': ['base:view:read'],
   'feishu_bitable_app_table_view.patch': ['base:view:write_only'],
-  'feishu_bitable_app_table_view.delete': ['base:view:write_only'],
   'feishu_calendar_calendar.list': ['calendar:calendar:read'],
   'feishu_calendar_calendar.get': ['calendar:calendar:read'],
   'feishu_calendar_calendar.primary': ['calendar:calendar:read'],
-  // 注意：所有 calendar_event 动作内部都调用 resolveCalendarIdOrFail，
-  // 它需要 calendar:calendar:read（来自 feishu_calendar_calendar.primary）。
-  'feishu_calendar_event.create': ['calendar:calendar:read', 'calendar:calendar.event:create', 'calendar:calendar.event:update'],
-  'feishu_calendar_event.list': ['calendar:calendar:read', 'calendar:calendar.event:read'],
-  'feishu_calendar_event.get': ['calendar:calendar:read', 'calendar:calendar.event:read'],
-  'feishu_calendar_event.patch': ['calendar:calendar:read', 'calendar:calendar.event:update'],
-  'feishu_calendar_event.delete': ['calendar:calendar:read', 'calendar:calendar.event:delete'],
-  'feishu_calendar_event.search': ['calendar:calendar:read', 'calendar:calendar.event:read'],
-  'feishu_calendar_event.reply': ['calendar:calendar:read', 'calendar:calendar.event:reply'],
-  'feishu_calendar_event.instances': ['calendar:calendar:read', 'calendar:calendar.event:read'],
-  'feishu_calendar_event.instance_view': ['calendar:calendar:read', 'calendar:calendar.event:read'],
+  'feishu_calendar_event.create': ['calendar:calendar.event:create', 'calendar:calendar.event:update'],
+  'feishu_calendar_event.list': ['calendar:calendar.event:read'],
+  'feishu_calendar_event.get': ['calendar:calendar.event:read'],
+  'feishu_calendar_event.patch': ['calendar:calendar.event:update'],
+  'feishu_calendar_event.delete': ['calendar:calendar.event:delete'],
+  'feishu_calendar_event.search': ['calendar:calendar.event:read'],
+  'feishu_calendar_event.reply': ['calendar:calendar.event:reply'],
+  'feishu_calendar_event.instances': ['calendar:calendar.event:read'],
+  'feishu_calendar_event.instance_view': ['calendar:calendar.event:read'],
   'feishu_calendar_event_attendee.create': ['calendar:calendar.event:update'],
   'feishu_calendar_event_attendee.list': ['calendar:calendar.event:read'],
-  'feishu_calendar_event_attendee.batch_delete': ['calendar:calendar.event:read', 'calendar:calendar.event:update'],
   'feishu_calendar_freebusy.list': ['calendar:calendar.free_busy:read'],
-  'feishu_task_task.add_members': ['task:task:write', 'task:task:writeonly'],
   'feishu_task_task.create': ['task:task:write', 'task:task:writeonly'],
   'feishu_task_task.get': ['task:task:read', 'task:task:write'],
   'feishu_task_task.list': ['task:task:read', 'task:task:write'],
   'feishu_task_task.patch': ['task:task:write', 'task:task:writeonly'],
-  'feishu_task_task.remove_members': ['task:task:write', 'task:task:writeonly'],
   'feishu_task_tasklist.create': ['task:tasklist:write'],
   'feishu_task_tasklist.get': ['task:tasklist:read', 'task:tasklist:write'],
   'feishu_task_tasklist.list': ['task:tasklist:read', 'task:tasklist:write'],
   'feishu_task_tasklist.tasks': ['task:tasklist:read', 'task:tasklist:write'],
   'feishu_task_tasklist.patch': ['task:tasklist:write'],
-  'feishu_task_tasklist.delete': ['task:tasklist:write'],
   'feishu_task_tasklist.add_members': ['task:tasklist:write'],
-  'feishu_task_tasklist.remove_members': ['task:tasklist:write'],
   'feishu_task_comment.create': ['task:comment:write'],
   'feishu_task_comment.list': ['task:comment:read', 'task:comment:write'],
   'feishu_task_comment.get': ['task:comment:read', 'task:comment:write'],
@@ -302,6 +285,7 @@ export const TOOL_SCOPES: ToolScopeMapping = {
     'search:message',
   ],
   'feishu_search_doc_wiki.search': ['search:docs:read'],
+  'feishu_get_user.basic_batch': ['contact:user.basic_profile:readonly'],
   'feishu_get_user.default': ['contact:contact.base:readonly', 'contact:user.base:readonly'],
   'feishu_search_user.default': ['contact:user:search'],
   'feishu_create_doc.default': [
@@ -343,50 +327,6 @@ export const TOOL_SCOPES: ToolScopeMapping = {
   ],
   'feishu_sheet.export': ['docs:document:export'],
 } as const;
-
-// ===== 工具 Token 类型 =====
-
-/**
- * 工具动作的 Token 类型覆盖映射
- *
- * 默认所有工具使用 'user'（User Access Token），
- * 此映射仅列出使用 'tenant'（Tenant Access Token / 应用身份）的工具。
- *
- * 使用 tenant token 的工具不需要用户 OAuth 授权，
- * 只需应用在开放平台开通了对应 scope 即可。
- *
- * ## 判断标准
- *
- * 可以用 tenant token 的场景：
- * - 查询基础信息（不涉及用户个人数据视角）
- * - 飞书 API 文档明确标注支持 tenant_access_token
- * - 业务语义不依赖用户身份（如搜索员工、获取群信息）
- *
- * 必须用 user token 的场景：
- * - 操作用户个人资源（任务、日历、文档）
- * - 需要用户权限视角的读操作
- * - 需要用户身份的写操作
- */
-export const TOOL_TOKEN_TYPES: Partial<Record<ToolActionKey, 'tenant'>> = {
-  'feishu_chat.get': 'tenant',
-  'feishu_chat_members.default': 'tenant',
-};
-
-/**
- * 获取工具动作的 Token 类型
- *
- * @param toolAction - 工具动作键
- * @returns 'user' 或 'tenant'，默认 'user'
- *
- * @example
- * ```ts
- * getTokenType('feishu_chat.get');             // 'tenant'
- * getTokenType('feishu_task_task.create');     // 'user'
- * ```
- */
-export function getTokenType(toolAction: ToolActionKey): 'user' | 'tenant' {
-  return TOOL_TOKEN_TYPES[toolAction] ?? 'user';
-}
 
 // ===== 必需的应用身份权限 =====
 
@@ -472,15 +412,23 @@ export const REQUIRED_SCOPE_DESCRIPTIONS: Record<RequiredAppScope, string> = {
  * 用户需要明确知晓这些权限的影响后，才能手动授权。
  *
  * 权限说明：
- * - im:message:send_as_user - 以用户身份发送消息（高风险，可能被滥用发送钓鱼或垃圾消息）
+ * - im:message.send_as_user - 以用户身份发送消息（高风险，可能被滥用发送钓鱼或垃圾消息）
+ * - space:document:delete - 删除云文档
+ * - calendar:calendar.event:delete - 删除日程
+ * - base:table:delete - 删除多维表格数据表
  *
  * 使用场景：
  * - 批量授权时会自动过滤掉这些权限
  * - 需要这些权限的功能会单独提示用户授权
  *
- * 最后更新: 2026-03-03
+ * 最后更新: 2026-03-17
  */
-export const SENSITIVE_SCOPES = ['im:message.send_as_user'] as const;
+export const SENSITIVE_SCOPES = [
+  'im:message.send_as_user',
+  'space:document:delete',
+  'calendar:calendar.event:delete',
+  'base:table:delete',
+] as const;
 
 /**
  * 高敏感权限类型
@@ -497,7 +445,7 @@ export type SensitiveScope = (typeof SENSITIVE_SCOPES)[number];
  *
  * @example
  * ```typescript
- * const allScopes = ["im:message", "im:message:send_as_user", "calendar:calendar:read"];
+ * const allScopes = ["im:message", "im:message.send_as_user", "calendar:calendar:read"];
  * const safeScopes = filterSensitiveScopes(allScopes);
  * // 返回: ["im:message", "calendar:calendar:read"]
  * ```
@@ -507,35 +455,11 @@ export function filterSensitiveScopes(scopes: string[]): string[] {
   return scopes.filter((scope) => !sensitiveSet.has(scope));
 }
 
-// ===== 关联工具族 =====
-
-/**
- * 关联工具族映射
- *
- * 定义常被一起使用的工具族。当某个工具族触发用户授权时，
- * 自动把关联族的 scope 一并请求，避免多次授权弹窗。
- *
- * Key: 工具族前缀（如 "feishu_task_"）或精确工具前缀（如 "feishu_search_user."）
- * Value: 关联的工具族前缀列表
- *
- * 注意：
- * - 使用 "feishu_search_user."（带点号）而非 "feishu_search_"（带下划线），
- *   避免误匹配 feishu_search_doc_wiki 等不相关工具。
- * - 反向映射（如 search_user → calendar）不再需要，已由 skill-scopes.ts
- *   的 getSkillScopesForTool 在 auto-auth 中按 skill 粒度自动覆盖。
- *
- * 最后更新: 2026-03-23
- */
-export const RELATED_TOOL_FAMILIES: Record<string, string[]> = {
-  'feishu_task_': ['feishu_calendar_', 'feishu_search_user.'],
-  'feishu_calendar_': ['feishu_search_user.'],
-};
-
 // ===== 统计信息 =====
 
 /**
- * 工具动作总数: 98
- * 唯一 scope 总数: 66
+ * 工具动作总数: 96
+ * 唯一 scope 总数: 74
  * 必需应用权限总数: 20
- * 高敏感权限总数: 1
+ * 高敏感权限总数: 4
  */

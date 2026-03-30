@@ -6,19 +6,6 @@ description: |
 
 # feishu__update_doc
 
-## 🔑 执行前权限预检
-
-**在使用本 Skill 的任何工具之前，必须先调用 `feishu_pre_auth` 工具进行权限预检：**
-
-```json
-{
-  "tool_actions": ["feishu_get_user.default", "feishu_search_user.default", "feishu_update_doc.default", "feishu_doc_media.insert"]
-}
-```
-
-- 如果返回 `all_authorized: true`，继续执行后续操作。
-- 否则按返回结果的指引完成授权后再继续。
-
 更新飞书云文档内容，支持 7 种更新模式。优先使用局部更新（replace_range/append/insert_before/insert_after），慎用 overwrite（会清空文档重写，可能丢失图片、评论等）。
 
 # 定位方式

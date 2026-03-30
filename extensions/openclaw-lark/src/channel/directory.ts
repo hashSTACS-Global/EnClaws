@@ -12,7 +12,7 @@ import type { ClawdbotConfig } from 'openclaw/plugin-sdk';
 import { getLarkAccount } from '../core/accounts';
 import { LarkClient } from '../core/lark-client';
 import { normalizeFeishuTarget } from '../core/targets';
-import type { FeishuDirectoryPeer, FeishuDirectoryGroup } from './types';
+import type { FeishuDirectoryGroup, FeishuDirectoryPeer } from './types';
 
 // Re-export types for backward compatibility
 export type { FeishuDirectoryPeer, FeishuDirectoryGroup } from './types';

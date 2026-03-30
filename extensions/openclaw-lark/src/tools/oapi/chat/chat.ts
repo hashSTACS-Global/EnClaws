@@ -15,7 +15,7 @@
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
-import { json, createToolContext, assertLarkOk, handleInvokeErrorWithAutoAuth } from '../helpers';
+import { StringEnum, assertLarkOk, createToolContext, handleInvokeErrorWithAutoAuth, json, registerTool } from '../helpers';
 import type { PaginatedData } from '../sdk-types';
 
 // ---------------------------------------------------------------------------
@@ -41,7 +41,7 @@ const FeishuChatSchema = Type.Union([
       }),
     ),
     user_id_type: Type.Optional(
-      Type.Union([Type.Literal('open_id'), Type.Literal('union_id'), Type.Literal('user_id')], {
+      StringEnum(['open_id', 'union_id', 'user_id'], {
         description: '用户 ID 类型（默认 open_id）',
       }),
     ),
@@ -54,7 +54,7 @@ const FeishuChatSchema = Type.Union([
       description: '群 ID（格式如 oc_xxx）',
     }),
     user_id_type: Type.Optional(
-      Type.Union([Type.Literal('open_id'), Type.Literal('union_id'), Type.Literal('user_id')], {
+      StringEnum(['open_id', 'union_id', 'user_id'], {
         description: '用户 ID 类型（默认 open_id）',
       }),
     ),
@@ -83,18 +83,19 @@ type FeishuChatParams =
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerChatSearchTool(api: OpenClawPluginApi) {
-  if (!api.config) return;
+export function registerChatSearchTool(api: OpenClawPluginApi): boolean {
+  if (!api.config) return false;
   const cfg = api.config;
 
   const { toolClient, log } = createToolContext(api, 'feishu_chat');
 
-  api.registerTool(
+  return registerTool(
+    api,
     {
       name: 'feishu_chat',
       label: 'Feishu: Chat Management',
       description:
-        '飞书群聊管理工具。Actions: search（以用户身份搜索群列表，支持关键词匹配群名称、群成员）, get（获取指定群的详细信息，包括群名称、描述、头像、群主、权限配置等）。',
+        '以用户身份调用飞书群聊管理工具。Actions: search（搜索群列表，支持关键词匹配群名称、群成员）, get（获取指定群的详细信息，包括群名称、描述、头像、群主、权限配置等）。',
       parameters: FeishuChatSchema,
       async execute(_toolCallId: string, params: unknown) {
         const p = params as FeishuChatParams;
@@ -165,7 +166,7 @@ export function registerChatSearchTool(api: OpenClawPluginApi) {
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     } as any,
                   ),
-                { as: 'tenant' },
+                { as: 'user' },
               );
               assertLarkOk(res);
 
@@ -183,6 +184,4 @@ export function registerChatSearchTool(api: OpenClawPluginApi) {
     },
     { name: 'feishu_chat' },
   );
-
-  api.logger.info?.('feishu_chat: Registered feishu_chat tool');
 }

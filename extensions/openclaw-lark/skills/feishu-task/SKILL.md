@@ -4,28 +4,14 @@ description: |
   飞书任务管理工具,用于创建、查询、更新任务和清单。
 
   **当以下情况时使用此 Skill**:
-  (1) 需要创建、查询、更新、删除任务
+  (1) 需要创建、查询、更新任务
   (2) 需要创建、管理任务清单
   (3) 需要查看任务列表或清单内的任务
   (4) 用户提到"任务"、"待办"、"to-do"、"清单"、"task"
   (5) 需要设置任务负责人、关注人、截止时间
-
 ---
 
 # 飞书任务管理
-
-## 🔑 执行前权限预检
-
-**在使用本 Skill 的任何工具之前，必须先调用 `feishu_pre_auth` 工具进行权限预检：**
-
-```json
-{
-  "tool_actions": ["feishu_get_user.default", "feishu_search_user.default", "feishu_task_task.create", "feishu_task_task.get", "feishu_task_task.list", "feishu_task_task.patch", "feishu_task_task.add_members", "feishu_task_task.remove_members", "feishu_task_tasklist.create", "feishu_task_tasklist.get", "feishu_task_tasklist.list", "feishu_task_tasklist.tasks", "feishu_task_tasklist.patch", "feishu_task_tasklist.delete", "feishu_task_tasklist.add_members", "feishu_task_tasklist.remove_members", "feishu_task_comment.create", "feishu_task_comment.list", "feishu_task_comment.get", "feishu_task_subtask.create", "feishu_task_subtask.list"]
-}
-```
-
-- 如果返回 `all_authorized: true`，继续执行后续操作。
-- 否则按返回结果的指引完成授权后再继续。
 
 ## 🚨 执行前必读
 
@@ -35,11 +21,6 @@ description: |
 - ✅ **tasklist.tasks 必须**：tasklist_guid
 - ✅ **完成任务**：completed_at = "2026-02-26 15:00:00"
 - ✅ **反完成（恢复未完成）**：completed_at = "0"
-- ✅ **任务提醒**：创建任务时必须设置 `reminders` 字段（截止前提醒），提醒时间按阶梯规则设置（详见「智能提醒规则」）。无需再创建日历日程作为提醒。
-- ✅ **创建成功后返回链接**：优先使用工具返回结果中的 `task_url` 字段作为任务链接；如果 `task_url` 不存在，禁止拼接url，提示链接暂时没有生成，到任务中心查看。
-- ✅ **创建前确认**：在调用 `feishu_task_task.create` 之前，必须先向用户发送一条确认消息，列出任务的所有关键信息（内容、负责人、截止时间、关注人），并在用户确认后再执行创建。
-- ✅ **查询任务**：查询任务时，应包含当前用户作为 **负责人（assignee）** 或 **关注人（follower）** 的所有相关任务。如果 `list` 接口返回的数据量大，应确保分页查询完整，不要遗漏任务。
-- ✅ **创建和查询消息返回格式**：创建任务使用的 **text格式** 返回，查询任务使用Markdown表格返回。
 
 ---
 
@@ -47,7 +28,7 @@ description: |
 
 | 用户意图 | 工具 | action | 必填参数 | 强烈建议 | 常用可选 |
 |---------|------|--------|---------|---------|---------|
-| 新建待办 | feishu_task_task | create | summary, due, members, reminders | current_user_id（SenderId） | description |
+| 新建待办 | feishu_task_task | create | summary | current_user_id（SenderId） | members, due, description |
 | 查未完成任务 | feishu_task_task | list | - | completed=false | page_size |
 | 获取任务详情 | feishu_task_task | get | task_guid | - | - |
 | 完成任务 | feishu_task_task | patch | task_guid, completed_at | - | - |
@@ -61,35 +42,7 @@ description: |
 
 ## 🎯 核心约束（Schema 未透露的知识）
 
-### 0. 创建任务前的确认机制
-
-**⚠️ 强制流程：在调用创建接口前，必须先与用户确认信息：**
-
-1.  **汇总信息**：列出任务标题、负责人、截止时间、关注人。
-2.  **询问用户**：发送确认请求，例如：“好的，即将为您创建以下任务，请确认：...”。
-3.  **等待确认**：只有在用户回复“确认”、“是的”、“好的”、“创建吧”等肯定意图后，才调用 `feishu_task_task.create`。
-
-**确认消息示例（text）**：
-> 好的，即将为您创建以下任务，请确认：
-> 📋 任务：准备周会材料
-> 👤 负责人：张三
-> ⏰ 截止时间：2026-02-28 17:00
-> 👀 关注人：李四
-> 
-> 是否现在创建？
-
-### 1. 创建任务四要素追问逻辑
-
-**⚠️ 强制约束：创建任务前必须检查以下要素，不满足则追问：**
-
-| 要素 | 参数位置 | 缺失处理 |
-|------|---------|---------|
-| **任务内容** | `summary` | **必须追问** |
-| **截止时间** | `due` | **必须追问** |
-| **负责人** | `members` (role=assignee) | **必须追问** |
-| **关注人** | `members` (role=follower) | **必须追问** |
-
-### 2. 当前工具使用用户身份（已内置保护）
+### 1. 当前工具使用用户身份（已内置保护）
 
 **工具使用 `user_access_token`（用户身份）**
 
@@ -105,7 +58,7 @@ description: |
 
 **推荐用法**：创建任务时始终传 `current_user_id`，工具会自动处理成员关系。
 
-### 3. 任务成员的角色说明
+### 2. 任务成员的角色说明
 
 - **assignee（负责人）**：负责完成任务，可以编辑任务
 - **follower（关注人）**：关注任务进展，接收通知
@@ -122,7 +75,7 @@ description: |
 
 **说明**：`id` 使用用户的 `open_id`（从消息上下文的 SenderId 获取）
 
-### 4. 任务清单角色冲突
+### 3. 任务清单角色冲突
 
 **现象**：创建清单（`tasklist.create`）时传了 `members`，但返回的 `tasklist.members` 为空或缺少成员
 
@@ -130,7 +83,7 @@ description: |
 
 **建议**：不要在 `members` 中包含创建人，只添加其他协作成员
 
-### 5. completed_at 的三种用法
+### 4. completed_at 的三种用法
 
 **1) 完成任务（设置完成时间）**：
 ```json
@@ -157,12 +110,12 @@ description: |
 }
 ```
 
-### 6. 清单成员的角色
+### 5. 清单成员的角色
 
 | 成员类型 | 角色 | 说明 |
 |---------|------|------|
 | user（用户） | owner | 所有者，可转让所有权 |
-| user（用户） | editor | 可编辑，可修改清单 and 任务 |
+| user（用户） | editor | 可编辑，可修改清单和任务 |
 | user（用户） | viewer | 可查看，只读权限 |
 | chat（群组） | editor/viewer | 整个群组获得权限 |
 
@@ -170,124 +123,40 @@ description: |
 
 ---
 
-### 7. 查询结果返回格式
-
-**查询结果必须以 Markdown 表格格式展示，字段包含：**
-- **任务标题**：summary
-- **截止时间**：due（若无则显示 `-`）
-- **状态**：根据 `completed_at` 和 `due` 判定（进行中 / 已完成 / 已过期）
-- **负责人**：assignee 的姓名 (open_id)
-
-**⚠️ 时间戳转换**：API 返回的 `due.timestamp`、`start.timestamp`、`completed_at` 等字段均为**毫秒时间戳字符串**（如 `"1774010400000"`，13 位数字），展示时必须转换为可读时间（北京时间 UTC+8）。毫秒时间戳 1773831600000 直接放入 new Date() = 2026-03-18 19:00。
-
-**Markdown 表格示例**：
-```text
-📋 找到相关任务（共 3 项）：
-
-| 任务标题 | 截止时间 | 状态 | 负责人 |
-|---------|---------|------|-------|
-| 准备周会材料 | 02-28 17:00 | 进行中 | 张三 |
-| 整理需求文档 | 02-20 10:00 | 已过期 | 李四 |
-| 完成代码审核 | - | 已完成 | 王五 |
-```
-
----
-
-## 🔔 智能提醒规则（任务原生提醒）
-
-创建任务时，通过 `reminders` 字段设置截止时间前的提醒，**无需额外创建日历日程**。
-
-| 截止时间距今 | relative_fire_minute | 说明 |
-|-------------|---------------------|------|
-| **< 1 天** | 15 | 截止前 15 分钟提醒 |
-| **1–2 天** | 30 | 截止前 30 分钟提醒 |
-| **> 2 天** | 60 | 截止前 60 分钟提醒 |
-
-**创建任务时直接传入 reminders 参数**：
-```json
-{
-  "action": "create",
-  "summary": "准备周会材料",
-  "due": {"timestamp": "2026-02-28T17:00:00+08:00"},
-  "reminders": [{"relative_fire_minute": 30}],
-  "members": [{"id": "ou_xxx", "role": "assignee"}]
-}
-```
-
-⚠️ 设置提醒必须同时设置截止时间（due），一个任务最多 1 个提醒。
-
----
-
 ## 📌 使用场景示例
 
-### 场景 1: 创建任务并分配负责人（包含确认流程）
+### 场景 1: 创建任务并分配负责人
 
-**用户输入**："帮我创建一个任务，准备周会材料，截止时间是2月28号下午5点，负责人是张三，关注人是李四"
-
-**Step 1: 发送确认消息**
-> 好的，即将为您创建以下任务，请确认：
-> 📋 任务：准备周会材料
-> 👤 负责人：张三
-> ⏰ 截止时间：2026-02-28 17:00
-> 👀 关注人：李四
-> 
-> 是否现在创建？
-
-**用户确认**："确认创建"
-
-**Step 2: 执行创建（四要素齐全）**
 ```json
 {
   "action": "create",
   "summary": "准备周会材料",
+  "description": "整理本周工作进展和下周计划",
+  "current_user_id": "ou_发送者的open_id",
   "due": {
     "timestamp": "2026-02-28 17:00:00",
     "is_all_day": false
   },
-  "reminders": [{"relative_fire_minute": 30}],
   "members": [
-    {"id": "ou_aaa", "role": "assignee"},
-    {"id": "ou_bbb", "role": "follower"}
+    {"id": "ou_协作者的open_id", "role": "assignee"}
   ]
 }
 ```
 
-**Step 3: 返回成功消息（必须 text 格式）**
+**说明**：
+- `summary` 是必填字段
+- `current_user_id` 强烈建议传入（从 SenderId 获取），工具会自动添加为 follower
+- `members` 可以只包含其他协作者，当前用户会被自动添加
+- 时间使用北京时间字符串格式
 
-```text
-✅ 任务创建成功！
+### 场景 2: 查询我负责的未完成任务
 
-📋 任务内容：准备周会材料
-👤 负责人：张三
-👀 关注人：李四
-⏰ 截止时间：2026-02-28 17:00
-🔔 提醒：截止前 30 分钟
-🔗 链接：{task_url}
-
-（链接获取优先级：优先使用返回的 task_url 字段；若无，提示：链接生成失败，请到飞书任务里查看）
-```
-
-### 场景 2: 查询我的相关任务（包含我负责和关注的）
-
-**用户输入**："列出我最近的所有任务"
-
-**Step 1: 执行查询**
 ```json
 {
   "action": "list",
   "completed": false,
-  "page_size": 50
+  "page_size": 20
 }
-```
-
-**Step 2: 返回 Markdown 表格**
-```text
-📋 您的相关任务（共 2 项）：
-
-| 任务标题 | 截止时间 | 状态 | 负责人 |
-|---------|---------|------|-------|
-| 准备周会材料 | 02-28 17:00 | 进行中 | 张三 |
-| 整理需求文档 | - | 进行中 | 李四 |
 ```
 
 ### 场景 3: 完成任务
@@ -381,7 +250,12 @@ description: |
 - **关注人（follower）**：接收任务更新通知
 - **我负责的（MyTasks）**：所有负责人为自己的任务集合
 
-### B. 如何将任务加入清单
+### B. 如何获取 GUID
+
+- **task_guid**：创建任务后从返回值的 `task.guid` 获取，或通过 `list` 查询
+- **tasklist_guid**：创建清单后从返回值的 `tasklist.guid` 获取，或通过 `list` 查询
+
+### C. 如何将任务加入清单
 
 创建任务时指定 `tasklists` 参数：
 ```json
@@ -392,12 +266,12 @@ description: |
     {
       "tasklist_guid": "清单的guid",
       "section_guid": "分组的guid（可选）"
-    }：:
+    }
   ]
 }
 ```
 
-### C. 重复任务如何创建
+### D. 重复任务如何创建
 
 使用 `repeat_rule` 参数，采用 RRULE 格式：
 ```json
@@ -412,7 +286,7 @@ description: |
 **说明**：只有设置了截止时间的任务才能设置重复规则。
 
 
-### D. 数据权限
+### E. 数据权限
 
 - 只能操作自己有权限的任务（作为成员的任务）
 - 只能操作自己有权限的清单（作为成员的清单）

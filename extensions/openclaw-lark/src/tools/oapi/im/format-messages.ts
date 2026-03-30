@@ -12,14 +12,14 @@
 
 import type { LarkAccount } from '../../../core/types';
 import type { ToolClient } from '../../../core/tool-client';
-import type { ApiMessageItem } from '../../../messaging/converters/types';
+import type { ApiMessageItem, ConvertContext } from '../../../messaging/converters/types';
 import { larkLogger } from '../../../core/lark-logger';
 import {
-  convertMessageContent,
   buildConvertContextFromItem,
+  convertMessageContent,
   extractMentionOpenId,
 } from '../../../messaging/converters/content-converter';
-import { getUATUserName, setUATUserNames, batchResolveUserNamesAsUser } from './user-name-uat';
+import { batchResolveUserNamesAsUser, getUATUserName, setUATUserNames } from './user-name-uat';
 import { millisStringToDateTime } from './time-utils';
 
 const log = larkLogger('oapi/im/format-messages');
@@ -79,7 +79,7 @@ export async function formatMessageItem(
   item: ApiMessageItem,
   accountId: string,
   nameResolver: (openId: string) => string | undefined,
-  ctxOverrides?: Partial<import('../../../messaging/converters/types.js').ConvertContext>,
+  ctxOverrides?: Partial<ConvertContext>,
 ): Promise<FormattedMessage> {
   const messageId: string = item.message_id ?? '';
   const msgType: string = item.msg_type ?? 'unknown';

@@ -6,13 +6,13 @@
  */
 
 import type { ClawdbotConfig } from 'openclaw/plugin-sdk';
-import type { FeishuSendResult } from '../types';
+import type { FeishuSendResult, MentionInfo  } from '../types';
+import { createAccountScopedConfig } from '../../core/accounts';
 import { LarkClient } from '../../core/lark-client';
 import { normalizeFeishuTarget, normalizeMessageId, resolveReceiveIdType } from '../../core/targets';
 import { runWithMessageUnavailableGuard } from '../../core/message-unavailable';
-import type { MentionInfo } from '../types';
 import { optimizeMarkdownStyle } from '../../card/markdown-style';
-import { buildMentionedMessage, buildMentionedCardContent } from '../inbound/mention';
+import { buildMentionedCardContent, buildMentionedMessage } from '../inbound/mention';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +35,12 @@ export interface SendFeishuMessageParams {
   accountId?: string;
   /** When true, the reply appears in the thread instead of main chat. */
   replyInThread?: boolean;
+  /**
+   * Optional multi-locale texts for i18n post messages.
+   * When provided, builds a multi-locale post structure (e.g. { zh_cn: ..., en_us: ... })
+   * and the `text` field is ignored. Feishu client auto-selects locale based on user language.
+   */
+  i18nTexts?: Record<string, string>;
 }
 
 /**
@@ -59,6 +65,33 @@ export interface SendFeishuCardParams {
 // ---------------------------------------------------------------------------
 
 /**
+ * Resolve the configured markdown table mode for Feishu and convert tables if
+ * the runtime converter is available.
+ *
+ * @param cfg - Plugin configuration
+ * @param text - Raw markdown text
+ * @param accountId - Optional account identifier for multi-account setups
+ * @returns Converted text, or the original text when runtime helpers are unavailable
+ */
+function convertMarkdownTablesForFeishu(cfg: ClawdbotConfig, text: string, accountId?: string): string {
+  try {
+    const accountScopedCfg = createAccountScopedConfig(cfg, accountId);
+    const runtime = LarkClient.runtime;
+    if (runtime?.channel?.text?.convertMarkdownTables && runtime.channel.text.resolveMarkdownTableMode) {
+      const tableMode = runtime.channel.text.resolveMarkdownTableMode({
+        cfg: accountScopedCfg,
+        channel: 'feishu',
+      });
+      return runtime.channel.text.convertMarkdownTables(text, tableMode);
+    }
+  } catch {
+    // Runtime not available -- use the text as-is.
+  }
+
+  return text;
+}
+
+/**
  * Send a text message (rendered as a Feishu "post" with markdown support)
  * to a chat or user.
  *
@@ -74,36 +107,56 @@ export interface SendFeishuCardParams {
  * @returns The send result containing the new message ID.
  */
 export async function sendMessageFeishu(params: SendFeishuMessageParams): Promise<FeishuSendResult> {
-  const { cfg, to, text, replyToMessageId, mentions, accountId, replyInThread } = params;
+  const { cfg, to, text, replyToMessageId, mentions, accountId, replyInThread, i18nTexts } = params;
 
   const client = LarkClient.fromCfg(cfg, accountId).sdk;
 
-  // Apply mention prefix if targets are provided.
-  let messageText = text;
-  if (mentions && mentions.length > 0) {
-    messageText = buildMentionedMessage(mentions, messageText);
-  }
-
-  // Convert markdown tables to Feishu-compatible format if the runtime
-  // provides a converter.
-  try {
-    const runtime = LarkClient.runtime;
-    if (runtime?.channel?.text?.convertMarkdownTables) {
-      messageText = runtime.channel.text.convertMarkdownTables(messageText, 'bullets');
-    }
-  } catch {
-    // Runtime not available -- use the text as-is.
-  }
-
-  // Apply Markdown style optimization.
-  messageText = optimizeMarkdownStyle(messageText, 1);
-
   // Build the post-format content envelope.
-  const contentPayload = JSON.stringify({
-    zh_cn: {
-      content: [[{ tag: 'md', text: messageText }]],
-    },
-  });
+  let contentPayload: string;
+
+  if (i18nTexts && Object.keys(i18nTexts).length > 0) {
+    // Multi-locale post: build each locale's content independently.
+    const postBody: Record<string, { content: Array<Array<{ tag: string; text: string }>> }> = {};
+    for (const [locale, localeText] of Object.entries(i18nTexts)) {
+      let processed = localeText;
+
+      // Apply mention prefix if targets are provided.
+      if (mentions && mentions.length > 0) {
+        processed = buildMentionedMessage(mentions, processed);
+      }
+
+      // Convert markdown tables to Feishu-compatible format.
+      processed = convertMarkdownTablesForFeishu(cfg, processed, accountId);
+
+      // Apply Markdown style optimization.
+      processed = optimizeMarkdownStyle(processed, 1);
+
+      postBody[locale] = {
+        content: [[{ tag: 'md', text: processed }]],
+      };
+    }
+    contentPayload = JSON.stringify(postBody);
+  } else {
+    // Single-locale (zh_cn) post: original behavior.
+    let messageText = text;
+
+    // Apply mention prefix if targets are provided.
+    if (mentions && mentions.length > 0) {
+      messageText = buildMentionedMessage(mentions, messageText);
+    }
+
+    // Convert markdown tables to Feishu-compatible format.
+    messageText = convertMarkdownTablesForFeishu(cfg, messageText, accountId);
+
+    // Apply Markdown style optimization.
+    messageText = optimizeMarkdownStyle(messageText, 1);
+
+    contentPayload = JSON.stringify({
+      zh_cn: {
+        content: [[{ tag: 'md', text: messageText }]],
+      },
+    });
+  }
 
   if (replyToMessageId) {
     // Send as a threaded reply.
@@ -298,6 +351,46 @@ export function buildMarkdownCard(text: string): Record<string, unknown> {
   };
 }
 
+/**
+ * Build an i18n-aware Feishu Interactive Message Card containing a single
+ * markdown element with per-locale content.
+ *
+ * Uses the CardKit v2 `i18n_content` field so the Feishu client
+ * auto-selects the locale matching the user's language setting.
+ *
+ * @param i18nTexts - A map of locale to markdown text (e.g. { zh_cn: '...', en_us: '...' }).
+ * @returns A card JSON object ready to be sent via {@link sendCardFeishu}.
+ */
+export function buildI18nMarkdownCard(i18nTexts: Record<string, string>): Record<string, unknown> {
+  const locales = Object.keys(i18nTexts);
+
+  // Determine fallback content (prefer en_us, then first available locale).
+  const fallbackLocale = locales.includes('en_us') ? 'en_us' : locales[0]!;
+  const fallbackText = optimizeMarkdownStyle(i18nTexts[fallbackLocale]!);
+
+  // Build i18n_content with optimized text for each locale.
+  const i18nContent: Record<string, string> = {};
+  for (const [locale, text] of Object.entries(i18nTexts)) {
+    i18nContent[locale] = optimizeMarkdownStyle(text);
+  }
+
+  return {
+    schema: '2.0',
+    config: {
+      wide_screen_mode: true,
+    },
+    body: {
+      elements: [
+        {
+          tag: 'markdown',
+          content: fallbackText,
+          i18n_content: i18nContent,
+        },
+      ],
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // sendMarkdownCardFeishu
 // ---------------------------------------------------------------------------
@@ -369,7 +462,9 @@ export async function editMessageFeishu(params: {
 
   const client = LarkClient.fromCfg(cfg, accountId).sdk;
 
-  const optimizedText = optimizeMarkdownStyle(text);
+  const convertedText = convertMarkdownTablesForFeishu(cfg, text, accountId);
+  // Use cardVersion=1 consistent with sendMessageFeishu post path.
+  const optimizedText = optimizeMarkdownStyle(convertedText, 1);
 
   const contentPayload = JSON.stringify({
     zh_cn: {

@@ -24,7 +24,7 @@ interface DiagLogger {
 import type * as Lark from '@larksuiteoapi/node-sdk';
 
 import { probeFeishu } from '../channel/probe';
-import { getLarkAccountIds, getLarkAccount, getEnabledLarkAccounts } from '../core/accounts';
+import { getEnabledLarkAccounts, getLarkAccount, getLarkAccountIds } from '../core/accounts';
 import { LarkClient } from '../core/lark-client';
 
 /**

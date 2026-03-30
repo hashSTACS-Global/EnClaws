@@ -16,27 +16,28 @@
  *     them).
  */
 
-import type { OpenClawPluginApi, ClawdbotConfig } from 'openclaw/plugin-sdk';
-import type { ConfiguredLarkAccount } from '../core/types';
+import type { ClawdbotConfig, OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
+import type { ConfiguredLarkAccount } from '../core/types';
 import { getLarkAccount } from '../core/accounts';
-import { assertUatAccess } from '../core/uat-access-guard';
+import { OwnerAccessDeniedError, assertOwnerAccessStrict } from '../core/owner-policy';
 import { LarkClient } from '../core/lark-client';
 import { getAppGrantedScopes } from '../core/app-scope-checker';
 import type { LarkTicket } from '../core/lark-ticket';
-import { getTicket, withTicket } from '../core/lark-ticket';
+import { getTicket } from '../core/lark-ticket';
 import { larkLogger } from '../core/lark-logger';
 
 const log = larkLogger('tools/oauth');
-import { handleFeishuMessage } from '../messaging/inbound/handler';
 import { formatLarkError } from '../core/api-error';
-import { enqueueFeishuChatTask } from '../channel/chat-queue';
-import { requestDeviceAuthorization, pollDeviceToken } from '../core/device-flow';
-import { getStoredToken, setStoredToken, tokenStatus, type StoredUAToken } from '../core/token-store';
+import { pollDeviceToken, requestDeviceAuthorization } from '../core/device-flow';
+import { type StoredUAToken, getStoredToken, setStoredToken, tokenStatus } from '../core/token-store';
 import { revokeUAT } from '../core/uat-client';
 import { createCardEntity, sendCardByCardId, updateCardKitCardForAuth } from '../card/cardkit';
-import { buildAuthCard, buildAuthSuccessCard, buildAuthFailedCard, buildAuthIdentityMismatchCard } from './oauth-cards';
-import { json } from './oapi/helpers';
+import { dispatchSyntheticTextMessage } from '../messaging/inbound/synthetic-message';
+import { buildAuthCard, buildAuthFailedCard, buildAuthIdentityMismatchCard, buildAuthSuccessCard } from './oauth-cards';
+import { formatToolResult, registerTool } from './helpers';
+
+const json = formatToolResult;
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -50,16 +51,15 @@ const FeishuOAuthSchema = Type.Object(
         Type.Literal('revoke'),
       ],
       {
-        description: 'revoke: 撤销当前用户的授权',
+        description: 'revoke: 撤销当前用户已保存的授权凭据',
       },
     ),
   },
   {
     description:
-      '飞书用户授权管理工具。' +
-      '【注意】授权流程由系统自动发起，不要主动调用此工具触发授权！' +
-      '此工具仅用于撤销授权（revoke）。' +
-      '不需要传入 user_open_id，系统自动识别当前用户。',
+      '飞书用户撤销授权工具。' +
+      '仅在用户明确说"撤销授权"、"取消授权"、"退出登录"、"清除授权"时调用。' +
+      '【严禁调用场景】用户说"重新授权"、"发起授权"、"重新发起"、"授权失败"、"授权过期"时，绝对不要调用此工具，授权流程由系统自动处理。',
   },
 );
 
@@ -134,21 +134,21 @@ async function verifyTokenIdentity(
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuOAuthTool(api: OpenClawPluginApi) {
+export function registerFeishuOAuthTool(api: OpenClawPluginApi): void {
   if (!api.config) return;
 
   const cfg = api.config;
 
-  api.registerTool(
+  registerTool(
+    api,
     {
       name: 'feishu_oauth',
       label: 'Feishu OAuth',
       description:
-        '飞书用户授权（OAuth）管理工具。' +
-        '【注意】授权流程由系统自动发起，不要主动调用此工具触发授权！' +
-        '此工具仅用于 revoke（撤销当前用户的授权）。' +
-        '不需要传入 user_open_id，系统自动从消息上下文获取当前用户。' +
-        '【Token 过期处理】当返回 token_expired 错误时，调用 revoke 撤销后，系统会自动重新发起授权流程。',
+        '飞书用户撤销授权工具。' +
+        '仅在用户明确说"撤销授权"、"取消授权"、"退出登录"、"清除授权"时调用 revoke。' +
+        '【严禁调用场景】用户说"重新授权"、"发起授权"、"重新发起"、"授权失败"、"授权过期"时，绝对不要调用此工具，授权流程由系统自动处理，无需人工干预。' +
+        '不需要传入 user_open_id，系统自动从消息上下文获取当前用户。',
       parameters: FeishuOAuthSchema,
 
       async execute(_toolCallId: string, params: unknown) {
@@ -228,7 +228,7 @@ export function registerFeishuOAuthTool(api: OpenClawPluginApi) {
     { name: 'feishu_oauth' },
   );
 
-  api.logger.info?.('feishu_oauth: Registered feishu_oauth tool');
+  api.logger.debug?.('feishu_oauth: Registered feishu_oauth tool');
 }
 
 // ---------------------------------------------------------------------------
@@ -275,16 +275,19 @@ export async function executeAuthorize(
   } = params;
   const { appId, appSecret, brand, accountId } = account;
 
-  // 0. 统一 UAT 访问策略检查
-  {
-    const sdk = LarkClient.fromAccount(account).sdk;
-    let stateDir: string | undefined;
-    try {
-      stateDir = LarkClient.runtime.state.resolveStateDir();
-    } catch {
-      // runtime 未初始化时不阻塞
+  // 0. Check if the user is the app owner (fail-close: 安全优先).
+  const sdk = LarkClient.fromAccount(account).sdk;
+  try {
+    await assertOwnerAccessStrict(account, sdk, senderOpenId);
+  } catch (err) {
+    if (err instanceof OwnerAccessDeniedError) {
+      log.warn(`non-owner user ${senderOpenId} attempted to authorize`);
+      return json({
+        error: 'permission_denied',
+        message: '当前应用仅限所有者（App Owner）使用。您没有权限发起授权，无法使用相关功能。',
+      });
     }
-    await assertUatAccess({ account, sdk, userOpenId: senderOpenId, stateDir });
+    throw err;
   }
 
   // effectiveScope：可变 scope 变量，后续可能因 pendingFlow 合并而扩大
@@ -406,7 +409,8 @@ export async function executeAuthorize(
 
         if (availableScopes.length === 0) {
           // 所有 scope 都未开通，直接返回错误
-          const permissionUrl = `https://open.feishu.cn/app/${appId}/permission`;
+          const openDomain = brand === 'lark' ? 'https://open.larksuite.com' : 'https://open.feishu.cn';
+          const permissionUrl = `${openDomain}/app/${appId}/permission`;
           return json({
             error: 'app_scopes_not_granted',
             message: `应用未开通任何请求的用户权限，无法发起授权。请先在开放平台开通以下权限：\n${unavailableScopes.map((s) => `- ${s}`).join('\n')}\n\n权限管理地址：${permissionUrl}`,
@@ -445,6 +449,7 @@ export async function executeAuthorize(
     filteredScopes: unavailableScopes.length > 0 ? unavailableScopes : undefined,
     appId,
     showBatchAuthHint,
+    brand,
   });
 
   let cardId: string;
@@ -553,7 +558,7 @@ export async function executeAuthorize(
             await updateCardKitCardForAuth({
               cfg,
               cardId,
-              card: buildAuthIdentityMismatchCard(),
+              card: buildAuthIdentityMismatchCard(brand),
               sequence: ++seq,
               accountId,
             });
@@ -586,7 +591,7 @@ export async function executeAuthorize(
           await updateCardKitCardForAuth({
             cfg,
             cardId,
-            card: buildAuthSuccessCard(),
+            card: buildAuthSuccessCard(brand),
             sequence: ++seq,
             accountId,
           });
@@ -613,26 +618,7 @@ export async function executeAuthorize(
           log.info('skipSyntheticMessage=true, skipping synthetic message');
         } else
           try {
-            // Use a unique message_id for MessageSid (avoids SDK dedup),
-            // but pass the real message ID as replyToMessageId so that
-            // typing indicators, reply-to threading, and delivery work.
             const syntheticMsgId = `${ticket.messageId}:auth-complete`;
-
-            const syntheticEvent = {
-              sender: {
-                sender_id: { open_id: senderOpenId },
-              },
-              message: {
-                message_id: syntheticMsgId,
-                chat_id: chatId,
-                chat_type: ticket.chatType ?? ('p2p' as const),
-                message_type: 'text',
-                content: JSON.stringify({
-                  text: '我已完成飞书账号授权，请继续执行之前的操作。',
-                }),
-                thread_id: ticket.threadId,
-              },
-            };
 
             // Provide a minimal runtime so reply-dispatcher
             // does not crash on `params.runtime.log?.()`.
@@ -641,38 +627,19 @@ export async function executeAuthorize(
               error: (msg: string) => log.error(msg),
             };
 
-            const { status, promise } = enqueueFeishuChatTask({
+            const status = await dispatchSyntheticTextMessage({
+              cfg,
               accountId,
               chatId,
+              senderOpenId,
+              text: '我已完成飞书账号授权，请继续执行之前的操作。',
+              syntheticMessageId: syntheticMsgId,
+              replyToMessageId: ticket.messageId,
+              chatType: ticket.chatType,
               threadId: ticket.threadId,
-              task: async () => {
-                await withTicket(
-                  {
-                    messageId: syntheticMsgId,
-                    chatId,
-                    accountId,
-                    startTime: Date.now(),
-                    senderOpenId,
-                    chatType: ticket.chatType,
-                    threadId: ticket.threadId,
-                  },
-                  () =>
-                    handleFeishuMessage({
-                      cfg,
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      event: syntheticEvent as any,
-                      accountId,
-                      forceMention: true,
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      runtime: syntheticRuntime as any,
-                      replyToMessageId: ticket.messageId,
-                    }),
-                );
-              },
+              runtime: syntheticRuntime,
             });
-
             log.info(`synthetic message queued (${status})`);
-            await promise;
             log.info('synthetic message dispatched after successful auth');
           } catch (e) {
             log.warn(`failed to send synthetic message after auth: ${e}`);
@@ -718,15 +685,17 @@ export async function executeAuthorize(
 
   // 如果有被过滤的 scope，添加提示信息
   if (unavailableScopes.length > 0) {
-    const permissionUrl = `https://open.feishu.cn/app/${appId}/permission`;
+    const openDomain = brand === 'lark' ? 'https://open.larksuite.com' : 'https://open.feishu.cn';
+    const permissionUrl = `${openDomain}/app/${appId}/permission`;
     message += `\n\n⚠️ **注意**：以下权限因应用未开通而被跳过，如需使用请先在开放平台开通：\n${unavailableScopes.map((s) => `- ${s}`).join('\n')}\n\n权限管理地址：${permissionUrl}`;
   }
 
+  const openDomainForResult = brand === 'lark' ? 'https://open.larksuite.com' : 'https://open.feishu.cn';
   return json({
     success: true,
     message,
     awaiting_authorization: true,
     filtered_scopes: unavailableScopes.length > 0 ? unavailableScopes : undefined,
-    app_permission_url: unavailableScopes.length > 0 ? `https://open.feishu.cn/app/${appId}/permission` : undefined,
+    app_permission_url: unavailableScopes.length > 0 ? `${openDomainForResult}/app/${appId}/permission` : undefined,
   });
 }

@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: MIT
  */
 
-import type { Obj, RawCardContent, ConvertCardResult, TextStyle } from './types';
-import { EMOJI_MAP, CHART_TYPE_NAMES } from './types';
-import { escapeAttr, formatMillisecondsToISO8601, normalizeTimeFormat } from './card-utils';
 import { safeParse } from '../utils';
+import type { ConvertCardResult, Obj, RawCardContent, TextStyle } from './types';
+import { CHART_TYPE_NAMES, EMOJI_MAP } from './types';
+import { escapeAttr, formatMillisecondsToISO8601, normalizeTimeFormat } from './card-utils';
 
 type ElementConverterFn = (c: CardConverter, elem: Obj, prop: Obj, id: string, depth: number) => string;
 
@@ -142,7 +142,7 @@ export class CardConverter {
   convertElements(elements: unknown[], depth: number): string {
     const results: string[] = [];
     for (const elem of elements) {
-      if (typeof elem !== 'object' || elem === null) continue;
+      if (typeof elem !== 'object' || elem == null) continue;
       const result = this.convertElement(elem as Obj, depth);
       if (result) results.push(result);
     }
@@ -195,7 +195,7 @@ export class CardConverter {
     if (Array.isArray(elements) && elements.length > 0) {
       const texts: string[] = [];
       for (const elem of elements) {
-        if (typeof elem === 'object' && elem !== null) {
+        if (typeof elem === 'object' && elem != null) {
           const t = this.extractTextContent(elem);
           if (t) texts.push(t);
         }
@@ -240,7 +240,7 @@ export class CardConverter {
   convertMarkdownElements(elements: unknown[]): string {
     const parts: string[] = [];
     for (const elem of elements) {
-      if (typeof elem !== 'object' || elem === null) continue;
+      if (typeof elem !== 'object' || elem == null) continue;
       const result = this.convertElement(elem as Obj, 0);
       if (result) parts.push(result);
     }
@@ -260,7 +260,7 @@ export class CardConverter {
     if (Array.isArray(fields) && fields.length > 0) {
       const fieldTexts: string[] = [];
       for (const field of fields) {
-        if (typeof field !== 'object' || field === null) continue;
+        if (typeof field !== 'object' || field == null) continue;
         const fm = field as Obj;
         const te = fm.text as Obj | undefined;
         if (te && typeof te === 'object') {
@@ -286,7 +286,7 @@ export class CardConverter {
 
     const texts: string[] = [];
     for (const elem of elements) {
-      if (typeof elem !== 'object' || elem === null) continue;
+      if (typeof elem !== 'object' || elem == null) continue;
       const text = this.convertElement(elem as Obj, 0);
       if (text) texts.push(text);
     }
@@ -328,7 +328,7 @@ export class CardConverter {
 
     const lines: string[] = [];
     for (const item of items) {
-      if (typeof item !== 'object' || item === null) continue;
+      if (typeof item !== 'object' || item == null) continue;
       const im = item as Obj;
       const level = (im.level as number) || 0;
       const listType = (im.type as string) || '';
@@ -370,12 +370,12 @@ export class CardConverter {
     const contents = prop.contents as unknown[] | undefined;
     if (Array.isArray(contents)) {
       for (const line of contents) {
-        if (typeof line !== 'object' || line === null) continue;
+        if (typeof line !== 'object' || line == null) continue;
         const lm = line as Obj;
         const lineContents = lm.contents as unknown[] | undefined;
         if (Array.isArray(lineContents)) {
           for (const c of lineContents) {
-            if (typeof c !== 'object' || c === null) continue;
+            if (typeof c !== 'object' || c == null) continue;
             const cm = c as Obj;
             if (typeof cm.content === 'string') code += cm.content;
           }
@@ -474,7 +474,7 @@ export class CardConverter {
 
     const results: string[] = [];
     for (const col of columns) {
-      if (typeof col !== 'object' || col === null) continue;
+      if (typeof col !== 'object' || col == null) continue;
       const result = this.convertElement(col as Obj, depth + 1);
       if (result) results.push(result);
     }
@@ -581,7 +581,7 @@ export class CardConverter {
     const actions = prop.actions as unknown[] | undefined;
     if (Array.isArray(actions)) {
       for (const action of actions) {
-        if (typeof action !== 'object' || action === null) continue;
+        if (typeof action !== 'object' || action == null) continue;
         const am = action as Obj;
         if (am.type === 'open_url') {
           const ad = am.action as Obj | undefined;
@@ -612,7 +612,7 @@ export class CardConverter {
 
     const results: string[] = [];
     for (const action of actions) {
-      if (typeof action !== 'object' || action === null) continue;
+      if (typeof action !== 'object' || action == null) continue;
       const result = this.convertElement(action as Obj, 0);
       if (result) results.push(result);
     }
@@ -646,7 +646,7 @@ export class CardConverter {
     const optionTexts: string[] = [];
     let hasSelected = false;
     for (const opt of options) {
-      if (typeof opt !== 'object' || opt === null) continue;
+      if (typeof opt !== 'object' || opt == null) continue;
       const om = opt as Obj;
       let optText = '';
       const textElem = om.text as Obj | undefined;
@@ -806,7 +806,7 @@ export class CardConverter {
 
     const optTexts: string[] = [];
     for (const opt of options) {
-      if (typeof opt !== 'object' || opt === null) continue;
+      if (typeof opt !== 'object' || opt == null) continue;
       const om = opt as Obj;
       const textElem = om.text as Obj | undefined;
       if (textElem && typeof textElem === 'object') {
@@ -881,7 +881,7 @@ export class CardConverter {
 
     const names: string[] = [];
     for (const person of persons) {
-      if (typeof person !== 'object' || person === null) continue;
+      if (typeof person !== 'object' || person == null) continue;
       const pm = person as Obj;
       const personID = (pm.id as string) || '';
       const name = '用户';
@@ -977,7 +977,7 @@ export class CardConverter {
     if (this.mode === MODE.Detailed) {
       const keys: string[] = [];
       for (const img of imgList) {
-        if (typeof img !== 'object' || img === null) continue;
+        if (typeof img !== 'object' || img == null) continue;
         const im = img as Obj;
         const imageID = im.imageID as string | undefined;
         if (imageID) keys.push(imageID);
@@ -1044,7 +1044,7 @@ export class CardConverter {
 
     const parts: string[] = [];
     for (const v of values) {
-      if (typeof v !== 'object' || v === null) continue;
+      if (typeof v !== 'object' || v == null) continue;
       const vm = v as Obj;
       parts.push(`${vm[xField]}:${vm[yField]}`);
     }
@@ -1061,7 +1061,7 @@ export class CardConverter {
 
     const parts: string[] = [];
     for (const v of values) {
-      if (typeof v !== 'object' || v === null) continue;
+      if (typeof v !== 'object' || v == null) continue;
       const vm = v as Obj;
       parts.push(`${vm[categoryField]}:${vm[valueField]}`);
     }
@@ -1099,7 +1099,7 @@ export class CardConverter {
     const colNames: string[] = [];
     const colKeys: string[] = [];
     for (const col of columns) {
-      if (typeof col !== 'object' || col === null) continue;
+      if (typeof col !== 'object' || col == null) continue;
       const cm = col as Obj;
       let displayName = (cm.displayName as string) || '';
       const name = (cm.name as string) || '';
@@ -1113,7 +1113,7 @@ export class CardConverter {
     lines.push('|' + colNames.map(() => '------|').join(''));
 
     for (const row of rows) {
-      if (typeof row !== 'object' || row === null) continue;
+      if (typeof row !== 'object' || row == null) continue;
       const rm = row as Obj;
       const cells: string[] = [];
       for (const key of colKeys) {
@@ -1138,14 +1138,14 @@ export class CardConverter {
     if (Array.isArray(data)) {
       const texts: string[] = [];
       for (const item of data) {
-        if (typeof item === 'object' && item !== null) {
+        if (typeof item === 'object' && item != null) {
           const im = item as Obj;
           if (typeof im.text === 'string') texts.push(`「${im.text}」`);
         }
       }
       return texts.join(' ');
     }
-    if (typeof data === 'object' && data !== null) {
+    if (typeof data === 'object' && data != null) {
       return this.extractTextContent(data);
     }
     return '';

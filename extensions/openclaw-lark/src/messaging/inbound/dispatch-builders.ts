@@ -9,13 +9,13 @@
  * never perform I/O, send messages, or mutate external state.
  */
 
-import type { HistoryEntry } from 'openclaw/plugin-sdk';
-import { buildPendingHistoryContextFromMap } from 'openclaw/plugin-sdk';
+import type { HistoryEntry } from 'openclaw/plugin-sdk/reply-history';
+import { buildPendingHistoryContextFromMap } from 'openclaw/plugin-sdk/reply-history';
 import type { MessageContext } from '../types';
-import type { DispatchContext } from './dispatch-context';
-import { LarkClient } from '../../core/lark-client';
-import { nonBotMentions } from './mention';
+import type { LarkClient } from '../../core/lark-client';
 import { threadScopedKey } from '../../channel/chat-queue';
+import type { DispatchContext } from './dispatch-context';
+import { nonBotMentions } from './mention';
 
 // ---------------------------------------------------------------------------
 // Mention annotation
@@ -109,6 +109,7 @@ export function buildInboundPayload(
     bodyForAgent: string;
     rawBody: string;
     commandBody: string;
+    originatingTo?: string;
     senderName: string;
     senderId: string;
     messageSid: string;
@@ -138,11 +139,11 @@ export function buildInboundPayload(
     MessageSid: opts.messageSid,
     ReplyToBody: opts.replyToBody,
     InboundHistory: opts.inboundHistory,
-    Timestamp: Date.now(),
+    Timestamp: dc.ctx.createTime ?? Date.now(),
     WasMentioned: opts.wasMentioned,
     CommandAuthorized: dc.commandAuthorized,
     OriginatingChannel: 'feishu' as const,
-    OriginatingTo: dc.feishuTo,
+    OriginatingTo: opts.originatingTo ?? dc.feishuTo,
   });
 }
 

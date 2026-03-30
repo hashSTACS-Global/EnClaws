@@ -23,33 +23,25 @@ export const LARK_ERROR = {
   /** access_token 无效 */
   TOKEN_INVALID: 99991668,
   /** access_token 已过期 */
-  TOKEN_EXPIRED: 99991669,
-  /** 认证 token 已过期（HTTP 401） */
-  AUTH_TOKEN_EXPIRED: 99991677,
-  /** refresh_token 无效 */
-  REFRESH_TOKEN_INVALID: 20003,
-  /** refresh_token 已过期 */
-  REFRESH_TOKEN_EXPIRED: 20004,
-  /** refresh_token 缺失 */
-  REFRESH_TOKEN_MISSING: 20024,
-  /** refresh_token 已被吊销（服务端主动吊销） */
-  REFRESH_TOKEN_REVOKED: 20063,
-  /** refresh_token 已被吊销（用户取消授权） */
-  REFRESH_TOKEN_REVOKED_BY_USER: 20064,
+  TOKEN_EXPIRED: 99991677,
+  /** refresh_token 本身无效（格式非法或来自 v1 API） */
+  REFRESH_TOKEN_INVALID: 20026,
+  /** refresh_token 已过期（超过 365 天） */
+  REFRESH_TOKEN_EXPIRED: 20037,
+  /** refresh_token 已被吊销 */
+  REFRESH_TOKEN_REVOKED: 20064,
+  /** refresh_token 已被使用（单次消费，rotation 场景） */
+  REFRESH_TOKEN_ALREADY_USED: 20073,
+  /** refresh token 端点服务端内部错误，可重试 */
+  REFRESH_SERVER_ERROR: 20050,
   /** 消息已被撤回 */
   MESSAGE_RECALLED: 230011,
   /** 消息已被删除 */
   MESSAGE_DELETED: 231003,
 } as const;
 
-/** 不可恢复的 refresh_token 错误码集合，遇到后需要重新授权。 */
-export const REFRESH_TOKEN_IRRECOVERABLE: ReadonlySet<number> = new Set([
-  LARK_ERROR.REFRESH_TOKEN_INVALID,
-  LARK_ERROR.REFRESH_TOKEN_EXPIRED,
-  LARK_ERROR.REFRESH_TOKEN_MISSING,
-  LARK_ERROR.REFRESH_TOKEN_REVOKED,
-  LARK_ERROR.REFRESH_TOKEN_REVOKED_BY_USER,
-]);
+/** refresh token 端点可重试的错误码集合（服务端瞬时故障）。遇到后重试一次，仍失败则清 token。 */
+export const REFRESH_TOKEN_RETRYABLE: ReadonlySet<number> = new Set([LARK_ERROR.REFRESH_SERVER_ERROR]);
 
 /** 消息终止错误码集合（撤回/删除），遇到后应停止对该消息的后续操作。 */
 export const MESSAGE_TERMINAL_CODES: ReadonlySet<number> = new Set([
@@ -58,11 +50,7 @@ export const MESSAGE_TERMINAL_CODES: ReadonlySet<number> = new Set([
 ]);
 
 /** access_token 失效相关的错误码集合，遇到后可尝试刷新重试。 */
-export const TOKEN_RETRY_CODES: ReadonlySet<number> = new Set([
-  LARK_ERROR.TOKEN_INVALID,
-  LARK_ERROR.TOKEN_EXPIRED,
-  LARK_ERROR.AUTH_TOKEN_EXPIRED,
-]);
+export const TOKEN_RETRY_CODES: ReadonlySet<number> = new Set([LARK_ERROR.TOKEN_INVALID, LARK_ERROR.TOKEN_EXPIRED]);
 
 // ---------------------------------------------------------------------------
 // Shared types

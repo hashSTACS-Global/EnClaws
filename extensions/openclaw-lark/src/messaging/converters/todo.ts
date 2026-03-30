@@ -6,7 +6,7 @@
  */
 
 import type { ContentConverterFn, PostElement } from './types';
-import { safeParse, millisToDatetime } from './utils';
+import { millisToDatetime, safeParse } from './utils';
 
 /** Extract plain text from post-style content blocks. */
 function extractPlainText(content: PostElement[][]): string {

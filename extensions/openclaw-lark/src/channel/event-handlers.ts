@@ -9,14 +9,15 @@
  * dependencies needed to process the event.
  */
 
-import type { FeishuMessageEvent, FeishuBotAddedEvent, FeishuReactionCreatedEvent } from '../messaging/types';
+import type { FeishuBotAddedEvent, FeishuMessageEvent, FeishuReactionCreatedEvent } from '../messaging/types';
 import { handleFeishuMessage } from '../messaging/inbound/handler';
 import { handleFeishuReaction, resolveReactionContext } from '../messaging/inbound/reaction-handler';
 import { isMessageExpired } from '../messaging/inbound/dedup';
 import { withTicket } from '../core/lark-ticket';
 import { larkLogger } from '../core/lark-logger';
 import { handleCardAction } from '../tools/auto-auth';
-import { enqueueFeishuChatTask, buildQueueKey, hasActiveTask, getActiveDispatcher, setAbortedCardMessageId } from './chat-queue';
+import { handleAskUserAction } from '../tools/ask-user-question';
+import { buildQueueKey, enqueueFeishuChatTask, getActiveDispatcher, hasActiveTask } from './chat-queue';
 import { extractRawTextFromEvent, isLikelyAbortText } from './abort-detect';
 import type { MonitorContext } from './types';
 
@@ -64,13 +65,10 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
     const event = data as FeishuMessageEvent;
     const msgId = event.message?.message_id ?? 'unknown';
     const chatId = event.message?.chat_id ?? '';
-    const threadId = event.message?.thread_id || undefined;
-    const senderOpenId = event.sender?.sender_id?.open_id || '';
-    const isGroup = event.message?.chat_type === 'group';
-    // Per-sender queue key for group chats enables concurrent dispatch
-    // across different users. Falls back to chat-level key when senderId
-    // is unavailable (malformed event) or in P2P chats.
-    const senderQueueId = isGroup && senderOpenId ? senderOpenId : undefined;
+    // In topic groups, reply events carry root_id but not thread_id.
+    // Use root_id as fallback so different topics get separate queue keys
+    // and can be processed in parallel.
+    const threadId = event.message?.thread_id || event.message?.root_id || undefined;
 
     // Dedup — skip duplicate messages (e.g. from WebSocket reconnects).
     if (!ctx.messageDedup.tryRecord(msgId, accountId)) {
@@ -89,22 +87,13 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
     // reply dispatcher for this chat, fire abortCard() immediately
     // (before the message enters the serial queue) so the streaming
     // card is terminated without waiting for the current task.
-    // The message still enters the queue so the core pipeline can send
-    // the "该任务已终止。" feedback via tryFastAbortFromMessage.
     const abortText = extractRawTextFromEvent(event);
-    const isAbortText = Boolean(abortText && isLikelyAbortText(abortText));
-    if (isAbortText) {
-      const queueKey = buildQueueKey(accountId, chatId, threadId, senderQueueId);
+    if (abortText && isLikelyAbortText(abortText)) {
+      const queueKey = buildQueueKey(accountId, chatId, threadId);
       if (hasActiveTask(queueKey)) {
         const active = getActiveDispatcher(queueKey);
         if (active) {
           log(`feishu[${accountId}]: abort fast-path triggered for chat ${chatId} (text="${abortText}")`);
-          // Capture the card message ID before aborting so the subsequent
-          // /stop feedback can reply to the original bot card.
-          const cardMsgId = active.getCardMessageId?.();
-          if (cardMsgId) {
-            setAbortedCardMessageId(queueKey, cardMsgId);
-          }
           active.abortController?.abort();
           active.abortCard().catch((err) => {
             error(`feishu[${accountId}]: abort fast-path abortCard failed: ${String(err)}`);
@@ -113,37 +102,10 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
       }
     }
 
-    // ---- Steer fast-path (interjection via /btw prefix) ----
-    // Only messages starting with "/btw " (case-insensitive) are eligible
-    // for steer injection.  The prefix is stripped before sending to the
-    // agent so the LLM sees clean supplementary text.
-    if (!isAbortText) {
-      const messageText = extractRawTextFromEvent(event);
-      const btwMatch = messageText?.match(/^\/btw\s+/i);
-      if (btwMatch) {
-        const queueKey = buildQueueKey(accountId, chatId, threadId, senderQueueId);
-        if (hasActiveTask(queueKey)) {
-          const active = getActiveDispatcher(queueKey);
-          if (active?.steer) {
-            const steerText = messageText!.slice(btwMatch[0].length).trim();
-            if (steerText) {
-              const steered = active.steer(steerText);
-              if (steered) {
-                log(`feishu[${accountId}]: /btw steer injected into active run for chat ${chatId}`);
-                return;
-              }
-              log(`feishu[${accountId}]: /btw steer failed for chat ${chatId}, falling through to queue`);
-            }
-          }
-        }
-      }
-    }
-
     const { status } = enqueueFeishuChatTask({
       accountId,
       chatId,
       threadId,
-      senderId: senderQueueId,
       task: async () => {
         try {
           await withTicket(
@@ -152,7 +114,7 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
               chatId,
               accountId,
               startTime: Date.now(),
-              senderOpenId,
+              senderOpenId: event.sender?.sender_id?.open_id || '',
               chatType: (event.message?.chat_type as 'p2p' | 'group') || undefined,
               threadId,
             },
@@ -281,6 +243,12 @@ export async function handleBotMembershipEvent(
 
 export async function handleCardActionEvent(ctx: MonitorContext, data: unknown): Promise<unknown> {
   try {
+    // AskUserQuestion card interactions — injects synthetic message
+    // carrying user answers for the AI to receive in a new turn.
+    const askResult = handleAskUserAction(data, ctx.cfg, ctx.accountId);
+    if (askResult !== undefined) return askResult;
+
+    // Auto-auth card actions (OAuth device flow, app scope confirmation)
     return await handleCardAction(data, ctx.cfg, ctx.accountId);
   } catch (err) {
     elog.warn(`card.action.trigger handler error: ${err}`);

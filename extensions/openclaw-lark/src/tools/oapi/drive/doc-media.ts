@@ -17,15 +17,15 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import { Type } from '@sinclair/typebox';
-import { json, createToolContext, assertLarkOk, handleInvokeErrorWithAutoAuth } from '../helpers';
-import { validateLocalMediaRoots } from '../../../messaging/outbound/media-url-utils';
 import * as fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { Type } from '@sinclair/typebox';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { imageSize } from 'image-size';
+import { validateLocalMediaRoots } from '../../../messaging/outbound/media-url-utils';
+import { StringEnum, assertLarkOk, createToolContext, handleInvokeErrorWithAutoAuth, json, registerTool } from '../helpers';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -112,12 +112,12 @@ const DocMediaSchema = Type.Union([
       description: '本地文件的绝对路径（必填）。图片支持 jpg/png/gif/webp 等，文件支持任意格式，最大 20MB',
     }),
     type: Type.Optional(
-      Type.Union([Type.Literal('image'), Type.Literal('file')], {
+      StringEnum(['image', 'file'], {
         description: '媒体类型："image"（图片，默认）或 "file"（文件附件）',
       }),
     ),
     align: Type.Optional(
-      Type.Union([Type.Literal('left'), Type.Literal('center'), Type.Literal('right')], {
+      StringEnum(['left', 'center', 'right'], {
         description: '对齐方式（仅图片生效）："center"（默认居中）、"left"（居左）、"right"（居右）',
       }),
     ),
@@ -134,7 +134,7 @@ const DocMediaSchema = Type.Union([
     resource_token: Type.String({
       description: '资源的唯一标识（file_token 用于文档素材，whiteboard_id 用于画板）',
     }),
-    resource_type: Type.Union([Type.Literal('media'), Type.Literal('whiteboard')], {
+    resource_type: StringEnum(['media', 'whiteboard'], {
       description: '资源类型：media（文档素材：图片、视频、文件等）或 whiteboard（画板缩略图）',
     }),
     output_path: Type.String({
@@ -401,13 +401,14 @@ async function handleDownload(
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerDocMediaTool(api: OpenClawPluginApi) {
-  if (!api.config) return;
+export function registerDocMediaTool(api: OpenClawPluginApi): boolean {
+  if (!api.config) return false;
   const cfg = api.config;
 
   const { toolClient, log } = createToolContext(api, 'feishu_doc_media');
 
-  api.registerTool(
+  return registerTool(
+    api,
     {
       name: 'feishu_doc_media',
       label: 'Feishu: Document Media',
@@ -436,6 +437,4 @@ export function registerDocMediaTool(api: OpenClawPluginApi) {
     },
     { name: 'feishu_doc_media' },
   );
-
-  api.logger.info?.('feishu_doc_media: Registered feishu_doc_media tool (insert, download)');
 }

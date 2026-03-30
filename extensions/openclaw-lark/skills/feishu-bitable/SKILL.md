@@ -13,19 +13,6 @@ description: |
 
 # Feishu Bitable (多维表格) SKILL
 
-## 🔑 执行前权限预检
-
-**在使用本 Skill 的任何工具之前，必须先调用 `feishu_pre_auth` 工具进行权限预检：**
-
-```json
-{
-  "tool_actions": ["feishu_get_user.default", "feishu_search_user.default", "feishu_bitable_app.copy", "feishu_bitable_app.create", "feishu_bitable_app.get", "feishu_bitable_app.list", "feishu_bitable_app.patch", "feishu_bitable_app_table.batch_create", "feishu_bitable_app_table.batch_delete", "feishu_bitable_app_table.create", "feishu_bitable_app_table.delete", "feishu_bitable_app_table.list", "feishu_bitable_app_table.patch", "feishu_bitable_app_table_field.create", "feishu_bitable_app_table_field.delete", "feishu_bitable_app_table_field.list", "feishu_bitable_app_table_field.update", "feishu_bitable_app_table_record.batch_create", "feishu_bitable_app_table_record.batch_delete", "feishu_bitable_app_table_record.batch_update", "feishu_bitable_app_table_record.create", "feishu_bitable_app_table_record.delete", "feishu_bitable_app_table_record.list", "feishu_bitable_app_table_record.update", "feishu_bitable_app_table_view.create", "feishu_bitable_app_table_view.delete", "feishu_bitable_app_table_view.get", "feishu_bitable_app_table_view.list", "feishu_bitable_app_table_view.patch"]
-}
-```
-
-- 如果返回 `all_authorized: true`，继续执行后续操作。
-- 否则按返回结果的指引完成授权后再继续。
-
 ## 🚨 执行前必读
 
 - ✅ **创建数据表**：支持两种模式 — ① 明确需求时，在 `create` 时通过 `table.fields` 一次性定义字段（减少 API 调用）；② 探索式场景时，使用默认表 + 逐步修改字段（更稳定，易调整）

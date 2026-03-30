@@ -18,9 +18,9 @@
  * for creating the appropriate callbacks (UAT / TAT / event push).
  */
 
-import type { ApiMessageItem, ContentConverterFn } from './types';
-import { convertMessageContent, buildConvertContextFromItem } from './content-converter';
 import { larkLogger } from '../../core/lark-logger';
+import type { ApiMessageItem, ContentConverterFn, ConvertContext } from './types';
+import { buildConvertContextFromItem } from './content-converter-helpers';
 
 const log = larkLogger('converters/merge-forward');
 
@@ -36,13 +36,20 @@ const log = larkLogger('converters/merge-forward');
  * ```
  */
 export const convertMergeForward: ContentConverterFn = async (_raw, ctx) => {
-  const { accountId, messageId, resolveUserName, batchResolveNames, fetchSubMessages } = ctx;
+  const { accountId, messageId, resolveUserName, batchResolveNames, fetchSubMessages, convertMessageContent } = ctx;
 
   if (!fetchSubMessages) {
     return { content: '<forwarded_messages/>', resources: [] };
   }
 
-  const content = await expand(accountId, messageId, resolveUserName, batchResolveNames, fetchSubMessages);
+  const content = await expand(
+    accountId,
+    messageId,
+    resolveUserName,
+    batchResolveNames,
+    fetchSubMessages,
+    convertMessageContent,
+  );
   return { content, resources: [] };
 };
 
@@ -56,6 +63,7 @@ async function expand(
   resolveUserName?: (openId: string) => string | undefined,
   batchResolveNames?: (openIds: string[]) => Promise<void>,
   fetchSubMessages?: (messageId: string) => Promise<ApiMessageItem[]>,
+  convertContent?: ConvertContext['convertMessageContent'],
 ): Promise<string> {
   // --- Phase 1: Fetch (single API call via callback) ---
   let items: ApiMessageItem[];
@@ -89,7 +97,7 @@ async function expand(
   }
 
   // --- Phase 3: Format tree recursively ---
-  return formatSubTree(messageId, childrenMap, accountId, resolveUserName);
+  return formatSubTree(messageId, childrenMap, accountId, resolveUserName, convertContent);
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +183,7 @@ async function formatSubTree(
   childrenMap: Map<string, ApiMessageItem[]>,
   accountId: string | undefined,
   resolveUserName?: (openId: string) => string | undefined,
+  convertContent?: ConvertContext['convertMessageContent'],
 ): Promise<string> {
   const children = childrenMap.get(parentId);
   if (!children || children.length === 0) {
@@ -197,7 +206,7 @@ async function formatSubTree(
         // Recurse into nested merge_forward via the tree — no API call
         const nestedId: string | undefined = item.message_id;
         if (nestedId) {
-          content = await formatSubTree(nestedId, childrenMap, accountId, resolveUserName);
+          content = await formatSubTree(nestedId, childrenMap, accountId, resolveUserName, convertContent);
         } else {
           content = '<forwarded_messages/>';
         }
@@ -210,8 +219,13 @@ async function formatSubTree(
           ...buildConvertContextFromItem(item, parentId, accountId),
           accountId,
           resolveUserName,
+          convertMessageContent: convertContent,
         };
-        content = (await convertMessageContent(rawContent, msgType, subCtx)).content;
+        if (!convertContent) {
+          content = rawContent;
+        } else {
+          content = (await convertContent(rawContent, msgType, subCtx)).content;
+        }
       }
 
       const displayName = resolveUserName?.(senderId) ?? senderId;

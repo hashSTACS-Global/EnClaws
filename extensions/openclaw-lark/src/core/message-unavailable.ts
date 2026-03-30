@@ -9,7 +9,8 @@
  * 2) 后续针对该 message_id 的 API 调用直接短路，避免持续报错刷屏。
  */
 
-import { LARK_ERROR, MESSAGE_TERMINAL_CODES } from './auth-errors';
+import type { LARK_ERROR } from './auth-errors';
+import { MESSAGE_TERMINAL_CODES } from './auth-errors';
 import { extractLarkApiCode } from './api-error';
 import { normalizeMessageId } from './targets';
 
@@ -115,7 +116,7 @@ export class MessageUnavailableError extends Error {
 export function isMessageUnavailableError(error: unknown): error is MessageUnavailableError {
   return (
     error instanceof MessageUnavailableError ||
-    (typeof error === 'object' && error !== null && (error as { name?: string }).name === 'MessageUnavailableError')
+    (typeof error === 'object' && error != null && (error as { name?: string }).name === 'MessageUnavailableError')
   );
 }
 

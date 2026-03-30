@@ -14,19 +14,6 @@ description: |
 
 # 飞书 IM 消息读取
 
-## 🔑 执行前权限预检
-
-**在使用本 Skill 的任何工具之前，必须先调用 `feishu_pre_auth` 工具进行权限预检：**
-
-```json
-{
-  "tool_actions": ["feishu_get_user.default", "feishu_search_user.default", "feishu_im_user_get_messages.default", "feishu_im_user_search_messages.default", "feishu_im_user_fetch_resource.default"]
-}
-```
-
-- 如果返回 `all_authorized: true`，继续执行后续操作。
-- 否则按返回结果的指引完成授权后再继续。
-
 ## 执行前必读
 
 - 该 Skill 中的所有消息读取工具均以用户身份调用，只能读取用户有权限的会话

@@ -9,6 +9,7 @@
  */
 
 import { optimizeMarkdownStyle } from './markdown-style';
+import type { FooterSessionMetrics } from './reply-dispatcher-types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -42,10 +43,11 @@ export interface FeishuCard {
   config: {
     wide_screen_mode: boolean;
     update_multi?: boolean;
+    locales?: string[];
     summary?: { content: string };
   };
   header?: {
-    title: { tag: 'plain_text'; content: string };
+    title: { tag: 'plain_text'; content: string; i18n_content?: Record<string, string> };
     template: string;
   };
   elements: CardElement[];
@@ -161,11 +163,12 @@ function cleanReasoningPrefix(text: string): string {
 }
 
 /**
- * Format reasoning duration into a human-readable string.
- * e.g. "Thought for 3.2s" or "Thought for 1m 15s"
+ * Format reasoning duration into a human-readable i18n pair.
+ * e.g. { zh: "思考了 3.2s", en: "Thought for 3.2s" }
  */
-export function formatReasoningDuration(ms: number): string {
-  return `Thought for ${formatElapsed(ms)}`;
+export function formatReasoningDuration(ms: number): { zh: string; en: string } {
+  const d = formatElapsed(ms);
+  return { zh: `思考了 ${d}`, en: `Thought for ${d}` };
 }
 
 /**
@@ -177,12 +180,120 @@ export function formatElapsed(ms: number): string {
 }
 
 /**
- * Build footer meta-info: hr separator + notation-sized text.
+ * Build footer meta-info: notation-sized text with i18n support.
  * Error text is rendered in red; normal text uses default grey (notation).
  */
-function buildFooter(text: string, isError?: boolean): CardElement[] {
-  const content = isError ? `<font color='red'>${text}</font>` : text;
-  return [{ tag: 'markdown', content, text_size: 'notation' }];
+function buildFooter(zhText: string, enText: string, isError?: boolean): CardElement[] {
+  const zhContent = isError ? `<font color='red'>${zhText}</font>` : zhText;
+  const enContent = isError ? `<font color='red'>${enText}</font>` : enText;
+  return [
+    {
+      tag: 'markdown',
+      content: enContent,
+      i18n_content: { zh_cn: zhContent, en_us: enContent },
+      text_size: 'notation',
+    },
+  ];
+}
+
+export function compactNumber(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) {
+    const m = value / 1_000_000;
+    return Math.abs(m) >= 100 ? `${Math.round(m)}m` : `${m.toFixed(1)}m`;
+  }
+  if (abs >= 1_000) {
+    const k = value / 1_000;
+    return Math.abs(k) >= 100 ? `${Math.round(k)}k` : `${k.toFixed(1)}k`;
+  }
+  return `${Math.round(value)}`;
+}
+
+export function formatFooterRuntimeSegments(params: {
+  footer?: {
+    status?: boolean;
+    elapsed?: boolean;
+    tokens?: boolean;
+    cache?: boolean;
+    context?: boolean;
+    model?: boolean;
+  };
+  metrics?: FooterSessionMetrics;
+  elapsedMs?: number;
+  isError?: boolean;
+  isAborted?: boolean;
+}): { zh: string[]; en: string[] } {
+  const { footer, metrics, elapsedMs, isError, isAborted } = params;
+  const zhParts: string[] = [];
+  const enParts: string[] = [];
+
+  if (footer?.status) {
+    if (isError) {
+      zhParts.push('出错');
+      enParts.push('Error');
+    } else if (isAborted) {
+      zhParts.push('已停止');
+      enParts.push('Stopped');
+    } else {
+      zhParts.push('已完成');
+      enParts.push('Completed');
+    }
+  }
+
+  if (footer?.elapsed && elapsedMs != null) {
+    const d = formatElapsed(elapsedMs);
+    zhParts.push(`耗时 ${d}`);
+    enParts.push(`Elapsed ${d}`);
+  }
+
+  if (footer?.tokens && metrics) {
+    const inTokens = typeof metrics.inputTokens === 'number' ? Math.max(0, metrics.inputTokens) : undefined;
+    const outTokens = typeof metrics.outputTokens === 'number' ? Math.max(0, metrics.outputTokens) : undefined;
+    if (inTokens != null && outTokens != null) {
+      const inLabel = compactNumber(inTokens);
+      const outLabel = compactNumber(outTokens);
+      zhParts.push(`↑ ${inLabel} ↓ ${outLabel}`);
+      enParts.push(`↑ ${inLabel} ↓ ${outLabel}`);
+    }
+  }
+
+  if (footer?.cache && metrics) {
+    const read = typeof metrics.cacheRead === 'number' ? Math.max(0, metrics.cacheRead) : undefined;
+    const write = typeof metrics.cacheWrite === 'number' ? Math.max(0, metrics.cacheWrite) : undefined;
+    const inputVal = typeof metrics.inputTokens === 'number' ? Math.max(0, metrics.inputTokens) : undefined;
+    if (read != null && write != null && inputVal != null) {
+      const total = read + write + inputVal;
+      const hit = total > 0 ? Math.round((read / total) * 100) : 0;
+      const left = compactNumber(read);
+      const right = compactNumber(write);
+      zhParts.push(`缓存 ${left}/${right} (${hit}%)`);
+      enParts.push(`Cache ${left}/${right} (${hit}%)`);
+    }
+  }
+
+  if (footer?.context && metrics) {
+    const freshTotal = metrics.totalTokensFresh === false ? undefined : metrics.totalTokens;
+    const total = typeof freshTotal === 'number' ? Math.max(0, freshTotal) : undefined;
+    const ctx = typeof metrics.contextTokens === 'number' ? Math.max(0, metrics.contextTokens) : undefined;
+    if (total != null && ctx != null) {
+      const totalLabel = compactNumber(total);
+      const ctxLabel = compactNumber(ctx);
+      const pct = ctx > 0 ? Math.round((total / ctx) * 100) : 0;
+      const pctLabel = `${pct}%`;
+      zhParts.push(`上下文 ${totalLabel}/${ctxLabel} (${pctLabel})`);
+      enParts.push(`Context ${totalLabel}/${ctxLabel} (${pctLabel})`);
+    }
+  }
+
+  if (footer?.model && metrics?.model) {
+    const model = metrics.model.trim();
+    if (model) {
+      zhParts.push(model);
+      enParts.push(model);
+    }
+  }
+
+  return { zh: zhParts, en: enParts };
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +315,15 @@ export function buildCardContent(
     elapsedMs?: number;
     isError?: boolean;
     isAborted?: boolean;
-    footer?: { status?: boolean; elapsed?: boolean };
+    footer?: {
+      status?: boolean;
+      elapsed?: boolean;
+      tokens?: boolean;
+      cache?: boolean;
+      context?: boolean;
+      model?: boolean;
+    };
+    footerMetrics?: FooterSessionMetrics;
   } = {},
 ): FeishuCard {
   switch (state) {
@@ -222,6 +341,7 @@ export function buildCardContent(
         reasoningElapsedMs: data.reasoningElapsedMs,
         isAborted: data.isAborted,
         footer: data.footer,
+        footerMetrics: data.footerMetrics,
       });
     case 'confirm':
       return buildConfirmCard(data.confirmData!);
@@ -236,11 +356,12 @@ export function buildCardContent(
 
 function buildThinkingCard(): FeishuCard {
   return {
-    config: { wide_screen_mode: true, update_multi: true },
+    config: { wide_screen_mode: true, update_multi: true, locales: ['zh_cn', 'en_us'] },
     elements: [
       {
         tag: 'markdown',
-        content: '思考中...',
+        content: 'Thinking...',
+        i18n_content: { zh_cn: '思考中...', en_us: 'Thinking...' },
       },
     ],
   };
@@ -254,6 +375,10 @@ function buildStreamingCard(partialText: string, toolCalls: ToolCallInfo[], reas
     elements.push({
       tag: 'markdown',
       content: `💭 **Thinking...**\n\n${reasoningText}`,
+      i18n_content: {
+        zh_cn: `💭 **思考中...**\n\n${reasoningText}`,
+        en_us: `💭 **Thinking...**\n\n${reasoningText}`,
+      },
       text_size: 'notation',
     });
   } else if (partialText) {
@@ -278,7 +403,7 @@ function buildStreamingCard(partialText: string, toolCalls: ToolCallInfo[], reas
   }
 
   return {
-    config: { wide_screen_mode: true, update_multi: true },
+    config: { wide_screen_mode: true, update_multi: true, locales: ['zh_cn', 'en_us'] },
     elements,
   };
 }
@@ -291,21 +416,36 @@ function buildCompleteCard(params: {
   reasoningText?: string;
   reasoningElapsedMs?: number;
   isAborted?: boolean;
-  footer?: { status?: boolean; elapsed?: boolean };
+  footer?: {
+    status?: boolean;
+    elapsed?: boolean;
+    tokens?: boolean;
+    cache?: boolean;
+    context?: boolean;
+    model?: boolean;
+  };
+  footerMetrics?: FooterSessionMetrics;
 }): FeishuCard {
-  const { text, toolCalls, elapsedMs, isError, reasoningText, reasoningElapsedMs, isAborted, footer } = params;
+  const { text, toolCalls, elapsedMs, isError, reasoningText, reasoningElapsedMs, isAborted, footer, footerMetrics } =
+    params;
   const elements: CardElement[] = [];
 
   // Collapsible reasoning panel (before main content)
   if (reasoningText) {
-    const durationLabel = reasoningElapsedMs ? formatReasoningDuration(reasoningElapsedMs) : 'Thought';
+    const dur = reasoningElapsedMs ? formatReasoningDuration(reasoningElapsedMs) : null;
+    const zhLabel = dur ? dur.zh : '思考';
+    const enLabel = dur ? dur.en : 'Thought';
     elements.push({
       tag: 'collapsible_panel',
       expanded: false,
       header: {
         title: {
           tag: 'markdown',
-          content: `💭 ${durationLabel}`,
+          content: `💭 ${enLabel}`,
+          i18n_content: {
+            zh_cn: `💭 ${zhLabel}`,
+            en_us: `💭 ${enLabel}`,
+          },
         },
         vertical_align: 'center',
         icon: {
@@ -350,35 +490,26 @@ function buildCompleteCard(params: {
   }
 
   // Footer meta-info: each metadata item is independently controlled via
-  // the `footer` config. Both status and elapsed default to hidden.
-  const parts: string[] = [];
+  // the `footer` config.
+  const footerParts = formatFooterRuntimeSegments({
+    footer,
+    metrics: footerMetrics,
+    elapsedMs,
+    isError,
+    isAborted,
+  });
 
-  if (footer?.status) {
-    if (isError) {
-      parts.push('出错');
-    } else if (isAborted) {
-      parts.push('已停止');
-    } else {
-      parts.push('已完成');
-    }
-  }
-
-  if (footer?.elapsed && elapsedMs != null) {
-    parts.push(`耗时 ${formatElapsed(elapsedMs)}`);
-  }
-
-  if (parts.length > 0) {
-    const footerText = parts.join(' · ');
-    elements.push(...buildFooter(footerText, isError));
+  if (footerParts.zh.length > 0) {
+    elements.push(...buildFooter(footerParts.zh.join(' · '), footerParts.en.join(' · '), isError));
   }
 
   // Use the answer text (not reasoning) as the feed preview summary.
   // Strip markdown syntax so the preview reads as plain text.
-  const summaryText = text.replace(/[*_`#>\[\]()~]/g, '').trim();
+  const summaryText = text.replace(/[*_`#>[\]()~]/g, '').trim();
   const summary = summaryText ? { content: summaryText.slice(0, 120) } : undefined;
 
   return {
-    config: { wide_screen_mode: true, update_multi: true, summary },
+    config: { wide_screen_mode: true, update_multi: true, locales: ['zh_cn', 'en_us'], summary },
     elements,
   };
 }

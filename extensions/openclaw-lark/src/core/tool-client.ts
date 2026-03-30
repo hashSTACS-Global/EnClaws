@@ -31,24 +31,26 @@
 import * as Lark from '@larksuiteoapi/node-sdk';
 import type { ClawdbotConfig } from 'openclaw/plugin-sdk';
 import type { ConfiguredLarkAccount } from './types';
-import { getLarkAccount, getEnabledLarkAccounts } from './accounts';
-import { LarkClient } from './lark-client';
+import { getEnabledLarkAccounts, getLarkAccount } from './accounts';
+import { LarkClient, getResolvedConfig } from './lark-client';
 import { getTicket } from './lark-ticket';
 import { callWithUAT } from './uat-client';
 import { getStoredToken } from './token-store';
 import { getAppGrantedScopes, invalidateAppScopeCache, missingScopes } from './app-scope-checker';
-import { assertUatAccess } from './uat-access-guard';
+import { getAppOwnerFallback } from './app-owner-fallback';
+import { larkLogger } from './lark-logger';
 import { type ToolActionKey, getRequiredScopes } from './scope-manager';
 import { rawLarkRequest } from './raw-request';
+import { assertOwnerAccessStrict } from './owner-policy';
 import {
-  LARK_ERROR,
-  NeedAuthorizationError,
   AppScopeCheckFailedError,
   AppScopeMissingError,
+  LARK_ERROR,
+  NeedAuthorizationError,
   UserAuthRequiredError,
   UserScopeInsufficientError,
 } from './auth-errors';
-import type { ScopeErrorInfo, AuthHint, TryInvokeResult } from './auth-errors';
+import type { AuthHint, ScopeErrorInfo, TryInvokeResult } from './auth-errors';
 
 // Re-export for backward compatibility — 下游模块可继续从 tool-client 导入
 export {
@@ -60,6 +62,8 @@ export {
   UserScopeInsufficientError,
 };
 export type { ScopeErrorInfo, AuthHint, TryInvokeResult };
+
+const tcLog = larkLogger('core/tool-client');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -227,17 +231,21 @@ export class ToolClient {
       return this.invokeAsTenant(toolAction, fn, requiredScopes);
     }
 
-    // 5.1 获取 userOpenId（不再静默 fallback owner）
-    const userOpenId = options?.userOpenId ?? this.senderOpenId;
+    // 5.1 获取 userOpenId，支持兜底逻辑
+    let userOpenId = options?.userOpenId ?? this.senderOpenId;
 
-    // 5.2 统一 UAT 访问策略检查
-    let stateDir: string | undefined;
-    try {
-      stateDir = LarkClient.runtime.state.resolveStateDir();
-    } catch {
-      // runtime 未初始化时（如测试场景）不阻塞
+    // 5.2 兜底逻辑：如果没有 senderOpenId，尝试使用应用所有者
+    if (!userOpenId) {
+      const fallbackUserId = await getAppOwnerFallback(this.account, this.sdk);
+      if (fallbackUserId) {
+        userOpenId = fallbackUserId;
+        tcLog.info(`Using app owner as fallback user`, {
+          toolAction,
+          appId: this.account.appId,
+          ownerId: fallbackUserId,
+        });
+      }
     }
-    await assertUatAccess({ account: this.account, sdk: this.sdk, userOpenId, stateDir });
 
     return this.invokeAsUser(toolAction, fn, requiredScopes, userOpenId, appScopeVerified);
   }
@@ -322,7 +330,8 @@ export class ToolClient {
       });
     }
 
-    // ownerOnly / appRoleAuth 策略检查已在 _invokeInternal 中通过 assertUatAccess() 完成
+    // Owner 检查：非 owner 用户直接拒绝（从 uat-client.ts 迁移至此）
+    await assertOwnerAccessStrict(this.account, this.sdk, userOpenId);
 
     // 预检：是否有已存储的 token
     const stored = await getStoredToken(this.account.appId, userOpenId);
@@ -421,11 +430,9 @@ export class ToolClient {
     userOpenId?: string,
     tokenType?: 'user' | 'tenant',
   ): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawCode = (err as any)?.code;
-    // Prefer numeric code; Axios errors set `code` to a string (e.g. "ERR_BAD_RESPONSE").
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const code = typeof rawCode === 'number' ? rawCode : (err as any)?.response?.data?.code;
+    const code =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (err as any)?.code ?? (err as any)?.response?.data?.code;
 
     if (code === LARK_ERROR.APP_SCOPE_MISSING) {
       // 应用 scope 不足 — 清缓存（管理员可能刚开通）
@@ -468,10 +475,15 @@ export function createToolClient(config: ClawdbotConfig, accountIndex = 0): Tool
   const ticket = getTicket();
 
   // 1. 解析账号
+  //
+  // `config` is the closure-captured snapshot from plugin registration and may be
+  // stale after a hot-reload.  Use getResolvedConfig() to always get the live config.
+  const resolveConfig = getResolvedConfig(config);
+
   let account: ConfiguredLarkAccount | undefined;
 
   if (ticket?.accountId) {
-    const resolved = getLarkAccount(config, ticket.accountId);
+    const resolved = getLarkAccount(resolveConfig, ticket.accountId);
     if (!resolved.configured) {
       throw new Error(
         `Feishu account "${ticket.accountId}" is not configured (missing appId or appSecret). ` +
@@ -488,7 +500,7 @@ export function createToolClient(config: ClawdbotConfig, accountIndex = 0): Tool
   }
 
   if (!account) {
-    const accounts = getEnabledLarkAccounts(config);
+    const accounts = getEnabledLarkAccounts(resolveConfig);
     if (accounts.length === 0) {
       throw new Error(
         'No enabled Feishu accounts configured. ' + 'Please add appId and appSecret in config under channels.feishu',

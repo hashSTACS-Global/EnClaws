@@ -19,10 +19,12 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
 
 import {
-  json,
-  createToolContext,
+  StringEnum,
   assertLarkOk,
+  createToolContext,
   handleInvokeErrorWithAutoAuth,
+  json,
+  registerTool,
 } from '../helpers';
 import type { PaginatedData } from '../sdk-types';
 
@@ -62,20 +64,9 @@ const FeishuWikiSpaceNodeSchema = Type.Union([
       description: 'node token',
     }),
     obj_type: Type.Optional(
-      Type.Union(
-        [
-          Type.Literal('doc'),
-          Type.Literal('sheet'),
-          Type.Literal('mindnote'),
-          Type.Literal('bitable'),
-          Type.Literal('file'),
-          Type.Literal('docx'),
-          Type.Literal('slides'),
-          Type.Literal('wiki'),
-        ],
-        {
-          description: 'obj_type',
-        },
+      StringEnum(
+        ['doc', 'sheet', 'mindnote', 'bitable', 'file', 'docx', 'slides', 'wiki'],
+        { description: 'obj_type' },
       ),
     ),
   }),
@@ -86,30 +77,18 @@ const FeishuWikiSpaceNodeSchema = Type.Union([
     space_id: Type.String({
       description: 'space_id',
     }),
-    obj_type: Type.Union(
-      [
-        Type.Literal('doc'),
-        Type.Literal('sheet'),
-        Type.Literal('mindnote'),
-        Type.Literal('bitable'),
-        Type.Literal('file'),
-        Type.Literal('docx'),
-        Type.Literal('slides'),
-      ],
-      {
-        description: 'obj_type',
-      },
+    obj_type: StringEnum(
+      ['sheet', 'mindnote', 'bitable', 'file', 'docx', 'slides'],
+      { description: 'obj_type' },
     ),
     parent_node_token: Type.Optional(
       Type.String({
         description: 'parent_node_token',
       }),
     ),
-    node_type: Type.Optional(
-      Type.Union([Type.Literal('origin'), Type.Literal('shortcut')], {
-        description: 'node_type',
-      }),
-    ),
+    node_type: StringEnum(['origin', 'shortcut'], {
+      description: 'node_type',
+    }),
     origin_node_token: Type.Optional(
       Type.String({
         description: 'origin_node_token',
@@ -187,7 +166,7 @@ type FeishuWikiSpaceNodeParams =
       space_id: string;
       obj_type: string;
       parent_node_token?: string;
-      node_type?: 'origin' | 'shortcut';
+      node_type: 'origin' | 'shortcut';
       origin_node_token?: string;
       title?: string;
     }
@@ -210,13 +189,14 @@ type FeishuWikiSpaceNodeParams =
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuWikiSpaceNodeTool(api: OpenClawPluginApi) {
-  if (!api.config) return;
+export function registerFeishuWikiSpaceNodeTool(api: OpenClawPluginApi): boolean {
+  if (!api.config) return false;
   const cfg = api.config;
 
   const { toolClient, log } = createToolContext(api, 'feishu_wiki_space_node');
 
-  api.registerTool(
+  return registerTool(
+    api,
     {
       name: 'feishu_wiki_space_node',
       label: 'Feishu Wiki Space Nodes',
@@ -301,7 +281,7 @@ export function registerFeishuWikiSpaceNodeTool(api: OpenClawPluginApi) {
             // -----------------------------------------------------------------
             case 'create': {
               log.info(
-                `create: space_id=${p.space_id}, obj_type=${p.obj_type}, parent=${p.parent_node_token ?? '(root)'}, title=${p.title ?? '(empty)'}`,
+                `create: space_id=${p.space_id}, obj_type=${p.obj_type}, parent=${p.parent_node_token ?? '(root)'}, title=${p.title ?? '(empty)'}, node_type=${p.node_type}, original_node_token=${p.origin_node_token ?? '(empty)'}`,
               );
 
               const res = await client.invoke(
@@ -408,6 +388,4 @@ export function registerFeishuWikiSpaceNodeTool(api: OpenClawPluginApi) {
     },
     { name: 'feishu_wiki_space_node' },
   );
-
-  api.logger.info?.('feishu_wiki_space_node: Registered feishu_wiki_space_node tool');
 }

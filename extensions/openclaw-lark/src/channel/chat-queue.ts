@@ -8,9 +8,7 @@
  * across channel, messaging, tools, and card layers as a process-level
  * singleton. Consumers: monitor.ts, dispatch.ts, oauth.ts, auto-auth.ts.
  *
- * Ensures tasks targeting the same queue key are executed serially.
- * In group chats, the key includes the sender ID so different users
- * are dispatched concurrently. P2P chats use account+chat only.
+ * Ensures tasks targeting the same account+chat are executed serially.
  * Used by both websocket inbound messages and synthetic message paths.
  */
 
@@ -19,31 +17,10 @@ type QueueStatus = 'queued' | 'immediate';
 export interface ActiveDispatcherEntry {
   abortCard: () => Promise<void>;
   abortController?: AbortController;
-  /** Inject a user message into the running agent session (steer). */
-  steer?: (text: string) => boolean;
-  /** Get the streaming card's message ID (for abort reply targeting). */
-  getCardMessageId?: () => string | undefined;
 }
 
 const chatQueues = new Map<string, Promise<void>>();
 const activeDispatchers = new Map<string, ActiveDispatcherEntry>();
-
-/**
- * Temporary storage for the aborted card's message ID per queue key.
- * Set by the abort fast-path so the subsequent `/stop` message dispatch
- * can reply to the original bot card instead of the user's stop message.
- */
-const abortedCardMessageIds = new Map<string, string>();
-
-export function setAbortedCardMessageId(key: string, messageId: string): void {
-  abortedCardMessageIds.set(key, messageId);
-}
-
-export function consumeAbortedCardMessageId(key: string): string | undefined {
-  const id = abortedCardMessageIds.get(key);
-  if (id) abortedCardMessageIds.delete(key);
-  return id;
-}
 
 /**
  * Append `:thread:{threadId}` suffix when threadId is present.
@@ -53,11 +30,8 @@ export function threadScopedKey(base: string, threadId?: string): string {
   return threadId ? `${base}:thread:${threadId}` : base;
 }
 
-export function buildQueueKey(accountId: string, chatId: string, threadId?: string, senderId?: string): string {
-  const base = senderId
-    ? `${accountId}:${chatId}:sender:${senderId}`
-    : `${accountId}:${chatId}`;
-  return threadScopedKey(base, threadId);
+export function buildQueueKey(accountId: string, chatId: string, threadId?: string): string {
+  return threadScopedKey(`${accountId}:${chatId}`, threadId);
 }
 
 export function registerActiveDispatcher(key: string, entry: ActiveDispatcherEntry): void {
@@ -81,30 +55,29 @@ export function enqueueFeishuChatTask(params: {
   accountId: string;
   chatId: string;
   threadId?: string;
-  senderId?: string;
   task: () => Promise<void>;
 }): { status: QueueStatus; promise: Promise<void> } {
-  const { accountId, chatId, threadId, senderId, task } = params;
-  const key = buildQueueKey(accountId, chatId, threadId, senderId);
+  const { accountId, chatId, threadId, task } = params;
+  const key = buildQueueKey(accountId, chatId, threadId);
   const prev = chatQueues.get(key) ?? Promise.resolve();
   const status: QueueStatus = chatQueues.has(key) ? 'queued' : 'immediate';
-  const next = prev.then(task, task); // continue queue even if previous task failed
-  chatQueues.set(key, next);
+
+  const taskPromise = prev.then(task, task);
+  chatQueues.set(key, taskPromise);
 
   const cleanup = (): void => {
-    if (chatQueues.get(key) === next) {
+    if (chatQueues.get(key) === taskPromise) {
       chatQueues.delete(key);
     }
   };
 
-  next.then(cleanup, cleanup);
+  taskPromise.then(cleanup, cleanup);
 
-  return { status, promise: next };
+  return { status, promise: taskPromise };
 }
 
 /** @internal Test-only: reset all queue and dispatcher state. */
 export function _resetChatQueueState(): void {
   chatQueues.clear();
   activeDispatchers.clear();
-  abortedCardMessageIds.clear();
 }

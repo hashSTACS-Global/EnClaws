@@ -6,7 +6,7 @@
  */
 
 import type { ContentConverterFn } from './types';
-import { resolveMentions } from './content-converter';
+import { resolveMentions } from './content-converter-helpers';
 import { safeParse } from './utils';
 
 export const convertText: ContentConverterFn = (raw, ctx) => {

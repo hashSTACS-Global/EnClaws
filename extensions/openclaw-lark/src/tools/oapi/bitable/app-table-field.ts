@@ -16,8 +16,8 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { Type } from '@sinclair/typebox';
 
-import { json, createToolContext, assertLarkOk, handleInvokeErrorWithAutoAuth } from '../helpers';
-import type { PaginatedData, FieldData } from '../sdk-types';
+import { assertLarkOk, createToolContext, handleInvokeErrorWithAutoAuth, json , registerTool } from '../helpers';
+import type { FieldData, PaginatedData } from '../sdk-types';
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -121,14 +121,15 @@ type FeishuBitableAppTableFieldParams =
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerFeishuBitableAppTableFieldTool(api: OpenClawPluginApi) {
+export function registerFeishuBitableAppTableFieldTool(api: OpenClawPluginApi): void {
   if (!api.config) return;
 
   const cfg = api.config;
 
   const { toolClient, log } = createToolContext(api, 'feishu_bitable_app_table_field');
 
-  api.registerTool(
+  registerTool(
+    api,
     {
       name: 'feishu_bitable_app_table_field',
       label: 'Feishu Bitable Fields',
@@ -359,5 +360,4 @@ export function registerFeishuBitableAppTableFieldTool(api: OpenClawPluginApi) {
     { name: 'feishu_bitable_app_table_field' },
   );
 
-  api.logger.info?.('feishu_bitable_app_table_field: Registered feishu_bitable_app_table_field tool');
 }

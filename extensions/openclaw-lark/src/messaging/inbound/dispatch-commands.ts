@@ -8,13 +8,13 @@
  * and permission-error notifications via the streaming card flow.
  */
 
-import type { DispatchContext } from './dispatch-context';
-import type { PermissionError } from './permission';
-import { LarkClient } from '../../core/lark-client';
+import type { LarkClient } from '../../core/lark-client';
 import { larkLogger } from '../../core/lark-logger';
 import { ticketElapsed } from '../../core/lark-ticket';
 import { createFeishuReplyDispatcher } from '../../card/reply-dispatcher';
 import { sendMessageFeishu } from '../outbound/send';
+import type { PermissionError } from './permission';
+import type { DispatchContext } from './dispatch-context';
 import { buildInboundPayload } from './dispatch-builders';
 
 const log = larkLogger('inbound/dispatch-commands');
@@ -62,6 +62,7 @@ export async function dispatchPermissionNotification(
   } = createFeishuReplyDispatcher({
     cfg: dc.accountScopedCfg,
     agentId: dc.route.agentId,
+    sessionKey: dc.threadSessionKey ?? dc.route.sessionKey,
     chatId: dc.ctx.chatId,
     replyToMessageId: replyToMessageId ?? dc.ctx.messageId,
     accountId: dc.account.accountId,

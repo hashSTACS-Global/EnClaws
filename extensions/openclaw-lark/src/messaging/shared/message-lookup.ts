@@ -10,12 +10,12 @@
  */
 
 import type { ClawdbotConfig } from 'openclaw/plugin-sdk';
-import { convertMessageContent, buildConvertContextFromItem } from '../converters/content-converter';
+import { buildConvertContextFromItem, convertMessageContent } from '../converters/content-converter';
 import { LarkClient } from '../../core/lark-client';
 import { larkLogger } from '../../core/lark-logger';
 
 const log = larkLogger('shared/message-lookup');
-import { getUserNameCache, createBatchResolveNames } from '../inbound/user-name-cache';
+import { createBatchResolveNames, getUserNameCache } from '../inbound/user-name-cache';
 import { getLarkAccount } from '../../core/accounts';
 
 // ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ import { Readable } from 'node:stream';
 import type { OpenClawConfig } from 'openclaw/plugin-sdk';
 import { LarkClient } from '../../core/lark-client';
 import { normalizeFeishuTarget, resolveReceiveIdType } from '../../core/targets';
+import { larkLogger } from '../../core/lark-logger';
 import {
   isLocalMediaPath,
   normalizeMediaUrlInput,
@@ -27,7 +28,6 @@ import {
   safeFileUrlToPath,
   validateLocalMediaRoots,
 } from './media-url-utils';
-import { larkLogger } from '../../core/lark-logger';
 
 const log = larkLogger('outbound/media');
 
@@ -841,6 +841,18 @@ export async function uploadAndSendMediaLark(params: {
     replyInThread,
     accountId,
   });
+}
+
+// ---------------------------------------------------------------------------
+// fetchRemoteImageBuffer — public wrapper for remote-only image downloads
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch remote image bytes by URL (http/https only).
+ * Local file access is denied. Includes SSRF protection.
+ */
+export async function fetchRemoteImageBuffer(url: string): Promise<Buffer> {
+  return fetchMediaBuffer(url, undefined);
 }
 
 // ---------------------------------------------------------------------------

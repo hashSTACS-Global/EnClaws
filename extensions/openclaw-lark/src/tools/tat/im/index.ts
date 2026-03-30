@@ -15,7 +15,8 @@ import { registerFeishuImBotImageTool } from './resource';
  * Note: feishu_im_message_reaction 和 feishu_im_message_recall 已移除，
  * 其功能由 ChannelMessageActionAdapter (actions.ts) 的 react/delete action 统一覆盖。
  */
-export function registerFeishuImTools(api: OpenClawPluginApi) {
-  registerFeishuImBotImageTool(api);
-  api.logger.info?.('feishu_im: Registered feishu_im_bot_image');
+export function registerFeishuImTools(api: OpenClawPluginApi): void {
+  if (registerFeishuImBotImageTool(api)) {
+    api.logger.debug?.('feishu_im: Registered feishu_im_bot_image');
+  }
 }

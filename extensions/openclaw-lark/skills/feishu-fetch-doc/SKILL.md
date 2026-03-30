@@ -6,19 +6,6 @@ description: |
 
 # feishu_mcp_fetch_doc
 
-## 🔑 执行前权限预检
-
-**在使用本 Skill 的任何工具之前，必须先调用 `feishu_pre_auth` 工具进行权限预检：**
-
-```json
-{
-  "tool_actions": ["feishu_fetch_doc.default", "feishu_doc_media.download", "feishu_wiki_space_node.get"]
-}
-```
-
-- 如果返回 `all_authorized: true`，继续执行后续操作。
-- 否则按返回结果的指引完成授权后再继续。
-
 获取飞书云文档的 Markdown 内容（Lark-flavored 格式）。
 
 ## 重要：图片、文件、画板的处理
