@@ -114,8 +114,12 @@ async function dispatchNormalMessage(
     abortController,
     steer: (text: string) => {
       try {
-        dc.core.agent.steerMessage({ sessionKey: effectiveSessionKey, text });
-        return true;
+        const agent = dc.core.agent as any;
+        if (typeof agent.steerMessage === 'function') {
+          agent.steerMessage({ sessionKey: effectiveSessionKey, text });
+          return true;
+        }
+        return false;
       } catch {
         return false;
       }

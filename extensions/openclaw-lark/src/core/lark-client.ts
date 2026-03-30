@@ -369,6 +369,7 @@ export class LarkClient {
       this._wsClient = null;
     }
 
+    const noop = () => {};
     const wsLogger = onConnectionChange
       ? {
           info: (...args: unknown[]) => {
@@ -383,6 +384,7 @@ export class LarkClient {
           },
           warn: (...args: unknown[]) => log.warn(args.map(String).join(' ')),
           debug: (...args: unknown[]) => log.debug(args.map(String).join(' ')),
+          trace: noop,
         }
       : undefined;
 
