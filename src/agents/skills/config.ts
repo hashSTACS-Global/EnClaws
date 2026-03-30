@@ -104,8 +104,5 @@ export function shouldIncludeSkill(params: {
       ),
     isConfigPathTruthy: (configPath) => isConfigPathTruthy(config, configPath),
   });
-  if (!eligible) {
-    debugLog.info(`[DEBUG-SKILL] excluded ${entry.skill.name}: runtime eligibility failed (requires=${JSON.stringify(entry.metadata?.requires ?? null)})`);
-  }
   return eligible;
 }
