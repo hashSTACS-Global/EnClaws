@@ -166,6 +166,25 @@ export function invalidateTenantAgentsCache() {
   _cachedTenantAgents = [];
 }
 
+async function checkTenantNeedsOnboarding(state: AppViewState) {
+  try {
+    const [agents, models, channels] = await Promise.all([
+      tenantRpc("tenant.agents.list") as Promise<{ agents?: unknown[] }>,
+      tenantRpc("tenant.models.list") as Promise<{ models?: unknown[] }>,
+      tenantRpc("tenant.channels.list") as Promise<{ channels?: unknown[] }>,
+    ]);
+    const isEmpty = !(agents.agents?.length) && !(models.models?.length) && !(channels.channels?.length);
+    if (isEmpty) {
+      state.showOnboarding = true;
+    } else {
+      state.connect();
+    }
+  } catch {
+    // RPC failed — skip onboarding check, just connect normally
+    state.connect();
+  }
+}
+
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
 const CRON_THINKING_SUGGESTIONS = ["off", "minimal", "low", "medium", "high"];
@@ -324,8 +343,11 @@ export function renderApp(state: AppViewState) {
         state.setTab(role === "platform-admin" ? "overview" : "tenant-users");
         if (e.detail?.isNewRegistration) {
           state.showOnboarding = true;
-        } else {
+        } else if (role === "platform-admin") {
           state.connect();
+        } else {
+          // Check if tenant has no resources configured — show onboarding if empty
+          checkTenantNeedsOnboarding(state);
         }
       }}
     ></openclaw-login>`;
