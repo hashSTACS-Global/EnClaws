@@ -101,6 +101,7 @@ import "./views/tenant/tenant-skills.ts";
 import "./views/tenant/tenant-traces.ts";
 import "./views/tenant/tenant-usage.ts";
 import "./views/platform-overview.ts";
+import "./views/onboarding-wizard.ts";
 import { isAuthenticated, loadAuth, clearAuth } from "./auth-store.ts";
 import { tenantRpc } from "./views/tenant/rpc.ts";
 import type { TenantAgentOption } from "./views/chat.ts";
@@ -313,7 +314,7 @@ export function renderApp(state: AppViewState) {
     }
     return html`<openclaw-login
       .gatewayUrl=${state.settings.gatewayUrl}
-      @auth-success=${() => {
+      @auth-success=${(e: CustomEvent) => {
         state.applySettings(loadSettings());
         const loc = state.settings.locale;
         if (isSupportedLocale(loc)) {
@@ -321,12 +322,28 @@ export function renderApp(state: AppViewState) {
         }
         const role = loadAuth()?.user?.role;
         state.setTab(role === "platform-admin" ? "overview" : "tenant-users");
-        state.connect();
+        if (e.detail?.isNewRegistration) {
+          state.showOnboarding = true;
+        } else {
+          state.connect();
+        }
       }}
     ></openclaw-login>`;
   }
 
   return html`
+      ${state.showOnboarding ? html`
+        <onboarding-wizard
+          .gatewayUrl=${state.settings.gatewayUrl}
+          @onboarding-complete=${() => {
+            state.showOnboarding = false;
+            state.connect();
+            // Reload tenant agents for chat after onboarding setup
+            _tenantAgentsLoaded = false;
+            void loadTenantAgentsForChat();
+          }}
+        ></onboarding-wizard>
+      ` : nothing}
       <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
           <aside class="nav ${state.settings.navCollapsed ? "nav--collapsed" : ""}">
 

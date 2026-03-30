@@ -55,6 +55,7 @@ export type AppViewState = {
   password: string;
   tab: Tab;
   onboarding: boolean;
+  showOnboarding: boolean;
   basePath: string;
   connected: boolean;
   theme: ThemeMode;

@@ -370,7 +370,7 @@ export class OpenClawLogin extends LitElement {
         password: this.regPassword,
         displayName: this.regDisplayName || undefined,
       });
-      this.dispatchEvent(new CustomEvent("auth-success", { detail: auth, bubbles: true, composed: true }));
+      this.dispatchEvent(new CustomEvent("auth-success", { detail: { ...auth, isNewRegistration: true }, bubbles: true, composed: true }));
     } catch (err) {
       this.serverError = err instanceof Error ? err.message : "register_failed";
     } finally {

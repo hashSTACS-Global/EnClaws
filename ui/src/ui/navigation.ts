@@ -127,7 +127,7 @@ export function inferBasePathFromPathname(pathname: string): string {
     if (normalized.endsWith("/index.html")) {
         normalized = normalizePath(normalized.slice(0, -"/index.html".length));
     }
-    if (normalized === "/") {
+    if (normalized === "/" || normalized === "/login") {
         return "";
     }
     const segments = normalized.split("/").filter(Boolean);

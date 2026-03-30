@@ -66,6 +66,8 @@ export const SCOPE_BYPASS_METHODS = new Set([
   // Tenant usage
   "tenant.usage.summary",
   "tenant.usage.quota",
+  // Tenant onboarding
+  "tenant.onboarding.setup",
   // Platform overview (handled by platform-admin RBAC)
   "platform.overview.summary",
   "platform.overview.tokenTrend",
