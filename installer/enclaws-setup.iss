@@ -37,6 +37,8 @@ UninstallDisplayIcon={app}\enclaws-icon.ico
 UninstallDisplayName=EnClaws {#AppVersion}
 ; Minimum Windows 10
 MinVersion=10.0
+; Broadcast WM_SETTINGCHANGE after install so new terminals pick up PATH
+ChangesEnvironment=yes
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "assets\ChineseSimplified.isl"
@@ -77,19 +79,22 @@ Type: filesandordirs; Name: "{app}"
 [Code]
 const
   WM_SETTINGCHANGE = $001A;
+  SMTO_ABORTIFHUNG = $0002;
 
-// Broadcast environment change to all top-level windows so new terminals
-// pick up the updated PATH without requiring a reboot.
+function SendMessageTimeoutW(hWnd: Integer; Msg: Cardinal; wParam: Cardinal;
+  lParam: String; fuFlags: Cardinal; uTimeout: Cardinal;
+  var lpdwResult: Cardinal): Cardinal;
+  external 'SendMessageTimeoutW@user32.dll stdcall';
+
+// Broadcast WM_SETTINGCHANGE so Explorer reloads environment variables
+// and new terminals pick up the updated PATH without requiring a reboot.
 procedure BroadcastEnvironmentChange;
 var
-  Dummy: Longint;
+  Res: Cardinal;
 begin
-  // SendMessage with HWND_BROADCAST
-  // Param: pointer to the string 'Environment'
-  RegWriteStringValue(HKCU, 'Environment', '_enclaws_noop', '');
-  RegDeleteValue(HKCU, 'Environment', '_enclaws_noop');
-  // Use a simpler approach: just log the change message
-  // The registry write above already triggers the broadcast on modern Windows
+  SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+    'Environment', SMTO_ABORTIFHUNG, 5000, Res);
+  Log('Broadcasted WM_SETTINGCHANGE for Environment');
 end;
 
 // Add a directory to the user-level PATH environment variable.

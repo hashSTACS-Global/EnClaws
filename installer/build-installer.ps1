@@ -34,6 +34,12 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"  # Speed up Invoke-WebRequest
 
+# Helper: write text as UTF-8 without BOM (PS5 -Encoding UTF8 adds BOM which breaks JSON.parse)
+$Utf8NoBom = New-Object System.Text.UTF8Encoding $false
+function Write-Utf8NoBom([string]$Path, [string]$Content) {
+    [System.IO.File]::WriteAllText($Path, $Content, $script:Utf8NoBom)
+}
+
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $InstallerDir = $PSScriptRoot
 $NodePortableDir = Join-Path $InstallerDir "node-portable"
@@ -127,7 +133,12 @@ if (-not $SkipBuild) {
 Write-Host "[*] Preparing app bundle..." -ForegroundColor Yellow
 
 if (Test-Path $AppBundleDir) {
-    Remove-Item -Recurse -Force $AppBundleDir
+    # Use robocopy to handle long paths that exceed Windows MAX_PATH (260 chars)
+    $emptyDir = Join-Path $env:TEMP "enclaws-empty-$([guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Force -Path $emptyDir | Out-Null
+    robocopy $emptyDir $AppBundleDir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+    Remove-Item -Force $emptyDir
+    Remove-Item -Force $AppBundleDir
 }
 New-Item -ItemType Directory -Force -Path $AppBundleDir | Out-Null
 
@@ -172,7 +183,7 @@ if ($PackageJson.optionalDependencies) {
     $prodPkg.optionalDependencies = $PackageJson.optionalDependencies
 }
 $prodPkgJson = $prodPkg | ConvertTo-Json -Depth 10
-Set-Content -Path (Join-Path $AppBundleDir "package.json") -Value $prodPkgJson -Encoding UTF8
+Write-Utf8NoBom -Path (Join-Path $AppBundleDir "package.json") -Content $prodPkgJson
 
 # ---------------------------------------------------------------------------
 # Step 4: Install production dependencies into the bundle
@@ -207,23 +218,34 @@ try {
 }
 Write-Host "[OK] Dependencies installed" -ForegroundColor Green
 
+# Patch @mariozechner/pi-coding-agent exports for Jiti CJS compatibility.
+# Jiti converts ESM imports to CJS require(), but this package only defines
+# an "import" condition in its exports map. Adding "default" as a fallback
+# lets require() resolve the same entry point.
+$piPkgPath = Join-Path $AppBundleDir "node_modules\@mariozechner\pi-coding-agent\package.json"
+if (Test-Path $piPkgPath) {
+    Write-Host "[*] Patching pi-coding-agent exports for CJS compat..." -ForegroundColor Yellow
+    $piPkgRaw = Get-Content $piPkgPath -Raw | ConvertFrom-Json
+    if ($piPkgRaw.exports -and $piPkgRaw.exports.'.') {
+        $piPkgRaw.exports.'.'  | Add-Member -NotePropertyName "default" -NotePropertyValue $piPkgRaw.exports.'.'.import -Force
+        if ($piPkgRaw.exports.'./hooks') {
+            $piPkgRaw.exports.'./hooks' | Add-Member -NotePropertyName "default" -NotePropertyValue $piPkgRaw.exports.'./hooks'.import -Force
+        }
+        Write-Utf8NoBom -Path $piPkgPath -Content ($piPkgRaw | ConvertTo-Json -Depth 10)
+        Write-Host "[OK] Patched pi-coding-agent exports" -ForegroundColor Green
+    }
+}
+
 # Remove unnecessary files to reduce bundle size
 Write-Host "[*] Cleaning up bundle..." -ForegroundColor Yellow
-$cleanPatterns = @(
-    "node_modules\*\*.md",
-    "node_modules\*\CHANGELOG*",
-    "node_modules\*\HISTORY*",
-    "node_modules\*\.github",
-    "node_modules\*\test",
-    "node_modules\*\tests",
-    "node_modules\*\__tests__",
-    "node_modules\*\example",
-    "node_modules\*\examples",
-    "node_modules\*\.travis.yml",
-    "node_modules\*\.eslintrc*",
-    "node_modules\*\.prettierrc*",
-    "node_modules\*\tsconfig.json"
-)
+# Patterns for both flat packages (node_modules/pkg/) and scoped packages (node_modules/@scope/pkg/)
+$cleanNames = @("*.md", "CHANGELOG*", "HISTORY*", ".github", "test", "tests",
+    "__tests__", "example", "examples", ".travis.yml", ".eslintrc*", ".prettierrc*", "tsconfig.json")
+$cleanPatterns = @()
+foreach ($name in $cleanNames) {
+    $cleanPatterns += "node_modules\*\$name"
+    $cleanPatterns += "node_modules\@*\*\$name"
+}
 foreach ($pat in $cleanPatterns) {
     $fullPat = Join-Path $AppBundleDir $pat
     Get-Item $fullPat -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue

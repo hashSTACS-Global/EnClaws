@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
+import { openUrl, resolveControlUiLinks } from "../../commands/onboard-helpers.js";
 import type { GatewayAuthMode, GatewayTailscaleMode } from "../../config/config.js";
 import {
   CONFIG_PATH,
@@ -9,6 +10,8 @@ import {
   resolveStateDir,
   resolveGatewayPort,
 } from "../../config/config.js";
+import { isMultiTenantMode } from "../../config/multi-tenant.js";
+import { isDbInitialized } from "../../db/index.js";
 import { resolveGatewayAuth } from "../../gateway/auth.js";
 import { startGatewayServer } from "../../gateway/server.js";
 import type { GatewayWsLogStyle } from "../../gateway/ws-logging.js";
@@ -21,8 +24,6 @@ import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { defaultRuntime } from "../../runtime.js";
 import { formatCliCommand } from "../command-format.js";
 import { inheritOptionFromParent } from "../command-options.js";
-import { isMultiTenantMode } from "../../config/multi-tenant.js";
-import { isDbInitialized } from "../../db/index.js";
 import { forceFreePortAndWait } from "../ports.js";
 import { ensureDevGatewayConfig } from "./dev.js";
 import { runGatewayLoop } from "./run-loop.js";
@@ -52,6 +53,7 @@ type GatewayRunOpts = {
   rawStreamPath?: unknown;
   dev?: boolean;
   reset?: boolean;
+  open?: boolean;
 };
 
 const gatewayLog = createSubsystemLogger("gateway");
@@ -304,13 +306,8 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
     tailscaleMode: tailscaleMode ?? cfg.gateway?.tailscale?.mode ?? "off",
   });
   const resolvedAuthMode = resolvedAuth.mode;
-  const tokenValue = resolvedAuth.token;
   const passwordValue = resolvedAuth.password;
-  const hasToken = typeof tokenValue === "string" && tokenValue.trim().length > 0;
   const hasPassword = typeof passwordValue === "string" && passwordValue.trim().length > 0;
-  const hasSharedSecret =
-    (resolvedAuthMode === "token" && hasToken) || (resolvedAuthMode === "password" && hasPassword);
-  const canBootstrapToken = resolvedAuthMode === "token" && !hasToken;
   const authHints: string[] = [];
   if (miskeys.hasGatewayToken) {
     authHints.push('Found "gateway.token" in config. Use "gateway.auth.token" instead.');
@@ -347,16 +344,41 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
         }
       : undefined;
 
+  const shouldOpenBrowser = opts.open !== false;
+  let browserOpened = false;
+
   try {
     await runGatewayLoop({
       runtime: defaultRuntime,
       lockPort: port,
-      start: async () =>
-        await startGatewayServer(port, {
+      start: async () => {
+        const server = await startGatewayServer(port, {
           bind,
           auth: authOverride,
           tailscale: tailscaleOverride,
-        }),
+        });
+        if (shouldOpenBrowser && !browserOpened) {
+          browserOpened = true;
+          const cfgSnapshot = loadConfig();
+          const token =
+            cfgSnapshot.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN ?? "";
+          const links = resolveControlUiLinks({
+            port,
+            bind: bind === "lan" ? "loopback" : bind,
+            customBindHost: cfgSnapshot.gateway?.customBindHost,
+            basePath: cfgSnapshot.gateway?.controlUi?.basePath,
+          });
+          const dashboardUrl = token
+            ? `${links.httpUrl}#token=${encodeURIComponent(token)}`
+            : links.httpUrl;
+          void openUrl(dashboardUrl).then((opened) => {
+            if (!opened) {
+              gatewayLog.info(`Open the Control UI manually: ${dashboardUrl}`);
+            }
+          });
+        }
+        return server;
+      },
     });
   } catch (err) {
     if (
@@ -430,6 +452,7 @@ export function addGatewayRunCommand(cmd: Command): Command {
     .option("--compact", 'Alias for "--ws-log compact"', false)
     .option("--raw-stream", "Log raw model stream events to jsonl", false)
     .option("--raw-stream-path <path>", "Raw stream jsonl path")
+    .option("--no-open", "Do not open the Control UI in the browser after startup")
     .action(async (opts, command) => {
       await runGatewayCommand(resolveGatewayRunOptions(opts, command));
     });
