@@ -92,6 +92,39 @@ const resolvePluginSdkAccountIdAlias = (): string | null => {
   return resolvePluginSdkAliasFile({ srcFile: "account-id.ts", distFile: "account-id.js" });
 };
 
+const PLUGIN_SDK_SUBPATHS = [
+  "reply-history",
+  "channel-contract",
+  "param-readers",
+  "reply-runtime",
+  "setup",
+  "channel-status",
+  "channel-runtime",
+  "channel-feedback",
+  "channel-send-result",
+  "agent-runtime",
+  "zalouser",
+  "routing",
+  "channel-policy",
+  "tool-send",
+  "temp-path",
+  "allow-from",
+] as const;
+
+const resolvePluginSdkSubpathAliases = (): Record<string, string> => {
+  const aliases: Record<string, string> = {};
+  for (const subpath of PLUGIN_SDK_SUBPATHS) {
+    const resolved = resolvePluginSdkAliasFile({
+      srcFile: `${subpath}.ts`,
+      distFile: `${subpath}.js`,
+    });
+    if (resolved) {
+      aliases[`openclaw/plugin-sdk/${subpath}`] = resolved;
+    }
+  }
+  return aliases;
+};
+
 export const __testing = {
   resolvePluginSdkAliasFile,
 };
@@ -431,19 +464,18 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
     }
     const pluginSdkAlias = resolvePluginSdkAlias();
     const pluginSdkAccountIdAlias = resolvePluginSdkAccountIdAlias();
+    const subpathAliases = resolvePluginSdkSubpathAliases();
+    const allAliases: Record<string, string> = {
+      ...(pluginSdkAccountIdAlias
+        ? { "openclaw/plugin-sdk/account-id": pluginSdkAccountIdAlias }
+        : {}),
+      ...subpathAliases,
+      ...(pluginSdkAlias ? { "openclaw/plugin-sdk": pluginSdkAlias } : {}),
+    };
     jitiLoader = createJiti(import.meta.url, {
       interopDefault: true,
       extensions: [".ts", ".tsx", ".mts", ".cts", ".mtsx", ".ctsx", ".js", ".mjs", ".cjs", ".json"],
-      ...(pluginSdkAlias || pluginSdkAccountIdAlias
-        ? {
-            alias: {
-              ...(pluginSdkAlias ? { "openclaw/plugin-sdk": pluginSdkAlias } : {}),
-              ...(pluginSdkAccountIdAlias
-                ? { "openclaw/plugin-sdk/account-id": pluginSdkAccountIdAlias }
-                : {}),
-            },
-          }
-        : {}),
+      ...(Object.keys(allAliases).length > 0 ? { alias: allAliases } : {}),
     });
     return jitiLoader;
   };

@@ -46,6 +46,70 @@
       "types": "./dist/plugin-sdk/account-id.d.ts",
       "default": "./dist/plugin-sdk/account-id.js"
     },
+    "./plugin-sdk/reply-history": {
+      "types": "./dist/plugin-sdk/reply-history.d.ts",
+      "default": "./dist/plugin-sdk/reply-history.js"
+    },
+    "./plugin-sdk/channel-contract": {
+      "types": "./dist/plugin-sdk/channel-contract.d.ts",
+      "default": "./dist/plugin-sdk/channel-contract.js"
+    },
+    "./plugin-sdk/param-readers": {
+      "types": "./dist/plugin-sdk/param-readers.d.ts",
+      "default": "./dist/plugin-sdk/param-readers.js"
+    },
+    "./plugin-sdk/reply-runtime": {
+      "types": "./dist/plugin-sdk/reply-runtime.d.ts",
+      "default": "./dist/plugin-sdk/reply-runtime.js"
+    },
+    "./plugin-sdk/setup": {
+      "types": "./dist/plugin-sdk/setup.d.ts",
+      "default": "./dist/plugin-sdk/setup.js"
+    },
+    "./plugin-sdk/channel-status": {
+      "types": "./dist/plugin-sdk/channel-status.d.ts",
+      "default": "./dist/plugin-sdk/channel-status.js"
+    },
+    "./plugin-sdk/channel-runtime": {
+      "types": "./dist/plugin-sdk/channel-runtime.d.ts",
+      "default": "./dist/plugin-sdk/channel-runtime.js"
+    },
+    "./plugin-sdk/channel-feedback": {
+      "types": "./dist/plugin-sdk/channel-feedback.d.ts",
+      "default": "./dist/plugin-sdk/channel-feedback.js"
+    },
+    "./plugin-sdk/channel-send-result": {
+      "types": "./dist/plugin-sdk/channel-send-result.d.ts",
+      "default": "./dist/plugin-sdk/channel-send-result.js"
+    },
+    "./plugin-sdk/agent-runtime": {
+      "types": "./dist/plugin-sdk/agent-runtime.d.ts",
+      "default": "./dist/plugin-sdk/agent-runtime.js"
+    },
+    "./plugin-sdk/zalouser": {
+      "types": "./dist/plugin-sdk/zalouser.d.ts",
+      "default": "./dist/plugin-sdk/zalouser.js"
+    },
+    "./plugin-sdk/routing": {
+      "types": "./dist/plugin-sdk/routing.d.ts",
+      "default": "./dist/plugin-sdk/routing.js"
+    },
+    "./plugin-sdk/channel-policy": {
+      "types": "./dist/plugin-sdk/channel-policy.d.ts",
+      "default": "./dist/plugin-sdk/channel-policy.js"
+    },
+    "./plugin-sdk/tool-send": {
+      "types": "./dist/plugin-sdk/tool-send.d.ts",
+      "default": "./dist/plugin-sdk/tool-send.js"
+    },
+    "./plugin-sdk/temp-path": {
+      "types": "./dist/plugin-sdk/temp-path.d.ts",
+      "default": "./dist/plugin-sdk/temp-path.js"
+    },
+    "./plugin-sdk/allow-from": {
+      "types": "./dist/plugin-sdk/allow-from.d.ts",
+      "default": "./dist/plugin-sdk/allow-from.js"
+    },
     "./cli-entry": "./enclaws.mjs"
   },
   "scripts": {
