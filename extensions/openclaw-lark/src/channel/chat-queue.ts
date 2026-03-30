@@ -30,8 +30,9 @@ export function threadScopedKey(base: string, threadId?: string): string {
   return threadId ? `${base}:thread:${threadId}` : base;
 }
 
-export function buildQueueKey(accountId: string, chatId: string, threadId?: string): string {
-  return threadScopedKey(`${accountId}:${chatId}`, threadId);
+export function buildQueueKey(accountId: string, chatId: string, threadId?: string, senderId?: string): string {
+  const base = senderId ? `${accountId}:${chatId}:sender:${senderId}` : `${accountId}:${chatId}`;
+  return threadScopedKey(base, threadId);
 }
 
 export function registerActiveDispatcher(key: string, entry: ActiveDispatcherEntry): void {
@@ -55,10 +56,11 @@ export function enqueueFeishuChatTask(params: {
   accountId: string;
   chatId: string;
   threadId?: string;
+  senderId?: string;
   task: () => Promise<void>;
 }): { status: QueueStatus; promise: Promise<void> } {
-  const { accountId, chatId, threadId, task } = params;
-  const key = buildQueueKey(accountId, chatId, threadId);
+  const { accountId, chatId, threadId, senderId, task } = params;
+  const key = buildQueueKey(accountId, chatId, threadId, senderId);
   const prev = chatQueues.get(key) ?? Promise.resolve();
   const status: QueueStatus = chatQueues.has(key) ? 'queued' : 'immediate';
 

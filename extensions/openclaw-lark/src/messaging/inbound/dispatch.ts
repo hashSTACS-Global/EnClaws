@@ -100,7 +100,9 @@ async function dispatchNormalMessage(
 
   // Register the active dispatcher so the monitor abort fast-path can
   // terminate the streaming card before this task completes.
-  const queueKey = buildQueueKey(dc.account.accountId, dc.ctx.chatId, dc.ctx.threadId);
+  const isGroup = dc.ctx.chatType === 'group';
+  const senderQueueId = isGroup ? dc.ctx.senderId : undefined;
+  const queueKey = buildQueueKey(dc.account.accountId, dc.ctx.chatId, dc.ctx.threadId, senderQueueId);
   registerActiveDispatcher(queueKey, { abortCard, abortController });
 
   const effectiveSessionKey = dc.threadSessionKey ?? dc.route.sessionKey;

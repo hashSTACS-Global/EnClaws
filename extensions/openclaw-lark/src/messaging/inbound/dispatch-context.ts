@@ -98,7 +98,7 @@ export function buildDispatchContext(params: {
     accountId: account.accountId,
     peer: {
       kind: isGroup ? 'group' : 'direct',
-      id: isGroup ? ctx.chatId : ctx.senderId,
+      id: isGroup ? `${ctx.chatId}:sender:${ctx.senderId}` : ctx.senderId,
     },
   });
 
