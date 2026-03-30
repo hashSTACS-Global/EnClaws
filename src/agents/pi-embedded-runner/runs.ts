@@ -44,7 +44,18 @@ export function queueEmbeddedPiMessage(sessionId: string, text: string): boolean
  * Used by the plugin steer fast-path which only knows the sessionKey.
  */
 export function queueEmbeddedPiMessageBySessionKey(sessionKey: string, text: string): boolean {
-  const sessionId = SESSION_KEY_TO_ID.get(sessionKey.toLowerCase());
+  const lower = sessionKey.toLowerCase();
+  let sessionId = SESSION_KEY_TO_ID.get(lower);
+  // In multi-tenant mode the actual key may carry a ":user:xxx" suffix that
+  // the plugin caller doesn't know about. Fall back to prefix matching.
+  if (!sessionId) {
+    for (const [key, id] of SESSION_KEY_TO_ID) {
+      if (key.startsWith(lower)) {
+        sessionId = id;
+        break;
+      }
+    }
+  }
   if (!sessionId) {
     diag.debug(`queue by sessionKey failed: sessionKey=${sessionKey} reason=no_mapping`);
     return false;
