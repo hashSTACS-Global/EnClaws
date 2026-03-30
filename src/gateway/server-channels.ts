@@ -423,7 +423,7 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
             enabled: true,
             accounts: newAccounts,
           };
-          console.log(`[loadDbChannels] merged after ${channelType}:`, JSON.stringify(merged, null, 2));
+          // console.log(`[loadDbChannels] merged after ${channelType}:`, JSON.stringify(merged, null, 2));
         }
 
         // Generate bindings from agent.channelAppId (direct 1:1 binding to channel app)

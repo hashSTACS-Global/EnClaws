@@ -29,7 +29,7 @@ import type { ToolsConfig } from "./types.tools.js";
 
 export type OpenClawConfig = {
   meta?: {
-    /** Last OpenClaw version that wrote this config. */
+    /** Last EnClaws version that wrote this config. */
     lastTouchedVersion?: string;
     /** ISO timestamp when this config was last written. */
     lastTouchedAt?: string;
@@ -80,7 +80,7 @@ export type OpenClawConfig = {
   };
   browser?: BrowserConfig;
   ui?: {
-    /** Accent color for OpenClaw UI chrome (hex). */
+    /** Accent color for EnClaws UI chrome (hex). */
     seamColor?: string;
     assistant?: {
       /** Assistant display name for UI surfaces. */

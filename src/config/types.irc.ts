@@ -12,7 +12,7 @@ export type IrcAccountConfig = CommonChannelMessagingConfig & {
   nick?: string;
   /** IRC USER field username (defaults to nick). */
   username?: string;
-  /** IRC USER field realname (default: OpenClaw). */
+  /** IRC USER field realname (default: EnClaws). */
   realname?: string;
   /** Optional IRC server password (sensitive). */
   password?: string;
