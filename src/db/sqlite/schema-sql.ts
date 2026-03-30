@@ -4,7 +4,7 @@
  */
 
 export const SQLITE_SCHEMA_SQL = `
--- OpenClaw Multi-Tenant Schema (SQLite)
+-- EnClaws Multi-Tenant Schema (SQLite)
 
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
@@ -170,7 +170,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs (tenant_id, action);
 CREATE TABLE IF NOT EXISTS usage_records (
   id                 TEXT PRIMARY KEY,
   tenant_id          TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  user_id            TEXT REFERENCES users(id) ON DELETE SET NULL,
+  user_id            TEXT,
   agent_id           TEXT,
   provider           TEXT,
   model              TEXT,

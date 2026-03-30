@@ -1,5 +1,5 @@
 -- ============================================================
--- OpenClaw Multi-Tenant Schema
+-- EnClaws Multi-Tenant Schema
 -- ============================================================
 
 -- Extension for UUID generation
