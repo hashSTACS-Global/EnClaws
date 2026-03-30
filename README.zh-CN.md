@@ -1,27 +1,25 @@
-[English](./README.md) | [中文](./README.zh-CN.md)
-
-# EnClaws — 企业级 数字AI员工的容器化平台
+# EnClaws — 企业级 AI 助手容器平台
 
 <p align="center">
-  <img src="./docs/assets/banner-enclaws-placeholder.png" alt="EnClaws 横幅占位图" width="100%" />
+  <img src="./docs/assets/banner-enclaws-placeholder.svg" alt="EnClaws 横幅占位图" width="100%" />
 </p>
 
 <p align="center">
-  <strong>让 AI 助理从一个人的工具，变成一个企业的生产力。</strong>
+  <strong>让 AI 从个人工具，进化为企业级运营能力。</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/hashSTACS-Global/EnClaws/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/hashSTACS-Global/EnClaws?style=social"></a>
-  <a href="https://github.com/hashSTACS-Global/EnClaws/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/hashSTACS-Global/EnClaws"></a>
-  <a href="./LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
+  <a href="https://github.com/hashSTACS/EnClaws/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/hashSTACS/EnClaws?style=social"></a>
+  <a href="https://github.com/hashSTACS/EnClaws/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/hashSTACS/EnClaws"></a>
+  <a href="./LICENSE"><img alt="Apache-2.0 许可证" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
 </p>
 
 <p align="center">
-  <a href="#快速开始">快速开始</a>
+  <a href="#快速开始-tldr">快速开始</a>
   ·
   <a href="#核心亮点">核心亮点</a>
   ·
-  <a href="#工作原理概览">工作原理</a>
+  <a href="#工作方式简述">工作方式</a>
   ·
   <a href="#社区">社区</a>
   ·
@@ -30,275 +28,258 @@
   <a href="#商标">商标</a>
 </p>
 
-**EnClaws** 是一个**企业级 数字AI员工的容器化平台**，专为大规模创建、调度、隔离、升级和审计多名数字AI员工而设计，覆盖团队协作、业务流程和企业运营等场景。
+**EnClaws** 是一个**企业级 AI 助手容器平台**。它旨在为跨团队、跨流程、跨业务系统的大量助手实例提供创建、调度、隔离、升级与审计能力。
 
-OpenClaw 专注于个人助理体验，而 EnClaws 则聚焦于数字AI员工的**企业容器化平台**。
+如果说 OpenClaw 关注的是个人助手体验，那么 EnClaws 关注的则是数字助手的企业级运行环境。
 
 > [!IMPORTANT]
-> 本仓库刚刚开源。随着项目推进，部署指南、配置说明和技术文档将陆续发布。
+> 本仓库刚刚开放。随着项目推进，后续会逐步发布更多部署、配置与仓库文档。
 
 ## 为什么需要 EnClaws
 
-个人助理可以让一个人变得更强，但企业对数字AI员工有完全不同的需求。
+个人助手可以为单个人发挥巨大作用，但企业的形态完全不同。
 
-企业需要的是：
+企业需要：
 
-- 数字AI员工可以支持高并发和同时支持处理多个用户的工作请求，对比openClaw只能串行的支持一个用户的请求
-- 数字AI员工可以支持企业、部门、用户之间清晰的权限边界，对比openClaw只能服务一个用户，没有企业、部门和用户的概念
-- 数字AI员工可以支持敏感上下文和数据的严格隔离，这是一个agent同时服务多个用户所必须的。对比openClaw由于它只服务一个用户，没有这个需求
-- 数字AI员工可以支持行业、公司、部门、个人多层级的记忆体系，对比openClaw仅有个人的记忆
-- 数字AI员工可以支持可复用的技能，能在多个数字AI员工之间流转和共享
-- 面向管理层的状态、风险、成本、回溯和审计能力
-- 一个能管理大规模数字AI员工的平台，而不是单一的聊天窗口
+- 团队、部门与用户之间的边界
+- 对敏感上下文与数据进行严格隔离
+- 能存在于行业、公司、部门和个人多个层级的记忆体系
+- 可在大量助手之间复用的技能
+- 面向状态、风险、成本、回放与可审计性的管理界面
+- 一个能够管理大量数字助手的平台，而不是单一聊天窗口
 
-简而言之，企业不只需要一个更聪明的助理，而是需要一套能够运行和治理数字AI员工的系统。
+归根结底，企业需要的不只是更聪明的助手，而是一套能够运行并治理数字劳动力的系统。
 
 ## 从 OpenClaw 到 EnClaws
 
-在 Claw 体系中，分工非常清晰：
+在 Claw 的世界里，这个划分很简单：
 
-- **OpenClaw** 是个人版 Claw，围绕单个用户的助理体验而构建。
-- **EnClaws** 是企业版 Claw，专为大规模创建、调度和管理数字AI员工而构建，让它们能够承接组织中的实际工作。
+- **OpenClaw** 是个人 claw，围绕“属于单个人的单个助手体验”来构建。
+- **EnClaws** 是企业 claw，旨在创建、调度和管理大量助手实例，使其能够在组织内部承担真实工作。
 
-如果说 OpenClaw 是个人操作员，那么 EnClaws 就是企业数字AI员工的操作系统。
+如果说 OpenClaw 是个人操作员，那么 EnClaws 就是企业级运行环境。
 
-## 快速开始
+## 快速开始 (TL;DR)
 
-### 方式一 — npm 安装（全平台）
-
-```bash
-npm install -g enclaws
-enclaws gateway
-```
-
-### 方式二 — Windows 一键安装包
-
-从 [Releases](https://github.com/hashSTACS-Global/EnClaws/releases) 下载 `EnClaws-Setup-x.x.x.exe`，双击安装即可。无需管理员权限，内置 Node.js 运行时，完全离线安装。
-
-安装后双击桌面快捷方式 "EnClaws" 或在新终端中运行 `enclaws gateway`。
-
-### 方式三 — 一行命令安装（macOS / Linux）
+在仓库根目录下执行：
 
 ```bash
-curl -fsSL --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/hashSTACS-Global/EnClaws/main/install.sh | bash
-```
-
-### 方式四 — 从源码构建
-
-**前置条件：** 已安装 [Node.js](https://nodejs.org/) >= 22.12.0 及 [pnpm](https://pnpm.io/)。
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/hashSTACS-Global/EnClaws.git
+git clone https://github.com/hashSTACS/EnClaws.git
 cd EnClaws
-
-# 2. 安装依赖并构建
-pnpm install
-pnpm build
-
-# 3. 注册 enclaws 全局命令
-npm link
-
-# 4. 启动 Gateway
-enclaws gateway
+docker-compose up -d
 ```
 
-启动完成后，Gateway 默认可通过 `http://localhost:18789` 访问。
+容器启动后，打开 **Web 管理面板**，开始配置你的多用户企业级助手环境。
+
+> [!NOTE]
+> 当前公开文档仅覆盖上述最小化启动命令，以及存在一个 Web 管理面板这一点。更多设置细节会在后续文档发布时补充。
 
 <p align="center">
-  <img src="./docs/assets/dashboard-enclaws-placeholder.jpg" alt="EnClaws 仪表盘占位图" width="92%" />
+  <img src="./docs/assets/dashboard-enclaws-placeholder.svg" alt="EnClaws 控制台占位图" width="92%" />
 </p>
 
 ## 核心亮点
 
-- **单助理，多任务并发**
-  EnClaws 天然支持并发执行。例如，一个财务数字AI员工应当能够同时处理多名员工的报销申请，而非让所有人排成一条队。
+- **一个助手，同时处理多个并发任务**  
+  EnClaws 以并发执行为设计目标。财务助手应当能够并行处理多名员工的报销请求，而不是让所有请求排成一条单线程队列。
 
-- **原生多用户隔离**
-  平台从设计之初就面向多用户场景，每个用户拥有独立的上下文、记忆和执行边界。
+- **原生多用户隔离**  
+  平台从一开始就为多用户环境而设计，为每个用户提供独立的上下文、记忆和执行边界。
 
-- **层级化记忆体系**
-  企业数字AI员工可以同时调用多个层次的知识：行业记忆、公司记忆、部门记忆和个人记忆。
+- **分层记忆**  
+  企业助手可以同时在多个知识层上进行推理：行业记忆、公司记忆、部门记忆以及个人记忆。
 
-- **记忆蒸馏与升级**
-  有价值的经验不应沉没在原始日志中。它可以被捕获、提炼为可复用的能力制品，经审核后向上层级传播。
+- **记忆蒸馏与升级**  
+  有价值的经验不应永远被困在原始日志中。它可以被捕获、蒸馏为可复用能力资产，经审查后在适当情况下向上提升。
 
-- **技能共享与传播**
-  一个数字AI员工掌握的优秀技能不应被锁死在一个实例中。EnClaws 支持技能的暴露、共享和跨助理传播。
+- **技能共享与传播**  
+  某个助手掌握的强技能，不应只停留在这个助手身上。EnClaws 旨在让技能能够在助手之间被暴露、共享和传播。
 
-- **审计与状态监控**
-  管理者需要可见性。EnClaws 旨在呈现数字AI员工状态、任务执行情况、Token 消耗与成本信号、风险信号，以及可回溯的证据链。
+- **审计与状态监控**  
+  管理者需要可见性。EnClaws 旨在呈现助手状态、任务执行情况、Token 成本信号、风险信号以及可回放证据。
 
-- **A2A 协作（路线图方向）**
-  轻量级的助理间协作是 EnClaws 的未来方向之一，重点在于降低 Token 开销、提升数据交换效率。
+- **A2A 协作为路线图方向**  
+  轻量级的 assistant-to-assistant 协作，是 EnClaws 的前进方向之一，重点在于更低的 Token 开销与更高效的数据交换。
 
 ## 核心能力模型
 
-### 1）单助理，多任务并发
+### 1) 一个助手，同时处理多个并发任务
 
-与传统串行助理不同——它必须完成一条指令才能处理下一条——EnClaws 从设计上支持并发任务执行。
+不同于串行助手必须等待上一条指令完成后才能开始下一条，EnClaws 的设计目标是支持并发任务执行。
 
-这对企业工作负载至关重要。一个财务数字AI员工应该能够同时处理多笔报销请求，而不是让每位员工在同一个数字队列中等待。
+这在企业工作负载中至关重要。财务助手应该能够同时处理多笔报销申请，而不是让每位员工都站在同一条数字队列里等待。
 
-设计目标不仅是速度，更是在持续的多用户负载下，保持稳定、响应迅速的企业级服务行为。
+设计目标不只是更快，而是在持续多用户负载下依然保持稳定、可响应的企业级服务行为。
 
-### 2）原生多用户模式
+### 2) 原生多用户模式
 
-EnClaws 从一开始就为多用户运行而构建。
+EnClaws 从一开始就是为多用户运行而构建的。
 
 这意味着：
 
-- 运行时能够区分不同用户和执行上下文
-- 每个用户拥有独立的记忆和个性化行为
-- 敏感信息被严格隔离，防止在人员、团队或部门之间泄露
+- 运行时能够区分不同用户与执行上下文
+- 每个用户都可以拥有独立的记忆与个性化行为
+- 敏感信息不会在个人、团队或部门之间串流泄露
 
-这不仅仅是便利性问题，更是运营安全的保障。
+重点不只是方便，更是运行安全。
 
-### 3）层级化记忆管理
+### 3) 分层记忆管理
 
-企业工作很少能被一个扁平的上下文窗口所容纳。
+企业工作很少只属于一个扁平的上下文窗口。
 
-EnClaws 围绕分层记忆模型设计，让助理能够同时运用多种类型的知识：
+EnClaws 围绕分层记忆模型设计，使助手能够同时处理多种类型的知识：
 
-- **行业记忆**：公共规则、术语和法规
-- **公司记忆**：商业模式、政策、文化和共享的产品知识
-- **部门记忆**：工作手册、流程规范和协作规则
-- **个人记忆**：个人习惯、偏好和历史上下文
+- **行业记忆**，用于公共规则、术语和监管要求
+- **公司记忆**，用于商业模式、制度、文化和共享产品知识
+- **部门记忆**，用于作业手册、工作流和协作规则
+- **个人记忆**，用于个体习惯、偏好和历史上下文
 
-这不是一个混杂的大脑，而是结构化的组织记忆。
+这不是一个混成一团的巨型大脑，而是结构化的组织记忆。
 
-### 4）记忆蒸馏与升级
+### 4) 记忆蒸馏与升级
 
-EnClaws 不会盲目地将原始记忆同步到所有地方。
+EnClaws 的目标并不是把原始记忆盲目同步到所有地方。
 
-相反，目标是识别有价值的经验，将其提炼为可复用的能力制品，经过脱敏和合规审查后，从个人或团队层级向上推广至部门或公司层级。
+相反，它的目标是识别有价值的经验，将其蒸馏为可复用的能力资产，完成脱敏与合规审查，然后再从个人或团队层级向上提升到部门或公司范围。
 
-这使得学习转化为组织进化，而非重复劳动。
+这让学习变成组织演化，而不是重复返工。
 
-### 5）技能共享与自动传播
+### 5) 技能共享与自动传播
 
-一个优秀的企业平台应当让能力自由流动。
+一个优秀的企业平台，应该让能力能够流动起来。
 
-EnClaws 围绕标准化的技能共享模型设计，一个在某个数字AI员工上被证明有效的技能，可以被暴露、复用并传播到其他助理。
+EnClaws 围绕标准化的技能共享模型来设计，使某个助手中被证明有效的技能，可以被暴露、复用并传播给其他助手。
 
-一个数字AI员工学到的有用技能，应当让整个系统受益。
+一个助手学会的有用能力，应该让整个系统都变得更强。
 
-### 6）审计与状态监控
+### 6) 审计与状态监控
 
-数字AI员工的能力越强，可观测性就越重要。
+数字助手越强大，可观测性就越重要。
 
-EnClaws 旨在为管理层提供以下可见性：
+EnClaws 旨在提供面向管理者的可视化视图，用于呈现：
 
-- 数字AI员工状态
+- 助手状态
 - 已执行的指令
 - 风险信号
-- Token 消耗与成本透视
-- 可回溯的流程、证据和责任链
+- Token 消耗与成本可见性
+- 可回放的流程、证据与责任链
 
-这是让数字AI员工从"黑箱"变为"可治理"的关键。
+只有这样，数字劳动力才能从“神秘黑箱”变成“可治理系统”。
 
-### 7）助理间协作（路线图方向）
+### 7) 助手协作作为路线图方向
 
-A2A 协作是 EnClaws 的未来发展方向之一。
+A2A 协作是 EnClaws 的前进方向之一。
 
-目标是建立一种轻量级的容器间协作模型，让大量协调指令可以通过直接的协议交换完成，而非反复经过完整的模型推理。
+目标是构建一种轻量级的容器间协作模型，使大量协同指令可以通过直接协议交换完成，而不必每次都反复经过完整模型解释。
 
 这意味着：
 
 - 更低的 Token 消耗
-- 更高效的共享数据流
-- 多数字AI员工协作更像一个协调有序的团队
+- 更高效的共享数据流动
+- 让多助手协作更像一支协调有序的团队
 
-这属于路线图规划，是发展方向，而非首日即交付的承诺。
+它被放在路线图部分，是因为这是一个方向，而不是首日上线就夸大的已实现能力。
 
-## 工作原理概览
+## 工作方式（简述）
 
 ```text
 用户 / 团队 / 企业系统
-         │
-         ▼
-  数字AI员工运行时 + 控制平面
-         │
-    ┌────┼────┬────┐
-    ▼    ▼    ▼    ▼
-  并发  记忆  技能  审计
-         │
-         ▼
-   Web 管理面板与企业管理界面
+            │
+            ▼
+ 助手运行时 + 控制平面
+            │
+   ┌────────┼────────┬────────┐
+   ▼        ▼        ▼        ▼
+ 并发      记忆      技能     审计
+            │
+            ▼
+   Web 管理面板与企业级操作界面
 ```
 
-更详细的架构示意：
+一个稍微更详细一些的心智模型如下：
 
 ```text
 企业用户 + 业务系统 + 工作事件
-              │
-              ▼
-    容器化数字AI员工运行时与调度器
-              │
-      ┌───────┼───────┬───────┐
-      ▼       ▼       ▼       ▼
-    隔离     记忆    技能    监控
-              │
-              ▼
-     证据、回溯、运营、执行
+               │
+               ▼
+     容器化助手运行时与调度器
+               │
+      ┌────────┼────────┬────────┐
+      ▼        ▼        ▼        ▼
+     隔离      记忆      技能     监控
+               │
+               ▼
+      证据、回放、运营、行动
 ```
 
-## 北极星
+## North Star
 
-EnClaws 的目标不只是做一个更炫酷的 AI 玩具。
+EnClaws 想做的，不只是一个更花哨的 AI 玩具。
 
-也不是做一个只有少数架构师才能理解的抽象底层。
+它也不想只成为一个只有极少数架构师才能理解的抽象底层。
 
-它的北极星是逐步将**企业的运营方式**转变为一个**开放、协作、可持续进化的 数字AI员工的底座和操作系统**。
+它的 North Star，是逐步把**企业的运作方式**转化为一个**开放、协作、可演化的 AI 系统**。
 
 ## 加入我们
 
-EnClaws 致力于为企业真实业务流程中的 数字AI员工 应用定义基础层。
+EnClaws 的目标，是帮助定义真实企业工作流中的 AI 基础层。
 
-如果你希望 数字AI员工 从演示走向实际业务运营：
+如果你希望 AI 从 Demo 走向业务运营：
 
-- 为本仓库点个 Star
-- 提交 Issue，描述你在实际运营中遇到的具体需求
-- 参与技能规范和运行时架构的讨论
-- 一起让企业 数字AI员工 更可复现、更可治理、更可共享
+- 给仓库点一个 star
+- 提交带有具体运营需求的 issue
+- 参与 Skill Spec 与运行时相关讨论
+- 帮助企业 AI 变得更可复现、可治理、可共享
 
-## 致谢
+## 致谢与鸣谢
 
-EnClaws 站在开源巨人的肩膀上。我们由衷感谢：
+EnClaws 站在开源巨人的肩膀上。我们在此诚挚感谢：
 
-- **[openclaw/openclaw](https://github.com/openclaw/openclaw)**
-  奠定了优秀数字助理范式的个人助理基础项目。EnClaws 在此基础上，将思路延伸至企业级容器化运营。
+- **[openclaw/openclaw](https://github.com/openclaw/openclaw)**  
+  它作为个人助手基础设施，帮助定义了强有力的数字助手范式。EnClaws 则沿着这条思路，继续向企业级容器化运行拓展。
 
-- **[luolin-ai/openclawWeComzh](https://github.com/luolin-ai/openclawWeComzh)**
-  在企业微信适配和多租户企业 IM 集成层方面提供了宝贵的参考。
+- **[luolin-ai/openclawWeComzh](https://github.com/luolin-ai/openclawWeComzh)**  
+  它为企业微信适配以及多租户企业 IM 集成层提供了有价值的参考。
 
-我们始终秉持开放契约精神，与开源社区共同推进企业 AI 运行时标准。
+我们依然致力于秉持开源精神，并与开源社区一起持续推进企业 AI 运行时标准的改进。
 
 ## 社区
 
-- 贡献指南请参阅 **[CONTRIBUTING.md](./CONTRIBUTING.md)**
-- 项目治理与维护者职责请参阅 **[GOVERNANCE.md](./GOVERNANCE.md)**
-- 社区行为准则请参阅 **[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)**
-- 安全漏洞报告请参阅 **[SECURITY.md](./SECURITY.md)**
-- 品牌使用规则请参阅 **[TRADEMARK.md](./TRADEMARK.md)**
+- 贡献指南请参见 **[CONTRIBUTING.md](./CONTRIBUTING.md)**。
+- 项目决策机制与维护者职责请参见 **[GOVERNANCE.md](./GOVERNANCE.md)**。
+- 社区行为规范请参见 **[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)**。
+- 漏洞报告方式请参见 **[SECURITY.md](./SECURITY.md)**。
+- 品牌使用规则请参见 **[TRADEMARK.md](./TRADEMARK.md)**。
+
+### 加入 EnClaws 社区
+
+欢迎加入社区，交流版本动态、使用反馈和产品讨论：
+
+- 飞书群: [点击加入](https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=1b6r1c67-a833-4d36-b748-5e6729d65045)
+- Discord 社区: [点击加入](https://discord.gg/p4Kp5jKAsZ)
+
+<p align="center">
+  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=1b6r1c67-a833-4d36-b748-5e6729d65045">
+    <img src="./docs/assets/community-feishu-qr.jpg" alt="加入 EnClaws 飞书群二维码" width="280" />
+  </a>
+  <a href="https://discord.gg/p4Kp5jKAsZ">
+    <img src="./docs/assets/community-discord-qr.jpg" alt="加入 EnClaws Discord 社区二维码" width="280" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=1b6r1c67-a833-4d36-b748-5e6729d65045"><strong>加入飞书群</strong></a>
+  ·
+  <a href="https://discord.gg/p4Kp5jKAsZ"><strong>加入 Discord 社区</strong></a>
+</p>
 
 ## 许可证
 
-本项目基于 **Apache License 2.0** 许可。详见 **[LICENSE](./LICENSE)**。
+本项目采用 **Apache License 2.0** 许可证。详见 **[LICENSE](./LICENSE)**。
 
 ## 商标
 
-源代码以 Apache License 2.0 开源，但项目名称、Logo 和品牌标识为保留权利。
+源代码依据 Apache License 2.0 开放，但项目名称、标志和品牌标识均为保留权利内容。
 
-Apache License 2.0 **不**授予商标使用权。允许和禁止的品牌使用方式请参阅 **[TRADEMARK.md](./TRADEMARK.md)**。
+Apache License 2.0 **不授予**商标权。有关允许与禁止的品牌使用方式，请参见 **[TRADEMARK.md](./TRADEMARK.md)**。
 
----
-
-<!--
-本 README 当前使用的资源占位文件：
-
-- ./docs/assets/banner-enclaws-placeholder.png
-- ./docs/assets/dashboard-enclaws-placeholder.jpg
-
-待正式视觉素材就绪后，直接替换上述文件即可保持 README 布局不变。
--->
