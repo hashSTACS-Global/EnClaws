@@ -47,8 +47,16 @@ export async function recordUsage(params: {
       ],
     );
   } catch (err) {
-    console.error("[usage] Failed to record usage:", err);
-    throw err;
+    // errcode 787 = SQLITE_CONSTRAINT_FOREIGNKEY — tenant may have been deleted;
+    // usage recording is best-effort, so demote to warn and do not re-throw.
+    const isFkViolation =
+      err instanceof Error && (err as unknown as Record<string, unknown>)["errcode"] === 787;
+    if (isFkViolation) {
+      console.warn("[usage] Skipping usage record: tenant not found (tenantId=%s)", params.tenantId);
+    } else {
+      console.error("[usage] Failed to record usage:", err);
+      throw err;
+    }
   }
 }
 

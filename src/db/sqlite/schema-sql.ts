@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS llm_interaction_traces (
   user_id            TEXT,
   session_key        TEXT,
   agent_id           TEXT,
+  channel            TEXT,
   turn_id            TEXT NOT NULL,
   turn_index         INTEGER NOT NULL DEFAULT 0,
   user_input         TEXT,

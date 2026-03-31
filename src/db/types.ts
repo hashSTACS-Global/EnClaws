@@ -326,6 +326,7 @@ export interface LlmInteractionTrace {
   userId: string | null;
   sessionKey: string | null;
   agentId: string | null;
+  channel: string | null;
   turnId: string;
   turnIndex: number;
   userInput: string | null;

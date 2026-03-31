@@ -19,6 +19,7 @@ function rowToTrace(row: Record<string, unknown>): LlmInteractionTrace {
     userId: (row.user_id as string) ?? null,
     sessionKey: (row.session_key as string) ?? null,
     agentId: (row.agent_id as string) ?? null,
+    channel: (row.channel as string) ?? null,
     turnId: row.turn_id as string,
     turnIndex: row.turn_index as number,
     userInput: (row.user_input as string) ?? null,
@@ -45,6 +46,7 @@ export async function createInteractionTrace(params: {
   userId?: string;
   sessionKey?: string;
   agentId?: string;
+  channel?: string;
   turnId: string;
   turnIndex: number;
   userInput?: string;
@@ -67,16 +69,17 @@ export async function createInteractionTrace(params: {
   try {
     await query(
       `INSERT INTO llm_interaction_traces
-       (tenant_id, user_id, session_key, agent_id, turn_id, turn_index,
+       (tenant_id, user_id, session_key, agent_id, channel, turn_id, turn_index,
         user_input, provider, model, system_prompt, messages, tools,
         request_params, response, stop_reason, error_message,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, duration_ms)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
       [
         params.tenantId,
         params.userId ?? null,
         params.sessionKey ?? null,
         params.agentId ?? null,
+        params.channel ?? null,
         params.turnId,
         params.turnIndex,
         params.userInput ?? null,
@@ -198,6 +201,7 @@ export async function listInteractionTurns(
     turnId: string;
     userInput: string | null;
     agentId: string | null;
+    channel: string | null;
     userId: string | null;
     sessionKey: string | null;
     provider: string | null;
@@ -253,6 +257,7 @@ export async function listInteractionTurns(
        turn_id,
        MAX(CASE WHEN turn_index = 0 THEN user_input END) as user_input,
        MAX(agent_id::text) as agent_id,
+       MAX(channel::text) as channel,
        MAX(user_id::text) as user_id,
        MAX(session_key::text) as session_key,
        MAX(provider::text) as provider,
@@ -274,6 +279,7 @@ export async function listInteractionTurns(
       turnId: row.turn_id as string,
       userInput: (row.user_input as string) ?? null,
       agentId: (row.agent_id as string) ?? null,
+      channel: (row.channel as string) ?? null,
       userId: (row.user_id as string) ?? null,
       sessionKey: (row.session_key as string) ?? null,
       provider: (row.provider as string) ?? null,

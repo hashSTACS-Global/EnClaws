@@ -14,6 +14,7 @@ interface TurnSummary {
   turnId: string;
   userInput: string | null;
   agentId: string | null;
+  channel: string | null;
   userId: string | null;
   sessionKey: string | null;
   provider: string | null;
@@ -113,6 +114,7 @@ export class TenantTracesView extends LitElement {
     .badge-error { background: #3b1111; color: #fca5a5; }
     .badge-platform { background: #2d1b4e; color: #c4b5fd; }
     .badge-user { background: #1e3a5f; color: #93c5fd; }
+    .badge-system { background: #1f2937; color: #9ca3af; }
 
     .turn-user-line {
       display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;
@@ -123,6 +125,7 @@ export class TenantTracesView extends LitElement {
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .turn-content.empty { color: var(--text-muted, #525252); font-style: italic; }
+    .turn-content.system-event { color: var(--text-muted, #525252); font-style: italic; font-size: 0.8rem; }
     .turn-session-id {
       font-size: 0.7rem; color: var(--text-muted, #525252);
       font-family: var(--font-mono, monospace); max-width: 180px;
@@ -358,34 +361,90 @@ export class TenantTracesView extends LitElement {
 
   private truncate(text: string | null, max = 80): string {
     if (!text) return t("tenantTraces.noInput");
-    return text.length > max ? text.slice(0, max) + "..." : text;
+    // Collapse actual and escaped newlines/tabs to spaces for single-line preview
+    const clean = text.replace(/\r?\n|\t/g, " ").replace(/\\n|\\t/g, " ").replace(/\s{2,}/g, " ").trim();
+    return clean.length > max ? clean.slice(0, max) + "..." : clean;
   }
 
   /**
-   * Parse platform system message prefix.
-   * Format: "System: [timestamp GMT+8] Platform[app_id] group group_id | UserName (user_id)\nActual content..."
-   * Returns { platform, userName, userId, content } or null if not matching.
+   * Parse platform system message to extract platform, user name, and actual content.
+   * Handles multiple formats:
+   * - "System: [time] Feishu[id] group id | UserName (uid)\nContent"
+   * - Prefixed with "System: [time] Reasoning STREAM ..." before the Feishu block
+   * - "Replied message (untrusted, for context): ```...```" blocks stripped
    */
   private parsePlatformMessage(raw: string | null): {
     platform: string; userName: string; userId: string; content: string;
   } | null {
     if (!raw) return null;
-    // Match: System: [date GMT+8] PlatformName[...] ... | UserName (uid...)
+
+    // Primary: match "System: [...] Platform[...] ... | UserName (uid)"
     const m = raw.match(
-      /^System:\s*\[.*?\]\s*([A-Za-z][A-Za-z0-9_-]*)\[.*?\].*?\|\s*(.+?)\s*\(([\w_-]+)\.{0,3}\)/
+      /System:\s*\[.*?\]\s*([A-Za-z][A-Za-z0-9_-]*)\[.*?\][\s\S]*?\|\s*(.+?)\s*\(([\w_-]+)\.{0,3}\)/
     );
-    if (!m) return null;
-    const platform = m[1];
-    const userName = m[2].trim();
-    const userId = m[3];
-    // Content after the header line
-    const nlIdx = raw.indexOf("\n");
-    let rest = nlIdx >= 0 ? raw.slice(nlIdx + 1).trim() : "";
-    // Strip any "(untrusted metadata): ```...```" blocks (Conversation info, Sender, etc.)
-    rest = rest.replace(/^[^\n]*\(untrusted metadata\)[^\n]*\n?```[\s\S]*?```\s*/gim, "").trim();
-    // Also strip bare single-line "(untrusted metadata)" lines without code fence
-    rest = rest.replace(/^[^\n]*\(untrusted metadata\)[^\n]*\n?/gim, "").trim();
-    return { platform, userName, userId, content: rest };
+
+    let platform: string;
+    let userName: string;
+    let userId: string;
+
+    if (m) {
+      platform = m[1];
+      userName = m[2].trim();
+      userId = m[3];
+    } else {
+      // Fallback: extract platform from "Feishu[...]" and username from Sender JSON
+      const platformM = raw.match(/([A-Za-z][A-Za-z0-9_-]*)\[[\w-]+\]/);
+      if (!platformM) return null;
+      platform = platformM[1];
+      // Try to extract display name from Sender metadata JSON block
+      const senderM = raw.match(/Sender[^\n]*\n```[\s\S]*?"(?:label|name)"\s*:\s*"([^"]+)"/);
+      if (!senderM) return null;
+      const candidate = senderM[1];
+      // Skip if it looks like a raw user ID (e.g. ou_xxx, oc_xxx, cli_xxx)
+      if (/^[a-z]{2,4}_[0-9a-f]{8,}$/i.test(candidate)) return null;
+      userName = candidate;
+      userId = "";
+    }
+
+    // Content = everything after the matched header's line
+    // When m is null (fallback path), use the full raw string for content extraction
+    const headerEnd = m ? (m.index ?? 0) + m[0].length : 0;
+    const afterHeader = raw.slice(headerEnd);
+    const nlIdx = afterHeader.indexOf("\n");
+    const rest = nlIdx >= 0 ? afterHeader.slice(nlIdx + 1) : afterHeader;
+
+    // Split by code-fenced blocks; the user's actual input is the last non-empty
+    // plain-text segment (not inside ```...```)
+    const segments = rest.split(/```[\s\S]*?```/g);
+    let content = "";
+    for (let i = segments.length - 1; i >= 0; i--) {
+      const seg = segments[i].trim();
+      if (seg) { content = seg; break; }
+    }
+
+    // Strip leading "System:" prefix from content if present
+    const cleanContent = content.replace(/^System:\s*/i, "").trim();
+
+    return { platform, userName, userId, content: cleanContent };
+  }
+
+  /** Extract user content or a short friendly label from a raw system message. */
+  private extractSystemEventLabel(raw: string): string {
+    // Classify well-known system-internal patterns first
+    if (/pre-compaction memory flush/i.test(raw)) return "[系统: 记忆整理]";
+    if (/reasoning\s*stream/i.test(raw)) return "[系统: 推理流]";
+    if (/\[cron:[^\]]+\]/i.test(raw)) return "[系统: 定时任务]";
+    if (/^IMPORTANT:/m.test(raw) && !/Feishu|WeChat|Telegram/i.test(raw)) return "[系统事件]";
+
+    // Try to find clean user text: last non-empty segment outside code blocks
+    const segments = raw.split(/```[\s\S]*?```/g);
+    const SYSTEM_LINE = /^\s*(System:|Conversation info|Sender|Replied message|<think>|IMPORTANT:)/i;
+    for (let i = segments.length - 1; i >= 0; i--) {
+      const lines = segments[i].split("\n").filter(l => l.trim() && !SYSTEM_LINE.test(l));
+      const text = lines.join(" ").trim();
+      if (text) return text;
+    }
+    return "[系统事件]";
   }
 
   private isRawJson(traceId: string, section: string): boolean {
@@ -441,21 +500,53 @@ export class TenantTracesView extends LitElement {
     return result;
   }
 
+  /** Derive a display platform name from channel field (reliable) or parsed header fallback. */
+  private resolvePlatform(channel: string | null, parsedPlatform?: string): string | null {
+    if (channel) {
+      const c = channel.toLowerCase();
+      if (c.includes("feishu") || c.includes("lark")) return "Feishu";
+      if (c.includes("wechat") || c.includes("wecom")) return "WeCom";
+      if (c === "webchat") return "WebChat";
+      if (c.includes("telegram")) return "Telegram";
+      if (c.includes("slack")) return "Slack";
+      if (c.includes("dingtalk") || c.includes("dingding")) return "DingTalk";
+      if (c === "whatsapp") return "WhatsApp";
+      if (c === "discord") return "Discord";
+      if (c === "googlechat") return "Google Chat";
+      if (c === "signal") return "Signal";
+      if (c === "imessage") return "iMessage";
+      if (c === "irc") return "IRC";
+      // Fallback: return raw channel value capitalised
+      return channel.charAt(0).toUpperCase() + channel.slice(1);
+    }
+    return parsedPlatform ?? null;
+  }
+
   private renderTurnCard(turn: TurnSummary) {
     const isExpanded = this.expandedTurnId === turn.turnId;
     const totalTokens = turn.totalInputTokens + turn.totalOutputTokens;
     const parsed = this.parsePlatformMessage(turn.userInput);
 
-    const mainContent = parsed
-      ? html`
-          <div class="turn-user-line">
-            <span class="badge badge-platform">${parsed.platform}</span>
-            <span class="turn-user-name">${parsed.userName}</span>
-          </div>
-          <div class="turn-content ${parsed.content ? "" : "empty"}">
-            ${parsed.content ? this.truncate(parsed.content, 120) : this.truncate(turn.userInput, 120)}
-          </div>`
-      : html`<div class="turn-content ${turn.userInput ? "" : "empty"}">${this.truncate(turn.userInput, 120)}</div>`;
+    // Platform: from channel field (reliable) with parsed header as fallback
+    const platform = this.resolvePlatform(turn.channel, parsed?.platform);
+    // Username: from parsed header; fall back to turn.userId
+    const userName = parsed?.userName ?? turn.userId ?? null;
+    const content = parsed?.content
+      ? this.truncate(parsed.content, 120)
+      : this.extractSystemEventLabel(turn.userInput ?? "");
+    // System badge: only when content is a recognised system event label (e.g. [系统: 记忆整理])
+    const isSystemEvent = content.startsWith("[系统");
+
+    const mainContent = html`
+      <div class="turn-user-line">
+        ${isSystemEvent
+          ? html`<span class="badge badge-system">System</span>`
+          : html`
+              ${platform ? html`<span class="badge badge-platform">${platform}</span>` : nothing}
+              ${userName ? html`<span class="turn-user-name">${userName}</span>` : nothing}
+            `}
+      </div>
+      <div class="turn-content">${content}</div>`;
 
     return html`
       <div class="turn-card ${isExpanded ? "expanded" : ""}" @click=${() => this.toggleTurn(turn.turnId)}>
@@ -465,8 +556,7 @@ export class TenantTracesView extends LitElement {
             <div class="turn-meta">
               <span>${this.formatTime(turn.createdAt)}</span>
               ${turn.agentId ? html`<span>Agent: ${turn.agentId}</span>` : nothing}
-              ${turn.model ? html`<span>${turn.provider ? turn.provider + "/" : ""}${turn.model}</span>` : nothing}
-              ${turn.sessionKey ? html`<span class="turn-session-id" title=${turn.sessionKey}>${turn.sessionKey.slice(0, 12)}…</span>` : nothing}
+              ${turn.model ? html`<span>Model: ${turn.model}</span>` : nothing}
             </div>
           </div>
           <div style="display:flex;gap:0.35rem;flex-shrink:0;align-items:flex-start">

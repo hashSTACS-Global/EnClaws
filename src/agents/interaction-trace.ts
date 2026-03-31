@@ -19,6 +19,7 @@ export type InteractionTraceContext = {
   tenantUserId?: string;
   sessionKey?: string;
   agentId?: string;
+  channel?: string;
   runId?: string;
   provider?: string;
   modelId?: string;
@@ -207,6 +208,7 @@ export function createInteractionTraceRecorder(
           userId: ctx.tenantUserId,
           sessionKey: ctx.sessionKey,
           agentId: ctx.agentId,
+          channel: ctx.channel,
           turnId,
           turnIndex: i,
           userInput: i === 0 ? ctx.userInput : undefined,

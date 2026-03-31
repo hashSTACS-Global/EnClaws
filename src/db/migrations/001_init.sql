@@ -251,6 +251,7 @@ CREATE TABLE llm_interaction_traces (
   user_id       VARCHAR(255),
   session_key   VARCHAR(512),
   agent_id      VARCHAR(128),
+  channel       VARCHAR(128),
 
   -- 用户轮次分组: 同一次用户提问共享相同turn_id
   turn_id       UUID         NOT NULL,

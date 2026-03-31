@@ -931,6 +931,7 @@ export async function runEmbeddedAttempt(
               provider: params.provider,
               modelId: params.modelId,
               userInput: params.prompt,
+              channel: params.messageChannel ?? params.messageProvider,
             },
             params.runId,
           )
