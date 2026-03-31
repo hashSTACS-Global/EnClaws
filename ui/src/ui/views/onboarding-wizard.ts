@@ -15,11 +15,11 @@ type WizardStep = "welcome" | "channel" | "model" | "agent" | "done";
 const STEPS: WizardStep[] = ["welcome", "model", "agent", "channel", "done"];
 
 const CHANNEL_ICONS: Record<string, string> = {
-  feishu: `<img src="/feishu-logo.png" width="24" height="24" alt="Feishu" style="object-fit:contain;" />`,
-  wechat: `<img src="/wechat-logo.png" width="24" height="24" alt="WeChat" style="object-fit:contain;" />`,
-  dingtalk: `<img src="/dingtalk-logo.png" width="24" height="24" alt="DingTalk" style="object-fit:contain;" />`,
-  slack: `<img src="/slack-logo.png" width="24" height="24" alt="Slack" style="object-fit:contain;" />`,
-  webchat: `<img src="/webchat-logo.png" width="24" height="24" alt="WebChat" style="object-fit:contain;" />`,
+  feishu: `<img src="/feishu-logo.svg" width="24" height="24" alt="Feishu" style="object-fit:contain;" />`,
+  wechat: `<img src="/wechat-logo.svg" width="24" height="24" alt="WeChat" style="object-fit:contain;" />`,
+  dingtalk: `<img src="/dingtalk-logo.svg" width="24" height="24" alt="DingTalk" style="object-fit:contain;" />`,
+  slack: `<img src="/slack-logo.svg" width="24" height="24" alt="Slack" style="object-fit:contain;" />`,
+  webchat: `<img src="/webchat-logo.svg" width="24" height="24" alt="WebChat" style="object-fit:contain;" />`,
 };
 
 const CHANNEL_OPTIONS = [

@@ -254,6 +254,18 @@ export class OpenClawLogin extends LitElement {
       text-decoration: underline;
     }
 
+    /* ── Secret input with eye toggle ── */
+    .secret-wrap { position: relative; display: flex; align-items: center; }
+    .secret-wrap input { flex: 1; padding-right: 2rem; }
+    .eye-btn {
+      position: absolute; right: 0.4rem; background: none; border: none;
+      color: var(--text-muted, #525252); cursor: pointer;
+      padding: 0.2rem; line-height: 1; user-select: none;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .eye-btn:hover { color: var(--text, #e5e5e5); }
+    .eye-btn svg { pointer-events: none; }
+
     .divider {
       display: flex;
       align-items: center;
@@ -544,13 +556,20 @@ export class OpenClawLogin extends LitElement {
         </div>
         <div class="form-group">
           <label>${t("login.password")}</label>
-          <input
-            type="password"
-            class=${this.hasError("password") ? "has-error" : ""}
-            placeholder=${t("login.passwordPlaceholder")}
-            .value=${this.password}
-            @input=${(e: InputEvent) => { this.password = (e.target as HTMLInputElement).value; this.clearFieldError("password"); }}
-          />
+          <div class="secret-wrap">
+            <input
+              type="password"
+              class=${this.hasError("password") ? "has-error" : ""}
+              placeholder=${t("login.passwordPlaceholder")}
+              .value=${this.password}
+              @input=${(e: InputEvent) => { this.password = (e.target as HTMLInputElement).value; this.clearFieldError("password"); }}
+            />
+            <button type="button" class="eye-btn"
+              @mousedown=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "text"; }}
+              @mouseup=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "password"; }}
+              @mouseleave=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "password"; }}
+            ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
           ${this.renderFieldError("password")}
         </div>
         ${this.serverError ? this.renderFormError(this.translateServerError(this.serverError)) : nothing}
@@ -618,15 +637,22 @@ export class OpenClawLogin extends LitElement {
         </div>
         <div class="form-group">
           <label>${t("login.password")}</label>
-          <input
-            type="password"
-            class=${this.hasError("regPassword") ? "has-error" : ""}
-            placeholder=${t("login.regPasswordPlaceholder")}
-            .value=${this.regPassword}
-            @input=${(e: InputEvent) => { this.regPassword = (e.target as HTMLInputElement).value; this.clearFieldError("regPassword"); }}
-            @focus=${() => { this.regPasswordFocused = true; }}
-            @blur=${() => { this.regPasswordFocused = false; }}
-          />
+          <div class="secret-wrap">
+            <input
+              type="password"
+              class=${this.hasError("regPassword") ? "has-error" : ""}
+              placeholder=${t("login.regPasswordPlaceholder")}
+              .value=${this.regPassword}
+              @input=${(e: InputEvent) => { this.regPassword = (e.target as HTMLInputElement).value; this.clearFieldError("regPassword"); }}
+              @focus=${() => { this.regPasswordFocused = true; }}
+              @blur=${() => { this.regPasswordFocused = false; }}
+            />
+            <button type="button" class="eye-btn"
+              @mousedown=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "text"; }}
+              @mouseup=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "password"; }}
+              @mouseleave=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "password"; }}
+            ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
           ${this.regPasswordFocused ? html`<div class="form-hint">${t("login.passwordHint")}</div>` : this.renderFieldError("regPassword")}
         </div>
         ${this.serverError ? this.renderFormError(this.translateServerError(this.serverError)) : nothing}
