@@ -35,7 +35,8 @@
   <p>网关启动后将自动跳转控制面板</p>
   <div class="status" id="status">正在连接...</div>
 <script>
-  const port = 18789;
+  // Must match gateway default (see src/gateway/server.impl.ts); keep in sync when default port changes.
+  const port = 18888;
   const url = `http://localhost:${port}`;
   let attempts = 0;
 
