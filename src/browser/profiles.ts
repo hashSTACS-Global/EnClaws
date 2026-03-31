@@ -6,7 +6,7 @@
  * Multi-instance: callers may pass an explicit range to avoid collisions.
  *
  * Reserved ports (do not use for CDP):
- *   18789 - Gateway WebSocket
+ *   18888 - Gateway WebSocket
  *   18790 - Bridge
  *   18791 - Browser control server
  *   18792-18799 - Reserved for future one-off services (canvas at 18793)

@@ -92,7 +92,7 @@ export const renderGatewayServiceCleanupHints = vi
   .fn()
   .mockReturnValue(["cleanup"]) as unknown as MockFn;
 export const resolveGatewayProgramArguments = vi.fn().mockResolvedValue({
-  programArguments: ["node", "cli", "gateway", "--port", "18789"],
+  programArguments: ["node", "cli", "gateway", "--port", "18888"],
 }) as unknown as MockFn;
 export const serviceInstall = vi.fn().mockResolvedValue(undefined) as unknown as MockFn;
 export const serviceIsLoaded = vi.fn().mockResolvedValue(false) as unknown as MockFn;
@@ -385,7 +385,7 @@ beforeEach(() => {
   findExtraGatewayServices.mockReset().mockResolvedValue([]);
   renderGatewayServiceCleanupHints.mockReset().mockReturnValue(["cleanup"]);
   resolveGatewayProgramArguments.mockReset().mockResolvedValue({
-    programArguments: ["node", "cli", "gateway", "--port", "18789"],
+    programArguments: ["node", "cli", "gateway", "--port", "18888"],
   });
   serviceInstall.mockReset().mockResolvedValue(undefined);
   serviceIsLoaded.mockReset().mockResolvedValue(false);

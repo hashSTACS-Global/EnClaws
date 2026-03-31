@@ -41,7 +41,7 @@ type Pending = {
 };
 
 export type GatewayClientOptions = {
-  url?: string; // ws://127.0.0.1:18789
+  url?: string; // ws://127.0.0.1:18888
   connectDelayMs?: number;
   tickWatchMinIntervalMs?: number;
   token?: string;
@@ -108,7 +108,7 @@ export class GatewayClient {
     if (this.closed) {
       return;
     }
-    const url = this.opts.url ?? "ws://127.0.0.1:18789";
+    const url = this.opts.url ?? "ws://127.0.0.1:18888";
     if (this.opts.tlsFingerprint && !url.startsWith("wss://")) {
       this.opts.onConnectError?.(new Error("gateway tls fingerprint requires wss:// gateway url"));
       return;
@@ -129,7 +129,7 @@ export class GatewayClient {
         `SECURITY ERROR: Cannot connect to "${displayHost}" over plaintext ws://. ` +
           "Both credentials and chat data would be exposed to network interception. " +
           "Use wss:// for remote URLs. Safe defaults: keep gateway.bind=loopback and connect via SSH tunnel " +
-          "(ssh -N -L 18789:127.0.0.1:18789 user@gateway-host), or use Tailscale Serve/Funnel. " +
+          "(ssh -N -L 18888:127.0.0.1:18888 user@gateway-host), or use Tailscale Serve/Funnel. " +
           "Run `enclaws doctor --fix` for guidance.",
       );
       this.opts.onConnectError?.(error);

@@ -27,7 +27,7 @@ export function registerNodeCli(program: Command) {
       () =>
         `\n${theme.heading("Examples:")}\n${formatHelpExamples([
           [
-            "enclaws node run --host 127.0.0.1 --port 18789",
+            "enclaws node run --host 127.0.0.1 --port 18888",
             "Run the node host in the foreground.",
           ],
           ["enclaws node status", "Check node host service status."],
@@ -49,7 +49,7 @@ export function registerNodeCli(program: Command) {
       const existing = await loadNodeHostConfig();
       const host =
         (opts.host as string | undefined)?.trim() || existing?.gateway?.host || "127.0.0.1";
-      const port = parsePortWithFallback(opts.port, existing?.gateway?.port ?? 18789);
+      const port = parsePortWithFallback(opts.port, existing?.gateway?.port ?? 18888);
       await runNodeHost({
         gatewayHost: host,
         gatewayPort: port,

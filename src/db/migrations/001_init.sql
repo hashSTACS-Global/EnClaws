@@ -294,7 +294,7 @@ CREATE INDEX idx_traces_agent ON llm_interaction_traces (tenant_id, agent_id, cr
 -- ============================================================
 CREATE TABLE IF NOT EXISTS sys_gateway_config (
   id                       INTEGER PRIMARY KEY CHECK (id = 1),
-  port                     INTEGER NOT NULL DEFAULT 18789,
+  port                     INTEGER NOT NULL DEFAULT 18888,
   mode                     VARCHAR(32) DEFAULT 'local',
   bind                     VARCHAR(32) DEFAULT 'lan',
   custom_bind_host         VARCHAR(255),

@@ -29,7 +29,7 @@ const EXAMPLES = [
     'enclaws message send --target +15555550123 --message "Hi" --json',
     "Send via your web session and print JSON result.",
   ],
-  ["enclaws gateway --port 18789", "Run the WebSocket Gateway locally."],
+  ["enclaws gateway --port 18888", "Run the WebSocket Gateway locally."],
   ["enclaws --dev gateway", "Run a dev Gateway (isolated state/config) on ws://127.0.0.1:19001."],
   ["enclaws gateway --force", "Kill anything bound to the default gateway port, then start it."],
   ["enclaws gateway ...", "Gateway control via WebSocket."],

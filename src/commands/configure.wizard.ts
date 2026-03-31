@@ -243,7 +243,7 @@ export async function runConfigureWizard(
       }
     }
 
-    const localUrl = "ws://127.0.0.1:18789";
+    const localUrl = "ws://127.0.0.1:18888";
     const localProbe = await probeGatewayReachable({
       url: localUrl,
       token: baseConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN,

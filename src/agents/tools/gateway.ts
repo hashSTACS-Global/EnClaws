@@ -5,7 +5,7 @@ import { resolveLeastPrivilegeOperatorScopesForMethod } from "../../gateway/meth
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
 import { readStringParam } from "./common.js";
 
-export const DEFAULT_GATEWAY_URL = "ws://127.0.0.1:18789";
+export const DEFAULT_GATEWAY_URL = "ws://127.0.0.1:18888";
 
 export type GatewayCallOptions = {
   gatewayUrl?: string;

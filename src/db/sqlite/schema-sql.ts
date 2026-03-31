@@ -231,7 +231,7 @@ CREATE TABLE IF NOT EXISTS _migrations (
 -- 13. System Gateway Config (single-row)
 CREATE TABLE IF NOT EXISTS sys_gateway_config (
   id                       INTEGER PRIMARY KEY CHECK (id = 1),
-  port                     INTEGER NOT NULL DEFAULT 18789,
+  port                     INTEGER NOT NULL DEFAULT 18888,
   mode                     TEXT DEFAULT 'local',
   bind                     TEXT DEFAULT 'lan',
   custom_bind_host         TEXT,

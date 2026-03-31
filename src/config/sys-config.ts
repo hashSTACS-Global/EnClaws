@@ -44,7 +44,7 @@ export async function buildSysConfig(): Promise<OpenClawConfig> {
 
   // control_ui: built entirely from env vars
   if (config.gateway) {
-    const port = config.gateway.port ?? 18789;
+    const port = config.gateway.port ?? 18888;
     const envDisableAuth = process.env.OPENCLAW_CONTROL_UI_DISABLE_DEVICE_AUTH;
     const envOrigins = process.env.OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS;
 
