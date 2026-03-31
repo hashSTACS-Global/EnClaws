@@ -1,7 +1,7 @@
 /**
  * Onboarding wizard — full-screen step-by-step guide after registration.
  *
- * Steps: Channel → Model → Agent → Done
+ * Steps: Model → Agent → Channel → Done
  */
 
 import { html, css, LitElement, nothing } from "lit";
@@ -12,7 +12,7 @@ import { tenantRpc } from "./tenant/rpc.ts";
 
 type WizardStep = "welcome" | "channel" | "model" | "agent" | "done";
 
-const STEPS: WizardStep[] = ["welcome", "channel", "model", "agent", "done"];
+const STEPS: WizardStep[] = ["welcome", "model", "agent", "channel", "done"];
 
 const CHANNEL_ICONS: Record<string, string> = {
   feishu: `<img src="/feishu-logo.png" width="24" height="24" alt="Feishu" style="object-fit:contain;" />`,
@@ -528,11 +528,6 @@ export class OnboardingWizard extends LitElement {
     return true;
   }
 
-  private nextChannel() {
-    if (this.selectedChannel && !this.validateChannel()) return;
-    this.goNext();
-  }
-
   private nextModel() {
     if (!this.validateModel()) return;
     this.goNext();
@@ -540,6 +535,11 @@ export class OnboardingWizard extends LitElement {
 
   private nextAgent() {
     if (!this.validateAgent()) return;
+    this.goNext();
+  }
+
+  private nextChannel() {
+    if (this.selectedChannel && !this.validateChannel()) return;
     this.submitAll();
   }
 
@@ -604,7 +604,7 @@ export class OnboardingWizard extends LitElement {
       <div class="wizard">
         ${this.step !== "welcome" && this.step !== "done" ? html`
           <div class="progress">
-            ${["channel", "model", "agent"].map((s, i) => {
+            ${["model", "agent", "channel"].map((s, i) => {
               const currentIdx = STEPS.indexOf(this.step) - 1;
               const cls = i < currentIdx ? "done" : i === currentIdx ? "active" : "";
               return html`<div class="progress-step ${cls}"></div>`;
@@ -613,9 +613,9 @@ export class OnboardingWizard extends LitElement {
         ` : nothing}
 
         ${this.step === "welcome" ? this.renderWelcome() : nothing}
-        ${this.step === "channel" ? this.renderChannel() : nothing}
         ${this.step === "model" ? this.renderModel() : nothing}
         ${this.step === "agent" ? this.renderAgent() : nothing}
+        ${this.step === "channel" ? this.renderChannel() : nothing}
         ${this.step === "done" ? this.renderDone() : nothing}
       </div>
     `;
@@ -639,7 +639,7 @@ export class OnboardingWizard extends LitElement {
     const isFeishu = this.selectedChannel === "feishu";
     const showManualForm = this.selectedChannel && (!isFeishu || this.feishuMode === "manual");
     return html`
-      <div class="step-indicator">${t("onboarding.step", { current: "1", total: "3" })}</div>
+      <div class="step-indicator">${t("onboarding.step", { current: "3", total: "3" })}</div>
       <div class="wizard-header">
         <h2 class="wizard-title">${t("onboarding.channelTitle")}</h2>
         <p class="wizard-desc">${t("onboarding.channelDesc")}</p>
@@ -711,11 +711,14 @@ export class OnboardingWizard extends LitElement {
       ` : nothing}
 
       <div class="wizard-actions">
-        <button class="btn btn-ghost" @click=${() => this.skip()}>${t("onboarding.skip")}</button>
-        <button class="btn btn-primary" ?disabled=${this.saving || !this.selectedChannel || !this.channelAppId || !this.channelAppSecret}
-          @click=${() => this.nextChannel()}>
-          ${this.saving ? t("onboarding.saving") : t("onboarding.next")}
-        </button>
+        <button class="btn btn-ghost" @click=${() => this.goBack()}>${t("onboarding.back")}</button>
+        <div>
+          <button class="btn btn-ghost" @click=${() => this.skip()}>${t("onboarding.skip")}</button>
+          <button class="btn btn-primary" ?disabled=${this.saving || !this.selectedChannel || !this.channelAppId || !this.channelAppSecret}
+            @click=${() => this.nextChannel()}>
+            ${this.saving ? t("onboarding.saving") : t("onboarding.complete")}
+          </button>
+        </div>
       </div>
     `;
   }
@@ -723,7 +726,7 @@ export class OnboardingWizard extends LitElement {
   private renderModel() {
     const provider = MODEL_PROVIDERS.find(p => p.type === this.selectedProvider);
     return html`
-      <div class="step-indicator">${t("onboarding.step", { current: "2", total: "3" })}</div>
+      <div class="step-indicator">${t("onboarding.step", { current: "1", total: "3" })}</div>
       <div class="wizard-header">
         <h2 class="wizard-title">${t("onboarding.modelTitle")}</h2>
         <p class="wizard-desc">${t("onboarding.modelDesc")}</p>
@@ -770,21 +773,18 @@ export class OnboardingWizard extends LitElement {
       ` : nothing}
 
       <div class="wizard-actions">
-        <button class="btn btn-ghost" @click=${() => this.goBack()}>${t("onboarding.back")}</button>
-        <div>
-          <button class="btn btn-ghost" @click=${() => this.skip()}>${t("onboarding.skip")}</button>
-          <button class="btn btn-primary" ?disabled=${this.saving || !this.selectedProvider || !this.modelApiKey || !this.modelBaseUrl || !this.modelName}
-            @click=${() => this.nextModel()}>
-            ${t("onboarding.next")}
-          </button>
-        </div>
+        <button class="btn btn-ghost" @click=${() => this.skip()}>${t("onboarding.skip")}</button>
+        <button class="btn btn-primary" ?disabled=${this.saving || !this.selectedProvider || !this.modelApiKey || !this.modelBaseUrl || !this.modelName}
+          @click=${() => this.nextModel()}>
+          ${t("onboarding.next")}
+        </button>
       </div>
     `;
   }
 
   private renderAgent() {
     return html`
-      <div class="step-indicator">${t("onboarding.step", { current: "3", total: "3" })}</div>
+      <div class="step-indicator">${t("onboarding.step", { current: "2", total: "3" })}</div>
       <div class="wizard-header">
         <h2 class="wizard-title">${t("onboarding.agentTitle")}</h2>
         <p class="wizard-desc">${t("onboarding.agentDesc")}</p>
@@ -813,7 +813,7 @@ export class OnboardingWizard extends LitElement {
           <button class="btn btn-ghost" @click=${() => this.skip()}>${t("onboarding.skip")}</button>
           <button class="btn btn-primary" ?disabled=${this.saving || !this.agentName || !this.agentPrompt || !this.selectedProvider}
             @click=${() => this.nextAgent()}>
-            ${this.saving ? t("onboarding.saving") : t("onboarding.complete")}
+            ${t("onboarding.next")}
           </button>
         </div>
       </div>
@@ -830,16 +830,16 @@ export class OnboardingWizard extends LitElement {
 
       <ul class="checklist">
         <li>
-          <span class="check-icon ${this.channelCreated ? 'done' : 'skip'}">${this.channelCreated ? '✓' : '—'}</span>
-          ${t("onboarding.channelTitle")}
-        </li>
-        <li>
           <span class="check-icon ${this.modelCreated ? 'done' : 'skip'}">${this.modelCreated ? '✓' : '—'}</span>
           ${t("onboarding.modelTitle")}
         </li>
         <li>
           <span class="check-icon ${this.agentCreated ? 'done' : 'skip'}">${this.agentCreated ? '✓' : '—'}</span>
           ${t("onboarding.agentTitle")}
+        </li>
+        <li>
+          <span class="check-icon ${this.channelCreated ? 'done' : 'skip'}">${this.channelCreated ? '✓' : '—'}</span>
+          ${t("onboarding.channelTitle")}
         </li>
       </ul>
 

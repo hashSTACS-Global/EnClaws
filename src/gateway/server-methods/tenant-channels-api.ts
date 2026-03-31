@@ -171,6 +171,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         appSecret?: string;
         botName?: string;
         groupPolicy?: string;
+        agentId?: string;
         agentConfig?: {
           agentId?: string;
           displayName?: string;
@@ -273,14 +274,25 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         }
       }
 
-      // Auto-create an agent for each app (using per-app agentConfig)
+      // Bind or auto-create an agent for each app
       const createdAgents = [];
       for (let appIdx = 0; appIdx < createdApps.length; appIdx++) {
         const app = createdApps[appIdx];
         const appInput = apps![appIdx];
         const agentConfig = appInput.agentConfig;
 
-        // Build agentId: prefer user-provided, otherwise auto-generate
+        // If agentId is provided, bind existing agent
+        if (appInput.agentId) {
+          try {
+            await updateTenantAgent(ctx.tenantId, appInput.agentId, { channelAppId: app.id });
+            createdAgents.push({ agentId: appInput.agentId, name: null });
+          } catch (bindErr: unknown) {
+            console.warn(`[tenant.channels.create] Bind agent ${appInput.agentId} failed: ${bindErr instanceof Error ? bindErr.message : "unknown"}`);
+          }
+          continue;
+        }
+
+        // Legacy: Build agentId from agentConfig or auto-generate
         let finalAgentId: string;
         if (agentConfig?.agentId) {
           finalAgentId = agentConfig.agentId;
@@ -640,12 +652,13 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { channelId, appId, appSecret, botName, groupPolicy, agentConfig } = params as {
+    const { channelId, appId, appSecret, botName, groupPolicy, agentConfig, agentId: bindAgentId } = params as {
       channelId: string;
       appId: string;
       appSecret?: string;
       botName?: string;
       groupPolicy?: string;
+      agentId?: string;
       agentConfig?: {
         agentId?: string;
         displayName?: string;
@@ -683,9 +696,16 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         groupPolicy: (groupPolicy as ChannelPolicy) ?? "open",
       });
 
-      // Auto-create linked agent if agentConfig provided
+      // Bind existing agent if agentId provided
       let createdAgent: { agentId: string; name: string | null } | null = null;
-      if (agentConfig) {
+      if (bindAgentId) {
+        try {
+          await updateTenantAgent(ctx.tenantId, bindAgentId, { channelAppId: app.id });
+          createdAgent = { agentId: bindAgentId, name: null };
+        } catch (bindErr: unknown) {
+          console.warn(`[apps.add] Bind agent ${bindAgentId} failed: ${bindErr instanceof Error ? bindErr.message : "unknown"}`);
+        }
+      } else if (agentConfig) {
         let finalAgentId: string;
         if (agentConfig.agentId) {
           finalAgentId = agentConfig.agentId;
@@ -786,13 +806,14 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { appDbId, appId, appSecret, botName, groupPolicy, isActive, agentConfig } = params as {
+    const { appDbId, appId, appSecret, botName, groupPolicy, isActive, agentConfig, agentId: bindAgentId } = params as {
       appDbId: string;
       appId?: string;
       appSecret?: string;
       botName?: string;
       groupPolicy?: string;
       isActive?: boolean;
+      agentId?: string;
       agentConfig?: {
         agentId?: string;
         displayName?: string;
@@ -880,8 +901,24 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
       }
     }
 
-    // Update linked agent if agentConfig provided
-    if (agentConfig) {
+    // Bind existing agent if agentId provided
+    if (bindAgentId) {
+      try {
+        // Unbind old agent from this app
+        const allAgents = await listTenantAgents(ctx.tenantId, { activeOnly: false });
+        const oldLinked = allAgents.find((ag) => ag.channelAppId === appDbId);
+        if (oldLinked && oldLinked.agentId !== bindAgentId) {
+          await updateTenantAgent(ctx.tenantId, oldLinked.agentId, { channelAppId: null });
+        }
+        // Bind new agent
+        await updateTenantAgent(ctx.tenantId, bindAgentId, { channelAppId: appDbId });
+        invalidateTenantConfigCache(ctx.tenantId);
+        await context.reloadDbChannels();
+      } catch (bindErr: unknown) {
+        console.warn(`[apps.update] Bind agent ${bindAgentId} failed: ${bindErr instanceof Error ? bindErr.message : "unknown"}`);
+      }
+    } else if (agentConfig) {
+      // Legacy: Update linked agent if agentConfig provided (backward compat)
       const allAgents = await listTenantAgents(ctx.tenantId, { activeOnly: false });
       const linkedAgent = allAgents.find((ag) => ag.channelAppId === appDbId);
       if (linkedAgent) {

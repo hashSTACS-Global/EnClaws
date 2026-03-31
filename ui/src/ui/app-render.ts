@@ -95,6 +95,7 @@ import { renderSkills } from "./views/skills.ts";
 import "./views/login.ts";
 import "./views/tenant/tenant-settings.ts";
 import "./views/tenant/tenant-users.ts";
+import "./views/tenant/tenant-agents.ts";
 import "./views/tenant/tenant-channels.ts";
 import "./views/tenant/tenant-models.ts";
 import "./views/tenant/tenant-skills.ts";
@@ -392,7 +393,7 @@ export function renderApp(state: AppViewState) {
                   const userRole = authState?.user?.role;
                   const isPlatformAdmin = userRole === "platform-admin";
                   const isTenantAdmin = userRole === "owner" || userRole === "admin";
-                  const tenantOnlyTabs = new Set(["tenant-settings", "tenant-users", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage"]);
+                  const tenantOnlyTabs = new Set(["tenant-settings", "tenant-users", "tenant-agents", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage"]);
                   const platformOnlyTabs = new Set(["overview"]);
                   const visibleTabs = group.tabs.filter((tab) => {
                     if (platformOnlyTabs.has(tab)) return isPlatformAdmin;
@@ -1448,7 +1449,7 @@ export function renderApp(state: AppViewState) {
                   }
 
                   ${
-                          state.tab === "tenant-settings" || state.tab === "tenant-users" || state.tab === "tenant-channels" || state.tab === "tenant-models" || state.tab === "tenant-skills" || state.tab === "tenant-traces" || state.tab === "tenant-usage"
+                          state.tab === "tenant-settings" || state.tab === "tenant-users" || state.tab === "tenant-agents" || state.tab === "tenant-channels" || state.tab === "tenant-models" || state.tab === "tenant-skills" || state.tab === "tenant-traces" || state.tab === "tenant-usage"
                                   ? html`
                                       <section class="card">
                                           ${state.tab === "tenant-settings" ? html`
@@ -1457,6 +1458,9 @@ export function renderApp(state: AppViewState) {
                                           ${state.tab === "tenant-users" ? html`
                                               <tenant-users-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}></tenant-users-view>` : nothing}
+                                          ${state.tab === "tenant-agents" ? html`
+                                              <tenant-agents-view
+                                                      .gatewayUrl=${state.settings.gatewayUrl}></tenant-agents-view>` : nothing}
                                           ${state.tab === "tenant-channels" ? html`
                                               <tenant-channels-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}></tenant-channels-view>` : nothing}

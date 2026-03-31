@@ -8,7 +8,7 @@ export const TAB_GROUPS = [
     },
     {
         label: "tenant",
-        tabs: ["tenant-settings", "tenant-users", "tenant-models", "tenant-channels", "tenant-skills", "tenant-traces"],
+        tabs: ["tenant-settings", "tenant-users", "tenant-models", "tenant-agents", "tenant-channels", "tenant-skills", "tenant-traces"],
     },
     {
         label: "settings",
@@ -33,8 +33,9 @@ export type Tab =
     | "logs"
     | "tenant-settings"
     | "tenant-users"
-    | "tenant-channels"
     | "tenant-models"
+    | "tenant-agents"
+    | "tenant-channels"
     | "tenant-skills"
     | "tenant-traces"
     | "tenant-usage";
@@ -56,8 +57,9 @@ const TAB_PATHS: Record<Tab, string> = {
     logs: "/logs",
     "tenant-settings": "/tenant-settings",
     "tenant-users": "/tenant-users",
-    "tenant-channels": "/tenant-channels",
     "tenant-models": "/tenant-models",
+    "tenant-agents": "/tenant-agents",
+    "tenant-channels": "/tenant-channels",
     "tenant-skills": "/tenant-skills",
     "tenant-traces": "/tenant-traces",
     "tenant-usage": "/tenant-usage",
@@ -177,6 +179,8 @@ export function iconForTab(tab: Tab): IconName {
         case "tenant-settings":
             return "settings";
         case "tenant-users":
+            return "folder";
+        case "tenant-agents":
             return "folder";
         case "tenant-channels":
             return "link";

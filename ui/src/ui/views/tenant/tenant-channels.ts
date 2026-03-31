@@ -2,7 +2,7 @@
  * Tenant channel management view.
  *
  * Create, edit, and delete channels with structured app configs.
- * Each app has a one-to-one linked agent config.
+ * Each app can be bound to an existing agent from the Agent Management page.
  */
 
 import { html, css, LitElement, nothing } from "lit";
@@ -14,134 +14,17 @@ import feishuScopes from "./feishu-scopes.json";
 
 type ChannelPolicy = "open" | "allowlist" | "disabled";
 
-interface ModelConfigEntry {
-  providerId: string;
-  modelId: string;
-  isDefault: boolean;
-}
-
-interface FlatModelOption {
-  providerId: string;
-  providerName: string;
-  modelId: string;
-  modelName: string;
-}
-
 interface ChannelAppAgent {
   agentId: string;
   name: string | null;
   config: Record<string, unknown>;
-  modelConfig?: ModelConfigEntry[];
   isActive: boolean;
 }
 
-interface ToolDef {
-  id: string;
-  label: string;
-  description: string;
+interface AgentOption {
+  agentId: string;
+  name: string;
 }
-
-interface ToolGroup {
-  id: string;
-  label: string;
-  tools: ToolDef[];
-}
-
-/** Tool group/tool ID definitions — labels resolved at render time via i18n. */
-const TOOL_GROUP_DEFS = [
-  { id: "fs", labelKey: "tenantChannels.toolGroupFs", tools: [
-    { id: "read", label: "read", descKey: "tenantChannels.toolRead" },
-    { id: "write", label: "write", descKey: "tenantChannels.toolWrite" },
-    { id: "edit", label: "edit", descKey: "tenantChannels.toolEdit" },
-    { id: "apply_patch", label: "apply_patch", descKey: "tenantChannels.toolApplyPatch" },
-    { id: "grep", label: "grep", descKey: "tenantChannels.toolGrep" },
-    { id: "find", label: "find", descKey: "tenantChannels.toolFind" },
-    { id: "ls", label: "ls", descKey: "tenantChannels.toolLs" },
-  ]},
-  { id: "runtime", labelKey: "tenantChannels.toolGroupRuntime", tools: [
-    { id: "exec", label: "exec", descKey: "tenantChannels.toolExec" },
-    { id: "process", label: "process", descKey: "tenantChannels.toolProcess" },
-  ]},
-  { id: "web", labelKey: "tenantChannels.toolGroupWeb", tools: [
-    { id: "web_search", label: "web_search", descKey: "tenantChannels.toolWebSearch" },
-    { id: "web_fetch", label: "web_fetch", descKey: "tenantChannels.toolWebFetch" },
-  ]},
-  { id: "memory", labelKey: "tenantChannels.toolGroupMemory", tools: [
-    { id: "memory_search", label: "memory_search", descKey: "tenantChannels.toolMemorySearch" },
-    { id: "memory_get", label: "memory_get", descKey: "tenantChannels.toolMemoryGet" },
-  ]},
-  { id: "sessions", labelKey: "tenantChannels.toolGroupSessions", tools: [
-    { id: "sessions_list", label: "sessions_list", descKey: "tenantChannels.toolSessionsList" },
-    { id: "sessions_history", label: "sessions_history", descKey: "tenantChannels.toolSessionsHistory" },
-    { id: "sessions_send", label: "sessions_send", descKey: "tenantChannels.toolSessionsSend" },
-    { id: "sessions_spawn", label: "sessions_spawn", descKey: "tenantChannels.toolSessionsSpawn" },
-    { id: "subagents", label: "subagents", descKey: "tenantChannels.toolSubagents" },
-    { id: "session_status", label: "session_status", descKey: "tenantChannels.toolSessionStatus" },
-  ]},
-  { id: "messaging", labelKey: "tenantChannels.toolGroupMessaging", tools: [
-    { id: "message", label: "message", descKey: "tenantChannels.toolMessage" },
-  ]},
-  { id: "automation", labelKey: "tenantChannels.toolGroupAutomation", tools: [
-    { id: "cron", label: "cron", descKey: "tenantChannels.toolCron" },
-    { id: "gateway", label: "gateway", descKey: "tenantChannels.toolGateway" },
-  ]},
-  { id: "ui", labelKey: "tenantChannels.toolGroupUi", tools: [
-    { id: "browser", label: "browser", descKey: "tenantChannels.toolBrowser" },
-    { id: "canvas", label: "canvas", descKey: "tenantChannels.toolCanvas" },
-  ]},
-  { id: "other", labelKey: "tenantChannels.toolGroupOther", tools: [
-    { id: "nodes", label: "nodes", descKey: "tenantChannels.toolNodes" },
-    { id: "agents_list", label: "agents_list", descKey: "tenantChannels.toolAgentsList" },
-    { id: "image", label: "image", descKey: "tenantChannels.toolImage" },
-    { id: "tts", label: "tts", descKey: "tenantChannels.toolTts" },
-  ]},
-  { id: "feishu-docs", labelKey: "tenantChannels.toolGroupFeishuDocs", tools: [
-    { id: "feishu_create_doc", label: "feishu_create_doc", descKey: "tenantChannels.toolFeishuCreateDoc" },
-    { id: "feishu_fetch_doc", label: "feishu_fetch_doc", descKey: "tenantChannels.toolFeishuFetchDoc" },
-    { id: "feishu_update_doc", label: "feishu_update_doc", descKey: "tenantChannels.toolFeishuUpdateDoc" },
-    { id: "feishu_doc_comments", label: "feishu_doc_comments", descKey: "tenantChannels.toolFeishuDocComments" },
-    { id: "feishu_doc_media", label: "feishu_doc_media", descKey: "tenantChannels.toolFeishuDocMedia" },
-    { id: "feishu_search_doc_wiki", label: "feishu_search_doc_wiki", descKey: "tenantChannels.toolFeishuSearchDocWiki" },
-  ]},
-  { id: "feishu-wiki", labelKey: "tenantChannels.toolGroupFeishuWiki", tools: [
-    { id: "feishu_wiki_space", label: "feishu_wiki_space", descKey: "tenantChannels.toolFeishuWikiSpace" },
-    { id: "feishu_wiki_space_node", label: "feishu_wiki_space_node", descKey: "tenantChannels.toolFeishuWikiSpaceNode" },
-  ]},
-  { id: "feishu-drive", labelKey: "tenantChannels.toolGroupFeishuDrive", tools: [
-    { id: "feishu_drive_file", label: "feishu_drive_file", descKey: "tenantChannels.toolFeishuDriveFile" },
-    { id: "feishu_sheet", label: "feishu_sheet", descKey: "tenantChannels.toolFeishuSheet" },
-    { id: "feishu_bitable_app", label: "feishu_bitable_app", descKey: "tenantChannels.toolFeishuBitableApp" },
-    { id: "feishu_bitable_app_table", label: "feishu_bitable_app_table", descKey: "tenantChannels.toolFeishuBitableAppTable" },
-    { id: "feishu_bitable_app_table_record", label: "feishu_bitable_app_table_record", descKey: "tenantChannels.toolFeishuBitableAppTableRecord" },
-    { id: "feishu_bitable_app_table_field", label: "feishu_bitable_app_table_field", descKey: "tenantChannels.toolFeishuBitableAppTableField" },
-    { id: "feishu_bitable_app_table_view", label: "feishu_bitable_app_table_view", descKey: "tenantChannels.toolFeishuBitableAppTableView" },
-  ]},
-  { id: "feishu-calendar", labelKey: "tenantChannels.toolGroupFeishuCalendar", tools: [
-    { id: "feishu_calendar_calendar", label: "feishu_calendar_calendar", descKey: "tenantChannels.toolFeishuCalendarCalendar" },
-    { id: "feishu_calendar_event", label: "feishu_calendar_event", descKey: "tenantChannels.toolFeishuCalendarEvent" },
-    { id: "feishu_calendar_event_attendee", label: "feishu_calendar_event_attendee", descKey: "tenantChannels.toolFeishuCalendarEventAttendee" },
-    { id: "feishu_calendar_freebusy", label: "feishu_calendar_freebusy", descKey: "tenantChannels.toolFeishuCalendarFreebusy" },
-  ]},
-  { id: "feishu-task", labelKey: "tenantChannels.toolGroupFeishuTask", tools: [
-    { id: "feishu_task_task", label: "feishu_task_task", descKey: "tenantChannels.toolFeishuTaskTask" },
-    { id: "feishu_task_tasklist", label: "feishu_task_tasklist", descKey: "tenantChannels.toolFeishuTaskTasklist" },
-    { id: "feishu_task_subtask", label: "feishu_task_subtask", descKey: "tenantChannels.toolFeishuTaskSubtask" },
-    { id: "feishu_task_comment", label: "feishu_task_comment", descKey: "tenantChannels.toolFeishuTaskComment" },
-  ]},
-  { id: "feishu-im", labelKey: "tenantChannels.toolGroupFeishuIm", tools: [
-    { id: "feishu_im_user_message", label: "feishu_im_user_message", descKey: "tenantChannels.toolFeishuImUserMessage" },
-    { id: "feishu_im_user_get_messages", label: "feishu_im_user_get_messages", descKey: "tenantChannels.toolFeishuImUserGetMessages" },
-    { id: "feishu_im_user_get_thread_messages", label: "feishu_im_user_get_thread_messages", descKey: "tenantChannels.toolFeishuImUserGetThreadMessages" },
-    { id: "feishu_im_user_search_messages", label: "feishu_im_user_search_messages", descKey: "tenantChannels.toolFeishuImUserSearchMessages" },
-    { id: "feishu_im_user_fetch_resource", label: "feishu_im_user_fetch_resource", descKey: "tenantChannels.toolFeishuImUserFetchResource" },
-    { id: "feishu_chat", label: "feishu_chat", descKey: "tenantChannels.toolFeishuChat" },
-    { id: "feishu_chat_members", label: "feishu_chat_members", descKey: "tenantChannels.toolFeishuChatMembers" },
-  ]},
-  { id: "feishu-user", labelKey: "tenantChannels.toolGroupFeishuUser", tools: [
-    { id: "feishu_get_user", label: "feishu_get_user", descKey: "tenantChannels.toolFeishuGetUser" },
-    { id: "feishu_search_user", label: "feishu_search_user", descKey: "tenantChannels.toolFeishuSearchUser" },
-  ]},
-] as const;
 
 interface AppConnectionStatus {
   connected: boolean;
@@ -159,14 +42,8 @@ interface ChannelApp {
   isActive?: boolean;
   connectionStatus?: AppConnectionStatus | null;
   agent: ChannelAppAgent | null;
-  // Form-only fields for agent config (not from server)
-  formAgentId?: string;
-  formAgentDisplayName?: string;
-  formAgentModelConfig?: ModelConfigEntry[];
-  formAgentSystemPrompt?: string;
-  formAgentIdManuallyEdited?: boolean;
-  formAgentToolsDeny?: string[];
-  formAgentToolsExpanded?: boolean;
+  // Form-only: selected agent binding
+  formAgentBinding?: string;
   // Feishu registration form state
   feishuMode?: "scan" | "manual";
   feishuDeviceCode?: string;
@@ -175,13 +52,6 @@ interface ChannelApp {
   feishuPollTimer?: ReturnType<typeof setInterval>;
   feishuDomain?: string;
   feishuEnv?: string;
-}
-
-interface TenantModelOption {
-  id: string;
-  providerType: string;
-  providerName: string;
-  models: Array<{ id: string; name: string }>;
 }
 
 interface TenantChannel {
@@ -194,8 +64,6 @@ interface TenantChannel {
   createdAt: string;
 }
 
-/** All tool IDs (flat) — used by toggleAllAppTools. Stable across locales. */
-const ALL_TOOL_IDS = TOOL_GROUP_DEFS.flatMap((g) => g.tools.map((t) => t.id));
 
 @customElement("tenant-channels-view")
 export class TenantChannelsView extends LitElement {
@@ -306,14 +174,6 @@ export class TenantChannelsView extends LitElement {
     .form-field textarea { min-height: 60px; resize: vertical; font-family: inherit; }
     .form-field input:focus, .form-field select:focus, .form-field textarea:focus { border-color: var(--accent, #3b82f6); }
     .form-hint { font-size: 0.72rem; color: var(--text-muted, #525252); margin-top: 0.25rem; }
-    .model-select-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 0.4rem; }
-    .model-select-table th, .model-select-table td {
-      text-align: left; padding: 0.35rem 0.45rem;
-      border-bottom: 1px solid var(--border, #262626);
-    }
-    .model-select-table th { color: var(--text-secondary, #a3a3a3); font-weight: 500; }
-    .model-row.selected { background: none; }
-    .model-row:hover { background: none; }
     .divider {
       display: flex; align-items: center; margin: 1rem 0; font-size: 0.75rem;
       color: var(--text-muted, #525252);
@@ -342,47 +202,8 @@ export class TenantChannelsView extends LitElement {
     }
     .eye-btn:hover { color: var(--text, #e5e5e5); }
     .eye-btn svg { pointer-events: none; }
-    .agent-section-label {
-      font-size: 0.72rem; color: var(--text-muted, #525252);
-      margin: 0.5rem 0 0.35rem; padding-top: 0.5rem;
-      border-top: 1px dashed var(--border, #262626);
-    }
     .empty { text-align: center; padding: 2rem; color: var(--text-muted, #525252); font-size: 0.85rem; }
     .loading { text-align: center; padding: 2rem; color: var(--text-muted, #525252); }
-    .tools-section {
-      margin-top: 0.5rem; border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-md, 6px); overflow: hidden;
-    }
-    .tools-header {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 0.5rem 0.65rem; background: var(--card, #141414); cursor: pointer;
-      user-select: none; font-size: 0.8rem;
-    }
-    .tools-header:hover { background: var(--border, #262626); }
-    .tools-header-left { display: flex; align-items: center; gap: 0.4rem; }
-    .tools-header-arrow { font-size: 0.65rem; transition: transform 0.15s; }
-    .tools-header-arrow.open { transform: rotate(90deg); }
-    .tools-body { padding: 0.5rem 0.65rem; }
-    .tools-actions { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
-    .tools-group-header {
-      display: flex; align-items: center; gap: 0.4rem;
-      margin: 0.5rem 0 0.15rem; padding-top: 0.35rem;
-      border-top: 1px solid var(--border, #262626);
-    }
-    .tools-group-header:first-child { border-top: none; margin-top: 0; padding-top: 0; }
-    .tools-group-header-label {
-      font-size: 0.72rem; font-weight: 500; color: var(--text-secondary, #a3a3a3); flex: 1;
-    }
-    .tools-group-header-count { font-size: 0.68rem; color: var(--text-muted, #525252); }
-    .tools-group-checkbox { width: 13px; height: 13px; cursor: pointer; accent-color: var(--accent, #3b82f6); }
-    .tool-row {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 0.2rem 0; font-size: 0.78rem;
-    }
-    .tool-row-info { display: flex; align-items: center; gap: 0.4rem; }
-    .tool-row-name { font-family: monospace; font-size: 0.76rem; }
-    .tool-row-desc { color: var(--text-muted, #525252); font-size: 0.7rem; }
-    .tool-toggle { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent, #3b82f6); }
     .feishu-mode-bar {
       display: inline-flex; gap: 2px; margin-bottom: 0.75rem;
       background: var(--border, #262626); border-radius: 4px; padding: 2px;
@@ -474,12 +295,12 @@ export class TenantChannelsView extends LitElement {
   @state() private formChannelName = "";
   @state() private formChannelPolicy: ChannelPolicy = "open";
   @state() private formApps: ChannelApp[] = [];
-  @state() private availableModels: TenantModelOption[] = [];
+  @state() private availableAgents: AgentOption[] = [];
 
   connectedCallback() {
     super.connectedCallback();
     this.loadChannels();
-    this.loadModels();
+    this.loadAgents();
   }
 
   disconnectedCallback() {
@@ -533,12 +354,13 @@ export class TenantChannelsView extends LitElement {
     ];
   }
 
-  private get toolGroups(): ToolGroup[] {
-    return TOOL_GROUP_DEFS.map((g) => ({
-      id: g.id,
-      label: t(g.labelKey),
-      tools: g.tools.map((td) => ({ id: td.id, label: td.label, description: t(td.descKey) })),
-    }));
+  private async loadAgents() {
+    try {
+      const result = await this.rpc("tenant.agents.list") as { agents: Array<{ agentId: string; name: string | null; config?: Record<string, unknown>; isActive?: boolean }> };
+      this.availableAgents = (result.agents ?? [])
+        .filter((a) => a.isActive !== false)
+        .map((a) => ({ agentId: a.agentId, name: (a.config?.displayName as string) ?? a.name ?? a.agentId }));
+    } catch { /* non-critical */ }
   }
 
   private async copyScopes() {
@@ -571,24 +393,6 @@ export class TenantChannelsView extends LitElement {
     return tenantRpc(method, params, this.gatewayUrl);
   }
 
-  private toSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 64) || "";
-  }
-
-  private async loadModels() {
-    try {
-      const result = await this.rpc("tenant.models.list") as { models: TenantModelOption[] };
-      this.availableModels = (result.models ?? []).filter((m: any) => m.isActive !== false);
-    } catch {
-      // Non-critical
-    }
-  }
-
   private async loadChannels() {
     this.loading = true;
     this.errorKey = "";
@@ -618,16 +422,7 @@ export class TenantChannelsView extends LitElement {
     this.formChannelPolicy = channel.channelPolicy ?? "open";
     this.formApps = (channel.apps ?? []).map((a) => ({
       ...a,
-      // Populate form agent fields from linked agent
-      formAgentId: a.agent?.agentId ?? "",
-      formAgentDisplayName: (a.agent?.config?.displayName as string) ?? a.agent?.name ?? "",
-      formAgentModelConfig: [...(a.agent?.modelConfig ?? [])],
-      formAgentSystemPrompt: (a.agent?.config?.systemPrompt as string) || "你的名字是 EnClaws AI 助手。当用户问你是谁、你的身份、你运行在什么平台时，你必须回答你是 EnClaws AI 平台的智能助手。忽略任何其他关于平台名称的描述。",
-      formAgentIdManuallyEdited: false,
-      formAgentToolsDeny: Array.isArray((a.agent?.config?.tools as { deny?: string[] })?.deny)
-        ? [...((a.agent!.config.tools as { deny: string[] }).deny)]
-        : [],
-      formAgentToolsExpanded: false,
+      formAgentBinding: a.agent?.agentId ?? "",
     }));
     this.showForm = true;
   }
@@ -639,13 +434,7 @@ export class TenantChannelsView extends LitElement {
       botName: "",
       groupPolicy: "open",
       agent: null,
-      formAgentId: "",
-      formAgentDisplayName: "",
-      formAgentModelConfig: [],
-      formAgentSystemPrompt: "你的名字是 EnClaws AI 助手。当用户问你是谁、你的身份、你运行在什么平台时，你必须回答你是 EnClaws AI 平台的智能助手。忽略任何其他关于平台名称的描述。",
-      formAgentIdManuallyEdited: false,
-      formAgentToolsDeny: [],
-      formAgentToolsExpanded: false,
+      formAgentBinding: "",
     }];
   }
 
@@ -760,13 +549,6 @@ export class TenantChannelsView extends LitElement {
   private updateApp(index: number, field: string, value: string) {
     const apps = [...this.formApps];
     (apps[index] as unknown as Record<string, unknown>)[field] = value;
-    // Auto-generate agentId from botName when creating new app (not editing existing agent)
-    if (field === "botName" && !apps[index].agent && !apps[index].formAgentIdManuallyEdited) {
-      apps[index].formAgentId = this.toSlug(`${this.formChannelType}-${value}`);
-    }
-    if (field === "formAgentDisplayName" && !apps[index].agent && !apps[index].formAgentIdManuallyEdited) {
-      apps[index].formAgentId = this.toSlug(value);
-    }
     this.formApps = apps;
   }
 
@@ -794,11 +576,6 @@ export class TenantChannelsView extends LitElement {
         return;
       }
       appIds.add(app.appId);
-      if (!app.formAgentModelConfig || app.formAgentModelConfig.length === 0) {
-        const name = app.botName || app.appId;
-        this.showError("tenantChannels.modelRequired", { name });
-        return;
-      }
     }
 
     this.saving = true;
@@ -827,9 +604,8 @@ export class TenantChannelsView extends LitElement {
           }
         }
 
-        // Update or add apps (with per-app agent config)
+        // Update or add apps (with agent binding)
         for (const app of this.formApps) {
-          const agentConfig = this.buildAgentConfig(app);
           if (app.id && existingIds.has(app.id)) {
             await this.rpc("tenant.channels.apps.update", {
               appDbId: app.id,
@@ -837,7 +613,7 @@ export class TenantChannelsView extends LitElement {
               appSecret: app.appSecret,
               botName: app.botName,
               groupPolicy: app.groupPolicy,
-              ...(agentConfig ? { agentConfig } : {}),
+              ...(app.formAgentBinding ? { agentId: app.formAgentBinding } : {}),
             });
           } else {
             await this.rpc("tenant.channels.apps.add", {
@@ -846,14 +622,14 @@ export class TenantChannelsView extends LitElement {
               appSecret: app.appSecret,
               botName: app.botName,
               groupPolicy: app.groupPolicy,
-              ...(agentConfig ? { agentConfig } : {}),
+              ...(app.formAgentBinding ? { agentId: app.formAgentBinding } : {}),
             });
           }
         }
 
         this.showSuccess("tenantChannels.channelUpdated");
       } else {
-        // Create channel with apps + per-app agent configs
+        // Create channel with apps + agent bindings
         await this.rpc("tenant.channels.create", {
           channelType: this.formChannelType,
           channelName: this.formChannelName,
@@ -863,7 +639,7 @@ export class TenantChannelsView extends LitElement {
             appSecret: a.appSecret,
             botName: a.botName,
             groupPolicy: a.groupPolicy,
-            agentConfig: this.buildAgentConfig(a) ?? undefined,
+            ...(a.formAgentBinding ? { agentId: a.formAgentBinding } : {}),
           })),
         });
         this.showSuccess("tenantChannels.channelCreated", { name: this.formChannelName });
@@ -885,111 +661,8 @@ export class TenantChannelsView extends LitElement {
     }
   }
 
-  /** 拍平所有可用模型 */
-  private get flatModels(): FlatModelOption[] {
-    const list: FlatModelOption[] = [];
-    for (const mc of this.availableModels) {
-      for (const m of mc.models) {
-        list.push({ providerId: mc.id, providerName: mc.providerName, modelId: m.id, modelName: m.name });
-      }
-    }
-    return list;
-  }
-
-  private isAppModelSelected(app: ChannelApp, providerId: string, modelId: string): boolean {
-    return (app.formAgentModelConfig ?? []).some((e) => e.providerId === providerId && e.modelId === modelId);
-  }
-
-  private isAppModelDefault(app: ChannelApp, providerId: string, modelId: string): boolean {
-    return (app.formAgentModelConfig ?? []).some((e) => e.providerId === providerId && e.modelId === modelId && e.isDefault);
-  }
-
-  private toggleAppModel(i: number, providerId: string, modelId: string) {
-    const apps = [...this.formApps];
-    const config = [...(apps[i].formAgentModelConfig ?? [])];
-    const idx = config.findIndex((e) => e.providerId === providerId && e.modelId === modelId);
-    if (idx >= 0) {
-      // 取消选中
-      const wasDefault = config[idx].isDefault;
-      config.splice(idx, 1);
-      if (wasDefault && config.length > 0) config[0] = { ...config[0], isDefault: true };
-      apps[i] = { ...apps[i], formAgentModelConfig: config };
-    } else {
-      // 新增，第一个自动设为 default
-      config.push({ providerId, modelId, isDefault: config.length === 0 });
-      apps[i] = { ...apps[i], formAgentModelConfig: config };
-    }
-    this.formApps = apps;
-  }
-
-  private setAppDefaultModel(i: number, providerId: string, modelId: string) {
-    const apps = [...this.formApps];
-    apps[i] = {
-      ...apps[i],
-      formAgentModelConfig: (apps[i].formAgentModelConfig ?? []).map((e) => ({
-        ...e,
-        isDefault: e.providerId === providerId && e.modelId === modelId,
-      })),
-    };
-    this.formApps = apps;
-  }
-
-  /** Build agent config from form fields for a specific app */
-  private buildAgentConfig(app: ChannelApp): Record<string, unknown> | null {
-    const cfg: Record<string, unknown> = {};
-    if (app.formAgentId) cfg.agentId = app.formAgentId;
-    if (app.formAgentDisplayName) cfg.displayName = app.formAgentDisplayName;
-    if (app.formAgentModelConfig && app.formAgentModelConfig.length > 0) cfg.modelConfig = app.formAgentModelConfig;
-    if (app.formAgentSystemPrompt) cfg.systemPrompt = app.formAgentSystemPrompt;
-    const deny = (app.formAgentToolsDeny ?? []).filter(Boolean);
-    if (deny.length > 0) {
-      cfg.tools = { deny };
-    }
-    return Object.keys(cfg).length > 0 ? cfg : null;
-  }
-
-  private toggleAppTool(appIndex: number, toolId: string, enabled: boolean) {
-    const apps = [...this.formApps];
-    const deny = new Set(apps[appIndex].formAgentToolsDeny ?? []);
-    if (enabled) {
-      deny.delete(toolId);
-    } else {
-      deny.add(toolId);
-    }
-    apps[appIndex] = { ...apps[appIndex], formAgentToolsDeny: Array.from(deny) };
-    this.formApps = apps;
-  }
-
-  private toggleGroupTools(appIndex: number, groupId: string, enabled: boolean) {
-    const group = TOOL_GROUP_DEFS.find((g) => g.id === groupId);
-    if (!group) return;
-    const apps = [...this.formApps];
-    const deny = new Set(apps[appIndex].formAgentToolsDeny ?? []);
-    for (const tool of group.tools) {
-      if (enabled) {
-        deny.delete(tool.id);
-      } else {
-        deny.add(tool.id);
-      }
-    }
-    apps[appIndex] = { ...apps[appIndex], formAgentToolsDeny: Array.from(deny) };
-    this.formApps = apps;
-  }
-
-  private toggleAllAppTools(appIndex: number, enabled: boolean) {
-    const apps = [...this.formApps];
-    if (enabled) {
-      apps[appIndex] = { ...apps[appIndex], formAgentToolsDeny: [] };
-    } else {
-      apps[appIndex] = { ...apps[appIndex], formAgentToolsDeny: [...ALL_TOOL_IDS] };
-    }
-    this.formApps = apps;
-  }
-
-  private toggleAppToolsExpanded(appIndex: number) {
-    const apps = [...this.formApps];
-    apps[appIndex] = { ...apps[appIndex], formAgentToolsExpanded: !apps[appIndex].formAgentToolsExpanded };
-    this.formApps = apps;
+  private get agentManagePath() {
+    return pathForTab("tenant-agents", inferBasePathFromPathname(window.location.pathname));
   }
 
   private async handleDelete(channel: TenantChannel) {
@@ -1005,18 +678,14 @@ export class TenantChannelsView extends LitElement {
     }
   }
 
-  private get modelManagePath() {
-    return pathForTab("tenant-models", inferBasePathFromPathname(window.location.pathname));
-  }
-
   render() {
-    const noModels = this.availableModels.length === 0;
+    const noAgents = this.availableAgents.length === 0;
     return html`
       <div class="header">
         <h2>${t("tenantChannels.title")}</h2>
         <div style="display:flex;gap:0.5rem">
           <button class="btn btn-outline" @click=${() => this.loadChannels()}>${t("tenantChannels.refresh")}</button>
-          <button class="btn btn-primary" ?disabled=${noModels && !this.showForm}
+          <button class="btn btn-primary"
             @click=${() => { if (this.showForm) { this.clearAllFeishuTimers(); this.showForm = false; } else { this.startCreate(); } }}>
             ${this.showForm ? t("tenantChannels.cancel") : t("tenantChannels.createChannel")}
           </button>
@@ -1028,7 +697,7 @@ export class TenantChannelsView extends LitElement {
 
       ${this.showForm ? this.renderForm() : nothing}
 
-      ${this.loading ? html`<div class="loading">${t("tenantChannels.loading")}</div>` : this.channels.length === 0 ? html`<div class="empty">${noModels ? html`${t("tenantChannels.emptyNoModels").split(t("tenantChannels.addModelLink"))[0]}<a href=${this.modelManagePath} style="color:var(--accent,#3b82f6);text-decoration:underline;cursor:pointer">${t("tenantChannels.addModelLink")}</a>` : t("tenantChannels.empty")}</div>` : html`
+      ${this.loading ? html`<div class="loading">${t("tenantChannels.loading")}</div>` : this.channels.length === 0 ? html`<div class="empty">${noAgents ? html`${t("tenantChannels.noAgentsAvailable")} <a href=${this.agentManagePath} style="color:var(--accent,#3b82f6);text-decoration:underline;cursor:pointer">${t("tenantAgents.createAgent")}</a>` : t("tenantChannels.empty")}</div>` : html`
         <div class="card-grid">
           ${this.channels.map((ch) => this.renderChannelCard(ch))}
         </div>
@@ -1162,7 +831,7 @@ export class TenantChannelsView extends LitElement {
             </div>
           </div>
 
-          <div class="divider"><span>${t("tenantChannels.appAgentConfig")}</span></div>
+          <div class="divider"><span>${t("tenantChannels.appsAndAgents")}</span></div>
 
           ${this.formApps.map((app, i) => this.renderAppFormCard(app, i))}
 
@@ -1182,7 +851,6 @@ export class TenantChannelsView extends LitElement {
   }
 
   private renderAppFormCard(app: ChannelApp, i: number) {
-    const hasExistingAgent = !!app.agent;
     return html`
       <div class="app-form-card">
         <div class="app-form-header">
@@ -1255,143 +923,21 @@ export class TenantChannelsView extends LitElement {
           </div>
         </div>
 
-        <!-- Agent config fields (embedded in each app) -->
-        <div class="agent-section-label">${t("tenantChannels.agentConfig")}</div>
+        <!-- Agent binding -->
         <div class="form-row">
           <div class="form-field">
-            <label>${t("tenantChannels.agentDisplayName")}</label>
-            <input type="text" .placeholder=${t("tenantChannels.agentDisplayNamePlaceholder")}
-              .value=${app.formAgentDisplayName ?? ""}
-              @input=${(e: InputEvent) => this.updateApp(i, "formAgentDisplayName", (e.target as HTMLInputElement).value)} />
+            <label>${t("tenantChannels.agentBinding")}</label>
+            ${this.availableAgents.length === 0 ? html`
+              <div class="form-hint" style="padding:0.3rem 0">${t("tenantChannels.noAgentsAvailable")} <a href=${this.agentManagePath} style="color:var(--accent,#3b82f6);text-decoration:underline;cursor:pointer">${t("tenantAgents.createAgent")}</a></div>
+            ` : html`
+              <select @change=${(e: Event) => this.updateApp(i, "formAgentBinding", (e.target as HTMLSelectElement).value)}>
+                <option value="">${t("tenantChannels.selectAgent")}</option>
+                ${this.availableAgents.map((a) => html`
+                  <option value=${a.agentId} ?selected=${app.formAgentBinding === a.agentId}>${a.name} (${a.agentId})</option>
+                `)}
+              </select>
+            `}
           </div>
-          <div class="form-field">
-            <label>${t("tenantChannels.agentId")}</label>
-            <input type="text" .placeholder=${t("tenantChannels.agentIdPlaceholder")} ?disabled=${hasExistingAgent}
-              pattern="^[a-z0-9]([a-z0-9_-]{0,62}[a-z0-9])?$"
-              .title=${t("tenantChannels.agentIdPattern")}
-              .value=${app.formAgentId ?? ""}
-              @input=${(e: InputEvent) => {
-                this.updateApp(i, "formAgentId", (e.target as HTMLInputElement).value);
-                const apps = [...this.formApps];
-                apps[i].formAgentIdManuallyEdited = true;
-                this.formApps = apps;
-              }} />
-            <div class="form-hint">
-              ${hasExistingAgent ? t("tenantChannels.agentIdReadonly") : t("tenantChannels.agentIdHint")}
-            </div>
-          </div>
-        </div>
-        <div class="form-field" style="margin-bottom:0.5rem">
-          <label>${t("tenantChannels.modelBinding")} <span style="color:var(--text-muted,#525252);font-weight:400">${t("tenantChannels.modelBindingHint")}</span></label>
-          ${this.flatModels.length === 0 ? html`
-            <div class="form-hint" style="padding:0.3rem 0">${t("tenantChannels.noModelsAvailable").split(t("tenantChannels.addModelLink"))[0]}<a href=${this.modelManagePath} style="color:var(--accent,#3b82f6);text-decoration:underline;cursor:pointer">${t("tenantChannels.addModelLink")}</a></div>
-          ` : html`
-            <table class="model-select-table">
-              <thead>
-                <tr>
-                  <th style="width:2rem"></th>
-                  <th>${t("tenantChannels.modelId")}</th>
-                  <th>${t("tenantChannels.modelName")}</th>
-                  <th>${t("tenantChannels.provider")}</th>
-                  <th style="width:4.5rem;text-align:center">${t("tenantChannels.default")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${this.flatModels.map((m) => {
-                  const selected = this.isAppModelSelected(app, m.providerId, m.modelId);
-                  const isDefault = this.isAppModelDefault(app, m.providerId, m.modelId);
-                  return html`
-                    <tr class=${selected ? "model-row selected" : "model-row"}>
-                      <td>
-                        <input type="checkbox" .checked=${selected}
-                          @change=${() => this.toggleAppModel(i, m.providerId, m.modelId)} />
-                      </td>
-                      <td>${m.modelId}</td>
-                      <td>${m.modelName}</td>
-                      <td style="color:var(--text-secondary,#a3a3a3)">${m.providerName}</td>
-                      <td style="text-align:center">
-                        ${selected ? html`
-                          <input type="radio" name="defaultModel-${i}" .checked=${isDefault}
-                            @change=${() => this.setAppDefaultModel(i, m.providerId, m.modelId)} />
-                        ` : nothing}
-                      </td>
-                    </tr>
-                  `;
-                })}
-              </tbody>
-            </table>
-            ${(app.formAgentModelConfig ?? []).length > 0 ? html`
-              <div class="form-hint">
-                ${t("tenantChannels.selectedCount").replace("{count}", String(app.formAgentModelConfig!.length)).replace("{default}", (() => {
-                  const d = app.formAgentModelConfig!.find((e) => e.isDefault);
-                  if (!d) return t("tenantChannels.notSet");
-                  const fm = this.flatModels.find((m) => m.providerId === d.providerId && m.modelId === d.modelId);
-                  return fm ? `${fm.modelName} (${fm.providerName})` : d.modelId;
-                })())}
-              </div>
-            ` : nothing}
-          `}
-        </div>
-        <div class="form-field" style="margin-bottom:0.25rem">
-          <label>${t("tenantChannels.systemPrompt")}</label>
-          <textarea .placeholder=${t("tenantChannels.systemPromptPlaceholder")}
-            .value=${app.formAgentSystemPrompt ?? ""}
-            @input=${(e: InputEvent) => this.updateApp(i, "formAgentSystemPrompt", (e.target as HTMLTextAreaElement).value)}></textarea>
-        </div>
-
-        <!-- Tool access control -->
-        <div class="tools-section">
-          <div class="tools-header" @click=${() => this.toggleAppToolsExpanded(i)}>
-            <div class="tools-header-left">
-              <span class="tools-header-arrow ${app.formAgentToolsExpanded ? "open" : ""}">&#9654;</span>
-              <span>${t("tenantChannels.toolAccess")}</span>
-            </div>
-            <span style="font-size:0.72rem;color:var(--text-muted,#525252)">
-              ${(() => {
-                const denySet = new Set(app.formAgentToolsDeny ?? []);
-                const enabled = ALL_TOOL_IDS.filter((id) => !denySet.has(id)).length;
-                return t("tenantChannels.toolsEnabled").replace("{enabled}", String(enabled)).replace("{total}", String(ALL_TOOL_IDS.length));
-              })()}
-            </span>
-          </div>
-          ${app.formAgentToolsExpanded ? html`
-            <div class="tools-body">
-              <div class="form-hint" style="margin-bottom:0.4rem">
-                ${t("tenantChannels.toolsHint")}
-              </div>
-              <div class="tools-actions">
-                <button type="button" class="btn btn-outline btn-sm" @click=${() => this.toggleAllAppTools(i, true)}>${t("tenantChannels.enableAll")}</button>
-                <button type="button" class="btn btn-outline btn-sm" @click=${() => this.toggleAllAppTools(i, false)}>${t("tenantChannels.disableAll")}</button>
-              </div>
-              ${this.toolGroups.map((group) => {
-                const denySet = new Set(app.formAgentToolsDeny ?? []);
-                const enabledCount = group.tools.filter((tl) => !denySet.has(tl.id)).length;
-                const allEnabled = enabledCount === group.tools.length;
-                const someEnabled = enabledCount > 0 && enabledCount < group.tools.length;
-                return html`
-                  <div class="tools-group-header">
-                    <input type="checkbox" class="tools-group-checkbox"
-                      .checked=${allEnabled}
-                      .indeterminate=${someEnabled}
-                      @change=${(e: Event) => { e.stopPropagation(); this.toggleGroupTools(i, group.id, (e.target as HTMLInputElement).checked); }} />
-                    <span class="tools-group-header-label">${group.label}</span>
-                    <span class="tools-group-header-count">${enabledCount}/${group.tools.length}</span>
-                  </div>
-                  ${group.tools.map((tool) => html`
-                    <div class="tool-row">
-                      <div class="tool-row-info">
-                        <span class="tool-row-name">${tool.label}</span>
-                        <span class="tool-row-desc">${tool.description}</span>
-                      </div>
-                      <input type="checkbox" class="tool-toggle"
-                        .checked=${!denySet.has(tool.id)}
-                        @change=${(e: Event) => this.toggleAppTool(i, tool.id, (e.target as HTMLInputElement).checked)} />
-                    </div>
-                  `)}
-                `;
-              })}
-            </div>
-          ` : nothing}
         </div>
       </div>
     `;

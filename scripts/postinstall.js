@@ -31,9 +31,9 @@ const content = `# EnClaws — auto-generated at install time
 
 OPENCLAW_DB_URL=sqlite:///${dbPath}
 OPENCLAW_JWT_SECRET=${jwtSecret}
-OPENCLAW_GATEWAY_PORT=18789
+OPENCLAW_GATEWAY_PORT=18888
 OPENCLAW_CONTROL_UI_DISABLE_DEVICE_AUTH=true
-OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS=http://localhost:18789,http://127.0.0.1:18789
+OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS=http://localhost:18888,http://127.0.0.1:18888
 `;
 
 try {
