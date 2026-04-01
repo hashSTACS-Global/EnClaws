@@ -394,7 +394,7 @@ export function renderApp(state: AppViewState) {
                               !state.settings.navCollapsed
                                       ? html`
                                           <div class="brand-text">
-                                              <div class="brand-title">ENCLAWS</div>
+                                              <div class="brand-title">EnClaws</div>
                                               <div class="brand-sub">Gateway Dashboard</div>
                                           </div>
                                       `
