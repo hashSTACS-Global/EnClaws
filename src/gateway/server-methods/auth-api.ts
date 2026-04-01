@@ -14,6 +14,7 @@ import { ErrorCodes, errorShape } from "../protocol/index.js";
 import { createTenant, getTenantBySlug, getTenantById } from "../../db/models/tenant.js";
 import { ensureTenantDirFiles } from "../../agents/workspace.js";
 import { resolveTenantDir } from "../../config/sessions/tenant-paths.js";
+import { installSkillPack } from "../../agents/skill-pack-installer.js";
 import {
   createUser,
   getUserById,
@@ -121,6 +122,19 @@ export const authHandlers: GatewayRequestHandlers = {
       } catch (dirErr: unknown) {
         console.warn(`[auth.register] Failed to seed tenant dir files for ${tenant.id}: ${dirErr instanceof Error ? dirErr.message : "unknown"}`);
       }
+
+      // Auto-install skill pack (fire-and-forget, don't block registration)
+      installSkillPack(tenant.id).then((packResult) => {
+        if (packResult.skipped) {
+          console.error(`[skill-pack] tenant ${tenant.id}: skipped — ${packResult.skipped}`);
+        } else if (packResult.ok) {
+          console.error(`[skill-pack] tenant ${tenant.id}: installed ${packResult.installed.length} skills from ${packResult.source}`);
+        } else {
+          console.error(`[skill-pack] tenant ${tenant.id}: partial — ok: ${packResult.installed.join(", ")}; errors: ${packResult.errors.map((e) => e.skill).join(", ")}`);
+        }
+      }).catch((err) => {
+        console.error(`[skill-pack] tenant ${tenant.id}: unexpected error —`, err);
+      });
 
       // Create owner user (skip user-level directory init for page registration;
       // directories will be created on-demand when the user actually starts a session)
