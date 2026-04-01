@@ -292,7 +292,7 @@ export class TenantChannelsView extends LitElement {
   @state() private scopesCopied = false;
 
   // Form fields
-  @state() private formChannelType = "web";
+  @state() private formChannelType = CHANNEL_TYPES[0]?.value ?? "feishu";
   @state() private formChannelName = "";
   @state() private formChannelPolicy: ChannelPolicy = "open";
   @state() private formApps: ChannelApp[] = [];
@@ -399,7 +399,7 @@ export class TenantChannelsView extends LitElement {
 
   private startCreate() {
     this.editingId = null;
-    this.formChannelType = "web";
+    this.formChannelType = CHANNEL_TYPES[0]?.value ?? "feishu";
     this.formChannelName = "";
     this.formChannelPolicy = "open";
     this.formApps = [];
