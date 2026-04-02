@@ -140,10 +140,11 @@ export async function listAllTenantChannelApps(tenantId: string): Promise<Array<
   channelName: string | null;
   appId: string;
   botName: string;
+  agentId: string | null;
 }>> {
   const result = sqliteQuery(
     `SELECT ca.id, ca.channel_id, tc.channel_type, tc.channel_name,
-            ca.app_id, ca.bot_name
+            ca.app_id, ca.bot_name, ca.agent_id
      FROM tenant_channel_apps ca
      JOIN tenant_channels tc ON tc.id = ca.channel_id
      WHERE ca.tenant_id = ? AND ca.is_active = 1 AND tc.is_active = 1
@@ -157,5 +158,6 @@ export async function listAllTenantChannelApps(tenantId: string): Promise<Array<
     channelName: (r.channel_name as string) ?? null,
     appId: r.app_id as string,
     botName: r.bot_name as string,
+    agentId: (r.agent_id as string) ?? null,
   }));
 }

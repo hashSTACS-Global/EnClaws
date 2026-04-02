@@ -485,9 +485,16 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
       const { listTenantModels } = await import("../db/models/tenant-model.js");
       const { toConfigAgentsList, buildTenantModelProviderKey } = await import("../db/models/tenant-agent.js");
       const allTenantModelsMap = new Map<string, import("../db/types.js").TenantModel>();
-      const tenantProviders: Record<string, unknown> = {
-        ...((merged as any).models?.providers ?? {}),
-      };
+      // Start with a CLEAN providers map — only non-tenant providers are inherited.
+      // Tenant model providers (keyed "tm-{id}") are rebuilt entirely from DB each
+      // time so that deleted/updated models are not carried over from stale snapshots.
+      const baseProviders = (merged as any).models?.providers ?? {};
+      const tenantProviders: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(baseProviders)) {
+        if (!key.startsWith("tm-")) {
+          tenantProviders[key] = value;
+        }
+      }
 
       for (const tenantRow of tenantsResult.rows) {
         const tId = tenantRow.id as string;

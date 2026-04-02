@@ -294,7 +294,28 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       }
     }
 
+    // Check if any channel app is bound to this agent
+    const apps = await listAllTenantChannelApps(ctx.tenantId);
+    const boundApps = apps.filter((a) => a.agentId === agentId);
+    if (boundApps.length > 0) {
+      const channels = boundApps.map((a) => `${a.channelName || a.channelType}/${a.appId}`).join(", ");
+      respond(false, undefined, errorShape(
+        ErrorCodes.INVALID_REQUEST,
+        "tenantAgents.deleteInUse",
+        { details: { channels } },
+      ));
+      return;
+    }
+
     const deleted = await deleteTenantAgent(ctx.tenantId, agentId);
+
+    // Remove the agent directory on disk
+    try {
+      const agentDir = resolveTenantAgentDir(ctx.tenantId, agentId);
+      await fs.rm(agentDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup — don't fail the delete if directory removal fails
+    }
 
     invalidateTenantConfigCache(ctx.tenantId);
     await context.reloadDbChannels();

@@ -129,7 +129,7 @@ export function getTenantLlmStats(tenantId: string, period: "all" | "month" | "t
 
   const turns = pInt(sqliteQuery(`SELECT COUNT(DISTINCT turn_id) as c FROM llm_interaction_traces WHERE ${where}`, [tenantId]).rows[0]?.c);
   const avgDurationMs = Math.round(parseFloat(String(sqliteQuery(`SELECT AVG(duration_ms) as avg_ms FROM llm_interaction_traces WHERE duration_ms IS NOT NULL AND ${where}`, [tenantId]).rows[0]?.avg_ms)) || 0);
-  const errorRow = sqliteQuery(`SELECT COUNT(CASE WHEN error_message IS NOT NULL THEN 1 END) as err, COUNT(*) as total FROM llm_interaction_traces WHERE ${where}`, [tenantId]).rows[0];
+  const errorRow = sqliteQuery(`SELECT COUNT(CASE WHEN error_message IS NOT NULL OR stop_reason = 'error' THEN 1 END) as err, COUNT(*) as total FROM llm_interaction_traces WHERE ${where}`, [tenantId]).rows[0];
   const errCount = pInt(errorRow?.err);
   const totalCount = pInt(errorRow?.total);
   const errorRate = totalCount > 0 ? Math.round(errCount / totalCount * 1000) / 10 : 0;

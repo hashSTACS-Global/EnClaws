@@ -21,6 +21,7 @@ import {
 import { createAuditLog } from "../../db/models/audit-log.js";
 import { assertPermission, RbacError } from "../../auth/rbac.js";
 import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
+import { listTenantAgents } from "../../db/models/tenant-agent.js";
 import type { TenantContext } from "../../auth/middleware.js";
 import type { TenantModelDefinition } from "../../db/types.js";
 
@@ -82,7 +83,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
     });
   },
 
-  "tenant.models.create": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
+  "tenant.models.create": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
     if (!ctx) return;
 
@@ -153,6 +154,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
       });
 
       invalidateTenantConfigCache(ctx.tenantId);
+      await context.reloadDbChannels();
 
       await createAuditLog({
         tenantId: ctx.tenantId,
@@ -180,7 +182,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
     }
   },
 
-  "tenant.models.update": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
+  "tenant.models.update": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
     if (!ctx) return;
 
@@ -231,6 +233,39 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
       }
     }
 
+    // When models list changes, check if any removed modelId is referenced by agents
+    if (models) {
+      const existing = await getTenantModel(ctx.tenantId, id);
+      if (existing) {
+        const newModelIds = new Set(models.map((m) => m.id));
+        const removedModelIds = (existing.models ?? [])
+          .map((m) => m.id)
+          .filter((mid) => !newModelIds.has(mid));
+
+        if (removedModelIds.length > 0) {
+          const agents = await listTenantAgents(ctx.tenantId);
+          const conflicts: string[] = [];
+          for (const agent of agents) {
+            const boundRemoved = (agent.modelConfig ?? []).filter(
+              (mc) => mc.providerId === id && removedModelIds.includes(mc.modelId),
+            );
+            if (boundRemoved.length > 0) {
+              const modelIds = boundRemoved.map((mc) => mc.modelId).join(", ");
+              conflicts.push(`${agent.name || agent.agentId} (${modelIds})`);
+            }
+          }
+          if (conflicts.length > 0) {
+            respond(false, undefined, errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              "models.removeModelInUse",
+              { details: { agents: conflicts.join("; ") } },
+            ));
+            return;
+          }
+        }
+      }
+    }
+
     const updates: Record<string, unknown> = {};
     if (providerName !== undefined) updates.providerName = providerName;
     if (baseUrl !== undefined) updates.baseUrl = baseUrl;
@@ -249,6 +284,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
     }
 
     invalidateTenantConfigCache(ctx.tenantId);
+    await context.reloadDbChannels();
 
     await createAuditLog({
       tenantId: ctx.tenantId,
@@ -273,7 +309,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
     }));
   },
 
-  "tenant.models.delete": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
+  "tenant.models.delete": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
     if (!ctx) return;
 
@@ -293,9 +329,25 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    // Check if any agent references this model (as default or fallback)
+    const agents = await listTenantAgents(ctx.tenantId);
+    const referencingAgents = agents.filter((a) =>
+      (a.modelConfig ?? []).some((mc) => mc.providerId === id),
+    );
+    if (referencingAgents.length > 0) {
+      const names = referencingAgents.map((a) => a.name || a.agentId).join(", ");
+      respond(false, undefined, errorShape(
+        ErrorCodes.INVALID_REQUEST,
+        "models.deleteInUse",
+        { details: { agents: names } },
+      ));
+      return;
+    }
+
     const deleted = await deleteTenantModel(ctx.tenantId, id);
 
     invalidateTenantConfigCache(ctx.tenantId);
+    await context.reloadDbChannels();
 
     await createAuditLog({
       tenantId: ctx.tenantId,

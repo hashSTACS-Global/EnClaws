@@ -11,6 +11,7 @@ import { tenantRpc } from "./rpc.ts";
 import { PROVIDER_TYPES as SHARED_PROVIDERS, API_PROTOCOLS as SHARED_PROTOCOLS } from "../../../constants/providers.ts";
 import { t } from "../../../i18n/index.ts";
 import { I18nController } from "../../../i18n/lib/lit-controller.ts";
+import { showConfirm } from "../../components/confirm-dialog.ts";
 
 interface ModelDefinition {
   id: string;
@@ -155,6 +156,9 @@ export class TenantModelsView extends LitElement {
   @state() private subModelId = "";
   @state() private subModelName = "";
 
+  // Cached agent list for model-in-use checks
+  private cachedAgents: Array<{ name: string; agentId: string; modelConfig: Array<{ providerId: string; modelId: string }> }> = [];
+
   private showError(key: string, params?: Record<string, string>) {
     this.errorKey = key;
     this.successKey = "";
@@ -180,6 +184,16 @@ export class TenantModelsView extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.loadConfigs();
+    this.loadAgents();
+  }
+
+  private async loadAgents() {
+    try {
+      const result = await this.rpc("tenant.agents.list") as { agents: Array<{ name: string; agentId: string; modelConfig: Array<{ providerId: string; modelId: string }> }> };
+      this.cachedAgents = result.agents ?? [];
+    } catch {
+      this.cachedAgents = [];
+    }
   }
 
   private rpc(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
@@ -282,6 +296,17 @@ export class TenantModelsView extends LitElement {
   }
 
   private removeModel(idx: number) {
+    const model = this.formModels[idx];
+    if (this.editingId && model) {
+      const conflicts = this.cachedAgents.filter((a) =>
+        (a.modelConfig ?? []).some((mc) => mc.providerId === this.editingId && mc.modelId === model.id),
+      );
+      if (conflicts.length > 0) {
+        const names = conflicts.map((a) => a.name || a.agentId).join(", ");
+        this.showError("models.removeModelInUse", { agents: names });
+        return;
+      }
+    }
     this.formModels = this.formModels.filter((_, i) => i !== idx);
   }
 
@@ -323,22 +348,29 @@ export class TenantModelsView extends LitElement {
       }
       this.showForm = false;
       await this.loadConfigs();
-    } catch (err) {
-      this.showError(err instanceof Error ? err.message : "models.saveFailed");
+    } catch (err: any) {
+      this.showError(err?.message ?? "models.saveFailed", err?.details);
     } finally {
       this.saving = false;
     }
   }
 
   private async handleDelete(config: TenantModelConfig) {
-    if (!confirm(t("models.confirmDelete", { name: config.providerName }))) return;
+    const ok = await showConfirm({
+      title: t("models.delete"),
+      message: t("models.confirmDelete", { name: config.providerName }),
+      confirmText: t("models.delete"),
+      cancelText: t("models.cancel"),
+      danger: true,
+    });
+    if (!ok) return;
     this.errorKey = "";
     try {
       await this.rpc("tenant.models.delete", { id: config.id });
       this.showSuccess("models.configDeleted", { name: config.providerName });
       await this.loadConfigs();
-    } catch (err) {
-      this.showError(err instanceof Error ? err.message : "models.deleteFailed");
+    } catch (err: any) {
+      this.showError(err?.message ?? "models.deleteFailed", err?.details);
     }
   }
 
@@ -405,9 +437,6 @@ export class TenantModelsView extends LitElement {
         </div>
         <div class="model-actions">
           <button class="btn btn-outline btn-sm" @click=${() => this.startEdit(config)}>${t("models.edit")}</button>
-          <button class="btn btn-outline btn-sm" @click=${() => this.handleToggle(config)}>
-            ${config.isActive ? t("models.disable") : t("models.enable")}
-          </button>
           <button class="btn btn-danger btn-sm" @click=${() => this.handleDelete(config)}>${t("models.delete")}</button>
         </div>
       </div>

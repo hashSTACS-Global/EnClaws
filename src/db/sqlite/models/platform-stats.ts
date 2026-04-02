@@ -114,7 +114,7 @@ export function getLlmStats(period: "all" | "month" | "today") {
   const avgDurationMs = Math.round(Number(avgRow.avg_ms) || 0);
 
   const errorRow = sqliteQuery(
-    `SELECT COUNT(CASE WHEN error_message IS NOT NULL THEN 1 END) as err_count, COUNT(*) as total_count FROM llm_interaction_traces WHERE ${cond}`
+    `SELECT COUNT(CASE WHEN error_message IS NOT NULL OR stop_reason = 'error' THEN 1 END) as err_count, COUNT(*) as total_count FROM llm_interaction_traces WHERE ${cond}`
   ).rows[0];
   const errCount = Number(errorRow.err_count) || 0;
   const totalCount2 = Number(errorRow.total_count) || 0;

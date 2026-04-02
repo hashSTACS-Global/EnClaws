@@ -12,6 +12,7 @@ import { tenantRpc } from "./rpc.ts";
 import { pathForTab, inferBasePathFromPathname } from "../../navigation.ts";
 import { CHANNEL_TYPES } from "../../../constants/channels.ts";
 import feishuScopes from "./feishu-scopes.json";
+import { showConfirm } from "../../components/confirm-dialog.ts";
 
 type ChannelPolicy = "open" | "allowlist" | "disabled";
 
@@ -665,7 +666,14 @@ export class TenantChannelsView extends LitElement {
 
   private async handleDelete(channel: TenantChannel) {
     const name = channel.channelName ?? channel.channelType;
-    if (!confirm(t("tenantChannels.confirmDelete").replace("{name}", name))) return;
+    const ok = await showConfirm({
+      title: t("tenantChannels.delete"),
+      message: t("tenantChannels.confirmDelete").replace("{name}", name),
+      confirmText: t("tenantChannels.delete"),
+      cancelText: t("tenantChannels.cancel"),
+      danger: true,
+    });
+    if (!ok) return;
     this.errorKey = "";
     try {
       await this.rpc("tenant.channels.delete", { channelId: channel.id });

@@ -138,7 +138,7 @@ export async function getTenantLlmStats(tenantId: string, period: "all" | "month
   const [turnsRes, avgRes, errorRes, modelRes] = await Promise.all([
     query(`SELECT COUNT(DISTINCT turn_id) as c FROM llm_interaction_traces WHERE ${where}`, [tenantId]),
     query(`SELECT AVG(duration_ms) as avg_ms FROM llm_interaction_traces WHERE duration_ms IS NOT NULL AND ${where}`, [tenantId]),
-    query(`SELECT COUNT(CASE WHEN error_message IS NOT NULL THEN 1 END) as err, COUNT(*) as total FROM llm_interaction_traces WHERE ${where}`, [tenantId]),
+    query(`SELECT COUNT(CASE WHEN error_message IS NOT NULL OR stop_reason = 'error' THEN 1 END) as err, COUNT(*) as total FROM llm_interaction_traces WHERE ${where}`, [tenantId]),
     query(`SELECT model, COUNT(*) as count FROM llm_interaction_traces WHERE model IS NOT NULL AND ${where} GROUP BY model ORDER BY count DESC`, [tenantId]),
   ]);
 

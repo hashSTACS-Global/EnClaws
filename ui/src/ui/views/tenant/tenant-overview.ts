@@ -95,22 +95,20 @@ export class TenantOverviewView extends LitElement {
     /* ── Rank list (matches platform overview) ── */
     .rank-block-title { font-size: 0.82rem; font-weight: 600; margin: 0 0 0.5rem; }
     .rank-list { list-style: none; margin: 0; padding: 0; }
-    .rank-item { display: flex; align-items: center; padding: 0.55rem 0; border-bottom: 1px solid var(--border, #1a1a1a); gap: 0.6rem; font-size: 0.82rem; }
+    .rank-item { display: flex; align-items: center; padding: 0.55rem 0; border-bottom: 1px solid var(--border, #1a1a1a); font-size: 0.85rem; }
     .rank-item:last-child { border-bottom: none; }
     .rank-index {
-      width: 22px; height: 22px; border-radius: 50%;
-      display: grid; place-items: center;
-      font-size: 0.68rem; font-weight: 700; flex-shrink: 0;
+      width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 600; margin-right: 0.75rem; flex-shrink: 0;
     }
-    .rank-index.top1 { background: #ca8a0433; color: #fbbf24; }
-    .rank-index.top2 { background: #94a3b833; color: #cbd5e1; }
-    .rank-index.top3 { background: #b4530833; color: #fb923c; }
-    .rank-index.other { background: var(--border, #262626); color: var(--text-muted, #525252); }
+    .rank-index img { width: 22px; height: 22px; }
+    .rank-index.other { border-radius: 50%; background: var(--border, #262626); color: var(--text-muted, #525252); }
     .rank-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rank-sub { font-size: 0.75rem; color: var(--text-muted, #525252); margin-left: 0.3rem; }
-    .rank-value { font-family: monospace; font-size: 0.82rem; color: var(--text-secondary, #a3a3a3); margin-right: 0.5rem; }
-    .rank-bar-bg { width: 80px; height: 6px; background: var(--border, #262626); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
-    .rank-bar-fill { height: 100%; border-radius: 3px; background: var(--accent, #3b82f6); }
+    .rank-sub { font-size: 0.75rem; color: var(--text-muted, #525252); margin-left: 0.25rem; }
+    .rank-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .rank-bar-bg { display: block; width: 80px; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; margin-left: 0.75rem; overflow: hidden; flex-shrink: 0; }
+    .rank-bar-fill { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #3b82f6, #60a5fa); transition: width 0.4s ease; }
     .rank-empty { text-align: center; padding: 2rem 0; color: var(--text-muted, #525252); font-size: 0.8rem; }
     .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
     .rank-block { background: var(--bg, #0a0a0a); border-radius: var(--radius-md, 6px); padding: 1rem; }
@@ -407,6 +405,11 @@ export class TenantOverviewView extends LitElement {
     return "other";
   }
 
+  private rankIcon(i: number) {
+    const medals = ["/gold-medal.svg", "/silver-medal.svg", "/bronze-medal.svg"];
+    return i < 3 ? html`<img src="${medals[i]}" alt="top${i + 1}">` : html`${i + 1}`;
+  }
+
   private renderRankList(items: Array<{ name: string; sub?: string; tokens: number }>) {
     if (items.length === 0) return html`<div class="rank-empty">${t("tenantOverview.noData")}</div>`;
     const maxVal = items[0]?.tokens || 1;
@@ -414,7 +417,7 @@ export class TenantOverviewView extends LitElement {
       <ul class="rank-list">
         ${items.slice(0, 5).map((item, i) => html`
           <li class="rank-item">
-            <span class="rank-index ${this.rankClass(i)}">${i + 1}</span>
+            <span class="rank-index ${this.rankClass(i)}">${this.rankIcon(i)}</span>
             <span class="rank-name">${item.name}${item.sub ? html`<span class="rank-sub">${item.sub}</span>` : nothing}</span>
             <span class="rank-value">${this.fmt(item.tokens)}</span>
             <span class="rank-bar-bg"><span class="rank-bar-fill" style="width:${Math.round((item.tokens / maxVal) * 100)}%"></span></span>

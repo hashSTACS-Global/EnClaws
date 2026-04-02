@@ -223,7 +223,6 @@ export class PlatformOverviewView extends LitElement {
     .rank-index {
       width: 22px;
       height: 22px;
-      border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -232,10 +231,8 @@ export class PlatformOverviewView extends LitElement {
       margin-right: 0.75rem;
       flex-shrink: 0;
     }
-    .rank-index.top1 { background: #ca8a0433; color: #fbbf24; }
-    .rank-index.top2 { background: #94a3b833; color: #cbd5e1; }
-    .rank-index.top3 { background: #b4530833; color: #fb923c; }
-    .rank-index.other { background: var(--border, #262626); color: var(--text-muted, #525252); }
+    .rank-index img { width: 22px; height: 22px; }
+    .rank-index.other { border-radius: 50%; background: var(--border, #262626); color: var(--text-muted, #525252); }
     .rank-name { flex: 1; }
     .rank-sub {
       font-size: 0.75rem;
@@ -247,18 +244,21 @@ export class PlatformOverviewView extends LitElement {
       font-variant-numeric: tabular-nums;
     }
     .rank-bar-bg {
+      display: block;
       width: 80px;
-      height: 6px;
-      background: var(--border, #262626);
-      border-radius: 3px;
+      height: 4px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 2px;
       margin-left: 0.75rem;
       overflow: hidden;
       flex-shrink: 0;
     }
     .rank-bar-fill {
+      display: block;
       height: 100%;
-      border-radius: 3px;
-      background: var(--accent, #3b82f6);
+      border-radius: 2px;
+      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      transition: width 0.4s ease;
     }
 
     /* ── LLM stats row ── */
@@ -360,6 +360,11 @@ export class PlatformOverviewView extends LitElement {
     if (i === 1) return "top2";
     if (i === 2) return "top3";
     return "other";
+  }
+
+  private rankIcon(i: number) {
+    const medals = ["/gold-medal.svg", "/silver-medal.svg", "/bronze-medal.svg"];
+    return i < 3 ? html`<img src="${medals[i]}" alt="top${i + 1}">` : html`${i + 1}`;
   }
 
   private rpc(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
@@ -688,7 +693,7 @@ export class PlatformOverviewView extends LitElement {
       <ul class="rank-list">
         ${items.map((item, i) => html`
           <li class="rank-item">
-            <span class="rank-index ${this.rankClass(i)}">${i + 1}</span>
+            <span class="rank-index ${this.rankClass(i)}">${this.rankIcon(i)}</span>
             <span class="rank-name">
               ${item.label}
               ${item.badge ? html`<span class="plan-badge ${item.badgeClass ?? ''}">${item.badge}</span>` : nothing}

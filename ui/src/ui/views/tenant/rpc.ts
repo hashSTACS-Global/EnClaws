@@ -93,7 +93,11 @@ export async function tenantRpc(
               clearAuth();
               window.location.reload();
             }
-            reject(new Error(msg));
+            const err = new Error(msg);
+            if (frame.error?.details && typeof frame.error.details === "object") {
+              (err as any).details = frame.error.details;
+            }
+            reject(err);
           }
         }
       } catch (err) {

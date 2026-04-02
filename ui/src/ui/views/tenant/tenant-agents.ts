@@ -13,6 +13,7 @@ import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../../i18n/index.ts";
 import { tenantRpc } from "./rpc.ts";
 import { pathForTab, inferBasePathFromPathname } from "../../navigation.ts";
+import { showConfirm } from "../../components/confirm-dialog.ts";
 import { CHANNEL_ICON_MAP } from "../../../constants/channels.ts";
 
 
@@ -804,15 +805,22 @@ export class TenantAgentsView extends LitElement {
 
   private async handleDelete(agent: TenantAgent) {
     const name = (agent.config?.displayName as string) || agent.name || agent.agentId;
-    if (!confirm(t("tenantAgents.confirmDelete").replace("{name}", name))) return;
+    const ok = await showConfirm({
+      title: t("tenantAgents.delete"),
+      message: t("tenantAgents.confirmDelete").replace("{name}", name),
+      confirmText: t("tenantAgents.delete"),
+      cancelText: t("tenantAgents.cancel"),
+      danger: true,
+    });
+    if (!ok) return;
     this.errorKey = "";
     try {
       await this.rpc("tenant.agents.delete", { agentId: agent.agentId });
       this.showSuccess("tenantAgents.agentDeleted", { name });
       if (this.selectedAgentId === agent.agentId) this.selectedAgentId = null;
       await this.loadAgents();
-    } catch (err) {
-      this.showError(err instanceof Error ? err.message : "tenantAgents.deleteFailed");
+    } catch (err: any) {
+      this.showError(err?.message ?? "tenantAgents.deleteFailed", err?.details);
     }
   }
 
