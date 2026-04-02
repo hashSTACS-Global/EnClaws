@@ -5,7 +5,7 @@
  * no user OAuth needed). Results are cached in memory to minimize API calls.
  *
  * This module uses plain fetch — no dependency on the Feishu SDK — so the
- * core can resolve names independently of the enclaws-lark plugin.
+ * core can resolve names independently of the openclaw-lark plugin.
  */
 
 import { createSubsystemLogger } from "../logging/subsystem.js";

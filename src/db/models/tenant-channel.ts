@@ -161,7 +161,7 @@ export async function toConfigChannels(channels: TenantChannel[]): Promise<Recor
         isActive: a.isActive,
       })),
     };
-    // Map channelPolicy → dmPolicy for feishu (enclaws-lark plugin reads dmPolicy)
+    // Map channelPolicy → dmPolicy for feishu (openclaw-lark plugin reads dmPolicy)
     if (ch.channelType === "feishu") {
       channelConfig.dmPolicy = ch.channelPolicy;
       if (ch.channelPolicy === "open") {

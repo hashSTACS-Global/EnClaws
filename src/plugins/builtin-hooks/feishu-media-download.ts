@@ -3,7 +3,7 @@
  * from /tmp/enclaws/ to the user's workspace download/ directory.
  *
  * Registered as an internal typed hook so it runs alongside plugin hooks
- * without modifying the official enclaws-lark plugin.
+ * without modifying the official openclaw-lark plugin.
  */
 import * as fs from "node:fs/promises";
 import * as path from "node:path";

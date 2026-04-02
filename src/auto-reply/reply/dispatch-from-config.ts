@@ -175,7 +175,7 @@ export async function dispatchReplyFromConfig(params: {
   }
 
   // ── Multi-tenant context enrichment ─────────────────────────────
-  // When an external channel plugin (e.g. official @larksuite/enclaws-lark)
+  // When an external channel plugin (e.g. official @larksuite/openclaw-lark)
   // does not inject TenantId/TenantUserId, auto-provision the user from the
   // account-scoped channel config so the downstream reply engine resolves
   // tenant-scoped workspace/session paths.

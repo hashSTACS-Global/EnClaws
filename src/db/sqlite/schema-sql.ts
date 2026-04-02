@@ -270,11 +270,11 @@ INSERT OR IGNORE INTO sys_logging_config (id) VALUES (1);
 CREATE TABLE IF NOT EXISTS sys_plugins_config (
   id                       INTEGER PRIMARY KEY CHECK (id = 1),
   enabled                  INTEGER NOT NULL DEFAULT 1,
-  allow                    TEXT NOT NULL DEFAULT '["enclaws-lark"]',
+  allow                    TEXT NOT NULL DEFAULT '["openclaw-lark"]',
   deny                     TEXT NOT NULL DEFAULT '[]',
   load                     TEXT NOT NULL DEFAULT '{}',
   slots                    TEXT NOT NULL DEFAULT '{}',
-  entries                  TEXT NOT NULL DEFAULT '{"enclaws-lark":{"enabled":true}}',
+  entries                  TEXT NOT NULL DEFAULT '{"openclaw-lark":{"enabled":true}}',
   installs                 TEXT NOT NULL DEFAULT '{}',
   updated_at               TEXT NOT NULL DEFAULT (datetime('now'))
 );

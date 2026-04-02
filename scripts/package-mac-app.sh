@@ -314,7 +314,8 @@ cp "$ROOT_DIR/enclaws.mjs" "$RESOURCES/enclaws.mjs"
 
 for dir in dist extensions skills assets; do
   if [ -d "$ROOT_DIR/$dir" ]; then
-    cp -R "$ROOT_DIR/$dir" "$RESOURCES/$dir"
+    # Exclude .app bundles to prevent nesting (dist/ may contain EnClaws.app from earlier build)
+    rsync -a --exclude='*.app' "$ROOT_DIR/$dir/" "$RESOURCES/$dir/"
     echo "    Copied $dir/"
   else
     echo "WARN: Missing directory: $dir/" >&2

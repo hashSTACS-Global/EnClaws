@@ -44,9 +44,20 @@ jobs:
         with:
           node-version: '22'
 
-      # 4. 验证 Swift 版本，确认 runner 支持 Swift 6.2+
-      - name: Verify Swift version / 验证 Swift 版本
-        run: swift --version
+      # 4. 选择支持 Swift 6.2 的 Xcode 版本
+      - name: Select Xcode / 选择 Xcode 版本
+        run: |
+          # 列出可用的 Xcode 版本，选择最新的
+          ls /Applications/ | grep Xcode
+          # Xcode 26 beta 包含 Swift 6.2
+          if [ -d "/Applications/Xcode_26.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_26.0.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_16.4.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_16.3.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+          fi
+          swift --version
 
       # 5. 为 scripts/ 目录下的所有 shell 脚本赋予可执行权限
       - name: Make scripts executable / 赋予脚本执行权限
@@ -67,6 +78,7 @@ jobs:
           BUNDLE_ID: ai.enclaws.mac
           ALLOW_ADHOC_SIGNING: '1'
           ALLOW_MISSING_TEXTUAL_BUNDLE: '1'
+          SKIP_TEAM_ID_CHECK: '1'
           APP_VERSION: ${{ inputs.app_version }}
         run: bash scripts/package-mac-app.sh
 
