@@ -9,6 +9,7 @@ import { html, css, LitElement, nothing } from "lit";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, i18n, I18nController } from "../../../i18n/index.ts";
 import { tenantRpc } from "./rpc.ts";
+import "../../components/date-picker.ts";
 
 interface TurnSummary {
   turnId: string;
@@ -762,11 +763,13 @@ export class TenantTracesView extends LitElement {
         <input type="text" .placeholder=${t("tenantTraces.filterAgentPlaceholder")} .value=${this.filterAgentId}
           @change=${(e: Event) => { this.filterAgentId = (e.target as HTMLInputElement).value; this.page = 0; this.loadTurns(); }} />
         <label>${t("tenantTraces.filterSince")}</label>
-        <input type="date" lang=${this.currentLocaleTag} .value=${this.filterSince}
-          @change=${(e: Event) => { this.filterSince = (e.target as HTMLInputElement).value; this.page = 0; this.loadTurns(); }} />
+        <date-picker .value=${this.filterSince} .locale=${this.currentLocaleTag}
+          .max=${this.filterUntil} .placeholder=${t("tenantTraces.filterSince").replace(":", "")}
+          @change=${(e: CustomEvent) => { this.filterSince = e.detail.value; this.page = 0; this.loadTurns(); }}></date-picker>
         <label>${t("tenantTraces.filterUntil")}</label>
-        <input type="date" lang=${this.currentLocaleTag} .value=${this.filterUntil}
-          @change=${(e: Event) => { this.filterUntil = (e.target as HTMLInputElement).value; this.page = 0; this.loadTurns(); }} />
+        <date-picker .value=${this.filterUntil} .locale=${this.currentLocaleTag}
+          .min=${this.filterSince} .placeholder=${t("tenantTraces.filterUntil").replace(":", "")}
+          @change=${(e: CustomEvent) => { this.filterUntil = e.detail.value; this.page = 0; this.loadTurns(); }}></date-picker>
       </div>
 
       ${this.loading

@@ -56,7 +56,7 @@ export const zh_TW: TranslationMap = {
     "tenant-channels": "頻道管理",
     "tenant-models": "模型管理",
     "tenant-skills": "技能管理",
-    "tenant-traces": "交互追蹤",
+    "tenant-traces": "交互審計",
     "tenant-usage": "使用量",
   },
   subtitles: {
@@ -661,7 +661,7 @@ export const zh_TW: TranslationMap = {
     emailAlreadyRegistered: "該電子郵件已註冊",
   },
   tenantTraces: {
-    title: "LLM 交互追蹤",
+    title: "LLM 交互審計",
     refresh: "重新整理",
     loading: "載入中...",
     loadFailed: "載入失敗",

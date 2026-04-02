@@ -7,6 +7,7 @@
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, state, property } from "lit/decorators.js";
 import { tenantRpc } from "./rpc.ts";
+import "../../components/date-picker.ts";
 
 interface UsageSummary {
   totalInputTokens: number;
@@ -159,11 +160,11 @@ export class TenantUsageView extends LitElement {
 
       <div class="period-selector">
         <label>统计区间:</label>
-        <input type="date" .value=${this.startDate}
-          @change=${(e: Event) => { this.startDate = (e.target as HTMLInputElement).value; this.loadData(); }} />
+        <date-picker .value=${this.startDate} locale="zh-CN" .max=${this.endDate}
+          @change=${(e: CustomEvent) => { this.startDate = e.detail.value; this.loadData(); }}></date-picker>
         <span style="color:var(--text-muted)">至</span>
-        <input type="date" .value=${this.endDate}
-          @change=${(e: Event) => { this.endDate = (e.target as HTMLInputElement).value; this.loadData(); }} />
+        <date-picker .value=${this.endDate} locale="zh-CN" .min=${this.startDate}
+          @change=${(e: CustomEvent) => { this.endDate = e.detail.value; this.loadData(); }}></date-picker>
       </div>
 
       ${this.quota ? html`
