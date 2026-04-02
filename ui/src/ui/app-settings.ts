@@ -6,7 +6,7 @@ import {
   stopDebugPolling,
 } from "./app-polling.ts";
 import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
-import type { OpenClawApp } from "./app.ts";
+import type { EnClawsApp } from "./app.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents, loadToolsCatalog } from "./controllers/agents.ts";
@@ -157,11 +157,11 @@ function startSandboxPolling(host: SettingsHost) {
     return;
   }
   host.sandboxPollTimer = setInterval(() => {
-    void loadSessions(host as unknown as OpenClawApp);
+    void loadSessions(host as unknown as EnClawsApp);
     // Respect the suppression flag set by /new reset
     const hostAny = host as unknown as Record<string, unknown>;
     if (!hostAny.sandboxTaskPlanSuppressed) {
-      void loadSandboxTaskPlan(host as unknown as OpenClawApp);
+      void loadSandboxTaskPlan(host as unknown as EnClawsApp);
     }
   }, 5_000);
 }
@@ -222,34 +222,34 @@ export async function refreshActiveTab(host: SettingsHost) {
     await loadChannelsTab(host);
   }
   if (host.tab === "instances") {
-    await loadPresence(host as unknown as OpenClawApp);
+    await loadPresence(host as unknown as EnClawsApp);
   }
   if (host.tab === "sessions") {
-    await loadSessions(host as unknown as OpenClawApp);
+    await loadSessions(host as unknown as EnClawsApp);
   }
   if (host.tab === "cron") {
     await loadCron(host);
   }
   if (host.tab === "skills") {
-    await loadSkills(host as unknown as OpenClawApp);
+    await loadSkills(host as unknown as EnClawsApp);
   }
   if (host.tab === "agents") {
-    await loadAgents(host as unknown as OpenClawApp);
-    await loadToolsCatalog(host as unknown as OpenClawApp);
-    await loadConfig(host as unknown as OpenClawApp);
+    await loadAgents(host as unknown as EnClawsApp);
+    await loadToolsCatalog(host as unknown as EnClawsApp);
+    await loadConfig(host as unknown as EnClawsApp);
     const agentIds = host.agentsList?.agents?.map((entry) => entry.id) ?? [];
     if (agentIds.length > 0) {
-      void loadAgentIdentities(host as unknown as OpenClawApp, agentIds);
+      void loadAgentIdentities(host as unknown as EnClawsApp, agentIds);
     }
     const agentId =
       host.agentsSelectedId ?? host.agentsList?.defaultId ?? host.agentsList?.agents?.[0]?.id;
     if (agentId) {
-      void loadAgentIdentity(host as unknown as OpenClawApp, agentId);
+      void loadAgentIdentity(host as unknown as EnClawsApp, agentId);
       if (host.agentsPanel === "skills") {
-        void loadAgentSkills(host as unknown as OpenClawApp, agentId);
+        void loadAgentSkills(host as unknown as EnClawsApp, agentId);
       }
       if (host.agentsPanel === "channels") {
-        void loadChannels(host as unknown as OpenClawApp, false);
+        void loadChannels(host as unknown as EnClawsApp, false);
       }
       if (host.agentsPanel === "cron") {
         void loadCron(host);
@@ -257,14 +257,14 @@ export async function refreshActiveTab(host: SettingsHost) {
     }
   }
   if (host.tab === "sandbox") {
-    await loadSessions(host as unknown as OpenClawApp);
-    await loadSandboxTaskPlan(host as unknown as OpenClawApp);
+    await loadSessions(host as unknown as EnClawsApp);
+    await loadSandboxTaskPlan(host as unknown as EnClawsApp);
   }
   if (host.tab === "nodes") {
-    await loadNodes(host as unknown as OpenClawApp);
-    await loadDevices(host as unknown as OpenClawApp);
-    await loadConfig(host as unknown as OpenClawApp);
-    await loadExecApprovals(host as unknown as OpenClawApp);
+    await loadNodes(host as unknown as EnClawsApp);
+    await loadDevices(host as unknown as EnClawsApp);
+    await loadConfig(host as unknown as EnClawsApp);
+    await loadExecApprovals(host as unknown as EnClawsApp);
   }
   if (host.tab === "chat") {
     await refreshChat(host as unknown as Parameters<typeof refreshChat>[0]);
@@ -274,16 +274,16 @@ export async function refreshActiveTab(host: SettingsHost) {
     );
   }
   if (host.tab === "config") {
-    await loadConfigSchema(host as unknown as OpenClawApp);
-    await loadConfig(host as unknown as OpenClawApp);
+    await loadConfigSchema(host as unknown as EnClawsApp);
+    await loadConfig(host as unknown as EnClawsApp);
   }
   if (host.tab === "debug") {
-    await loadDebug(host as unknown as OpenClawApp);
+    await loadDebug(host as unknown as EnClawsApp);
     host.eventLog = host.eventLogBuffer;
   }
   if (host.tab === "logs") {
     host.logsAtBottom = true;
-    await loadLogs(host as unknown as OpenClawApp, { reset: true });
+    await loadLogs(host as unknown as EnClawsApp, { reset: true });
     scheduleLogsScroll(host as unknown as Parameters<typeof scheduleLogsScroll>[0], true);
   }
 }
@@ -453,26 +453,26 @@ export function syncUrlWithSessionKey(host: SettingsHost, sessionKey: string, re
 
 export async function loadOverview(host: SettingsHost) {
   await Promise.all([
-    loadChannels(host as unknown as OpenClawApp, false),
-    loadPresence(host as unknown as OpenClawApp),
-    loadSessions(host as unknown as OpenClawApp),
-    loadCronStatus(host as unknown as OpenClawApp),
-    loadDebug(host as unknown as OpenClawApp),
+    loadChannels(host as unknown as EnClawsApp, false),
+    loadPresence(host as unknown as EnClawsApp),
+    loadSessions(host as unknown as EnClawsApp),
+    loadCronStatus(host as unknown as EnClawsApp),
+    loadDebug(host as unknown as EnClawsApp),
   ]);
 }
 
 export async function loadChannelsTab(host: SettingsHost) {
   await Promise.all([
-    loadChannels(host as unknown as OpenClawApp, true),
-    loadConfigSchema(host as unknown as OpenClawApp),
-    loadConfig(host as unknown as OpenClawApp),
+    loadChannels(host as unknown as EnClawsApp, true),
+    loadConfigSchema(host as unknown as EnClawsApp),
+    loadConfig(host as unknown as EnClawsApp),
   ]);
 }
 
 export async function loadCron(host: SettingsHost) {
-  const cronHost = host as unknown as OpenClawApp;
+  const cronHost = host as unknown as EnClawsApp;
   await Promise.all([
-    loadChannels(host as unknown as OpenClawApp, false),
+    loadChannels(host as unknown as EnClawsApp, false),
     loadCronStatus(cronHost),
     loadCronJobs(cronHost),
     loadCronModelSuggestions(cronHost),

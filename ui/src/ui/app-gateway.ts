@@ -12,7 +12,7 @@ import {
   setLastActiveSessionKey,
 } from "./app-settings.ts";
 import { handleAgentEvent, resetToolStream, type AgentEventPayload } from "./app-tool-stream.ts";
-import type { OpenClawApp } from "./app.ts";
+import type { EnClawsApp } from "./app.ts";
 import { setRefreshClient, isAuthenticated, refreshAccessToken, clearAuth } from "./auth-store.ts";
 import { shouldReloadHistoryForFinalEvent } from "./chat-event-reload.ts";
 import { loadAgents, loadToolsCatalog } from "./controllers/agents.ts";
@@ -181,11 +181,11 @@ export function connectGateway(host: GatewayHost) {
           }
         });
       }
-      void loadAssistantIdentity(host as unknown as OpenClawApp);
-      void loadAgents(host as unknown as OpenClawApp);
-      void loadToolsCatalog(host as unknown as OpenClawApp);
-      void loadNodes(host as unknown as OpenClawApp, { quiet: true });
-      void loadDevices(host as unknown as OpenClawApp, { quiet: true });
+      void loadAssistantIdentity(host as unknown as EnClawsApp);
+      void loadAgents(host as unknown as EnClawsApp);
+      void loadToolsCatalog(host as unknown as EnClawsApp);
+      void loadNodes(host as unknown as EnClawsApp, { quiet: true });
+      void loadDevices(host as unknown as EnClawsApp, { quiet: true });
       void refreshActiveTab(host as unknown as Parameters<typeof refreshActiveTab>[0]);
     },
     onClose: ({ code, reason, error }) => {
@@ -252,7 +252,7 @@ function handleTerminalChatEvent(
   }
   host.refreshSessionsAfterChat.delete(runId);
   if (state === "final") {
-    void loadSessions(host as unknown as OpenClawApp, {
+    void loadSessions(host as unknown as EnClawsApp, {
       activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
     });
   }
@@ -265,14 +265,14 @@ function handleChatGatewayEvent(host: GatewayHost, payload: ChatEventPayload | u
       payload.sessionKey,
     );
   }
-  const state = handleChatEvent(host as unknown as OpenClawApp, payload);
+  const state = handleChatEvent(host as unknown as EnClawsApp, payload);
   handleTerminalChatEvent(host, payload, state);
   if (state === "final" && shouldReloadHistoryForFinalEvent(payload)) {
-    void loadChatHistory(host as unknown as OpenClawApp);
+    void loadChatHistory(host as unknown as EnClawsApp);
   }
   // Auto-refresh task plan when chat events complete (captures write_todos and subagent completions)
   if (state === "final" || state === "aborted") {
-    void loadSandboxTaskPlan(host as unknown as OpenClawApp);
+    void loadSandboxTaskPlan(host as unknown as EnClawsApp);
   }
 }
 
@@ -323,7 +323,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
   }
 
   if (evt.event === "device.pair.requested" || evt.event === "device.pair.resolved") {
-    void loadDevices(host as unknown as OpenClawApp, { quiet: true });
+    void loadDevices(host as unknown as EnClawsApp, { quiet: true });
   }
 
   if (evt.event === "exec.approval.requested") {
@@ -357,7 +357,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     const now = Date.now();
     if (!agentPlanRefreshLast || now - agentPlanRefreshLast > 3000) {
       agentPlanRefreshLast = now;
-      void loadSandboxTaskPlan(host as unknown as OpenClawApp);
+      void loadSandboxTaskPlan(host as unknown as EnClawsApp);
     }
   }
 }

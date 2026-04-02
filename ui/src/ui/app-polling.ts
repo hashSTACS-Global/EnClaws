@@ -1,4 +1,4 @@
-import type { OpenClawApp } from "./app.ts";
+import type { EnClawsApp } from "./app.ts";
 import { loadDebug } from "./controllers/debug.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
@@ -17,7 +17,7 @@ export function startNodesPolling(host: PollingHost) {
     return;
   }
   host.nodesPollInterval = window.setInterval(
-    () => void loadNodes(host as unknown as OpenClawApp, { quiet: true }),
+    () => void loadNodes(host as unknown as EnClawsApp, { quiet: true }),
     5000,
   );
 }
@@ -38,7 +38,7 @@ export function startLogsPolling(host: PollingHost) {
     if (host.tab !== "logs") {
       return;
     }
-    void loadLogs(host as unknown as OpenClawApp, { quiet: true });
+    void loadLogs(host as unknown as EnClawsApp, { quiet: true });
   }, 2000);
 }
 
@@ -58,7 +58,7 @@ export function startDebugPolling(host: PollingHost) {
     if (host.tab !== "debug") {
       return;
     }
-    void loadDebug(host as unknown as OpenClawApp);
+    void loadDebug(host as unknown as EnClawsApp);
   }, 3000);
 }
 
@@ -78,7 +78,7 @@ export function startSandboxPolling(host: PollingHost & { sessionKey: string }) 
     if (host.tab !== "chat") {
       return;
     }
-    void loadSandboxTaskPlan(host as unknown as OpenClawApp);
+    void loadSandboxTaskPlan(host as unknown as EnClawsApp);
   }, 3000);
 }
 

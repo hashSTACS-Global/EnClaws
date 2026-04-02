@@ -244,7 +244,7 @@ function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
 }
 
 export function renderApp(state: AppViewState) {
-  const openClawVersion =
+  const enClawsVersion =
     (typeof state.hello?.server?.version === "string" && state.hello.server.version.trim()) ||
     state.updateAvailable?.currentVersion ||
     t("common.na");
@@ -339,7 +339,7 @@ export function renderApp(state: AppViewState) {
     if (typeof window !== "undefined" && window.location.pathname !== "/login") {
       window.history.replaceState(null, "", "/login");
     }
-    return html`<openclaw-login
+    return html`<enclaws-login
       .gatewayUrl=${state.settings.gatewayUrl}
       @auth-success=${(e: CustomEvent) => {
         state.applySettings(loadSettings());
@@ -358,7 +358,7 @@ export function renderApp(state: AppViewState) {
           checkTenantNeedsOnboarding(state);
         }
       }}
-    ></openclaw-login>`;
+    ></enclaws-login>`;
   }
 
   return html`
@@ -457,7 +457,7 @@ export function renderApp(state: AppViewState) {
                   <div class="nav-group__items">
                       <a
                               class="nav-item nav-item--external"
-                              href="https://docs.openclaw.ai"
+                              href="https://docs.enclaws.ai"
                               target=${EXTERNAL_LINK_TARGET}
                               rel=${buildExternalLinkRel()}
                               title="${t("common.docs")} (opens in new tab)"
@@ -544,7 +544,7 @@ export function renderApp(state: AppViewState) {
                       <div class="pill">
                           <span class="statusDot ${versionStatusClass}"></span>
                           <span>${t("common.version")}</span>
-                          <span class="mono">${openClawVersion}</span>
+                          <span class="mono">${enClawsVersion}</span>
                       </div>
                       <div class="pill">
                           <span class="statusDot ${state.connected ? "ok" : ""}"></span>

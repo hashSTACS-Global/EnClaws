@@ -74,7 +74,7 @@ export const zh_CN: TranslationMap = {
     skills: "管理技能可用性和 API 密钥注入。",
     nodes: "配对设备、功能和命令公开。",
     chat: "用于快速干预的直接网关聊天会话。",
-    config: "安全地编辑 ~/.openclaw/openclaw.json。",
+    config: "安全地编辑 ~/.enclaws/enclaws.json。",
     debug: "网关快照、事件和手动 RPC 调用。",
     logs: "网关文件日志的实时追踪。",
     sandbox: "实时编排与任务委派视图。",
@@ -239,7 +239,7 @@ export const zh_CN: TranslationMap = {
     pairing: {
       hint: "此设备需要网关主机的配对批准。",
       mobileHint:
-        "在手机上？从桌面运行 openclaw dashboard --no-open 复制完整 URL（包括 #token=...）。",
+        "在手机上？从桌面运行 enclaws dashboard --no-open 复制完整 URL（包括 #token=...）。",
     },
     insecure: {
       hint: "此页面为 HTTP，因此浏览器阻止设备标识。请使用 HTTPS (Tailscale Serve) 或在网关主机上打开 {url}。",

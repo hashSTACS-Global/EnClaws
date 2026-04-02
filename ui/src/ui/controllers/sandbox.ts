@@ -20,7 +20,7 @@ type TaskPlanReadResponse = {
 
 /**
  * Loads the live task plan for the current main agent session from the gateway.
- * The gateway reads `.openclaw/planner/<sessionKey>.json` from disk.
+ * The gateway reads `.enclaws/planner/<sessionKey>.json` from disk.
  */
 export async function loadSandboxTaskPlan(state: SandboxState): Promise<void> {
   if (!state.client || !state.connected) {

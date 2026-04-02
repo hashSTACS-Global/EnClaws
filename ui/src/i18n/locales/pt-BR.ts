@@ -70,7 +70,7 @@ export const pt_BR: TranslationMap = {
     skills: "Gerenciar disponibilidade de habilidades e injeção de chaves de API.",
     nodes: "Dispositivos pareados, capacidades e exposição de comandos.",
     chat: "Sessão de chat direta com o gateway para intervenções rápidas.",
-    config: "Editar ~/.openclaw/openclaw.json com segurança.",
+    config: "Editar ~/.enclaws/enclaws.json com segurança.",
     debug: "Snapshots do gateway, eventos e chamadas RPC manuais.",
     logs: "Acompanhamento ao vivo dos logs de arquivo do gateway.",
     "tenant-overview": "Visão geral da empresa, uso de recursos e atividades recentes.",
@@ -175,7 +175,7 @@ export const pt_BR: TranslationMap = {
     pairing: {
       hint: "Este dispositivo precisa de aprovação de pareamento do host do gateway.",
       mobileHint:
-        "No celular? Copie a URL completa (incluindo #token=...) executando openclaw dashboard --no-open no desktop.",
+        "No celular? Copie a URL completa (incluindo #token=...) executando enclaws dashboard --no-open no desktop.",
     },
     insecure: {
       hint: "Esta página é HTTP, então o navegador bloqueia a identidade do dispositivo. Use HTTPS (Tailscale Serve) ou abra {url} no host do gateway.",

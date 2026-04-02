@@ -20,8 +20,8 @@ type AuthMode = "login" | "register";
 /** Per-field error map. Keys are field identifiers, values are i18n error strings. */
 type FieldErrors = Record<string, string>;
 
-@customElement("openclaw-login")
-export class OpenClawLogin extends LitElement {
+@customElement("enclaws-login")
+export class EnClawsLogin extends LitElement {
   private i18nCtrl = new I18nController(this);
 
   static styles = css`
@@ -523,7 +523,7 @@ export class OpenClawLogin extends LitElement {
       <div class="login-container">
         <div class="login-card">
           <div class="login-header">
-            <img src="/favicon.svg" alt="OpenClaw" />
+            <img src="/favicon.svg" alt="EnClaws" />
             <h1>${this.mode === "login" ? t("login.title") : t("login.titleRegister")}</h1>
             <p>${this.mode === "login" ? t("login.subtitle") : t("login.subtitleRegister")}</p>
           </div>

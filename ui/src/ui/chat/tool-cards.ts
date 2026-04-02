@@ -270,7 +270,7 @@ function renderBrowserCard(card: ToolCard) {
       const filePath = typeof parsed.path === "string" ? parsed.path : null;
       if (filePath && parsed.ok) {
         // Convert absolute path to gateway-served media URL.
-        // Gateway serves /media/* from the ~/.openclaw/media directory.
+        // Gateway serves /media/* from the ~/.enclaws/media directory.
         const fileName = filePath.split("/").pop() ?? "";
         const imgSrc = fileName ? `/media/browser/${fileName}` : null;
         const pageUrl = typeof parsed.url === "string" ? parsed.url : "";
