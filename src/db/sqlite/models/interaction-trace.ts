@@ -130,7 +130,7 @@ export async function listInteractionTraces(
     values.push(opts.since);
   }
   if (opts?.until) {
-    conditions.push("created_at < ?");
+    conditions.push("created_at <= ?");
     values.push(opts.until);
   }
 
@@ -220,7 +220,7 @@ export async function listInteractionTurns(
     values.push(opts.since);
   }
   if (opts?.until) {
-    conditions.push("created_at < ?");
+    conditions.push("created_at <= ?");
     values.push(opts.until);
   }
 
