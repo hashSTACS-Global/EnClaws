@@ -5,6 +5,12 @@ enum CommandResolver {
     private static let helperName = "openclaw"
 
     static func gatewayEntrypoint(in root: URL) -> String? {
+        // Check inside the app bundle first (self-contained builds).
+        if let bundledEntry = Bundle.main.resourceURL?.appendingPathComponent("dist/index.js").path,
+           FileManager().isReadableFile(atPath: bundledEntry)
+        {
+            return bundledEntry
+        }
         let distEntry = root.appendingPathComponent("dist/index.js").path
         if FileManager().isReadableFile(atPath: distEntry) { return distEntry }
         let openclawEntry = root.appendingPathComponent("openclaw.mjs").path
@@ -85,6 +91,12 @@ enum CommandResolver {
             "/usr/bin",
             "/bin",
         ]
+        // Bundled Node.js inside the .app takes highest priority.
+        if let bundledNodeBin = Bundle.main.resourceURL?.appendingPathComponent("node/bin").path,
+           FileManager().isExecutableFile(atPath: (bundledNodeBin as NSString).appendingPathComponent("node"))
+        {
+            extras.insert(bundledNodeBin, at: 0)
+        }
         #if DEBUG
         // Dev-only convenience. Avoid project-local PATH hijacking in release builds.
         extras.insert(projectRoot.appendingPathComponent("node_modules/.bin").path, at: 0)
@@ -208,6 +220,12 @@ enum CommandResolver {
     }
 
     static func nodeCliPath() -> String? {
+        // Check inside app bundle first.
+        if let bundledCli = Bundle.main.resourceURL?.appendingPathComponent("enclaws.mjs").path,
+           FileManager().isReadableFile(atPath: bundledCli)
+        {
+            return bundledCli
+        }
         let root = self.projectRoot()
         let candidates = [
             root.appendingPathComponent("openclaw.mjs").path,
@@ -575,4 +593,30 @@ enum CommandResolver {
         self.nodeManagerBinPaths(home: home)
     }
     #endif
+
+    /// Runs the bundled postinstall.js if ~/.enclaws/.env does not yet exist.
+    /// This mirrors the Windows installer's post-install step.
+    static func runBundledPostinstallIfNeeded() {
+        let envPath = FileManager().homeDirectoryForCurrentUser
+            .appendingPathComponent(".enclaws/.env")
+        guard !FileManager().fileExists(atPath: envPath.path) else { return }
+
+        guard let resourceURL = Bundle.main.resourceURL else { return }
+        let postinstall = resourceURL.appendingPathComponent("scripts/postinstall.js")
+        let nodeBin = resourceURL.appendingPathComponent("node/bin/node")
+        guard FileManager().isExecutableFile(atPath: nodeBin.path),
+              FileManager().isReadableFile(atPath: postinstall.path)
+        else { return }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: nodeBin.path)
+        process.arguments = [postinstall.path]
+        process.currentDirectoryURL = resourceURL
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            // Ignore — gateway will still start, user can configure manually.
+        }
+    }
 }

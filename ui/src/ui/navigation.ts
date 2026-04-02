@@ -16,15 +16,15 @@ export const TAB_GROUPS = [
     },
     {
         label: "resources",
-        tabs: ["tenant-channels", "tenant-skills", "tenant-models", "nodes"],
+        tabs: ["tenant-channels", "tenant-skills", "tenant-models"],
     },
     {
         label: "enterprise",
-        tabs: ["tenant-settings", "tenant-users", "tenant-usage", "tenant-traces"],
+        tabs: ["tenant-settings", "tenant-users", "tenant-traces"],
     },
     {
         label: "system",
-        tabs: ["instances", "cron", "logs", "config", "debug"],
+        tabs: ["instances", "cron", "logs", "debug"],
     },
 ] as const;
 

@@ -141,3 +141,6 @@ installer/node-portable/
 installer/app-bundle/
 installer/Output/
 installer/*.zip
+
+# Node.js download cache for macOS app bundling
+.node-cache

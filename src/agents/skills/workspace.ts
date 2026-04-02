@@ -348,7 +348,6 @@ function loadSkillEntries(
   const hasTenantSkillsDir = !!opts?.tenantSkillsDir;
   const managedSkillsDir = opts?.managedSkillsDir ?? path.join(CONFIG_DIR, "skills");
   const bundledSkillsDir = opts?.bundledSkillsDir ?? resolveBundledSkillsDir();
-  skillsLogger.info(`[DEBUG-SKILL] loadSkillEntries: workspace=${workspaceDir} tenantSkillsDir=${opts?.tenantSkillsDir ?? "(none)"} bundledSkillsDir=${bundledSkillsDir ?? "(none)"} hasTenant=${hasTenantSkillsDir}`);
   const extraDirsRaw = opts?.config?.skills?.load?.extraDirs ?? [];
   const extraDirs = extraDirsRaw
     .map((d) => (typeof d === "string" ? d.trim() : ""))
@@ -392,7 +391,6 @@ function loadSkillEntries(
         source: "openclaw-tenant",
       })
     : [];
-  skillsLogger.info(`[DEBUG-SKILL] loaded: bundled=${bundledSkills.length} extra=${extraSkills.length} managed=${managedSkills.length} tenant=${tenantSkills.length} tenantNames=${tenantSkills.map((s) => s.name).join(",") || "(none)"}`);
   const personalAgentsSkillsDir = path.resolve(os.homedir(), ".agents", "skills");
   const personalAgentsSkills = hasTenantSkillsDir
     ? []
@@ -415,7 +413,6 @@ function loadSkillEntries(
         source: "openclaw-workspace",
       });
 
-  skillsLogger.info(`[DEBUG-SKILL] loaded: personal=${personalAgentsSkills.length} project=${projectAgentsSkills.length} workspace=${workspaceSkills.length}`);
   const merged = new Map<string, Skill>();
   // Precedence: extra < bundled < managed < tenant < agents-skills-personal < agents-skills-project < workspace
   for (const skill of extraSkills) {
@@ -464,7 +461,6 @@ function loadSkillEntries(
     }
     return entry;
   });
-  skillsLogger.info(`[DEBUG-SKILL] merged total=${skillEntries.length} names=${skillEntries.map((e) => e.skill.name).join(",")}`);
   return skillEntries;
 }
 
@@ -515,7 +511,6 @@ export function buildWorkspaceSkillSnapshot(
   const skillOverrides = eligible
     .filter((e) => e.overrides && e.overrides.length > 0)
     .flatMap((e) => e.overrides!);
-  skillsLogger.info(`[DEBUG-SKILL] snapshot overrides: eligible=${eligible.map((e) => `${e.skill.name}(overrides=${JSON.stringify(e.overrides ?? [])})`).join(",")} collected=${JSON.stringify(skillOverrides)}`);
   return {
     prompt,
     skills: eligible.map((entry) => ({

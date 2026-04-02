@@ -1,0 +1,100 @@
+name: Build macOS DMG
+
+# 手动触发，支持自定义版本号和构建架构
+on:
+  workflow_dispatch:
+    inputs:
+      app_version:
+        description: 'App version (leave empty to use package.json) / 应用版本号（留空则从 package.json 读取）'
+        required: false
+        type: string
+      build_config:
+        description: 'Build configuration / 构建配置'
+        required: false
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+jobs:
+  build-dmg:
+    name: Build macOS DMG (${{ matrix.arch }})
+    # 使用 macOS 15 (Sequoia) runner，支持 Swift 6.2 / Xcode 26+
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository / 检出代码
+        uses: actions/checkout@v4
+
+      # 2. 安装 pnpm 包管理器
+      - name: Setup pnpm / 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      # 3. 设置 Node.js 22
+      - name: Setup Node.js 22 / 配置 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 4. 验证 Swift 版本，确认 runner 支持 Swift 6.2+
+      - name: Verify Swift version / 验证 Swift 版本
+        run: swift --version
+
+      # 5. 为 scripts/ 目录下的所有 shell 脚本赋予可执行权限
+      - name: Make scripts executable / 赋予脚本执行权限
+        run: chmod +x scripts/*.sh
+
+      # 6. 构建自包含 macOS 应用
+      #    - BUILD_CONFIG：构建配置（release/debug）
+      #    - BUILD_ARCHS：单一架构（arm64 或 x86_64），每个架构独立打包
+      #    - BUNDLE_ID：应用 Bundle ID
+      #    - ALLOW_ADHOC_SIGNING=1：使用 ad-hoc 签名（无需正式开发者证书）
+      #    - ALLOW_MISSING_TEXTUAL_BUNDLE=1：允许缺少 Textual bundle（CI 环境）
+      #    - APP_VERSION：版本号（未指定时由脚本自动从 package.json 读取）
+      #    package-mac-app.sh 内部会自动执行 pnpm install --no-frozen-lockfile
+      - name: Build macOS app / 构建 macOS 应用
+        env:
+          BUILD_CONFIG: ${{ inputs.build_config || 'release' }}
+          BUILD_ARCHS: ${{ matrix.arch }}
+          BUNDLE_ID: ai.enclaws.mac
+          ALLOW_ADHOC_SIGNING: '1'
+          ALLOW_MISSING_TEXTUAL_BUNDLE: '1'
+          APP_VERSION: ${{ inputs.app_version }}
+        run: bash scripts/package-mac-app.sh
+
+      # 7. 将构建好的 .app 打包为 DMG 安装镜像
+      #    SKIP_DMG_STYLE=1：跳过 Finder AppleScript 窗口美化（CI 无头环境会卡死）
+      - name: Create DMG / 创建 DMG 安装包
+        env:
+          SKIP_DMG_STYLE: '1'
+        run: |
+          bash scripts/create-dmg.sh dist/EnClaws.app
+          # Rename DMG to include architecture
+          for f in dist/EnClaws-*.dmg; do
+            mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg"
+          done
+
+      # 8. 上传 .app 作为构建产物，保留 7 天
+      - name: Upload .app artifact / 上传 .app 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: EnClaws-app-${{ matrix.arch }}
+          path: dist/EnClaws.app
+          if-no-files-found: error
+          retention-days: 7
+
+      # 9. 上传 DMG 文件作为构建产物，保留 7 天
+      - name: Upload DMG artifact / 上传 DMG 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: EnClaws-dmg-${{ matrix.arch }}
+          path: dist/EnClaws-*-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+          retention-days: 7

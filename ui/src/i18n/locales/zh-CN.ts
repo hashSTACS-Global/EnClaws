@@ -59,8 +59,8 @@ export const zh_CN: TranslationMap = {
     "tenant-agents": "Agent 管理",
     "tenant-channels": "频道管理",
     "tenant-models": "模型管理",
-    "tenant-skills": "技能管理",
-    "tenant-traces": "交互追踪",
+    "tenant-skills": "技能市场",
+    "tenant-traces": "交互审计",
     "tenant-usage": "使用量",
   },
   subtitles: {
@@ -935,8 +935,8 @@ export const zh_CN: TranslationMap = {
     visible: "可见",
   },
   tenantSkills: {
-    title: "技能管理",
-    subtitle: "查看和管理企业可用的技能",
+    title: "技能市场",
+    subtitle: "多租户功能实现中，敬请期待",
     refresh: "刷新",
     loading: "加载中...",
     skillName: "技能名称:",
@@ -993,7 +993,7 @@ export const zh_CN: TranslationMap = {
     emailAlreadyRegistered: "该邮箱已注册",
   },
   tenantTraces: {
-    title: "LLM 交互追踪",
+    title: "LLM 交互审计",
     refresh: "刷新",
     loading: "加载中...",
     loadFailed: "加载失败",

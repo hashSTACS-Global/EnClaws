@@ -172,6 +172,7 @@ enum GatewayEnvironment {
 
     static func resolveGatewayCommand() -> GatewayCommandResolution {
         let start = Date()
+        CommandResolver.runBundledPostinstallIfNeeded()
         defer {
             let elapsedMs = Int(Date().timeIntervalSince(start) * 1000)
             if elapsedMs > 500 {

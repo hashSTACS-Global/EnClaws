@@ -599,7 +599,6 @@ export function createOpenClawCodingTools(options?: {
     : undefined;
   if (overrideSet) {
     const removed = subagentFiltered.filter((tool) => overrideSet.has(tool.name.toLowerCase())).map((t) => t.name);
-    if (removed.length > 0) logWarn(`[skill-overrides] removing tools: ${removed.join(", ")}`);
   }
   const afterSkillOverrides = overrideSet
     ? subagentFiltered.filter((tool) => !overrideSet.has(tool.name.toLowerCase()))

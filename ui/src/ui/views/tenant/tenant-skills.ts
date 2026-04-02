@@ -226,16 +226,11 @@ export class TenantSkillsView extends LitElement {
         <div>
           <h2>${t("tenantSkills.title")}</h2>
         </div>
-        <button class="btn btn-outline" ?disabled=${this._loading} @click=${() => this._load()}>
-          ${this._loading ? t("tenantSkills.loading") : t("tenantSkills.refresh")}
-        </button>
       </div>
-
-      ${this._error ? html`<div class="error-msg">${this._error}</div>` : nothing}
-
-      ${this._loading && !this._report ? html`<div class="loading">${t("tenantSkills.loading")}</div>` : nothing}
-
-      ${this._report ? this._renderReport() : nothing}
+      <div style="text-align:center;padding:4rem 2rem;color:var(--text-muted,#525252);">
+        <img src="/coming-soon.svg" alt="" style="width:64px;height:64px;margin-bottom:0.75rem;opacity:0.5;" />
+        <p style="font-size:0.85rem;margin:0;">${t("tenantSkills.subtitle")}</p>
+      </div>
     `;
   }
 

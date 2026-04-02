@@ -181,6 +181,5 @@ function buildToolsConfig(row: SysToolsConfigRow): ToolsConfig {
  */
 export async function loadAndActivateSysConfig(): Promise<void> {
   const config = await buildSysConfig();
-  console.log("[sys-config] controlUi config:", JSON.stringify(config.gateway?.controlUi));
   setRuntimeConfigSnapshot(config);
 }

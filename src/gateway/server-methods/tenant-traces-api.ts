@@ -20,6 +20,13 @@ import {
 import { assertPermission, RbacError } from "../../auth/rbac.js";
 import type { TenantContext } from "../../auth/middleware.js";
 
+/** Parse a date-only string and set to end of day (23:59:59.999). */
+function parseUntilDate(s: string): Date {
+  const d = new Date(s);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
 function getTenantCtx(
   client: GatewayRequestHandlerOptions["client"],
   respond: GatewayRequestHandlerOptions["respond"],
@@ -69,7 +76,7 @@ export const tenantTracesHandlers: GatewayRequestHandlers = {
       agentId,
       userId,
       since: since ? new Date(since) : undefined,
-      until: until ? new Date(until) : undefined,
+      until: until ? parseUntilDate(until) : undefined,
       limit,
       offset,
     });
@@ -142,7 +149,7 @@ export const tenantTracesHandlers: GatewayRequestHandlers = {
       agentId,
       userId,
       since: since ? new Date(since) : undefined,
-      until: until ? new Date(until) : undefined,
+      until: until ? parseUntilDate(until) : undefined,
       limit,
       offset,
     });

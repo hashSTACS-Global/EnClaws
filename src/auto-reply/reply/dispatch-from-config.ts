@@ -216,7 +216,6 @@ export async function dispatchReplyFromConfig(params: {
     }
     parts.push(`body="${bodyPreview}"`);
     const logLine = parts.join(" ");
-    console.log(logLine);
     try {
       getLogger().info(logLine);
     } catch {
