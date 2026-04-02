@@ -457,6 +457,97 @@ export class TenantAgentsView extends LitElement {
     .tools-header-left { display: flex; align-items: center; gap: 0.4rem; }
     .tools-header-arrow { font-size: 0.65rem; transition: transform 0.15s; }
     .tools-header-arrow.open { transform: rotate(90deg); }
+    /* ── Tools & Skills panels (copied from platform agent) ── */
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem; }
+    .panel-header-left { display: flex; flex-direction: column; gap: 0.25rem; }
+    .panel-title { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; color: var(--text, #e5e5e5); }
+    .panel-sub { color: var(--text-muted, #525252); font-size: 13px; line-height: 1.5; }
+    .panel-sub .mono { font-family: monospace; }
+    .panel-actions { display: flex; gap: 0.4rem; align-items: center; }
+    .panel-filter { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+    .panel-filter input {
+      flex: 1; padding: 6px 10px; background: var(--bg, #0a0a0a);
+      border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px);
+      color: var(--text, #e5e5e5); font-size: 13px; outline: none;
+    }
+    .panel-filter input:focus { border-color: var(--accent, #3b82f6); }
+    .panel-filter .count { font-size: 13px; color: var(--text-muted, #525252); white-space: nowrap; }
+
+    /* Tool grid (matches .agent-tools-grid / .agent-tools-section / .agent-tool-row) */
+    .tools-grid { display: grid; gap: 16px; }
+    .tools-section {
+      border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px);
+      padding: 10px; background: var(--bg, #0a0a0a);
+    }
+    .tools-section-header { font-weight: 600; margin-bottom: 10px; font-size: 13px; }
+    .tools-list { display: grid; gap: 8px 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .tool-row {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 6px 8px; border: 1px solid var(--border, #262626);
+      border-radius: var(--radius-md, 6px); background: var(--card, #141414);
+    }
+    .tool-row-info { flex: 1; min-width: 0; overflow: hidden; }
+    .tool-row-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tool-row-source { font-size: 11px; color: var(--text-muted, #525252); margin-left: 6px; opacity: 0.8; }
+    .tool-row-desc { color: var(--text-muted, #525252); font-size: 11px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Toggle switch (matches .cfg-toggle) */
+    .cfg-toggle { position: relative; flex-shrink: 0; }
+    .cfg-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .cfg-toggle__track {
+      display: block; width: 50px; height: 28px;
+      background: var(--bg-elevated); border: 1px solid var(--border-strong);
+      border-radius: var(--radius-full); position: relative; cursor: pointer;
+      transition: background var(--duration-normal) ease, border-color var(--duration-normal) ease;
+    }
+    .cfg-toggle__track::after {
+      content: ""; position: absolute; top: 3px; left: 3px;
+      width: 20px; height: 20px; border-radius: var(--radius-full);
+      background: var(--text); box-shadow: var(--shadow-sm);
+      transition: transform var(--duration-normal) var(--ease-out), background var(--duration-normal) ease;
+    }
+    .cfg-toggle input:checked + .cfg-toggle__track { background: var(--ok-subtle); border-color: rgba(34,197,94,0.4); }
+    .cfg-toggle input:checked + .cfg-toggle__track::after { transform: translateX(22px); background: var(--ok); }
+
+    /* Skills groups (matches .agent-skills-groups / .agent-skills-group / .agent-skills-header) */
+    .skills-groups { display: grid; gap: 16px; }
+    .skills-group { display: grid; gap: 10px; }
+    .skills-group summary { list-style: none; }
+    .skills-group summary::-webkit-details-marker { display: none; }
+    .skills-group summary::marker { content: ""; }
+    .skills-header {
+      display: flex; align-items: center; font-weight: 600; font-size: 13px;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--text-muted, #525252); cursor: pointer; gap: 8px;
+    }
+    .skills-header > span:last-child { margin-left: auto; }
+    .skills-header::after {
+      content: "\u25B8"; font-size: 12px; color: var(--text-muted, #525252);
+      transition: transform 0.15s ease; margin-left: 8px;
+    }
+    .skills-group[open] .skills-header::after { transform: rotate(90deg); }
+    /* Skill rows (matches .list-item / .list-main / .list-title / .list-sub) */
+    .skills-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .skill-row {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px; align-items: flex-start;
+      border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px);
+      padding: 12px; background: var(--card, #141414);
+      transition: border-color 0.15s;
+    }
+    .skill-row:hover { border-color: var(--border, #333); }
+    .skill-info { display: grid; gap: 4px; min-width: 0; }
+    .skill-name { font-weight: 500; font-size: 13px; }
+    .skill-desc { color: var(--text-muted, #525252); font-size: 12px; }
+    .chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      font-size: 11px; padding: 2px 8px; border-radius: 4px;
+      background: var(--border, #262626); color: var(--text-secondary, #a3a3a3);
+    }
+    .chip-ok { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .chip-warn { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+    /* Form tools (edit mode) */
     .tools-body { padding: 0.5rem 0.65rem; }
     .tools-actions { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
     .tools-group-header {
@@ -470,13 +561,6 @@ export class TenantAgentsView extends LitElement {
     }
     .tools-group-header-count { font-size: 0.68rem; color: var(--text-muted, #525252); }
     .tools-group-checkbox { width: 13px; height: 13px; cursor: pointer; accent-color: var(--accent, #3b82f6); }
-    .tool-row {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 0.2rem 0; font-size: 0.78rem;
-    }
-    .tool-row-info { display: flex; align-items: center; gap: 0.4rem; }
-    .tool-row-name { font-family: monospace; font-size: 0.76rem; }
-    .tool-row-desc { color: var(--text-muted, #525252); font-size: 0.7rem; }
     .tool-toggle { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent, #3b82f6); }
 
     .empty { text-align: center; padding: 2rem; color: var(--text-muted, #525252); font-size: 0.85rem; }
@@ -505,6 +589,8 @@ export class TenantAgentsView extends LitElement {
   @state() private inlineModelSaving = false;
   @state() private agentChannels: AgentChannelInfo[] = [];
   @state() private channelsLoading = false;
+  @state() private agentSkills: Array<{ name: string; description: string; emoji?: string; source: string; disabled: boolean; always: boolean }> = [];
+  @state() private skillsLoading = false;
   @state() private editingAgentId: string | null = null;
   @state() private saving = false;
   @state() private availableModels: TenantModelOption[] = [];
@@ -516,6 +602,10 @@ export class TenantAgentsView extends LitElement {
   @state() private formModelConfig: ModelConfigEntry[] = [];
   @state() private formToolsDeny: string[] = [];
   @state() private formToolsExpanded = false;
+  @state() private toolsFilter = "";
+  @state() private toolsPendingDeny: string[] | null = null;
+  @state() private toolsSaving = false;
+  @state() private skillsFilter = "";
   @state() private formAgentIdManuallyEdited = false;
 
   connectedCallback() {
@@ -558,6 +648,18 @@ export class TenantAgentsView extends LitElement {
       const result = await this.rpc("tenant.models.list") as { models: TenantModelOption[] };
       this.availableModels = (result.models ?? []).filter((m: any) => m.isActive !== false);
     } catch { /* non-critical */ }
+  }
+
+  private async loadSkillsForAgent(agentId: string) {
+    this.skillsLoading = true;
+    this.agentSkills = [];
+    try {
+      const result = await this.rpc("skills.status", { agentId }) as {
+        skills: Array<{ name: string; description: string; emoji?: string; source: string; disabled: boolean; always: boolean }>;
+      };
+      this.agentSkills = result.skills ?? [];
+    } catch { /* non-critical */ }
+    finally { this.skillsLoading = false; }
   }
 
   private async loadChannelsForAgent(agentId: string) {
@@ -867,7 +969,7 @@ export class TenantAgentsView extends LitElement {
     const isSelected = this.selectedAgentId === agent.agentId;
     return html`
       <button type="button" class="agent-row ${isSelected ? "active" : ""}"
-        @click=${() => { this.selectedAgentId = agent.agentId; this.activePanel = "overview"; this.showForm = false; this.inlineModelConfig = null; }}>
+        @click=${() => { this.selectedAgentId = agent.agentId; this.activePanel = "overview"; this.showForm = false; this.inlineModelConfig = null; this.toolsPendingDeny = null; }}>
         <div class="agent-avatar">${initial}</div>
         <div class="agent-info">
           <div class="agent-title">${displayName}</div>
@@ -915,7 +1017,7 @@ export class TenantAgentsView extends LitElement {
         ${this.activePanel === "overview" ? this.renderPanelOverview(agent) : nothing}
         ${this.activePanel === "files" ? this.renderPanelEmpty() : nothing}
         ${this.activePanel === "tools" ? this.renderPanelTools(agent) : nothing}
-        ${this.activePanel === "skills" ? this.renderPanelEmpty() : nothing}
+        ${this.activePanel === "skills" ? this.renderPanelSkills() : nothing}
         ${this.activePanel === "channels" ? this.renderPanelChannels() : nothing}
         ${this.activePanel === "cron" ? this.renderPanelEmpty() : nothing}
         ${this.activePanel === "knowledge" ? this.renderPanelEmpty() : nothing}
@@ -927,10 +1029,10 @@ export class TenantAgentsView extends LitElement {
     type Panel = "overview" | "files" | "tools" | "skills" | "channels" | "cron" | "knowledge";
     const tabs: Array<{ id: Panel; label: string }> = [
       { id: "overview", label: t("tenantAgents.panelOverview") },
+      { id: "channels", label: t("tabs.channels") },
       { id: "files", label: t("tabs.files") },
       { id: "tools", label: t("tabs.tools") },
       { id: "skills", label: t("tabs.skills") },
-      { id: "channels", label: t("tabs.channels") },
       { id: "cron", label: t("tabs.cron") },
       { id: "knowledge", label: t("tabs.knowledge") },
     ];
@@ -942,6 +1044,9 @@ export class TenantAgentsView extends LitElement {
               this.activePanel = tab.id;
               if (tab.id === "channels" && this.selectedAgentId) {
                 void this.loadChannelsForAgent(this.selectedAgentId);
+              }
+              if (tab.id === "skills" && this.selectedAgentId) {
+                void this.loadSkillsForAgent(this.selectedAgentId);
               }
             }}>
             ${tab.label}
@@ -1053,6 +1158,83 @@ export class TenantAgentsView extends LitElement {
     return html`<div class="empty">${t("common.comingSoon")}</div>`;
   }
 
+  private renderPanelSkills() {
+    const filter = this.skillsFilter.trim().toLowerCase();
+    const allSkills = this.agentSkills;
+    const filtered = filter
+      ? allSkills.filter((s) => [s.name, s.description, s.source].join(" ").toLowerCase().includes(filter))
+      : allSkills;
+    const enabled = allSkills.filter((s) => !s.disabled).length;
+
+    // Group by source
+    const groups = new Map<string, typeof filtered>();
+    for (const s of filtered) {
+      const key = s.source || "other";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(s);
+    }
+
+    return html`
+      <div class="panel-header">
+        <div class="panel-header-left">
+          <div class="panel-title">Skills</div>
+          <div class="panel-sub">
+            Per-agent skill allowlist and workspace skills.
+            ${allSkills.length > 0 ? html`<span class="mono">${enabled}/${allSkills.length}</span>` : nothing}
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-outline btn-sm" ?disabled=${this.skillsLoading}
+            @click=${() => { if (this.selectedAgentId) void this.loadSkillsForAgent(this.selectedAgentId); }}>
+            ${this.skillsLoading ? "Loading\u2026" : t("tenantSkills.refresh")}
+          </button>
+        </div>
+      </div>
+
+      ${this.skillsLoading && allSkills.length === 0 ? html`<div class="loading">${t("tenantSkills.loading")}</div>` : html`
+        <div class="panel-filter">
+          <input placeholder="Search skills..." .value=${this.skillsFilter}
+            @input=${(e: Event) => { this.skillsFilter = (e.target as HTMLInputElement).value; }} />
+          <span class="count">${filtered.length} shown</span>
+        </div>
+
+        ${filtered.length === 0
+          ? html`<div class="empty">No skills found.</div>`
+          : html`
+            <div class="skills-groups">
+              ${[...groups.entries()].map(([source, skills]) => html`
+                <details class="skills-group" open>
+                  <summary class="skills-header">
+                    <span>${source}</span>
+                    <span>${skills.length}</span>
+                  </summary>
+                  <div class="skills-grid">
+                    ${skills.map((s) => html`
+                      <div class="skill-row">
+                        <div class="skill-info">
+                          <div class="skill-name">${s.emoji ? `${s.emoji} ` : ""}${s.name}</div>
+                          <div class="skill-desc">${s.description}</div>
+                          <div class="chip-row" style="margin-top:6px">
+                            <span class="chip">${s.source}</span>
+                            <span class="chip ${s.disabled ? "chip-warn" : "chip-ok"}">${s.disabled ? "disabled" : "eligible"}</span>
+                          </div>
+                        </div>
+                        <label class="cfg-toggle">
+                          <input type="checkbox" .checked=${!s.disabled} disabled />
+                          <span class="cfg-toggle__track"></span>
+                        </label>
+                      </div>
+                    `)}
+                  </div>
+                </details>
+              `)}
+            </div>
+          `
+        }
+      `}
+    `;
+  }
+
   private renderPanelChannels() {
     if (this.channelsLoading) {
       return html`<div class="loading">${t("tenantAgents.loading")}</div>`;
@@ -1084,33 +1266,93 @@ export class TenantAgentsView extends LitElement {
     `;
   }
 
+  private async saveToolsDeny(agent: TenantAgent, deny: string[]) {
+    this.toolsSaving = true;
+    try {
+      const config: Record<string, unknown> = { ...(agent.config ?? {}) };
+      config.tools = deny.length > 0 ? { deny } : {};
+      await this.rpc("tenant.agents.update", { agentId: agent.agentId, config });
+      this.toolsPendingDeny = null;
+      this.showSuccess("tenantAgents.agentUpdated");
+      await this.loadAgents();
+    } catch (err) {
+      this.showError(err instanceof Error ? err.message : "tenantAgents.saveFailed");
+    } finally {
+      this.toolsSaving = false;
+    }
+  }
+
   private renderPanelTools(agent: TenantAgent) {
-    const denySet = new Set(Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
-      ? (agent.config.tools as { deny: string[] }).deny : []);
+    const savedDeny: string[] = Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
+      ? (agent.config.tools as { deny: string[] }).deny : [];
+    const denySet = new Set(this.toolsPendingDeny ?? savedDeny);
+    const isDirty = this.toolsPendingDeny !== null;
     const enabled = ALL_TOOL_IDS.filter((id) => !denySet.has(id)).length;
+    const filter = this.toolsFilter.trim().toLowerCase();
+
+    const toggleTool = (id: string, checked: boolean) => {
+      const next = new Set(denySet);
+      checked ? next.delete(id) : next.add(id);
+      this.toolsPendingDeny = [...next];
+    };
+
+    const filteredGroups = this.toolGroups.map((group) => ({
+      ...group,
+      tools: filter ? group.tools.filter((tl) => tl.label.toLowerCase().includes(filter) || tl.description.toLowerCase().includes(filter)) : group.tools,
+    })).filter((g) => g.tools.length > 0);
+    const shownCount = filteredGroups.reduce((s, g) => s + g.tools.length, 0);
 
     return html`
-      <div class="form-hint" style="margin-bottom:0.75rem">
-        ${t("tenantAgents.toolsEnabled").replace("{enabled}", String(enabled)).replace("{total}", String(ALL_TOOL_IDS.length))}
+      <div class="panel-header">
+        <div class="panel-header-left">
+          <div class="panel-title">${t("tenantAgents.toolAccess")} &nbsp;<span style="font-weight:400;font-size:13px;color:var(--text-muted,#525252)"><span class="mono">${enabled}/${ALL_TOOL_IDS.length}</span> ${t("tenantAgents.enabled")}</span></div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-outline btn-sm" ?disabled=${this.toolsSaving}
+            @click=${() => { this.toolsPendingDeny = []; }}>${t("tenantAgents.enableAll")}</button>
+          <button class="btn btn-outline btn-sm" ?disabled=${this.toolsSaving}
+            @click=${() => { this.toolsPendingDeny = [...ALL_TOOL_IDS]; }}>${t("tenantAgents.disableAll")}</button>
+          <button class="btn btn-outline btn-sm" ?disabled=${!isDirty || this.toolsSaving}
+            @click=${() => { this.toolsPendingDeny = null; }}>${t("tenantAgents.toolsReset")}</button>
+          <button class="btn btn-primary btn-sm" ?disabled=${!isDirty || this.toolsSaving}
+            @click=${() => this.saveToolsDeny(agent, [...denySet])}>
+            ${this.toolsSaving ? t("tenantAgents.saving") : t("tenantAgents.save")}
+          </button>
+        </div>
       </div>
-      ${this.toolGroups.map((group) => {
-        const enabledCount = group.tools.filter((tl) => !denySet.has(tl.id)).length;
-        return html`
-          <div class="tools-group-header">
-            <span class="tools-group-header-label">${group.label}</span>
-            <span class="tools-group-header-count">${enabledCount}/${group.tools.length}</span>
-          </div>
-          ${group.tools.map((tool) => html`
-            <div class="tool-row">
-              <div class="tool-row-info">
-                <span class="tool-row-name">${tool.label}</span>
-                <span class="tool-row-desc">${tool.description}</span>
+      <div class="panel-filter">
+        <input .placeholder=${t("tenantAgents.searchTools")} .value=${this.toolsFilter}
+          @input=${(e: Event) => { this.toolsFilter = (e.target as HTMLInputElement).value; }} />
+        <span class="count">${filter ? t("tenantAgents.toolsShown").replace("{count}", String(shownCount)) : ''}</span>
+      </div>
+      <div class="tools-grid">
+        ${filteredGroups.map((group) => {
+          const enabledCount = group.tools.filter((tl) => !denySet.has(tl.id)).length;
+          return html`
+            <div class="tools-section">
+              <div class="tools-section-header">${group.label} <span class="tool-row-source">${enabledCount}/${group.tools.length}</span></div>
+              <div class="tools-list">
+                ${group.tools.map((tool) => {
+                  const allowed = !denySet.has(tool.id);
+                  return html`
+                    <div class="tool-row">
+                      <div class="tool-row-info">
+                        <div class="tool-row-name" title=${`${tool.label} [${t("tenantAgents.toolSourceCore")}]`}>${tool.label}<span class="tool-row-source">${t("tenantAgents.toolSourceCore")}</span></div>
+                        <div class="tool-row-desc" title=${tool.description}>${tool.description}</div>
+                      </div>
+                      <label class="cfg-toggle">
+                        <input type="checkbox" .checked=${allowed} ?disabled=${this.toolsSaving}
+                          @change=${(e: Event) => toggleTool(tool.id, (e.target as HTMLInputElement).checked)} />
+                        <span class="cfg-toggle__track"></span>
+                      </label>
+                    </div>
+                  `;
+                })}
               </div>
-              <span style="font-size:0.75rem;color:${denySet.has(tool.id) ? "var(--text-muted,#525252)" : "#22c55e"}">${denySet.has(tool.id) ? "✗" : "✓"}</span>
             </div>
-          `)}
-        `;
-      })}
+          `;
+        })}
+      </div>
     `;
   }
 
