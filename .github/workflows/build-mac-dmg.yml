@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 60
 
     strategy:
+      fail-fast: false
       matrix:
         arch: [arm64, x86_64]
 
