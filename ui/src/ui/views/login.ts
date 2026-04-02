@@ -135,8 +135,8 @@ export class EnClawsLogin extends LitElement {
     }
 
     .login-header img {
-      width: 48px;
-      height: 48px;
+      width: 72px;
+      height: 72px;
       margin-bottom: 0.75rem;
     }
 
