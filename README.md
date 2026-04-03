@@ -220,6 +220,36 @@ This belongs in the roadmap section because it is a direction, not a launch-day 
 
 ## How it works (short)
 
+```text
+Users / Teams / Enterprise Systems
+                 │
+                 ▼
+   Assistant Runtime + Control Plane
+                 │
+      ┌──────────┼──────────┬──────────┐
+      ▼          ▼          ▼          ▼
+ Concurrency   Memory      Skills    Audit
+                 │
+                 ▼
+      Web management panel and enterprise surfaces
+```
+
+A slightly more detailed mental model:
+
+```text
+Enterprise users + business systems + work events
+                 │
+                 ▼
+   containerized assistant runtime and scheduler
+                 │
+      ┌──────────┼──────────┬──────────┐
+      ▼          ▼          ▼          ▼
+  isolation    memory     skills   monitoring
+                 │
+                 ▼
+       evidence, replay, operations, action
+```
+
 ### System architecture
 
 ```
