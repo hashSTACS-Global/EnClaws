@@ -591,6 +591,8 @@ export class TenantAgentsView extends LitElement {
   @state() private channelsLoading = false;
   @state() private agentSkills: Array<{ name: string; description: string; emoji?: string; source: string; disabled: boolean; always: boolean }> = [];
   @state() private skillsLoading = false;
+  @state() private toolsCatalogGroups: ToolGroup[] | null = null;
+  @state() private toolsCatalogLoading = false;
   @state() private editingAgentId: string | null = null;
   @state() private saving = false;
   @state() private availableModels: TenantModelOption[] = [];
@@ -612,6 +614,7 @@ export class TenantAgentsView extends LitElement {
     super.connectedCallback();
     this.loadAgents();
     this.loadModels();
+    this.loadToolsCatalog();
   }
 
   private showError(key: string, params?: Record<string, string>) {
@@ -648,6 +651,23 @@ export class TenantAgentsView extends LitElement {
       const result = await this.rpc("tenant.models.list") as { models: TenantModelOption[] };
       this.availableModels = (result.models ?? []).filter((m: any) => m.isActive !== false);
     } catch { /* non-critical */ }
+  }
+
+  private async loadToolsCatalog() {
+    this.toolsCatalogLoading = true;
+    try {
+      const result = await this.rpc("tools.catalog", { includePlugins: true }) as {
+        groups?: Array<{ id: string; label: string; tools: Array<{ id: string; label: string; description: string }> }>;
+      };
+      if (result.groups?.length) {
+        this.toolsCatalogGroups = result.groups.map((g) => ({
+          id: g.id,
+          label: g.label,
+          tools: g.tools.map((tl) => ({ id: tl.id, label: tl.label, description: tl.description })),
+        }));
+      }
+    } catch { /* fallback to hardcoded TOOL_GROUP_DEFS */ }
+    finally { this.toolsCatalogLoading = false; }
   }
 
   private async loadSkillsForAgent(agentId: string) {
@@ -722,11 +742,16 @@ export class TenantAgentsView extends LitElement {
   }
 
   private get toolGroups(): ToolGroup[] {
+    if (this.toolsCatalogGroups) return this.toolsCatalogGroups;
     return TOOL_GROUP_DEFS.map((g) => ({
       id: g.id,
       label: t(g.labelKey),
       tools: g.tools.map((td) => ({ id: td.id, label: td.label, description: t(td.descKey) })),
     }));
+  }
+
+  private get allToolIds(): string[] {
+    return this.toolGroups.flatMap((g) => g.tools.map((t) => t.id));
   }
 
   private get modelManagePath() {
@@ -802,7 +827,7 @@ export class TenantAgentsView extends LitElement {
   }
 
   private toggleGroupTools(groupId: string, enabled: boolean) {
-    const group = TOOL_GROUP_DEFS.find((g) => g.id === groupId);
+    const group = this.toolGroups.find((g) => g.id === groupId);
     if (!group) return;
     const deny = new Set(this.formToolsDeny);
     for (const tool of group.tools) {
@@ -812,7 +837,7 @@ export class TenantAgentsView extends LitElement {
   }
 
   private toggleAllTools(enabled: boolean) {
-    this.formToolsDeny = enabled ? [] : [...ALL_TOOL_IDS];
+    this.formToolsDeny = enabled ? [] : [...this.allToolIds];
   }
 
   // ── Inline model config ──
@@ -1061,7 +1086,7 @@ export class TenantAgentsView extends LitElement {
   private renderPanelOverview(agent: TenantAgent) {
     const denySet = new Set(Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
       ? (agent.config.tools as { deny: string[] }).deny : []);
-    const toolsEnabled = ALL_TOOL_IDS.filter((id) => !denySet.has(id)).length;
+    const toolsEnabled = this.allToolIds.filter((id) => !denySet.has(id)).length;
     const systemPrompt = (agent.config?.systemPrompt as string) || "";
     const currentConfig = this.getInlineModelConfig(agent);
     const isDirty = this.inlineModelConfig !== null;
@@ -1087,7 +1112,7 @@ export class TenantAgentsView extends LitElement {
         </div>
         <div class="kv">
           <div class="label">${t("tenantAgents.tools")}</div>
-          <div class="value">${toolsEnabled}/${ALL_TOOL_IDS.length} ${t("tenantAgents.enabled")}</div>
+          <div class="value">${toolsEnabled}/${this.allToolIds.length} ${t("tenantAgents.enabled")}</div>
         </div>
         <div class="kv">
           <div class="label">${t("tenantAgents.createdAt")}</div>
@@ -1291,7 +1316,8 @@ export class TenantAgentsView extends LitElement {
         ? (agent.config.tools as { deny: string[] }).deny : [];
     const denySet = new Set(this.toolsPendingDeny ?? savedDeny);
     const isDirty = this.toolsPendingDeny !== null;
-    const enabled = ALL_TOOL_IDS.filter((id) => !denySet.has(id)).length;
+    const allIds = this.allToolIds;
+    const enabled = allIds.filter((id) => !denySet.has(id)).length;
     const filter = this.toolsFilter.trim().toLowerCase();
 
     const toggleTool = (id: string, checked: boolean) => {
@@ -1309,13 +1335,13 @@ export class TenantAgentsView extends LitElement {
     return html`
       <div class="panel-header">
         <div class="panel-header-left">
-          <div class="panel-title">${t("tenantAgents.toolAccess")} &nbsp;<span style="font-weight:400;font-size:13px;color:var(--text-muted,#525252)"><span class="mono">${enabled}/${ALL_TOOL_IDS.length}</span> ${t("tenantAgents.enabled")}</span></div>
+          <div class="panel-title">${t("tenantAgents.toolAccess")} &nbsp;<span style="font-weight:400;font-size:13px;color:var(--text-muted,#525252)"><span class="mono">${enabled}/${allIds.length}</span> ${t("tenantAgents.enabled")}</span></div>
         </div>
         <div class="panel-actions">
           <button class="btn btn-outline btn-sm" ?disabled=${this.toolsSaving}
             @click=${() => { this.toolsPendingDeny = []; }}>${t("tenantAgents.enableAll")}</button>
           <button class="btn btn-outline btn-sm" ?disabled=${this.toolsSaving}
-            @click=${() => { this.toolsPendingDeny = [...ALL_TOOL_IDS]; }}>${t("tenantAgents.disableAll")}</button>
+            @click=${() => { this.toolsPendingDeny = [...allIds]; }}>${t("tenantAgents.disableAll")}</button>
           <button class="btn btn-outline btn-sm" ?disabled=${!isDirty || this.toolsSaving}
             @click=${() => { this.toolsPendingDeny = null; }}>${t("tenantAgents.toolsReset")}</button>
           <button class="btn btn-primary btn-sm" ?disabled=${!isDirty || this.toolsSaving}
@@ -1473,7 +1499,8 @@ export class TenantAgentsView extends LitElement {
 
   private renderToolsSection() {
     const denySet = new Set(this.formToolsDeny);
-    const enabled = ALL_TOOL_IDS.filter((id) => !denySet.has(id)).length;
+    const allIds = this.allToolIds;
+    const enabled = allIds.filter((id) => !denySet.has(id)).length;
     return html`
       <div class="tools-section">
         <div class="tools-header" @click=${() => { this.formToolsExpanded = !this.formToolsExpanded; }}>
@@ -1482,7 +1509,7 @@ export class TenantAgentsView extends LitElement {
             <span>${t("tenantAgents.toolAccess")}</span>
           </div>
           <span style="font-size:0.72rem;color:var(--text-muted,#525252)">
-            ${t("tenantAgents.toolsEnabled").replace("{enabled}", String(enabled)).replace("{total}", String(ALL_TOOL_IDS.length))}
+            ${t("tenantAgents.toolsEnabled").replace("{enabled}", String(enabled)).replace("{total}", String(allIds.length))}
           </span>
         </div>
         ${this.formToolsExpanded ? html`
