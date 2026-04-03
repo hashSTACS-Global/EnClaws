@@ -757,9 +757,11 @@ export class TenantAgentsView extends LitElement {
     this.formName = (agent.config?.displayName as string) ?? agent.name ?? "";
     this.formSystemPrompt = (agent.config?.systemPrompt as string) || DEFAULT_SYSTEM_PROMPT;
     this.formModelConfig = [...(agent.modelConfig ?? [])];
-    this.formToolsDeny = Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
-      ? [...((agent.config.tools as { deny: string[] }).deny)]
-      : [];
+    this.formToolsDeny = Array.isArray((agent as any).tools?.deny) && (agent as any).tools.deny.length > 0
+      ? [...(agent as any).tools.deny]
+      : Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
+        ? [...((agent.config.tools as { deny: string[] }).deny)]
+        : [];
     this.formToolsExpanded = false;
     this.formAgentIdManuallyEdited = false;
     this.showForm = true;
@@ -1283,8 +1285,10 @@ export class TenantAgentsView extends LitElement {
   }
 
   private renderPanelTools(agent: TenantAgent) {
-    const savedDeny: string[] = Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
-      ? (agent.config.tools as { deny: string[] }).deny : [];
+    const savedDeny: string[] = Array.isArray((agent as any).tools?.deny) && (agent as any).tools.deny.length > 0
+      ? (agent as any).tools.deny
+      : Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
+        ? (agent.config.tools as { deny: string[] }).deny : [];
     const denySet = new Set(this.toolsPendingDeny ?? savedDeny);
     const isDirty = this.toolsPendingDeny !== null;
     const enabled = ALL_TOOL_IDS.filter((id) => !denySet.has(id)).length;

@@ -18,6 +18,9 @@ import { listTenantChannels, toConfigChannels } from "../db/models/tenant-channe
 import { listTenantModels } from "../db/models/tenant-model.js";
 import type { TenantSettings } from "../db/types.js";
 import { loadConfig, type OpenClawConfig } from "./config.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
+
+const log = createSubsystemLogger("tenant-config");
 
 /** Cache tenant configs with short TTL to avoid DB hits on every request. */
 const tenantConfigCache = new Map<string, { config: OpenClawConfig; expiresAt: number }>();
@@ -120,9 +123,11 @@ async function buildTenantConfig(
   // Override agents if tenant has their own.
   // Pass tenantModelsMap so agents with model_id FK resolve correctly.
   if (agents.length > 0) {
+    const agentsList = toConfigAgentsList(agents, tenantModelsMap);
+    log.info("Tenant AgentConfig loaded: %o", { agents: agentsList });
     config.agents = {
       ...config.agents,
-      list: toConfigAgentsList(agents, tenantModelsMap) as any,
+      list: agentsList as any,
     };
   }
 

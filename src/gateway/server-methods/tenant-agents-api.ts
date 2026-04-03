@@ -92,6 +92,8 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
         name: a.name,
         config: a.config,
         modelConfig: a.modelConfig,
+        tools: a.tools,
+        skills: a.skills,
         isActive: a.isActive,
         createdBy: a.createdBy,
         createdAt: a.createdAt,
@@ -114,11 +116,13 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { agentId, name, config, modelConfig } = params as {
+    const { agentId, name, config, modelConfig, tools, skills } = params as {
       agentId: string;
       name: string;
       config?: Record<string, unknown>;
       modelConfig?: ModelConfigEntry[];
+      tools?: { deny: string[] };
+      skills?: { deny: string[] };
     };
 
     if (!agentId || !name) {
@@ -159,12 +163,36 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    // Extract tools/skills deny lists from config if sent inline (UI sends config.tools = { deny: [...] })
+    let resolvedTools = tools;
+    let resolvedSkills = skills;
+    let cleanConfig = config;
+    if (config) {
+      if (resolvedTools === undefined && config.tools != null) {
+        const toolsCfg = config.tools as Record<string, unknown>;
+        if (Array.isArray(toolsCfg.deny)) {
+          resolvedTools = { deny: toolsCfg.deny as string[] };
+        }
+        const { tools: _t, ...rest } = config;
+        cleanConfig = rest;
+      }
+      if (resolvedSkills === undefined && config.skills != null) {
+        if (Array.isArray(config.skills)) {
+          resolvedSkills = { deny: config.skills as string[] };
+        }
+        const { skills: _s, ...rest } = cleanConfig!;
+        cleanConfig = rest;
+      }
+    }
+
     const agent = await createTenantAgent({
       tenantId: ctx.tenantId,
       agentId,
       name,
-      config,
+      config: cleanConfig,
       modelConfig,
+      tools: resolvedTools,
+      skills: resolvedSkills,
       createdBy: ctx.userId,
     });
 
@@ -186,6 +214,8 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       name: agent.name,
       config: agent.config,
       modelConfig: agent.modelConfig,
+      tools: agent.tools,
+      skills: agent.skills,
     });
   },
 
@@ -203,11 +233,13 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { agentId, name, config, modelConfig, isActive } = params as {
+    const { agentId, name, config, modelConfig, tools, skills, isActive } = params as {
       agentId: string;
       name?: string;
       config?: Record<string, unknown>;
       modelConfig?: ModelConfigEntry[];
+      tools?: { deny: string[] };
+      skills?: { deny: string[] };
       isActive?: boolean;
     };
 
@@ -236,7 +268,37 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       }
     }
 
-    const updated = await updateTenantAgent(ctx.tenantId, agentId, { name, config, modelConfig, isActive });
+    // Extract tools/skills deny lists from config if sent inline (UI sends config.tools = { deny: [...] })
+    let resolvedTools = tools;
+    let resolvedSkills = skills;
+    let cleanConfig = config;
+    if (config) {
+      if (resolvedTools === undefined && config.tools != null) {
+        const toolsCfg = config.tools as Record<string, unknown>;
+        if (Array.isArray(toolsCfg.deny)) {
+          resolvedTools = { deny: toolsCfg.deny as string[] };
+        }
+        // Remove tools from config — it's stored in its own column
+        const { tools: _t, ...rest } = config;
+        cleanConfig = rest;
+      }
+      if (resolvedSkills === undefined && config.skills != null) {
+        if (Array.isArray(config.skills)) {
+          resolvedSkills = { deny: config.skills as string[] };
+        }
+        const { skills: _s, ...rest } = cleanConfig!;
+        cleanConfig = rest;
+      }
+    }
+
+    const updated = await updateTenantAgent(ctx.tenantId, agentId, {
+      name,
+      config: cleanConfig,
+      modelConfig,
+      tools: resolvedTools,
+      skills: resolvedSkills,
+      isActive,
+    });
     if (!updated) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Agent not found"));
       return;
@@ -261,6 +323,8 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       agentId: updated.agentId,
       name: updated.name,
       config: updated.config,
+      tools: updated.tools,
+      skills: updated.skills,
       isActive: updated.isActive,
     });
   },

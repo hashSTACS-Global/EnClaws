@@ -14,6 +14,8 @@ function rowToAgent(row: Record<string, unknown>): TenantAgent {
     name: (row.name as string) ?? null,
     config: (row.config ?? {}) as Record<string, unknown>,
     modelConfig: (row.model_config ?? []) as ModelConfigEntry[],
+    tools: (row.tools ?? { deny: [] }) as { deny: string[] },
+    skills: (row.skills ?? { deny: [] }) as { deny: string[] },
     isActive: row.is_active as boolean,
     createdBy: (row.created_by as string) ?? null,
     createdAt: row.created_at as Date,
@@ -27,14 +29,16 @@ export async function createTenantAgent(params: {
   name?: string;
   config?: Record<string, unknown>;
   modelConfig?: ModelConfigEntry[];
+  tools?: { deny: string[] };
+  skills?: { deny: string[] };
   createdBy?: string;
 }): Promise<TenantAgent> {
   if (getDbType() === DB_SQLITE) return sqliteAgent.createTenantAgent(params);
   const result = await query(
-    `INSERT INTO tenant_agents (tenant_id, agent_id, name, config, model_config, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO tenant_agents (tenant_id, agent_id, name, config, model_config, tools, skills, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), params.createdBy ?? null],
+    [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? { deny: [] }), params.createdBy ?? null],
   );
   return rowToAgent(result.rows[0]);
 }
@@ -75,7 +79,7 @@ export async function listTenantAgents(
 export async function updateTenantAgent(
   tenantId: string,
   agentId: string,
-  updates: Partial<Pick<TenantAgent, "name" | "config" | "modelConfig" | "isActive">>,
+  updates: Partial<Pick<TenantAgent, "name" | "config" | "modelConfig" | "tools" | "skills" | "isActive">>,
 ): Promise<TenantAgent | null> {
   if (getDbType() === DB_SQLITE) return sqliteAgent.updateTenantAgent(tenantId, agentId, updates);
   const sets: string[] = [];
@@ -93,6 +97,14 @@ export async function updateTenantAgent(
   if (updates.modelConfig !== undefined) {
     sets.push(`model_config = $${idx++}`);
     values.push(JSON.stringify(updates.modelConfig));
+  }
+  if (updates.tools !== undefined) {
+    sets.push(`tools = $${idx++}`);
+    values.push(JSON.stringify(updates.tools));
+  }
+  if (updates.skills !== undefined) {
+    sets.push(`skills = $${idx++}`);
+    values.push(JSON.stringify(updates.skills));
   }
   if (updates.isActive !== undefined) {
     sets.push(`is_active = $${idx++}`);
@@ -163,11 +175,16 @@ export function toConfigAgentsList(
           : primary          // single model — use plain string form
         : undefined;
 
+    const toolsDeny = a.tools?.deny ?? [];
+    const skillsDeny = a.skills?.deny ?? [];
+
     return {
       id: a.agentId,
       name: a.name,
       ...a.config,
       ...(modelField !== undefined ? { model: modelField } : {}),
+      ...(toolsDeny.length > 0 ? { tools: { ...((a.config?.tools as Record<string, unknown>) ?? {}), deny: toolsDeny } } : {}),
+      ...(skillsDeny.length > 0 ? { skills: skillsDeny } : {}),
     };
   });
 }

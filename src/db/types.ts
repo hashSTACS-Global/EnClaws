@@ -202,6 +202,8 @@ export interface TenantAgent {
   name: string | null;
   config: Record<string, unknown>;
   modelConfig: ModelConfigEntry[];
+  tools: { deny: string[] };
+  skills: { deny: string[] };
   isActive: boolean;
   createdBy: string | null;
   createdAt: Date;

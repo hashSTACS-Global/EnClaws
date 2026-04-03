@@ -75,7 +75,7 @@ async function runMigrations(): Promise<void> {
     // Filter out PG-specific migrations (those with PG syntax that won't run on SQLite)
     // 006_user_open_ids_array.sql uses PG array types — skip, already in schema.sql
     // 002_user_channel_id.sql uses PG ALTER TABLE syntax — handled inline below
-    const pgOnlyMigrations = new Set(["006_user_open_ids_array.sql", "002_user_channel_id.sql", "004_usage_user_id_text.sql"]);
+    const pgOnlyMigrations = new Set(["006_user_open_ids_array.sql", "002_user_channel_id.sql", "004_usage_user_id_text.sql", "006_tenant_agents_tools_skills.sql"]);
     for (const migration of pgOnlyMigrations) {
       if (!applied.has(migration) && pending.includes(migration)) {
         sqliteQuery("INSERT OR IGNORE INTO _migrations (name) VALUES (?)", [migration]);
@@ -98,6 +98,17 @@ async function runMigrations(): Promise<void> {
       db.exec("ALTER TABLE tenant_channel_apps ADD COLUMN agent_id TEXT");
       db.exec("CREATE INDEX IF NOT EXISTS idx_channel_apps_agent ON tenant_channel_apps (agent_id)");
       console.log("[migrate]   ✓ SQLite: added agent_id column to tenant_channel_apps");
+    }
+
+    // Inline SQLite migration: add tools and skills columns to tenant_agents if missing
+    const agentCols = db.prepare("PRAGMA table_info(tenant_agents)").all() as { name: string }[];
+    if (!agentCols.some((c) => c.name === "tools")) {
+      db.exec(`ALTER TABLE tenant_agents ADD COLUMN tools TEXT NOT NULL DEFAULT '{"deny":[]}'`);
+      console.log("[migrate]   ✓ SQLite: added tools column to tenant_agents");
+    }
+    if (!agentCols.some((c) => c.name === "skills")) {
+      db.exec(`ALTER TABLE tenant_agents ADD COLUMN skills TEXT NOT NULL DEFAULT '{"deny":[]}'`);
+      console.log("[migrate]   ✓ SQLite: added skills column to tenant_agents");
     }
   }
 

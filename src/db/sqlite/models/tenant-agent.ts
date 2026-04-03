@@ -13,6 +13,8 @@ function rowToAgent(row: Record<string, unknown>): TenantAgent {
     name: (row.name as string) ?? null,
     config: (typeof row.config === "string" ? JSON.parse(row.config) : row.config ?? {}) as Record<string, unknown>,
     modelConfig: (typeof row.model_config === "string" ? JSON.parse(row.model_config) : row.model_config ?? []) as ModelConfigEntry[],
+    tools: (typeof row.tools === "string" ? JSON.parse(row.tools) : row.tools ?? { deny: [] }) as { deny: string[] },
+    skills: (typeof row.skills === "string" ? JSON.parse(row.skills) : row.skills ?? { deny: [] }) as { deny: string[] },
     isActive: Boolean(row.is_active),
     createdBy: (row.created_by as string) ?? null,
     createdAt: new Date(row.created_at as string),
@@ -26,13 +28,15 @@ export async function createTenantAgent(params: {
   name?: string;
   config?: Record<string, unknown>;
   modelConfig?: ModelConfigEntry[];
+  tools?: { deny: string[] };
+  skills?: { deny: string[] };
   createdBy?: string;
 }): Promise<TenantAgent> {
   const id = generateUUID();
   sqliteQuery(
-    `INSERT INTO tenant_agents (id, tenant_id, agent_id, name, config, model_config, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), params.createdBy ?? null],
+    `INSERT INTO tenant_agents (id, tenant_id, agent_id, name, config, model_config, tools, skills, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? { deny: [] }), params.createdBy ?? null],
   );
   const result = sqliteQuery("SELECT * FROM tenant_agents WHERE id = ?", [id]);
   return rowToAgent(result.rows[0]);
@@ -71,7 +75,7 @@ export async function listTenantAgents(
 export async function updateTenantAgent(
   tenantId: string,
   agentId: string,
-  updates: Partial<Pick<TenantAgent, "name" | "config" | "modelConfig" | "isActive">>,
+  updates: Partial<Pick<TenantAgent, "name" | "config" | "modelConfig" | "tools" | "skills" | "isActive">>,
 ): Promise<TenantAgent | null> {
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -87,6 +91,14 @@ export async function updateTenantAgent(
   if (updates.modelConfig !== undefined) {
     sets.push("model_config = ?");
     values.push(JSON.stringify(updates.modelConfig));
+  }
+  if (updates.tools !== undefined) {
+    sets.push("tools = ?");
+    values.push(JSON.stringify(updates.tools));
+  }
+  if (updates.skills !== undefined) {
+    sets.push("skills = ?");
+    values.push(JSON.stringify(updates.skills));
   }
   if (updates.isActive !== undefined) {
     sets.push("is_active = ?");
