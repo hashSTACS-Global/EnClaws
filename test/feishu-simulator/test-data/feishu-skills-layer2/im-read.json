@@ -20,6 +20,30 @@
       "message": "帮我看看今天群里大家都聊了些什么",
       "assert": { "notContains": "error", "minLength": 2 },
       "tags": ["P2"]
+    },
+    {
+      "name": "搜索消息-指定关键词",
+      "message": "帮我在群里搜一下谁提过「上线」这个关键词",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "读取最近N条消息",
+      "message": "帮我看看群里最近10条消息是什么",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "口语化-看看聊天",
+      "message": "群里最近在聊啥呢？帮我看看",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "intent"]
+    },
+    {
+      "name": "搜索消息-无结果",
+      "message": "帮我搜搜群里有没有人说过「xyzzy_不存在的关键词」",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "error"]
     }
   ]
 }

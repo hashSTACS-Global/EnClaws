@@ -20,6 +20,30 @@
       "message": "帮我创建一个新的知识库，名字叫「Q2项目文档」",
       "assert": { "notContains": "exception", "minLength": 2 },
       "tags": ["P2"]
+    },
+    {
+      "name": "搜索知识库内容",
+      "message": "帮我在知识库里搜索关于「部署流程」的文档",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "知识库不存在",
+      "message": "帮我看看「xyzzy_不存在的知识库」里有什么文档",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "error"]
+    },
+    {
+      "name": "口语化-查知识库",
+      "message": "公司有哪些知识库来着？帮我列一下",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "intent"]
+    },
+    {
+      "name": "在知识库创建文档",
+      "message": "帮我在「工程知识库」里创建一篇文档，标题叫《编码规范》，内容写一些基本的代码规范",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P2"]
     }
   ]
 }

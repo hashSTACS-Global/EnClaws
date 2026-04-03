@@ -1,7 +1,7 @@
 {
-  "appId": "cli_a92530d1887b5cbb",
-  "appSecret": "0j5IghJlW1H3FXcnN43yKfjx8tC11FNT",
-  "userOpenId": "ou_0d59bb9bedc61b8f5e09e3f73617a344",
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
   "cases": [
     {
       "name": "基本问候",

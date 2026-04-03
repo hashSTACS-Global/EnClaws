@@ -26,6 +26,30 @@
       "message": "有没有一个叫「产品」的群？帮我找找",
       "assert": { "notContains": "error", "minLength": 2 },
       "tags": ["P1", "intent"]
+    },
+    {
+      "name": "搜索群组-不存在",
+      "message": "帮我搜一下有没有叫「xyzzy_不存在的群_99999」的群聊",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "error"]
+    },
+    {
+      "name": "查看群公告",
+      "message": "帮我看看当前群的公告是什么",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "查看群成员数量",
+      "message": "帮我看看这个群一共有多少人",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "口语化-谁在群里",
+      "message": "这群里都有谁啊？列个名单",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "intent"]
     }
   ]
 }

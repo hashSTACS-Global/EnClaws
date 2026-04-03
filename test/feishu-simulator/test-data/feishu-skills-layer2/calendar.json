@@ -53,7 +53,7 @@
     },
     {
       "name": "邀请参会人-按名字",
-      "message": "帮我创建一个明天上午10点到11点的会议，主题是需求评审，邀请张三和李四",
+      "message": "帮我创建一个明天上午10点到11点的会议，主题是需求评审，邀请许帅和李帅",
       "assert": { "notContains": "exception", "minLength": 5 },
       "tags": ["P1"]
     },
@@ -74,6 +74,48 @@
       "message": "约个会吧，明天下午，聊聊Q2的规划",
       "assert": { "minLength": 5, "notContains": "exception" },
       "tags": ["P1", "intent"]
+    },
+    {
+      "name": "修改日程时间",
+      "message": "帮我把明天下午3点的「自动化测试周会」改到后天上午10点",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "创建日程-带地点",
+      "message": "帮我创建一个明天上午9点到10点的会议，主题是「产品评审」，地点是3楼会议室A",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程"], "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "查询本周日程",
+      "message": "帮我看看这周还有哪些会议安排",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "创建跨天日程",
+      "message": "帮我创建一个日程，从下周一早上9点到下周三下午6点，主题是「封闭开发」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程"], "notContains": "error" },
+      "tags": ["P2"]
+    },
+    {
+      "name": "创建日程-带描述",
+      "message": "帮我创建一个后天下午2点到3点的会议，主题是「技术方案评审」，备注写上：请各位提前阅读方案文档",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程"], "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "口语化-查空闲",
+      "message": "我明天下午有没有空？想约个面试",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P2", "intent"]
+    },
+    {
+      "name": "口语化-改会",
+      "message": "那个评审会推迟一小时行不行",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P2", "intent"]
     }
   ]
 }

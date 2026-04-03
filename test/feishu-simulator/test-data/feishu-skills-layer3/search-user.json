@@ -5,7 +5,7 @@
   "cases": [
     {
       "name": "搜索用户-回复质量",
-      "message": "帮我查一下张三的飞书账号信息",
+      "message": "帮我查一下许帅的飞书账号信息",
       "assert": {
         "notContains": "error",
         "minLength": 2

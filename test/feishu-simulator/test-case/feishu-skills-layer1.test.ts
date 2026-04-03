@@ -1,21 +1,16 @@
 /**
- * Feishu Skills Layer 1 tests — direct script invocation.
+ * Layer 1 — Script-level testing for feishu-skills.
  *
- * Executes skill JS scripts directly with CLI arguments, parses JSON output,
- * and asserts on exit code, output fields, etc.
+ * Directly invokes skill scripts (e.g. `node feishu-drive/drive.js --action list ...`)
+ * and validates JSON output. No Feishu message sending — only tests the script contract.
  *
  * Prerequisites:
- * - feishu-skills repo available at the path specified in each test file's `skillsDir`
- * - Valid FEISHU_APP_ID/FEISHU_APP_SECRET in env or test file
- * - User already authorized (cached token exists)
+ *   - User token already cached (run feishu-auth first)
+ *   - SKILLS_REPO_DIR env var points to feishu-skills repo root
  *
  * Usage:
+ *   SKILLS_REPO_DIR=C:/Users/15769/WebstormProjects/feishu-skills \
  *   pnpm vitest run test/feishu-simulator/test-case/feishu-skills-layer1.test.ts
- *
- * Environment variables:
- *   TEST_DATA_DIR         — test data directory (default: test-data/feishu-skills-layer1)
- *   TEST_CSV_OUTPUT       — CSV report path
- *   TEST_COMMAND_TIMEOUT  — per-command timeout ms (default: 30000)
  */
 
 import { config } from "dotenv";
@@ -23,22 +18,26 @@ config({ override: true });
 
 import path from "node:path";
 import { describe, it } from "vitest";
-import { runScriptTestFiles } from "../test-runner/index.js";
+import { runLayer1TestFiles } from "../test-runner/index.js";
 
 const SIMULATOR_DIR = path.resolve(new URL(".", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1"), "..");
 
-describe("feishu-skills-layer1 (script)", () => {
-  it("run script test cases", async () => {
-    const { errors } = await runScriptTestFiles({
+const SKILLS_REPO_DIR = process.env.SKILLS_REPO_DIR ?? path.resolve(SIMULATOR_DIR, "../../../../WebstormProjects/feishu-skills");
+
+describe("feishu-skills Layer 1 (script-level)", () => {
+  it("run test cases", async () => {
+    const { errors } = await runLayer1TestFiles({
       dataDir: process.env.TEST_DATA_DIR ?? path.join(SIMULATOR_DIR, "test-data/feishu-skills-layer1"),
       csvOutput: process.env.TEST_CSV_OUTPUT
-        ?? path.join(SIMULATOR_DIR, `test-results/feishu-skills-layer1-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.csv`),
+        ?? path.join(SIMULATOR_DIR, `test-results/layer1-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.csv`),
       continueOnFailure: true,
+      concurrency: Number(process.env.TEST_CONCURRENCY) || 1,
+      skillsRepoDir: SKILLS_REPO_DIR,
       commandTimeoutMs: Number(process.env.TEST_COMMAND_TIMEOUT) || 30_000,
     });
 
     if (errors.length > 0) {
       throw new Error(`${errors.length} case(s) failed:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
     }
-  }, 300_000);
+  }, 600_000);
 });

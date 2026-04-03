@@ -88,7 +88,12 @@ async function runSingleFile(
     userOpenId: data.userOpenId,
     replyTimeoutMs: opts.replyTimeoutMs,
     pollIntervalMs: opts.pollIntervalMs,
+    chatId: data.chatId,
   });
+
+  if (data.chatName) {
+    console.log(`  Group: ${data.chatName} (${data.chatId})`);
+  }
 
   try {
     await client.init();
@@ -112,7 +117,7 @@ async function runSingleFile(
 
     let reply: Awaited<ReturnType<typeof client.send>>;
     try {
-      reply = await client.send(tc.message);
+      reply = await client.send(tc.message, { mentionBot: tc.mentionBot });
     } catch (e) {
       console.log(`  [${i + 1}/${data.cases.length}] FAIL ❌ ${label}`);
       console.log(`    Message: ${tc.message}`);

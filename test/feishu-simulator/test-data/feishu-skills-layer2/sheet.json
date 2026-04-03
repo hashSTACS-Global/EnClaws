@@ -23,7 +23,7 @@
     },
     {
       "name": "追加数据行",
-      "message": "帮我在《测试数据表》里添加一行数据：张三、工程部、开发、2024-01-15",
+      "message": "帮我在《测试数据表》里添加一行数据：许帅、工程部、开发、2024-01-15",
       "assert": { "notContains": "error", "minLength": 2 },
       "tags": ["P1"]
     },
@@ -32,6 +32,30 @@
       "message": "帮我把《测试数据表》导出成Excel文件",
       "assert": { "notContains": "exception", "minLength": 2 },
       "tags": ["P1"]
+    },
+    {
+      "name": "创建表格-带初始数据",
+      "message": "帮我创建一个表格叫《项目进度》，列是：任务、状态、完成度。先填一行：首页开发、进行中、60%",
+      "assert": { "containsAny": ["已创建", "创建成功", "表格"], "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "修改单元格",
+      "message": "帮我把《测试数据表》第一行的部门改成「产品部」",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "查找表格数据",
+      "message": "帮我在《员工花名册》里找一下「工程部」的所有人",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "口语化-做个表",
+      "message": "做个表帮我统计一下各部门人数，列名就叫部门和人数",
+      "assert": { "containsAny": ["已创建", "创建成功", "表格"], "notContains": "error" },
+      "tags": ["P1", "intent"]
     }
   ]
 }

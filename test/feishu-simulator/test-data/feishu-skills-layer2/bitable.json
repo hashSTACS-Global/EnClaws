@@ -20,6 +20,30 @@
       "message": "帮我创建一个多维表格，用来记录bug追踪，需要字段：标题、状态、优先级、负责人",
       "assert": { "notContains": "exception", "minLength": 5 },
       "tags": ["P2"]
+    },
+    {
+      "name": "查询记录-按条件筛选",
+      "message": "帮我查一下bug追踪表里状态是「未解决」的记录有哪些",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "修改记录",
+      "message": "帮我把bug追踪表里第一条记录的状态改成「已解决」",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "口语化-记一下",
+      "message": "帮我在多维表格里记一下：标题是登录页面崩溃，优先级P0，负责人许帅",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "intent"]
+    },
+    {
+      "name": "创建多维表格-复杂字段",
+      "message": "帮我创建一个多维表格叫《OKR追踪》，字段有：目标、关键结果、进度百分比、负责人、截止日期",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P2"]
     }
   ]
 }

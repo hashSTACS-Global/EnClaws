@@ -32,6 +32,24 @@
       "message": "之前有个关于产品需求的文档，你帮我找找",
       "assert": { "notContains": "error", "minLength": 5 },
       "tags": ["P1", "intent"]
+    },
+    {
+      "name": "按文档类型搜索",
+      "message": "帮我搜索一下飞书上所有的表格文件",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "搜索最近创建的文档",
+      "message": "帮我找一下最近一周创建的文档",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "口语化-搜个东西",
+      "message": "飞书上有没有关于API接口的文档？我记得有人写过",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "intent"]
     }
   ]
 }

@@ -14,6 +14,18 @@
       "message": "帮我提取一下云空间里那个PDF报告的文字内容",
       "assert": { "notContains": "exception", "minLength": 2 },
       "tags": ["P2"]
+    },
+    {
+      "name": "下载并总结",
+      "message": "帮我下载那个Word文档然后简单总结一下里面的内容",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "口语化-拿文件",
+      "message": "云盘里那个报告帮我下载下来看看",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "intent"]
     }
   ]
 }

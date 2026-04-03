@@ -8,6 +8,18 @@
       "message": "帮我识别这张图片上的文字",
       "assert": { "notContains": "exception", "minLength": 2 },
       "tags": ["P2"]
+    },
+    {
+      "name": "识别截图内容",
+      "message": "帮我看看这个截图上写了什么内容",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "口语化-看图",
+      "message": "这图上写的啥？帮我认一下",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "intent"]
     }
   ]
 }

@@ -23,7 +23,7 @@
     },
     {
       "name": "创建任务-指定负责人",
-      "message": "帮我创建一个任务，标题是「准备周报」，指派给张三，本周五前完成",
+      "message": "帮我创建一个任务，标题是「准备周报」，指派给许帅，本周五前完成",
       "assert": { "notContains": "exception", "minLength": 5 },
       "tags": ["P1"]
     },
@@ -38,6 +38,36 @@
       "message": "我还有啥没干完的事儿来着？",
       "assert": { "notContains": "error", "minLength": 2 },
       "tags": ["P1", "intent"]
+    },
+    {
+      "name": "创建任务-设置优先级",
+      "message": "帮我创建一个紧急任务：修复线上bug，优先级设为最高，今天下班前完成",
+      "assert": { "containsAny": ["已创建", "创建成功", "任务"], "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "查询已完成任务",
+      "message": "帮我看看我已经完成的任务有哪些",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "查询逾期任务",
+      "message": "帮我看看有没有已经过期但还没完成的任务",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "创建任务-带描述",
+      "message": "帮我创建一个任务叫「编写接口文档」，描述是：整理所有API接口并编写文档，下周三前完成",
+      "assert": { "containsAny": ["已创建", "创建成功", "任务"], "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "口语化-提醒我",
+      "message": "提醒我明天下午交周报",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "intent"]
     }
   ]
 }
