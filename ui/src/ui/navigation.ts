@@ -12,7 +12,7 @@ export const TAB_GROUPS = [
     },
     {
         label: "workspace",
-        tabs: ["agents","tenant-agents", "chat", "sessions", "sandbox"],
+        tabs: ["tenant-agents", "chat", "sessions", "sandbox"],
     },
     {
         label: "resources",
