@@ -557,6 +557,7 @@ export const pt_BR: TranslationMap = {
     searchTools: "Buscar palavra-chave da ferramenta",
     toolsShown: "{count} exibida(s)",
     toolSourceCore: "nativo",
+    toolSystemDisabled: "Desativado pela plataforma",
     toolGroupFs: "File Operations",
     toolGroupRuntime: "Runtime",
     toolGroupWeb: "Web",

@@ -508,6 +508,13 @@ export class TenantAgentsView extends LitElement {
     }
     .cfg-toggle input:checked + .cfg-toggle__track { background: var(--ok-subtle); border-color: rgba(34,197,94,0.4); }
     .cfg-toggle input:checked + .cfg-toggle__track::after { transform: translateX(22px); background: var(--ok); }
+    .cfg-toggle--disabled { opacity: 0.45; cursor: not-allowed; }
+    .cfg-toggle--disabled .cfg-toggle__track { cursor: not-allowed; }
+    .tool-badge-platform-denied {
+      display: inline-block; font-size: 11px; font-weight: 600; line-height: 1;
+      padding: 2px 7px; border-radius: 3px; margin-left: 8px;
+      color: var(--destructive, #ff4d4f); background: rgba(255,77,79,0.1); border: 1px solid rgba(255,77,79,0.25);
+    }
 
     /* Skills groups (matches .agent-skills-groups / .agent-skills-group / .agent-skills-header) */
     .skills-groups { display: grid; gap: 16px; }
@@ -593,6 +600,7 @@ export class TenantAgentsView extends LitElement {
   @state() private skillsLoading = false;
   @state() private toolsCatalogGroups: ToolGroup[] | null = null;
   @state() private toolsCatalogLoading = false;
+  @state() private systemDenySet: Set<string> = new Set();
   @state() private editingAgentId: string | null = null;
   @state() private saving = false;
   @state() private availableModels: TenantModelOption[] = [];
@@ -656,16 +664,20 @@ export class TenantAgentsView extends LitElement {
   private async loadToolsCatalog() {
     this.toolsCatalogLoading = true;
     try {
-      const result = await this.rpc("tools.catalog", { includePlugins: true }) as {
-        groups?: Array<{ id: string; label: string; tools: Array<{ id: string; label: string; description: string }> }>;
-      };
-      if (result.groups?.length) {
-        this.toolsCatalogGroups = result.groups.map((g) => ({
+      const [catalogResult, sysToolsResult] = await Promise.all([
+        this.rpc("tools.catalog", { includePlugins: true }) as Promise<{
+          groups?: Array<{ id: string; label: string; tools: Array<{ id: string; label: string; description: string }> }>;
+        }>,
+        this.rpc("sys.tools.get").catch(() => ({ deny: [] })) as Promise<{ deny?: string[] }>,
+      ]);
+      if (catalogResult.groups?.length) {
+        this.toolsCatalogGroups = catalogResult.groups.map((g) => ({
           id: g.id,
           label: g.label,
           tools: g.tools.map((tl) => ({ id: tl.id, label: tl.label, description: tl.description })),
         }));
       }
+      this.systemDenySet = new Set(sysToolsResult.deny ?? []);
     } catch { /* fallback to hardcoded TOOL_GROUP_DEFS */ }
     finally { this.toolsCatalogLoading = false; }
   }
@@ -821,6 +833,7 @@ export class TenantAgentsView extends LitElement {
   }
 
   private toggleTool(toolId: string, enabled: boolean) {
+    if (this.systemDenySet.has(toolId)) return;
     const deny = new Set(this.formToolsDeny);
     if (enabled) deny.delete(toolId); else deny.add(toolId);
     this.formToolsDeny = Array.from(deny);
@@ -831,13 +844,14 @@ export class TenantAgentsView extends LitElement {
     if (!group) return;
     const deny = new Set(this.formToolsDeny);
     for (const tool of group.tools) {
+      if (this.systemDenySet.has(tool.id)) continue;
       if (enabled) deny.delete(tool.id); else deny.add(tool.id);
     }
     this.formToolsDeny = Array.from(deny);
   }
 
   private toggleAllTools(enabled: boolean) {
-    this.formToolsDeny = enabled ? [] : [...this.allToolIds];
+    this.formToolsDeny = enabled ? [] : this.allToolIds.filter((id) => !this.systemDenySet.has(id));
   }
 
   // ── Inline model config ──
@@ -1086,7 +1100,7 @@ export class TenantAgentsView extends LitElement {
   private renderPanelOverview(agent: TenantAgent) {
     const denySet = new Set(Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
       ? (agent.config.tools as { deny: string[] }).deny : []);
-    const toolsEnabled = this.allToolIds.filter((id) => !denySet.has(id)).length;
+    const toolsEnabled = this.allToolIds.filter((id) => !denySet.has(id) && !this.systemDenySet.has(id)).length;
     const systemPrompt = (agent.config?.systemPrompt as string) || "";
     const currentConfig = this.getInlineModelConfig(agent);
     const isDirty = this.inlineModelConfig !== null;
@@ -1317,10 +1331,11 @@ export class TenantAgentsView extends LitElement {
     const denySet = new Set(this.toolsPendingDeny ?? savedDeny);
     const isDirty = this.toolsPendingDeny !== null;
     const allIds = this.allToolIds;
-    const enabled = allIds.filter((id) => !denySet.has(id)).length;
+    const enabled = allIds.filter((id) => !denySet.has(id) && !this.systemDenySet.has(id)).length;
     const filter = this.toolsFilter.trim().toLowerCase();
 
     const toggleTool = (id: string, checked: boolean) => {
+      if (this.systemDenySet.has(id)) return;
       const next = new Set(denySet);
       checked ? next.delete(id) : next.add(id);
       this.toolsPendingDeny = [...next];
@@ -1357,24 +1372,33 @@ export class TenantAgentsView extends LitElement {
       </div>
       <div class="tools-grid">
         ${filteredGroups.map((group) => {
-          const enabledCount = group.tools.filter((tl) => !denySet.has(tl.id)).length;
+          const enabledCount = group.tools.filter((tl) => !denySet.has(tl.id) && !this.systemDenySet.has(tl.id)).length;
           return html`
             <div class="tools-section">
               <div class="tools-section-header">${group.label} <span class="tool-row-source">${enabledCount}/${group.tools.length}</span></div>
               <div class="tools-list">
                 ${group.tools.map((tool) => {
-                  const allowed = !denySet.has(tool.id);
+                  const sysDenied = this.systemDenySet.has(tool.id);
+                  const allowed = !sysDenied && !denySet.has(tool.id);
                   return html`
                     <div class="tool-row">
                       <div class="tool-row-info">
-                        <div class="tool-row-name" title=${`${tool.label} [${t("tenantAgents.toolSourceCore")}]`}>${tool.label}<span class="tool-row-source">${t("tenantAgents.toolSourceCore")}</span></div>
+                        <div class="tool-row-name" title=${`${tool.label} [${t("tenantAgents.toolSourceCore")}]`}>${tool.label}${sysDenied ? html`<span class="tool-badge-platform-denied">${t("tenantAgents.toolSystemDisabled")}</span>` : html`<span class="tool-row-source">${t("tenantAgents.toolSourceCore")}</span>`}</div>
                         <div class="tool-row-desc" title=${tool.description}>${tool.description}</div>
                       </div>
-                      <label class="cfg-toggle">
-                        <input type="checkbox" .checked=${allowed} ?disabled=${this.toolsSaving}
-                          @change=${(e: Event) => toggleTool(tool.id, (e.target as HTMLInputElement).checked)} />
-                        <span class="cfg-toggle__track"></span>
-                      </label>
+                      ${sysDenied ? html`
+                        <label class="cfg-toggle cfg-toggle--disabled"
+                          @click=${(e: Event) => { e.preventDefault(); this.showError("tenantAgents.toolSystemDisabled"); }}>
+                          <input type="checkbox" .checked=${false} disabled style="pointer-events:none" />
+                          <span class="cfg-toggle__track"></span>
+                        </label>
+                      ` : html`
+                        <label class="cfg-toggle">
+                          <input type="checkbox" .checked=${allowed} ?disabled=${this.toolsSaving}
+                            @change=${(e: Event) => toggleTool(tool.id, (e.target as HTMLInputElement).checked)} />
+                          <span class="cfg-toggle__track"></span>
+                        </label>
+                      `}
                     </div>
                   `;
                 })}
@@ -1500,7 +1524,7 @@ export class TenantAgentsView extends LitElement {
   private renderToolsSection() {
     const denySet = new Set(this.formToolsDeny);
     const allIds = this.allToolIds;
-    const enabled = allIds.filter((id) => !denySet.has(id)).length;
+    const enabled = allIds.filter((id) => !denySet.has(id) && !this.systemDenySet.has(id)).length;
     return html`
       <div class="tools-section">
         <div class="tools-header" @click=${() => { this.formToolsExpanded = !this.formToolsExpanded; }}>
@@ -1520,8 +1544,9 @@ export class TenantAgentsView extends LitElement {
               <button type="button" class="btn btn-outline btn-sm" @click=${() => this.toggleAllTools(false)}>${t("tenantAgents.disableAll")}</button>
             </div>
             ${this.toolGroups.map((group) => {
-              const enabledCount = group.tools.filter((tl) => !denySet.has(tl.id)).length;
-              const allEnabled = enabledCount === group.tools.length;
+              const enabledCount = group.tools.filter((tl) => !denySet.has(tl.id) && !this.systemDenySet.has(tl.id)).length;
+              const nonSysDeniedCount = group.tools.filter((tl) => !this.systemDenySet.has(tl.id)).length;
+              const allEnabled = enabledCount === nonSysDeniedCount && nonSysDeniedCount > 0;
               const someEnabled = enabledCount > 0 && enabledCount < group.tools.length;
               return html`
                 <div class="tools-group-header">
@@ -1532,17 +1557,29 @@ export class TenantAgentsView extends LitElement {
                   <span class="tools-group-header-label">${group.label}</span>
                   <span class="tools-group-header-count">${enabledCount}/${group.tools.length}</span>
                 </div>
-                ${group.tools.map((tool) => html`
+                ${group.tools.map((tool) => {
+                  const sysDenied = this.systemDenySet.has(tool.id);
+                  return html`
                   <div class="tool-row">
                     <div class="tool-row-info">
-                      <span class="tool-row-name">${tool.label}</span>
+                      <span class="tool-row-name">${tool.label}${sysDenied ? html`<span class="tool-badge-platform-denied">${t("tenantAgents.toolSystemDisabled")}</span>` : nothing}</span>
                       <span class="tool-row-desc">${tool.description}</span>
                     </div>
-                    <input type="checkbox" class="tool-toggle"
-                      .checked=${!denySet.has(tool.id)}
-                      @change=${(e: Event) => this.toggleTool(tool.id, (e.target as HTMLInputElement).checked)} />
+                    ${sysDenied ? html`
+                      <span style="position:relative;display:inline-block;cursor:not-allowed;opacity:0.45"
+                        @click=${(e: Event) => { e.preventDefault(); this.showError("tenantAgents.toolSystemDisabled"); }}>
+                        <input type="checkbox" class="tool-toggle"
+                          .checked=${false} disabled
+                          style="pointer-events:none"
+                          title=${t("tenantAgents.toolSystemDisabled")} />
+                      </span>
+                    ` : html`
+                      <input type="checkbox" class="tool-toggle"
+                        .checked=${!denySet.has(tool.id)}
+                        @change=${(e: Event) => this.toggleTool(tool.id, (e.target as HTMLInputElement).checked)} />
+                    `}
                   </div>
-                `)}
+                `})}
               `;
             })}
           </div>

@@ -893,6 +893,7 @@ export const en: TranslationMap = {
     searchTools: "Search tool keywords",
     toolsShown: "{count} shown",
     toolSourceCore: "core",
+    toolSystemDisabled: "Disabled by platform",
     toolGroupFs: "File Operations",
     toolGroupRuntime: "Runtime",
     toolGroupWeb: "Web",
