@@ -482,14 +482,14 @@ export class TenantAgentsView extends LitElement {
     .tools-section-header { font-weight: 600; margin-bottom: 10px; font-size: 13px; }
     .tools-list { display: grid; gap: 8px 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
     .tool-row {
-      display: flex; justify-content: space-between; align-items: center; gap: 12px;
-      padding: 6px 8px; border: 1px solid var(--border, #262626);
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px;
+      padding: 8px 10px; border: 1px solid var(--border, #262626);
       border-radius: var(--radius-md, 6px); background: var(--card, #141414);
     }
-    .tool-row-info { flex: 1; min-width: 0; overflow: hidden; }
+    .tool-row-info { display: grid; gap: 2px; min-width: 0; }
     .tool-row-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .tool-row-source { font-size: 11px; color: var(--text-muted, #525252); margin-left: 6px; opacity: 0.8; }
-    .tool-row-desc { color: var(--text-muted, #525252); font-size: 11px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tool-row-desc { color: var(--text-muted, #525252); font-size: 12px; margin-top: 2px; line-height: 1.4; word-break: break-word; }
 
     /* Toggle switch (matches .cfg-toggle) */
     .cfg-toggle { position: relative; flex-shrink: 0; }
@@ -518,7 +518,8 @@ export class TenantAgentsView extends LitElement {
 
     /* Skills groups (matches .agent-skills-groups / .agent-skills-group / .agent-skills-header) */
     .skills-groups { display: grid; gap: 16px; }
-    .skills-group { display: grid; gap: 10px; }
+
+    .skills-group { display: block; }
     .skills-group summary { list-style: none; }
     .skills-group summary::-webkit-details-marker { display: none; }
     .skills-group summary::marker { content: ""; }
@@ -616,7 +617,7 @@ export class TenantAgentsView extends LitElement {
   @state() private toolsPendingDeny: string[] | null = null;
   @state() private toolsSaving = false;
   @state() private skillsFilter = "";
-  @state() private skillsPendingDeny: string[] | null = null;
+  @state() private skillsPendingEnabled: string[] | null = null;
   @state() private skillsSaving = false;
   @state() private formAgentIdManuallyEdited = false;
 
@@ -1012,7 +1013,7 @@ export class TenantAgentsView extends LitElement {
     const isSelected = this.selectedAgentId === agent.agentId;
     return html`
       <button type="button" class="agent-row ${isSelected ? "active" : ""}"
-        @click=${() => { this.selectedAgentId = agent.agentId; this.activePanel = "overview"; this.showForm = false; this.inlineModelConfig = null; this.toolsPendingDeny = null; this.skillsPendingDeny = null; }}>
+        @click=${() => { this.selectedAgentId = agent.agentId; this.activePanel = "overview"; this.showForm = false; this.inlineModelConfig = null; this.toolsPendingDeny = null; this.skillsPendingEnabled = null; }}>
         <div class="agent-avatar">${initial}</div>
         <div class="agent-info">
           <div class="agent-title">${displayName}</div>
@@ -1201,13 +1202,13 @@ export class TenantAgentsView extends LitElement {
     return html`<div class="empty">${t("common.comingSoon")}</div>`;
   }
 
-  private async saveSkillsDeny(agent: TenantAgent, deny: string[]) {
+  private async saveSkillsEnabled(agent: TenantAgent, enabled: string[]) {
     this.skillsSaving = true;
     try {
       const config: Record<string, unknown> = { ...(agent.config ?? {}) };
-      config.skills = deny;
+      config.skills = enabled;
       await this.rpc("tenant.agents.update", { agentId: agent.agentId, config });
-      this.skillsPendingDeny = null;
+      this.skillsPendingEnabled = null;
       this.showSuccess("tenantAgents.agentUpdated");
       await this.loadAgents();
     } catch (err) {
@@ -1220,17 +1221,18 @@ export class TenantAgentsView extends LitElement {
   private renderPanelSkills(agent: TenantAgent) {
     const allSkills = this.agentSkills;
     const allSkillNames = allSkills.map((s) => s.name);
-    const savedDeny: string[] = Array.isArray((agent as any).skills) ? (agent as any).skills
+    const savedEnabled: string[] = Array.isArray((agent as any).skills) ? (agent as any).skills
       : Array.isArray(agent.config?.skills) ? agent.config.skills as string[] : [];
-    const denySet = new Set(this.skillsPendingDeny ?? savedDeny);
-    const isDirty = this.skillsPendingDeny !== null;
-    const enabled = allSkillNames.filter((name) => !denySet.has(name)).length;
+    // Empty/null → all enabled (default for new agents)
+    const enableSet = new Set(this.skillsPendingEnabled ?? (savedEnabled.length > 0 ? savedEnabled : allSkillNames));
+    const isDirty = this.skillsPendingEnabled !== null;
+    const enabledCount = enableSet.size;
     const filter = this.skillsFilter.trim().toLowerCase();
 
     const toggleSkill = (name: string, checked: boolean) => {
-      const next = new Set(denySet);
-      checked ? next.delete(name) : next.add(name);
-      this.skillsPendingDeny = [...next];
+      const next = new Set(enableSet);
+      checked ? next.add(name) : next.delete(name);
+      this.skillsPendingEnabled = [...next];
     };
 
     // Group by source
@@ -1249,17 +1251,17 @@ export class TenantAgentsView extends LitElement {
     return html`
       <div class="panel-header">
         <div class="panel-header-left">
-          <div class="panel-title">${t("tenantSkills.skillAccess")} &nbsp;<span style="font-weight:400;font-size:13px;color:var(--text-muted,#525252)"><span class="mono">${enabled}/${allSkillNames.length}</span> ${t("tenantAgents.enabled")}</span></div>
+          <div class="panel-title">${t("tenantSkills.skillAccess")} &nbsp;<span style="font-weight:400;font-size:13px;color:var(--text-muted,#525252)"><span class="mono">${enabledCount}/${allSkillNames.length}</span> ${t("tenantAgents.enabled")}</span></div>
         </div>
         <div class="panel-actions">
           <button class="btn btn-outline btn-sm" ?disabled=${this.skillsSaving}
-            @click=${() => { this.skillsPendingDeny = []; }}>${t("tenantAgents.enableAll")}</button>
+            @click=${() => { this.skillsPendingEnabled = [...allSkillNames]; }}>${t("tenantAgents.enableAll")}</button>
           <button class="btn btn-outline btn-sm" ?disabled=${this.skillsSaving}
-            @click=${() => { this.skillsPendingDeny = [...allSkillNames]; }}>${t("tenantAgents.disableAll")}</button>
+            @click=${() => { this.skillsPendingEnabled = []; }}>${t("tenantAgents.disableAll")}</button>
           <button class="btn btn-outline btn-sm" ?disabled=${!isDirty || this.skillsSaving}
-            @click=${() => { this.skillsPendingDeny = null; }}>${t("tenantAgents.toolsReset")}</button>
+            @click=${() => { this.skillsPendingEnabled = null; }}>${t("tenantAgents.toolsReset")}</button>
           <button class="btn btn-primary btn-sm" ?disabled=${!isDirty || this.skillsSaving}
-            @click=${() => this.saveSkillsDeny(agent, [...denySet])}>
+            @click=${() => this.saveSkillsEnabled(agent, [...enableSet])}>
             ${this.skillsSaving ? t("tenantAgents.saving") : t("tenantAgents.save")}
           </button>
         </div>
@@ -1272,22 +1274,26 @@ export class TenantAgentsView extends LitElement {
           <span class="count">${filter ? t("tenantAgents.toolsShown").replace("{count}", String(shownCount)) : ""}</span>
         </div>
 
-        <div class="tools-grid">
+        <div class="skills-groups">
           ${filteredGroups.map(({ source, skills }) => {
-            const enabledCount = skills.filter((s) => !denySet.has(s.name)).length;
+            const groupEnabled = skills.filter((s) => enableSet.has(s.name)).length;
+            const collapsedByDefault = source === "enclaws-bundled";
             return html`
-              <div class="tools-section">
-                <div class="tools-section-header">${source} <span class="tool-row-source">${enabledCount}/${skills.length}</span></div>
-                <div style="display:flex;flex-direction:column;gap:8px">
+              <details class="skills-group" ?open=${!collapsedByDefault}>
+                <summary class="skills-header">
+                  <span>${source}</span>
+                  <span>${groupEnabled}/${skills.length}</span>
+                </summary>
+                <div class="tools-list" style="grid-template-columns:1fr;margin-top:10px">
                   ${skills.map((s) => {
-                    const allowed = !denySet.has(s.name);
+                    const allowed = enableSet.has(s.name);
                     return html`
-                      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 8px;border:1px solid var(--border,#262626);border-radius:var(--radius-md,6px);background:var(--card,#141414)">
-                        <div style="flex:1;min-width:0;overflow:hidden">
-                          <div class="tool-row-name">${s.emoji ? `${s.emoji} ` : ""}${s.name}<span class="tool-row-source">${s.source}</span></div>
+                      <div class="tool-row">
+                        <div class="tool-row-info">
+                          <div class="tool-row-name">${s.emoji ? `${s.emoji} ` : ""}${s.name}</div>
                           <div class="tool-row-desc" title=${s.description}>${s.description}</div>
                         </div>
-                        <label class="cfg-toggle" style="display:inline-flex;flex-shrink:0">
+                        <label class="cfg-toggle">
                           <input type="checkbox" .checked=${allowed} ?disabled=${this.skillsSaving}
                             @change=${(e: Event) => toggleSkill(s.name, (e.target as HTMLInputElement).checked)} />
                           <span class="cfg-toggle__track"></span>
@@ -1296,7 +1302,7 @@ export class TenantAgentsView extends LitElement {
                     `;
                   })}
                 </div>
-              </div>
+              </details>
             `;
           })}
         </div>
