@@ -1,13 +1,19 @@
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { t, I18nController } from "../../i18n/index.ts";
+import { tenantRpc } from "./tenant/rpc.ts";
 
-// ── Tool definitions (mirrors tenant-agents TOOL_GROUP_DEFS) ─────────
+// ── Types ──────────────────────────────────────────────────────────────
 
-type ToolDef = { id: string; label: string; descKey: string };
-type ToolGroupDef = { id: string; labelKey: string; tools: ToolDef[] };
+type ToolDef = { id: string; label: string; description: string };
+type ToolGroup = { id: string; label: string; tools: ToolDef[] };
 
-const TOOL_GROUP_DEFS: ToolGroupDef[] = [
+// ── Hardcoded fallback (mirrors tenant-agents TOOL_GROUP_DEFS) ─────────
+
+type FallbackToolDef = { id: string; label: string; descKey: string };
+type FallbackToolGroupDef = { id: string; labelKey: string; tools: FallbackToolDef[] };
+
+const FALLBACK_TOOL_GROUP_DEFS: FallbackToolGroupDef[] = [
   { id: "fs", labelKey: "tenantAgents.toolGroupFs", tools: [
     { id: "read",        label: "read",        descKey: "tenantAgents.toolRead" },
     { id: "write",       label: "write",       descKey: "tenantAgents.toolWrite" },
@@ -56,18 +62,17 @@ const TOOL_GROUP_DEFS: ToolGroupDef[] = [
   ]},
 ];
 
-const ALL_TOOL_IDS = TOOL_GROUP_DEFS.flatMap((g) => g.tools.map((tl) => tl.id));
-
-// ── Mock data: currently denied tools at platform level ───────────────
-const MOCK_DENY: string[] = ["exec", "process", "gateway", "browser"];
-
 @customElement("platform-tools-view")
 export class PlatformToolsView extends LitElement {
   private i18nCtrl = new I18nController(this);
 
   @state() private filter = "";
+  @state() private savedDeny: string[] = [];
   @state() private pendingDeny: string[] | null = null;
   @state() private saving = false;
+  @state() private loading = true;
+  @state() private catalogGroups: ToolGroup[] | null = null;
+  @state() private error = "";
 
   static styles = css`
     :host {
@@ -199,18 +204,58 @@ export class PlatformToolsView extends LitElement {
       display: inline-block; width: 7px; height: 7px; border-radius: 50%;
       background: var(--warning, #f59e0b); margin-left: 6px; vertical-align: middle;
     }
+    .error-banner {
+      padding: 10px 14px; margin-bottom: 1rem;
+      background: var(--bg-destructive, #7f1d1d); color: var(--text-destructive, #fca5a5);
+      border-radius: var(--radius-md, 6px); font-size: 13px;
+    }
   `;
 
-  private get toolGroups() {
-    return TOOL_GROUP_DEFS.map((g) => ({
+  connectedCallback() {
+    super.connectedCallback();
+    this.loadData();
+  }
+
+  private async loadData() {
+    this.loading = true;
+    this.error = "";
+    try {
+      const [catalogRes, toolsRes] = await Promise.all([
+        tenantRpc("tools.catalog", { includePlugins: true }) as Promise<{
+          groups?: Array<{ id: string; label: string; tools: Array<{ id: string; label: string; description: string }> }>;
+        }>,
+        tenantRpc("sys.tools.get") as Promise<{ deny?: string[] }>,
+      ]);
+      if (catalogRes.groups?.length) {
+        this.catalogGroups = catalogRes.groups.map((g) => ({
+          id: g.id,
+          label: g.label,
+          tools: g.tools.map((tl) => ({ id: tl.id, label: tl.label, description: tl.description })),
+        }));
+      }
+      this.savedDeny = toolsRes.deny ?? [];
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private get toolGroups(): ToolGroup[] {
+    if (this.catalogGroups) return this.catalogGroups;
+    return FALLBACK_TOOL_GROUP_DEFS.map((g) => ({
       id: g.id,
       label: t(g.labelKey),
       tools: g.tools.map((td) => ({ id: td.id, label: td.label, description: t(td.descKey) })),
     }));
   }
 
+  private get allToolIds(): string[] {
+    return this.toolGroups.flatMap((g) => g.tools.map((tl) => tl.id));
+  }
+
   private get effectiveDeny(): Set<string> {
-    return new Set(this.pendingDeny ?? MOCK_DENY);
+    return new Set(this.pendingDeny ?? this.savedDeny);
   }
 
   private get isDirty(): boolean {
@@ -224,17 +269,30 @@ export class PlatformToolsView extends LitElement {
   }
 
   private async handleSave() {
+    if (!this.pendingDeny) return;
     this.saving = true;
-    // TODO: replace with real API call
-    await new Promise((r) => setTimeout(r, 600));
-    this.saving = false;
-    this.pendingDeny = null;
+    this.error = "";
+    try {
+      const deny = [...this.pendingDeny];
+      await tenantRpc("sys.tools.update", { deny });
+      this.savedDeny = deny;
+      this.pendingDeny = null;
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      this.saving = false;
+    }
   }
 
   render() {
+    if (this.loading) {
+      return html`<div style="padding:2rem;text-align:center;color:var(--text-muted,#525252)">Loading...</div>`;
+    }
+
+    const allIds = this.allToolIds;
     const denySet = this.effectiveDeny;
-    const enabled = ALL_TOOL_IDS.filter((id) => !denySet.has(id)).length;
-    const denied = ALL_TOOL_IDS.length - enabled;
+    const enabled = allIds.filter((id) => !denySet.has(id)).length;
+    const denied = allIds.length - enabled;
     const filter = this.filter.trim().toLowerCase();
 
     const filteredGroups = this.toolGroups.map((g) => ({
@@ -247,6 +305,8 @@ export class PlatformToolsView extends LitElement {
     const shownCount = filteredGroups.reduce((s, g) => s + g.tools.length, 0);
 
     return html`
+      ${this.error ? html`<div class="error-banner">${this.error}</div>` : nothing}
+
       <!-- Page header -->
       <div class="page-header">
         <div>
@@ -272,7 +332,7 @@ export class PlatformToolsView extends LitElement {
       <!-- Stats strip -->
       <div class="stats-strip">
         <div class="stat">
-          <div class="stat-value">${ALL_TOOL_IDS.length}</div>
+          <div class="stat-value">${allIds.length}</div>
           <div class="stat-label">${t("platformTools.statsTotal")}</div>
         </div>
         <div class="stat">
@@ -301,7 +361,7 @@ export class PlatformToolsView extends LitElement {
             ${t("tenantAgents.enableAll")}
           </button>
           <button class="btn btn-outline btn-sm" ?disabled=${this.saving}
-            @click=${() => { this.pendingDeny = [...ALL_TOOL_IDS]; }}>
+            @click=${() => { this.pendingDeny = [...allIds]; }}>
             ${t("tenantAgents.disableAll")}
           </button>
           <button class="btn btn-outline btn-sm" ?disabled=${!this.isDirty || this.saving}

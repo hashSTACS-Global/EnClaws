@@ -286,7 +286,7 @@ INSERT OR IGNORE INTO sys_plugins_config (id) VALUES (1);
 CREATE TABLE IF NOT EXISTS sys_tools_config (
   id                             INTEGER PRIMARY KEY CHECK (id = 1),
   allow_dangerous_tools_override INTEGER NOT NULL DEFAULT 0,
-  profile                        TEXT,
+  profile                        TEXT DEFAULT 'full',
   allow                          TEXT NOT NULL DEFAULT '[]',
   also_allow                     TEXT NOT NULL DEFAULT '[]',
   deny                           TEXT NOT NULL DEFAULT '["browser"]',
