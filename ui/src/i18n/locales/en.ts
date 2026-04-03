@@ -62,6 +62,7 @@ export const en: TranslationMap = {
     "tenant-skills": "Skill Store",
     "tenant-traces": "Traces",
     "tenant-usage": "Usage",
+    "platform-tools": "Tool Management",
   },
   subtitles: {
     agents: "Manage agent workspaces, tools, and identities.",
@@ -87,6 +88,13 @@ export const en: TranslationMap = {
     "tenant-skills": "View and manage skills available to this enterprise.",
     "tenant-traces": "Trace every LLM interaction for debugging and optimization.",
     "tenant-usage": "View tenant token usage and quota.",
+    "platform-tools": "Configure platform-level tool access policy applied to all agents by default.",
+  },
+  platformTools: {
+    infoBanner: "This is the platform-level tool policy. It defines which tools are available to all agents by default. Individual agents or tenants may apply stricter overrides on top of this policy.",
+    statsTotal: "Total tools",
+    statsEnabled: "Enabled",
+    statsDenied: "Denied",
   },
   platformOverview: {
     title: "Platform Overview",
