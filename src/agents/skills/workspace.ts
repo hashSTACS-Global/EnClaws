@@ -76,16 +76,17 @@ function filterSkillEntries(
 ): SkillEntry[] {
   let filtered = entries.filter((entry) => shouldIncludeSkill({ entry, config, eligibility }));
   // If skillFilter is provided, only include skills in the filter list.
+  skillsLogger.info(`[skills-chain] filterSkillEntries: total=${entries.length}, eligible=${filtered.length}, skillFilter=${skillFilter !== undefined ? JSON.stringify(skillFilter) : "undefined"}`);
   if (skillFilter !== undefined) {
     const normalized = normalizeSkillFilter(skillFilter) ?? [];
     const label = normalized.length > 0 ? normalized.join(", ") : "(none)";
-    skillsLogger.debug(`Applying skill filter: ${label}`);
+    skillsLogger.info(`[skills-chain] Applying skill filter: ${label}`);
     filtered =
       normalized.length > 0
         ? filtered.filter((entry) => normalized.includes(entry.skill.name))
         : [];
-    skillsLogger.debug(
-      `After skill filter: ${filtered.map((entry) => entry.skill.name).join(", ") || "(none)"}`,
+    skillsLogger.info(
+      `[skills-chain] After skill filter: ${filtered.length} skills — ${filtered.map((entry) => entry.skill.name).join(", ") || "(none)"}`,
     );
   }
   return filtered;
