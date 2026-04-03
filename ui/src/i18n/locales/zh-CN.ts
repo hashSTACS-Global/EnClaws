@@ -854,6 +854,7 @@ export const zh_CN: TranslationMap = {
     searchTools: "搜索工具关键词",
     toolsShown: "显示 {count} 个",
     toolSourceCore: "内置",
+    toolSystemDisabled: "平台已禁用",
     toolGroupFs: "文件操作",
     toolGroupRuntime: "运行时",
     toolGroupWeb: "网络",

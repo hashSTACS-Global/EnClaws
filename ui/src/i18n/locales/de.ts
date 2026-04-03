@@ -526,6 +526,7 @@ export const de: TranslationMap = {
     searchTools: "Tool-Stichwort suchen",
     toolsShown: "{count} angezeigt",
     toolSourceCore: "Kern",
+    toolSystemDisabled: "Von der Plattform deaktiviert",
     toolGroupFs: "Dateioperationen",
     toolGroupRuntime: "Laufzeit",
     toolGroupWeb: "Web",

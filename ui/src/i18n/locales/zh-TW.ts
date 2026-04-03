@@ -482,6 +482,7 @@ export const zh_TW: TranslationMap = {
     searchTools: "搜尋工具關鍵詞",
     toolsShown: "顯示 {count} 個",
     toolSourceCore: "內建",
+    toolSystemDisabled: "平台已停用",
     channelNameRequired: "請輸入頻道名稱",
     appRequired: "請至少新增一個應用",
     appIdRequired: "每個應用必須填寫 App ID",
