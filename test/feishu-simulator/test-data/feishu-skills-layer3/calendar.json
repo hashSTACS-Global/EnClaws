@@ -1,0 +1,43 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "创建日程-回复质量",
+      "message": "帮我创建一个明天上午10点到11点的产品评审会议",
+      "assert": {
+        "containsAny": ["已创建", "创建成功", "日程"],
+        "notContains": "error"
+      },
+      "llmJudge": {
+        "criteria": [
+          "回复明确包含会议的标题/主题",
+          "回复包含会议的时间信息",
+          "回复自然流畅，像人类助手的回答",
+          "没有暴露 event_id、calendar_id 等内部 ID"
+        ],
+        "passThreshold": 0.75
+      },
+      "tags": ["P0", "quality"]
+    },
+    {
+      "name": "查询日程-回复质量",
+      "message": "看看我今天有什么会议",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "llmJudge": {
+        "criteria": [
+          "如果有日程，以时间顺序清晰列出",
+          "每个日程包含时间和标题",
+          "如果没有日程，友好地告知而非返回空",
+          "没有暴露技术细节"
+        ],
+        "passThreshold": 0.75
+      },
+      "tags": ["P0", "quality"]
+    }
+  ]
+}

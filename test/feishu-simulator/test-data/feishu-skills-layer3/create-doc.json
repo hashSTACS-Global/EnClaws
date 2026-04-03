@@ -1,0 +1,41 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "创建文档-回复质量",
+      "message": "帮我写一篇500字的关于AI发展趋势的文档放到云空间",
+      "assert": {
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "llmJudge": {
+        "criteria": [
+          "回复中包含了可点击的飞书文档链接",
+          "回复明确告知用户文档已创建成功",
+          "语气友好自然，不生硬不啰嗦",
+          "没有暴露技术细节（如 token、API 错误码、JSON 原始数据、doc_id 等内部字段）"
+        ],
+        "passThreshold": 0.75
+      },
+      "tags": ["P0", "quality"]
+    },
+    {
+      "name": "授权引导-回复质量",
+      "message": "帮我创建一个飞书文档叫《测试授权》",
+      "assert": {
+        "minLength": 5
+      },
+      "llmJudge": {
+        "criteria": [
+          "如果需要授权，清晰地引导用户完成授权流程",
+          "授权提示对用户友好，不含技术术语（如 scope、token）",
+          "如果已授权，正常完成文档创建"
+        ],
+        "passThreshold": 0.66
+      },
+      "tags": ["P1", "quality", "auth"]
+    }
+  ]
+}

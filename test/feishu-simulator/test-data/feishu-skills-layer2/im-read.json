@@ -1,0 +1,25 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "读取群最近消息",
+      "message": "帮我看看当前群最近的聊天记录",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "搜索群消息",
+      "message": "帮我搜索一下群里关于「发布」的消息",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "查看今天的消息",
+      "message": "帮我看看今天群里大家都聊了些什么",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    }
+  ]
+}

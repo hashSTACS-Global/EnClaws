@@ -153,6 +153,7 @@ export interface FeishuReplyDispatcherResult {
   markDispatchIdle: () => void;
   markFullyComplete: () => void;
   abortCard: () => Promise<void>;
+  getCardMessageId: () => string | undefined;
 }
 
 // ---------------------------------------------------------------------------

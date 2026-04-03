@@ -1,0 +1,37 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "按关键词搜索",
+      "message": "帮我搜索飞书上关于'自动化测试'的文档",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P0"]
+    },
+    {
+      "name": "搜索无结果",
+      "message": "搜索飞书文档，关键词是'xyzzy_nonexistent_doc_12345'",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "搜索知识库空间",
+      "message": "帮我看看有没有叫「工程」的知识库空间",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "搜索云盘文件夹",
+      "message": "帮我找一下云空间里有没有叫「项目资料」的文件夹",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "口语化-找文档",
+      "message": "之前有个关于产品需求的文档，你帮我找找",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "intent"]
+    }
+  ]
+}

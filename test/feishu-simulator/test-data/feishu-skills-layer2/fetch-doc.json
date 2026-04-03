@@ -1,0 +1,37 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "按名称读取文档",
+      "message": "帮我读取《自动化测试文档》的内容",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P0"]
+    },
+    {
+      "name": "读取不存在的文档",
+      "message": "帮我读取文档 docx_nonexistent_99999 的内容",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "error"]
+    },
+    {
+      "name": "通过URL读取",
+      "message": "帮我看看这个文档里写了什么 https://www.feishu.cn/docx/doxcnxxxxxx",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "读取wiki文档",
+      "message": "帮我读取知识库里那篇关于项目规范的文档内容",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "口语化-看看内容",
+      "message": "那个《随手记》文档里写了啥来着？帮我看看",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "intent"]
+    }
+  ]
+}

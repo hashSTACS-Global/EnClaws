@@ -1,0 +1,37 @@
+{
+  "skillsDir": "D:/web3/feishu-skills",
+  "env": { "FEISHU_APP_ID": "cli_xxx", "FEISHU_APP_SECRET": "xxx" },
+  "vars": { "OPEN_ID": "ou_xxx" },
+  "cases": [
+    {
+      "name": "查询任务列表",
+      "command": "node ./feishu-task/task.js --open-id {{OPEN_ID}} --action list_tasks",
+      "assert": { "exitCode": 0, "jsonPath": { "action": { "equals": "list_tasks" }, "reply": { "exists": true } } },
+      "tags": ["P1"]
+    },
+    {
+      "name": "查询任务清单列表",
+      "command": "node ./feishu-task/task.js --open-id {{OPEN_ID}} --action list_tasklists",
+      "assert": { "exitCode": 0, "jsonPath": { "action": { "equals": "list_tasklists" } } },
+      "tags": ["P1"]
+    },
+    {
+      "name": "错误-缺少open-id",
+      "command": "node ./feishu-task/task.js --action list_tasks",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "equals": "missing_param" } } },
+      "tags": ["P1", "error"]
+    },
+    {
+      "name": "错误-缺少action",
+      "command": "node ./feishu-task/task.js --open-id {{OPEN_ID}}",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "exists": true } } },
+      "tags": ["P1", "error"]
+    },
+    {
+      "name": "错误-无效action",
+      "command": "node ./feishu-task/task.js --open-id {{OPEN_ID}} --action invalid_xyz",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "exists": true } } },
+      "tags": ["P1", "error"]
+    }
+  ]
+}

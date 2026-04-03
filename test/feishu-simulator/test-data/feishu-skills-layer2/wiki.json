@@ -1,0 +1,25 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "查询知识库列表",
+      "message": "帮我看看我有哪些飞书知识库",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "查看知识库下的文档",
+      "message": "帮我看看工程知识库里有哪些文档",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "创建知识库空间",
+      "message": "帮我创建一个新的知识库，名字叫「Q2项目文档」",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2"]
+    }
+  ]
+}

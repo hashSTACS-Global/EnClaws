@@ -1,0 +1,56 @@
+{
+  "skillsDir": "D:/web3/feishu-skills",
+  "env": {
+    "FEISHU_APP_ID": "cli_xxx",
+    "FEISHU_APP_SECRET": "xxx"
+  },
+  "vars": {
+    "OPEN_ID": "ou_xxx"
+  },
+  "cases": [
+    {
+      "name": "列出多维表格应用",
+      "command": "node ./feishu-bitable/bitable.js --open-id {{OPEN_ID}} --action list_apps",
+      "assert": {
+        "exitCode": 0,
+        "jsonPath": {
+          "action": { "equals": "list_apps" }
+        }
+      },
+      "tags": ["feishu-bitable", "P2"]
+    },
+    {
+      "name": "缺少action",
+      "command": "node ./feishu-bitable/bitable.js --open-id {{OPEN_ID}}",
+      "assert": {
+        "exitCode": 1,
+        "jsonPath": {
+          "error": { "exists": true }
+        }
+      },
+      "tags": ["feishu-bitable", "P2", "error"]
+    },
+    {
+      "name": "缺少open-id",
+      "command": "node ./feishu-bitable/bitable.js --action list_apps",
+      "assert": {
+        "exitCode": 1,
+        "jsonPath": {
+          "error": { "equals": "missing_param" }
+        }
+      },
+      "tags": ["feishu-bitable", "P2", "error"]
+    },
+    {
+      "name": "无效的action",
+      "command": "node ./feishu-bitable/bitable.js --open-id {{OPEN_ID}} --action invalid_action",
+      "assert": {
+        "exitCode": 1,
+        "jsonPath": {
+          "error": { "equals": "invalid_action" }
+        }
+      },
+      "tags": ["feishu-bitable", "P2", "error"]
+    }
+  ]
+}

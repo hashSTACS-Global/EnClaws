@@ -1,0 +1,32 @@
+{
+  "skillsDir": "D:/web3/feishu-skills",
+  "env": {
+    "FEISHU_APP_ID": "cli_xxx",
+    "FEISHU_APP_SECRET": "xxx"
+  },
+  "vars": {},
+  "cases": [
+    {
+      "name": "缺少image参数",
+      "command": "node ./feishu-image-ocr/ocr.js",
+      "assert": {
+        "exitCode": 1,
+        "jsonPath": {
+          "error": { "equals": "missing_arg" }
+        }
+      },
+      "tags": ["P2", "error"]
+    },
+    {
+      "name": "文件不存在",
+      "command": "node ./feishu-image-ocr/ocr.js --image /nonexistent/path/image.png",
+      "assert": {
+        "exitCode": 1,
+        "jsonPath": {
+          "error": { "equals": "file_not_found" }
+        }
+      },
+      "tags": ["P2", "error"]
+    }
+  ]
+}

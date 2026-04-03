@@ -1,0 +1,25 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "搜索文档-结果呈现质量",
+      "message": "帮我搜索一下飞书上关于项目管理的文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 10
+      },
+      "llmJudge": {
+        "criteria": [
+          "搜索结果以清晰的列表形式呈现",
+          "每个结果包含文档标题",
+          "结果包含可点击的链接",
+          "如果没有结果，友好地告知用户而非返回空"
+        ],
+        "passThreshold": 0.5
+      },
+      "tags": ["P0", "quality"]
+    }
+  ]
+}

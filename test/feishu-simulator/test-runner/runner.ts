@@ -2,11 +2,12 @@ import { FeishuTestClient } from "../feishu-client.js";
 import { loadTestFiles } from "./file-loader.js";
 import { CsvWriter } from "./csv-writer.js";
 import { formatAssert, checkAssertions } from "./asserter.js";
-import type { RunnerOptions, ResultRow, TestFile } from "../types.js";
+import { evaluateReply } from "./llm-judge.js";
+import type { RunnerOptions, ResultRow, TestFile, TestCaseWithJudge, LlmJudgeConfig } from "../types.js";
 
 type FileResult = { results: ResultRow[]; errors: string[] };
 
-export async function runTestFiles(opts: RunnerOptions): Promise<{ results: ResultRow[]; errors: string[] }> {
+export async function runTestFiles(opts: RunnerOptions & { llmJudge?: LlmJudgeConfig }): Promise<{ results: ResultRow[]; errors: string[] }> {
   const testFiles = loadTestFiles(opts.dataDir);
 
   if (testFiles.length === 0) {
@@ -61,10 +62,13 @@ export async function runTestFiles(opts: RunnerOptions): Promise<{ results: Resu
   return { results: allResults, errors: allErrors };
 }
 
+// Re-export for convenience so callers don't need a separate import
+export type { LlmJudgeConfig };
+
 async function runSingleFile(
   fileName: string,
   data: TestFile,
-  opts: RunnerOptions,
+  opts: RunnerOptions & { llmJudge?: LlmJudgeConfig },
   csv: CsvWriter,
 ): Promise<FileResult> {
   const results: ResultRow[] = [];
@@ -124,15 +128,35 @@ async function runSingleFile(
 
     const failures = checkAssertions(reply.text, tc.assert, reply.reply);
 
+    // Layer 3: LLM-as-Judge evaluation (if configured and test case has llmJudge)
+    const tcWithJudge = tc as TestCaseWithJudge;
+    let judgeInfo = "";
+    if (tcWithJudge.llmJudge && opts.llmJudge) {
+      try {
+        const judgeResult = await evaluateReply(opts.llmJudge, tc.message, reply.text, tcWithJudge.llmJudge);
+        const judgeDetails = judgeResult.criteriaResults
+          .map((c) => `${c.passed ? "✅" : "❌"} ${c.criterion}: ${c.reason}`)
+          .join("\n      ");
+        judgeInfo = `\n    [LLM Judge] score=${(judgeResult.score * 100).toFixed(0)}% ${judgeResult.passed ? "PASS" : "FAIL"}\n      ${judgeDetails}`;
+
+        if (!judgeResult.passed) {
+          failures.push(`LLM Judge: score ${(judgeResult.score * 100).toFixed(0)}% < threshold ${((tcWithJudge.llmJudge.passThreshold ?? 0.75) * 100).toFixed(0)}%`);
+        }
+      } catch (e) {
+        console.log(`    [LLM Judge] Error: ${(e as Error).message}`);
+        // Judge failure is non-blocking — don't add to failures
+      }
+    }
+
     if (failures.length > 0) {
       caseFailed = true;
       console.log(`  [${i + 1}/${data.cases.length}] FAIL ❌ ${label}`);
       console.log(`    Message:  ${tc.message}`);
       console.log(`    Reply:    ${reply.text}`);
-      console.log(`    Failures: ${failures.join("; ")}`);
+      console.log(`    Failures: ${failures.join("; ")}${judgeInfo}`);
     } else {
       console.log(`  [${i + 1}/${data.cases.length}] PASS ✅ ${label} (${reply.durationMs}ms)`);
-      console.log(`    Reply: ${reply.text}`);
+      console.log(`    Reply: ${reply.text}${judgeInfo}`);
     }
 
     record({

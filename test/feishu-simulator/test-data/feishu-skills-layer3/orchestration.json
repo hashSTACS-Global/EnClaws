@@ -1,0 +1,62 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "编排-创建文档到文件夹",
+      "message": "帮我在「项目资料」文件夹里创建一个文档，标题叫《会议纪要》，内容写今天讨论了产品方向",
+      "assert": {
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "llmJudge": {
+        "criteria": [
+          "回复确认文档已创建到指定文件夹",
+          "回复包含文档链接",
+          "操作过程没有让用户感到困惑（如反复确认、暴露中间步骤）",
+          "语气自然流畅"
+        ],
+        "passThreshold": 0.75
+      },
+      "tags": ["P1", "quality", "orchestration"]
+    },
+    {
+      "name": "编排-查人建会",
+      "message": "帮我找到张三，然后创建一个明天下午2点到3点的会议，邀请他一起参加，主题是需求评审",
+      "assert": {
+        "containsAny": ["已创建", "创建成功", "日程", "会议"],
+        "notContains": "error"
+      },
+      "llmJudge": {
+        "criteria": [
+          "回复确认会议已创建并包含会议主题",
+          "回复提及了参会人（张三）",
+          "回复包含会议时间信息",
+          "整个流程对用户透明，没有暴露中间的搜索步骤细节",
+          "没有暴露 open_id、event_id 等内部 ID"
+        ],
+        "passThreshold": 0.6
+      },
+      "tags": ["P1", "quality", "orchestration"]
+    },
+    {
+      "name": "编排-文档写入知识库",
+      "message": "帮我创建一个文档叫《技术方案》，写一些关于微服务架构的内容，然后放到知识库里",
+      "assert": {
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "llmJudge": {
+        "criteria": [
+          "回复确认文档已创建并已放入知识库",
+          "回复包含文档链接",
+          "如果需要选择知识库，友好引导用户",
+          "语气自然，没有暴露 wiki_node、space_id 等内部字段"
+        ],
+        "passThreshold": 0.75
+      },
+      "tags": ["P1", "quality", "orchestration"]
+    }
+  ]
+}

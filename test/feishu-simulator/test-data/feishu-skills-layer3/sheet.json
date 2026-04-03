@@ -1,0 +1,41 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "创建表格-回复质量",
+      "message": "帮我创建一个飞书表格，标题叫《项目进度跟踪》",
+      "assert": {
+        "containsAny": ["已创建", "创建成功", "表格"],
+        "notContains": "error"
+      },
+      "llmJudge": {
+        "criteria": [
+          "回复确认表格已创建",
+          "回复包含表格标题",
+          "包含可点击的飞书表格链接",
+          "没有暴露 spreadsheet_token 等内部字段"
+        ],
+        "passThreshold": 0.75
+      },
+      "tags": ["P1", "quality"]
+    },
+    {
+      "name": "导出表格-回复质量",
+      "message": "帮我把刚才那个表格导出为Excel文件",
+      "assert": {
+        "notContains": "exception"
+      },
+      "llmJudge": {
+        "criteria": [
+          "如果导出成功，回复明确告知并提供文件",
+          "如果需要指定具体表格，友好地引导用户提供",
+          "语气自然不生硬"
+        ],
+        "passThreshold": 0.66
+      },
+      "tags": ["P1", "quality"]
+    }
+  ]
+}

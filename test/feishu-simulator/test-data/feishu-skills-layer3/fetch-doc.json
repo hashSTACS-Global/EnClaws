@@ -1,0 +1,23 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "错误处理-读取不存在文档",
+      "message": "帮我读取文档 docx_nonexistent_99999",
+      "assert": {
+        "notContains": "exception"
+      },
+      "llmJudge": {
+        "criteria": [
+          "错误信息对用户友好，没有直接暴露 API 错误码",
+          "给出了建设性建议（如'请检查文档链接是否正确'）",
+          "没有显示 stack trace 或 JSON 原始报错"
+        ],
+        "passThreshold": 0.66
+      },
+      "tags": ["P1", "quality", "error"]
+    }
+  ]
+}

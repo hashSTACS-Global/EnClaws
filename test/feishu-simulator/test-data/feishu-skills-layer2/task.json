@@ -1,0 +1,43 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "创建任务-完整参数",
+      "message": "帮我创建一个飞书任务：完成自动化测试用例编写，截止日期后天",
+      "assert": { "containsAny": ["已创建", "创建成功", "任务"], "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "查询任务列表",
+      "message": "看看我有哪些待办任务",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "创建任务-模糊意图",
+      "message": "帮我建个任务",
+      "assert": { "minLength": 5, "notContains": "exception" },
+      "tags": ["P1", "intent"]
+    },
+    {
+      "name": "创建任务-指定负责人",
+      "message": "帮我创建一个任务，标题是「准备周报」，指派给张三，本周五前完成",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "完成任务",
+      "message": "帮我把「完成自动化测试用例编写」这个任务标记为已完成",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "口语化-待办",
+      "message": "我还有啥没干完的事儿来着？",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "intent"]
+    }
+  ]
+}

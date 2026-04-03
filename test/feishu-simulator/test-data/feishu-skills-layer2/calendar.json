@@ -1,0 +1,79 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "创建日程-完整参数",
+      "message": "帮我创建一个明天下午3点到4点的会议，主题是「自动化测试周会」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程"], "notContains": "error" },
+      "tags": ["P0"]
+    },
+    {
+      "name": "创建日程-缺少时间应询问",
+      "message": "帮我创建一个会议，主题是项目评审",
+      "assert": { "minLength": 5, "notContains": "error" },
+      "tags": ["P0", "intent"]
+    },
+    {
+      "name": "查询今日日程",
+      "message": "看看我今天有什么会议安排",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P0"]
+    },
+    {
+      "name": "查询明日日程",
+      "message": "明天有什么日程？",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "查空闲时间",
+      "message": "看看我明天下午有没有空闲时间",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "创建重复日程-每周",
+      "message": "帮我创建一个每周三下午2点到3点的固定会议，主题是「技术分享」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程"], "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "创建重复日程-工作日",
+      "message": "帮我创建一个工作日每天早上9点半到10点的站会",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程"], "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "创建全天日程",
+      "message": "帮我在后天创建一个全天的「团建活动」日程",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程"], "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "邀请参会人-按名字",
+      "message": "帮我创建一个明天上午10点到11点的会议，主题是需求评审，邀请张三和李四",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "取消日程",
+      "message": "帮我取消明天下午3点的「自动化测试周会」",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "搜索日程",
+      "message": "帮我搜索一下最近有没有关于「评审」的会议",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "口语化-约会议",
+      "message": "约个会吧，明天下午，聊聊Q2的规划",
+      "assert": { "minLength": 5, "notContains": "exception" },
+      "tags": ["P1", "intent"]
+    }
+  ]
+}

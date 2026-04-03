@@ -1,0 +1,31 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "追加内容",
+      "message": "帮我在《自动化测试文档》末尾追加一段：这是新追加的内容。",
+      "assert": { "containsAny": ["已更新", "已追加", "成功", "追加"], "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "模糊意图-不确定追加还是覆盖",
+      "message": "帮我修改《自动化测试文档》的内容",
+      "assert": { "minLength": 5, "notContains": "exception" },
+      "tags": ["P1", "intent"]
+    },
+    {
+      "name": "覆盖写入",
+      "message": "帮我把《自动化测试文档》的全部内容替换成：全新的文档内容，之前的不要了",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "修改文档标题",
+      "message": "把《自动化测试文档》的标题改成《自动化测试文档-已更新》",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1"]
+    }
+  ]
+}

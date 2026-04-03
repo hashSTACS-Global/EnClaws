@@ -188,7 +188,8 @@ foreach ($d in $dirsToCopy) {
     $src = Join-Path $ProjectRoot $d
     $dest = Join-Path $AppBundleDir $d
     if (Test-Path $src) {
-        Copy-Item $src $dest -Recurse
+        # Use robocopy to handle long paths that exceed Windows MAX_PATH (260 chars)
+        robocopy $src $dest /E /NFL /NDL /NJH /NJS /NP | Out-Null
         Write-Host "    Copied $d/" -ForegroundColor Gray
     } else {
         Write-Host "[!] Missing directory: $d/" -ForegroundColor Yellow
@@ -279,7 +280,7 @@ Write-Host "[*] Cleaning up bundle..." -ForegroundColor Yellow
 # Patterns for both flat packages (node_modules/pkg/) and scoped packages (node_modules/@scope/pkg/)
 $cleanNames = @("*.md", "CHANGELOG*", "HISTORY*", ".github", "test", "tests",
     "__tests__", "example", "examples", ".travis.yml", ".eslintrc*", ".prettierrc*", "tsconfig.json",
-    "*.map", "doc", "docs")
+    "*.map")
 $cleanPatterns = @()
 foreach ($name in $cleanNames) {
     $cleanPatterns += "node_modules\*\$name"

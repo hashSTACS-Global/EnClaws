@@ -1,0 +1,13 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "识别图片文字",
+      "message": "帮我识别这张图片上的文字",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2"]
+    }
+  ]
+}

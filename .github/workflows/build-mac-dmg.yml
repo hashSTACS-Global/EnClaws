@@ -1,28 +1,15 @@
 name: Build macOS DMG
 
-# 手动触发，支持自定义版本号和构建架构
+# 手动触发
 on:
   workflow_dispatch:
-    inputs:
-      app_version:
-        description: 'App version (leave empty to use package.json) / 应用版本号（留空则从 package.json 读取）'
-        required: false
-        type: string
-      build_config:
-        description: 'Build configuration / 构建配置'
-        required: false
-        default: 'release'
-        type: choice
-        options:
-          - release
-          - debug
 
 jobs:
   build-dmg:
     name: Build macOS DMG (${{ matrix.arch }})
-    # 使用 macOS 15 (Sequoia) runner，支持 Swift 6.2 / Xcode 26+
+    # macOS runner（纯 Node.js 打包，不需要 Xcode/Swift）
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     strategy:
       fail-fast: false
@@ -34,76 +21,95 @@ jobs:
       - name: Checkout repository / 检出代码
         uses: actions/checkout@v4
 
-      # 2. 安装 pnpm 包管理器
+      # 2. 安装 pnpm
       - name: Setup pnpm / 安装 pnpm
         uses: pnpm/action-setup@v4
 
-      # 3. 设置 Node.js 22
+      # 3. 设置 Node.js 22（用于 pnpm build 和 npm install）
       - name: Setup Node.js 22 / 配置 Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      # 4. 选择支持 Swift 6.2 的 Xcode 版本
-      - name: Select Xcode / 选择 Xcode 版本
-        run: |
-          # 列出可用的 Xcode 版本，选择最新的
-          ls /Applications/ | grep Xcode
-          # Xcode 26 beta 包含 Swift 6.2
-          if [ -d "/Applications/Xcode_26.0.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_26.0.app/Contents/Developer
-          elif [ -d "/Applications/Xcode_16.4.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
-          elif [ -d "/Applications/Xcode_16.3.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
-          fi
-          swift --version
-
-      # 5. 为 scripts/ 目录下的所有 shell 脚本赋予可执行权限
+      # 4. 赋予脚本执行权限
       - name: Make scripts executable / 赋予脚本执行权限
         run: chmod +x scripts/*.sh
 
-      # 6. 构建自包含 macOS 应用
-      #    - BUILD_CONFIG：构建配置（release/debug）
-      #    - BUILD_ARCHS：单一架构（arm64 或 x86_64），每个架构独立打包
-      #    - BUNDLE_ID：应用 Bundle ID
-      #    - ALLOW_ADHOC_SIGNING=1：使用 ad-hoc 签名（无需正式开发者证书）
-      #    - ALLOW_MISSING_TEXTUAL_BUNDLE=1：允许缺少 Textual bundle（CI 环境）
-      #    - APP_VERSION：版本号（未指定时由脚本自动从 package.json 读取）
-      #    package-mac-app.sh 内部会自动执行 pnpm install --no-frozen-lockfile
-      - name: Build macOS app / 构建 macOS 应用
+      # 5. 构建自包含 macOS 安装包
+      #    - 纯 Node.js，不需要 Swift/Xcode
+      #    - 内部自动执行 pnpm install + pnpm build
+      #    - 下载对应架构的 Node.js 捆绑进 .app
+      #    - 打包 JS 代码 + 依赖 + skills-pack
+      #    - 生成 DMG 安装包
+      - name: Build macOS installer / 构建 macOS 安装包
         env:
-          BUILD_CONFIG: ${{ inputs.build_config || 'release' }}
           BUILD_ARCHS: ${{ matrix.arch }}
-          BUNDLE_ID: ai.enclaws.mac
-          ALLOW_ADHOC_SIGNING: '1'
-          ALLOW_MISSING_TEXTUAL_BUNDLE: '1'
-          SKIP_TEAM_ID_CHECK: '1'
-          APP_VERSION: ${{ inputs.app_version }}
-        run: bash scripts/package-mac-app.sh
+        run: bash scripts/build-mac-installer.sh
 
-      # 7. 将构建好的 .app 打包为 DMG 安装镜像
-      #    SKIP_DMG_STYLE=1：跳过 Finder AppleScript 窗口美化（CI 无头环境会卡死）
-      - name: Create DMG / 创建 DMG 安装包
-        env:
-          SKIP_DMG_STYLE: '1'
+      # 6. 验证 .app 结构和功能（仅 arm64，x86_64 无法在 arm64 runner 上运行）
+      - name: Verify app bundle / 验证安装包
+        if: matrix.arch == 'arm64'
         run: |
-          bash scripts/create-dmg.sh dist/EnClaws.app
-          # Rename DMG to include architecture
-          for f in dist/EnClaws-*.dmg; do
-            mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg"
+          APP="dist/EnClaws.app"
+          echo "=== Checking app structure ==="
+          # 检查关键文件是否存在
+          for f in \
+            "$APP/Contents/Info.plist" \
+            "$APP/Contents/MacOS/enclaws-launcher" \
+            "$APP/Contents/Resources/enclaws" \
+            "$APP/Contents/Resources/enclaws.mjs" \
+            "$APP/Contents/Resources/node/bin/node" \
+            "$APP/Contents/Resources/dist/index.js" \
+            "$APP/Contents/Resources/package.json" \
+            "$APP/Contents/Resources/scripts/postinstall.js"
+          do
+            if [ -f "$f" ]; then
+              echo "  ✓ $f"
+            else
+              echo "  ✗ MISSING: $f" && exit 1
+            fi
           done
 
-      # 8. 上传 .app 作为构建产物，保留 7 天
-      - name: Upload .app artifact / 上传 .app 产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: EnClaws-app-${{ matrix.arch }}
-          path: dist/EnClaws.app
-          if-no-files-found: error
-          retention-days: 7
+          # 检查关键目录
+          for d in \
+            "$APP/Contents/Resources/node_modules" \
+            "$APP/Contents/Resources/extensions" \
+            "$APP/Contents/Resources/skills" \
+            "$APP/Contents/Resources/skills-pack"
+          do
+            if [ -d "$d" ]; then
+              echo "  ✓ $d/"
+            else
+              echo "  ✗ MISSING DIR: $d/" && exit 1
+            fi
+          done
 
-      # 9. 上传 DMG 文件作为构建产物，保留 7 天
+          echo ""
+          echo "=== Testing bundled Node.js ==="
+          NODE="$APP/Contents/Resources/node/bin/node"
+          NODE_VER=$("$NODE" -v)
+          echo "  Node.js version: $NODE_VER"
+
+          echo ""
+          echo "=== Testing gateway startup (5 second smoke test) ==="
+          "$NODE" "$APP/Contents/Resources/enclaws.mjs" gateway --port 19999 --no-open &
+          PID=$!
+          sleep 5
+          if curl -s -o /dev/null -w "%{http_code}" "http://localhost:19999" | grep -q "200"; then
+            echo "  ✓ Gateway responded with 200 OK"
+          else
+            echo "  ✗ Gateway did not respond"
+          fi
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+
+          echo ""
+          echo "=== Bundle size ==="
+          du -sh "$APP/Contents/Resources"
+          echo ""
+          echo "=== Verification complete ==="
+
+      # 7. 上传 DMG 产物，保留 7 天
       - name: Upload DMG artifact / 上传 DMG 产物
         uses: actions/upload-artifact@v4
         with:

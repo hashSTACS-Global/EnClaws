@@ -1,0 +1,23 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "图片OCR-回复质量",
+      "message": "帮我识别这张图片上的文字",
+      "assert": {
+        "notContains": "exception"
+      },
+      "llmJudge": {
+        "criteria": [
+          "如果成功，回复包含识别出的文字内容",
+          "如果需要用户提供图片，友好引导",
+          "识别结果格式清晰易读"
+        ],
+        "passThreshold": 0.66
+      },
+      "tags": ["P2", "quality"]
+    }
+  ]
+}

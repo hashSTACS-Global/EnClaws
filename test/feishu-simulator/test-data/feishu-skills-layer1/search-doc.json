@@ -1,0 +1,37 @@
+{
+  "skillsDir": "D:/web3/feishu-skills",
+  "env": { "FEISHU_APP_ID": "cli_xxx", "FEISHU_APP_SECRET": "xxx" },
+  "vars": { "OPEN_ID": "ou_xxx" },
+  "cases": [
+    {
+      "name": "搜索文档-默认action",
+      "command": "node ./feishu-search-doc/search-doc.js --open-id {{OPEN_ID}} --query 测试",
+      "assert": { "exitCode": 0, "jsonPath": { "reply": { "exists": true } } },
+      "tags": ["P0"]
+    },
+    {
+      "name": "搜索文档-指定docs类型",
+      "command": "node ./feishu-search-doc/search-doc.js --open-id {{OPEN_ID}} --action docs --query 测试",
+      "assert": { "exitCode": 0, "jsonPath": { "action": { "equals": "docs" } } },
+      "tags": ["P1"]
+    },
+    {
+      "name": "列出知识库空间",
+      "command": "node ./feishu-search-doc/search-doc.js --open-id {{OPEN_ID}} --action list_wiki_spaces",
+      "assert": { "exitCode": 0, "jsonPath": { "action": { "equals": "list_wiki_spaces" } } },
+      "tags": ["P1"]
+    },
+    {
+      "name": "错误-缺少query",
+      "command": "node ./feishu-search-doc/search-doc.js --open-id {{OPEN_ID}} --action search",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "exists": true } } },
+      "tags": ["P1", "error"]
+    },
+    {
+      "name": "错误-缺少open-id",
+      "command": "node ./feishu-search-doc/search-doc.js --action docs --query 测试",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "equals": "missing_param" } } },
+      "tags": ["P0", "error"]
+    }
+  ]
+}

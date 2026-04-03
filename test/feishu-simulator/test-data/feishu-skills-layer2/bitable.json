@@ -1,0 +1,25 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "新增记录",
+      "message": "帮我在多维表格里新增一条记录",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "查看多维表格列表",
+      "message": "帮我看看我有哪些多维表格",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "创建多维表格",
+      "message": "帮我创建一个多维表格，用来记录bug追踪，需要字段：标题、状态、优先级、负责人",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P2"]
+    }
+  ]
+}

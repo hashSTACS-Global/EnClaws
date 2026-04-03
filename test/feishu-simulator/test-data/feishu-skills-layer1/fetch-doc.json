@@ -1,0 +1,34 @@
+{
+  "skillsDir": "D:/web3/feishu-skills",
+  "env": {
+    "FEISHU_APP_ID": "cli_xxx",
+    "FEISHU_APP_SECRET": "xxx"
+  },
+  "vars": {
+    "OPEN_ID": "ou_xxx"
+  },
+  "cases": [
+    {
+      "name": "缺少doc-id",
+      "command": "node ./feishu-fetch-doc/fetch-doc.js --open-id {{OPEN_ID}}",
+      "assert": {
+        "exitCode": 1,
+        "jsonPath": {
+          "error": { "equals": "missing_param" }
+        }
+      },
+      "tags": ["feishu-fetch-doc", "P0", "error"]
+    },
+    {
+      "name": "缺少open-id",
+      "command": "node ./feishu-fetch-doc/fetch-doc.js --doc-id docx_test",
+      "assert": {
+        "exitCode": 1,
+        "jsonPath": {
+          "error": { "equals": "missing_param" }
+        }
+      },
+      "tags": ["feishu-fetch-doc", "P0", "error"]
+    }
+  ]
+}

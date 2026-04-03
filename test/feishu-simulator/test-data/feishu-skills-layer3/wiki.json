@@ -1,0 +1,25 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "知识库列表-回复质量",
+      "message": "帮我看看我有哪些飞书知识库",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "llmJudge": {
+        "criteria": [
+          "知识库以列表形式清晰呈现",
+          "每个知识库包含名称",
+          "如果没有知识库，友好告知",
+          "没有暴露 space_id 等内部 ID"
+        ],
+        "passThreshold": 0.75
+      },
+      "tags": ["P2", "quality"]
+    }
+  ]
+}

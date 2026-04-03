@@ -1,0 +1,31 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "搜索群组-按名字",
+      "message": "帮我搜索一下飞书群，关键词是「测试」",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "查看群成员",
+      "message": "帮我看看当前群里都有哪些人",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "获取群信息",
+      "message": "帮我看看这个群的基本信息，比如群名和群主是谁",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "口语化-找群",
+      "message": "有没有一个叫「产品」的群？帮我找找",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "intent"]
+    }
+  ]
+}

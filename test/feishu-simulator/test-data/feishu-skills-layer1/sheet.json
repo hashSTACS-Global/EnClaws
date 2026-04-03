@@ -1,0 +1,37 @@
+{
+  "skillsDir": "D:/web3/feishu-skills",
+  "env": { "FEISHU_APP_ID": "cli_xxx", "FEISHU_APP_SECRET": "xxx" },
+  "vars": { "OPEN_ID": "ou_xxx" },
+  "cases": [
+    {
+      "name": "创建表格",
+      "command": "node ./feishu-sheet/sheet.js --open-id {{OPEN_ID}} --action create --title AutoTest_Sheet",
+      "assert": { "exitCode": 0, "jsonPath": { "action": { "equals": "create" }, "reply": { "exists": true } } },
+      "tags": ["P1"]
+    },
+    {
+      "name": "创建表格-带表头",
+      "command": "node ./feishu-sheet/sheet.js --open-id {{OPEN_ID}} --action create --title AutoTest_Sheet_Headers --headers '姓名,部门,职位'",
+      "assert": { "exitCode": 0, "jsonPath": { "action": { "equals": "create" } } },
+      "tags": ["P1"]
+    },
+    {
+      "name": "错误-缺少action",
+      "command": "node ./feishu-sheet/sheet.js --open-id {{OPEN_ID}}",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "exists": true } } },
+      "tags": ["P1", "error"]
+    },
+    {
+      "name": "错误-缺少open-id",
+      "command": "node ./feishu-sheet/sheet.js --action create --title 测试",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "equals": "missing_param" } } },
+      "tags": ["P1", "error"]
+    },
+    {
+      "name": "错误-创建缺少title",
+      "command": "node ./feishu-sheet/sheet.js --open-id {{OPEN_ID}} --action create",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "equals": "missing_param" } } },
+      "tags": ["P1", "error"]
+    }
+  ]
+}

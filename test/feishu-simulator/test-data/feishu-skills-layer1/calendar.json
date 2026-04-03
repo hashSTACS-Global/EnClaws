@@ -1,0 +1,55 @@
+{
+  "skillsDir": "D:/web3/feishu-skills",
+  "env": { "FEISHU_APP_ID": "cli_xxx", "FEISHU_APP_SECRET": "xxx" },
+  "vars": { "OPEN_ID": "ou_xxx" },
+  "cases": [
+    {
+      "name": "查询日历列表",
+      "command": "node ./feishu-calendar/calendar.js --open-id {{OPEN_ID}} --action list_calendars",
+      "assert": { "exitCode": 0, "jsonPath": { "action": { "equals": "list_calendars" } } },
+      "tags": ["P0"]
+    },
+    {
+      "name": "获取主日历",
+      "command": "node ./feishu-calendar/calendar.js --open-id {{OPEN_ID}} --action get_primary",
+      "assert": { "exitCode": 0, "jsonPath": { "action": { "equals": "get_primary" } } },
+      "tags": ["P0"]
+    },
+    {
+      "name": "查询今日日程",
+      "command": "node ./feishu-calendar/calendar.js --open-id {{OPEN_ID}} --action list_events",
+      "assert": { "exitCode": 0, "jsonPath": { "action": { "equals": "list_events" } } },
+      "tags": ["P0"]
+    },
+    {
+      "name": "搜索日程",
+      "command": "node ./feishu-calendar/calendar.js --open-id {{OPEN_ID}} --action search_events --query 测试",
+      "assert": { "exitCode": 0, "jsonPath": { "action": { "equals": "search_events" } } },
+      "tags": ["P1"]
+    },
+    {
+      "name": "错误-缺少action",
+      "command": "node ./feishu-calendar/calendar.js --open-id {{OPEN_ID}}",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "exists": true } } },
+      "tags": ["P1", "error"]
+    },
+    {
+      "name": "错误-缺少open-id",
+      "command": "node ./feishu-calendar/calendar.js --action list_calendars",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "equals": "missing_param" } } },
+      "tags": ["P0", "error"]
+    },
+    {
+      "name": "错误-无效action",
+      "command": "node ./feishu-calendar/calendar.js --open-id {{OPEN_ID}} --action invalid_xyz",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "exists": true } } },
+      "tags": ["P1", "error"]
+    },
+    {
+      "name": "错误-搜索日程缺少query",
+      "command": "node ./feishu-calendar/calendar.js --open-id {{OPEN_ID}} --action search_events",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "equals": "missing_param" } } },
+      "tags": ["P1", "error"]
+    }
+  ]
+}

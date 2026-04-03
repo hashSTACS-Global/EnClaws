@@ -1,0 +1,31 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "按名字搜索",
+      "message": "帮我搜索一下飞书用户「张三」",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "查看自己的信息",
+      "message": "帮我查一下我自己的飞书账号信息",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "搜索不存在的用户",
+      "message": "帮我找一下飞书用户「xyzzy_不存在的人」",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1"]
+    },
+    {
+      "name": "口语化-找人",
+      "message": "李四的飞书号是多少？帮我查查",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "intent"]
+    }
+  ]
+}

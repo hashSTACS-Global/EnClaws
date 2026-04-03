@@ -1,0 +1,24 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "多维表格操作-回复质量",
+      "message": "帮我在多维表格里新增一条记录，名称填「测试项目」，状态填「进行中」",
+      "assert": {
+        "notContains": "exception"
+      },
+      "llmJudge": {
+        "criteria": [
+          "如果操作成功，明确告知记录已创建",
+          "如果需要先指定多维表格，友好引导用户",
+          "回复语气自然，没有技术术语",
+          "没有暴露 app_token、record_id 等内部字段"
+        ],
+        "passThreshold": 0.75
+      },
+      "tags": ["P2", "quality"]
+    }
+  ]
+}

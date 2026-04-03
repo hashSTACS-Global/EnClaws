@@ -1,0 +1,49 @@
+{
+  "skillsDir": "D:/web3/feishu-skills",
+  "env": { "FEISHU_APP_ID": "cli_xxx", "FEISHU_APP_SECRET": "xxx" },
+  "vars": { "OPEN_ID": "ou_xxx" },
+  "cases": [
+    {
+      "name": "正常-标题+内容",
+      "command": "node ./feishu-create-doc/create-doc.js --open-id {{OPEN_ID}} --title AutoTest_创建文档 --markdown '# 测试\\n这是自动化测试'",
+      "assert": { "exitCode": 0, "jsonPath": { "doc_id": { "matches": "^docx_" }, "doc_url": { "contains": "feishu.cn" }, "reply": { "contains": "已创建" } } },
+      "tags": ["P0"]
+    },
+    {
+      "name": "正常-仅标题无内容",
+      "command": "node ./feishu-create-doc/create-doc.js --open-id {{OPEN_ID}} --title AutoTest_空白文档",
+      "assert": { "exitCode": 0, "jsonPath": { "doc_id": { "matches": "^docx_" }, "doc_url": { "contains": "feishu.cn" } } },
+      "tags": ["P0"]
+    },
+    {
+      "name": "正常-Markdown代码块",
+      "command": "node ./feishu-create-doc/create-doc.js --open-id {{OPEN_ID}} --title AutoTest_代码文档 --markdown '# 代码示例\\n```python\\nprint(hello)\\n```'",
+      "assert": { "exitCode": 0, "jsonPath": { "doc_id": { "matches": "^docx_" } } },
+      "tags": ["P1"]
+    },
+    {
+      "name": "正常-Markdown表格",
+      "command": "node ./feishu-create-doc/create-doc.js --open-id {{OPEN_ID}} --title AutoTest_表格文档 --markdown '| 姓名 | 部门 |\\n|---|---|\\n| 张三 | 工程 |'",
+      "assert": { "exitCode": 0, "jsonPath": { "doc_id": { "matches": "^docx_" } } },
+      "tags": ["P1"]
+    },
+    {
+      "name": "错误-缺少open-id",
+      "command": "node ./feishu-create-doc/create-doc.js --title 测试",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "equals": "missing_param" } } },
+      "tags": ["P0", "error"]
+    },
+    {
+      "name": "错误-缺少标题",
+      "command": "node ./feishu-create-doc/create-doc.js --open-id {{OPEN_ID}}",
+      "assert": { "exitCode": 1, "jsonPath": { "error": { "exists": true } } },
+      "tags": ["P1", "error"]
+    },
+    {
+      "name": "正常-特殊字符标题",
+      "command": "node ./feishu-create-doc/create-doc.js --open-id {{OPEN_ID}} --title 'AutoTest_特殊字符!@#$%&()' --markdown '测试内容'",
+      "assert": { "exitCode": 0, "jsonPath": { "doc_id": { "matches": "^docx_" } } },
+      "tags": ["P1"]
+    }
+  ]
+}

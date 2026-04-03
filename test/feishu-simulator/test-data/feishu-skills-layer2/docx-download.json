@@ -1,0 +1,19 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "下载文档并提取文本",
+      "message": "帮我下载云空间里的那个Word文档，并提取里面的文字",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "提取PDF内容",
+      "message": "帮我提取一下云空间里那个PDF报告的文字内容",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2"]
+    }
+  ]
+}

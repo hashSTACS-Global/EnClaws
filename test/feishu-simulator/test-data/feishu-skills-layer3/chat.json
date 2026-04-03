@@ -1,0 +1,25 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "搜索群组-回复质量",
+      "message": "帮我搜索一下有没有叫「产品」的飞书群",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "llmJudge": {
+        "criteria": [
+          "搜索结果以清晰列表呈现",
+          "每个群组包含群名和成员数",
+          "如果无结果，友好地告知",
+          "没有暴露 chat_id 等内部 ID"
+        ],
+        "passThreshold": 0.75
+      },
+      "tags": ["P1", "quality"]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "下载文档-回复质量",
+      "message": "帮我下载这个飞书文档并提取里面的文字内容",
+      "assert": {
+        "notContains": "exception"
+      },
+      "llmJudge": {
+        "criteria": [
+          "如果成功，回复包含提取出的文字内容或文件",
+          "如果需要用户指定文档，友好引导",
+          "没有暴露 file_token 等内部字段"
+        ],
+        "passThreshold": 0.66
+      },
+      "tags": ["P2", "quality"]
+    }
+  ]
+}

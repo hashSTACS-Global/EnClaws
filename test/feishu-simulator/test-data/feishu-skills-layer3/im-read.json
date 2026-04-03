@@ -1,0 +1,25 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "读取聊天记录-回复质量",
+      "message": "帮我看看当前群最近的聊天记录",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "llmJudge": {
+        "criteria": [
+          "消息以时间顺序清晰呈现",
+          "每条消息包含发送者和内容",
+          "对媒体消息（图片、文件等）有合理的描述",
+          "没有暴露 message_id 等内部 ID"
+        ],
+        "passThreshold": 0.5
+      },
+      "tags": ["P2", "quality"]
+    }
+  ]
+}

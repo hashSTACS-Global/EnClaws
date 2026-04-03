@@ -1,0 +1,25 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "创建任务-回复质量",
+      "message": "帮我创建一个任务：编写自动化测试用例，截止日期后天",
+      "assert": {
+        "containsAny": ["任务", "已创建", "创建成功"],
+        "notContains": "error"
+      },
+      "llmJudge": {
+        "criteria": [
+          "回复确认了任务已创建",
+          "回复包含任务标题和截止日期信息",
+          "语气简洁明了",
+          "没有暴露 task_id 等内部字段"
+        ],
+        "passThreshold": 0.75
+      },
+      "tags": ["P1", "quality"]
+    }
+  ]
+}

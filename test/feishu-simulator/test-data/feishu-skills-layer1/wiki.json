@@ -1,0 +1,46 @@
+{
+  "skillsDir": "D:/web3/feishu-skills",
+  "env": {
+    "FEISHU_APP_ID": "cli_xxx",
+    "FEISHU_APP_SECRET": "xxx"
+  },
+  "vars": {
+    "OPEN_ID": "ou_xxx"
+  },
+  "cases": [
+    {
+      "name": "查询知识库列表",
+      "command": "node ./feishu-wiki/wiki.js --open-id {{OPEN_ID}} --action space_list",
+      "assert": {
+        "exitCode": 0,
+        "jsonPath": {
+          "action": { "equals": "space_list" },
+          "reply": { "exists": true }
+        }
+      },
+      "tags": ["feishu-wiki", "P2"]
+    },
+    {
+      "name": "缺少action",
+      "command": "node ./feishu-wiki/wiki.js --open-id {{OPEN_ID}}",
+      "assert": {
+        "exitCode": 1,
+        "jsonPath": {
+          "error": { "exists": true }
+        }
+      },
+      "tags": ["feishu-wiki", "P2", "error"]
+    },
+    {
+      "name": "缺少open-id",
+      "command": "node ./feishu-wiki/wiki.js --action space_list",
+      "assert": {
+        "exitCode": 1,
+        "jsonPath": {
+          "error": { "equals": "missing_param" }
+        }
+      },
+      "tags": ["feishu-wiki", "P2", "error"]
+    }
+  ]
+}
