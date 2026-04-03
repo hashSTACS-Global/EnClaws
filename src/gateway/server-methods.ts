@@ -28,6 +28,7 @@ import { systemHandlers } from "./server-methods/system.js";
 import { talkHandlers } from "./server-methods/talk.js";
 import { taskPlanHandlers } from "./server-methods/task-plan.js";
 import { toolsCatalogHandlers } from "./server-methods/tools-catalog.js";
+import { sysToolsHandlers } from "./server-methods/sys-tools-api.js";
 import { tenantHandlers } from "./server-methods/tenant-api.js";
 import { tenantAgentsHandlers } from "./server-methods/tenant-agents-api.js";
 import { tenantChannelsHandlers } from "./server-methods/tenant-channels-api.js";
@@ -106,6 +107,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...wizardHandlers,
   ...talkHandlers,
   ...toolsCatalogHandlers,
+  ...sysToolsHandlers,
   ...ttsHandlers,
   ...skillsHandlers,
   ...sessionsHandlers,

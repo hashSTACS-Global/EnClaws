@@ -109,6 +109,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "tts.providers",
     "models.list",
     "tools.catalog",
+    "sys.tools.get",
     "agents.list",
     "agent.identity.get",
     "skills.status",
@@ -178,6 +179,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "agents.files.set",
     "agents.memory.set",
     "agents.memory.delete",
+    "sys.tools.update",
   ],
 };
 

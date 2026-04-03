@@ -355,7 +355,7 @@ INSERT INTO sys_plugins_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS sys_tools_config (
   id                             INTEGER PRIMARY KEY CHECK (id = 1),
   allow_dangerous_tools_override BOOLEAN NOT NULL DEFAULT false,
-  profile                        VARCHAR(32),
+  profile                        VARCHAR(32) DEFAULT 'full',
   allow                          JSONB NOT NULL DEFAULT '[]',
   also_allow                     JSONB NOT NULL DEFAULT '[]',
   deny                           JSONB NOT NULL DEFAULT '["browser"]',
