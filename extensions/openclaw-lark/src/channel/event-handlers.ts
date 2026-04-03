@@ -91,11 +91,19 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
     // (before the message enters the serial queue) so the streaming
     // card is terminated without waiting for the current task.
     const abortText = extractRawTextFromEvent(event);
+    const botMentionedInAbort = (event.message?.mentions ?? []).some(
+      (m) => m.id?.open_id && m.id.open_id === ctx.lark.botOpenId,
+    );
+    let abortFired = false;
     if (abortText && isLikelyAbortText(abortText)) {
       const queueKey = buildQueueKey(accountId, chatId, threadId, senderQueueId);
       if (hasActiveTask(queueKey)) {
         const active = getActiveDispatcher(queueKey);
-        if (active) {
+        // In groups without @bot, only abort tasks that were originally
+        // triggered by a message that @-mentioned THIS bot (wasMentioned).
+        // This prevents requireMention:false bots from aborting tasks
+        // that belong to a different bot.
+        if (active && (!isGroup || botMentionedInAbort || active.wasMentioned === true)) {
           // Capture card message ID before aborting for reply targeting
           const cardMsgId = active.getCardMessageId?.();
           if (cardMsgId) {
@@ -106,7 +114,18 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
           active.abortCard().catch((err) => {
             error(`feishu[${accountId}]: abort fast-path abortCard failed: ${String(err)}`);
           });
+          abortFired = true;
         }
+      }
+
+      // ---- Bare /stop in groups: skip enqueue for non-target bots ----
+      // If the fast-path didn't fire for this bot, the /stop is not
+      // intended for us — skip enqueueing so the SDK doesn't process it.
+      // If the fast-path DID fire, enqueue normally so the SDK sends a
+      // reply that quotes the aborted card.
+      if (isGroup && !botMentionedInAbort && !abortFired) {
+        log(`feishu[${accountId}]: bare /stop in group, not our task, skipping`);
+        return;
       }
     }
 

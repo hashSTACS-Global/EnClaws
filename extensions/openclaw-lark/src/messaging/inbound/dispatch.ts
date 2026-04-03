@@ -87,7 +87,7 @@ async function dispatchNormalMessage(
     return;
   }
 
-  const { dispatcher, replyOptions, markDispatchIdle, markFullyComplete, abortCard } = createFeishuReplyDispatcher({
+  const { dispatcher, replyOptions, markDispatchIdle, markFullyComplete, abortCard, getCardMessageId } = createFeishuReplyDispatcher({
     cfg: dc.accountScopedCfg,
     agentId: dc.route.agentId,
     sessionKey: dc.threadSessionKey ?? dc.route.sessionKey,
@@ -124,7 +124,8 @@ async function dispatchNormalMessage(
         return false;
       }
     },
-    getCardMessageId: () => undefined,
+    getCardMessageId,
+    wasMentioned: mentionedBot(dc.ctx),
   });
   dc.log(`feishu[${dc.account.accountId}]: dispatching to agent (session=${effectiveSessionKey})`);
   log.info(`dispatching to agent (session=${effectiveSessionKey})`);
@@ -374,7 +375,19 @@ export async function dispatchToAgent(params: {
   const skillFilter = dc.isGroup ? (params.groupConfig?.skills ?? params.defaultGroupConfig?.skills) : undefined;
 
   if (isCommand) {
-    await dispatchSystemCommand(dc, ctxPayload, false, params.replyToMessageId);
+    // For abort commands (/stop), reply to the active streaming card instead
+    // of the /stop message itself so the user sees the reply linked to the
+    // in-progress task, not their stop command.
+    let commandReplyToMessageId = params.replyToMessageId;
+    if (isLikelyAbortText(params.ctx.content?.trim() ?? '')) {
+      const abortIsGroup = dc.ctx.chatType === 'group';
+      const abortQueueKey = buildQueueKey(dc.account.accountId, dc.ctx.chatId, dc.ctx.threadId, abortIsGroup ? dc.ctx.senderId : undefined);
+      const abortedCardId = consumeAbortedCardMessageId(abortQueueKey);
+      if (abortedCardId) {
+        commandReplyToMessageId = abortedCardId;
+      }
+    }
+    await dispatchSystemCommand(dc, ctxPayload, false, commandReplyToMessageId);
     // /new and /reset explicitly start a new session — clear pending history
     if (isBareNewOrReset && dc.isGroup && historyKey && params.chatHistories) {
       clearHistoryEntriesIfEnabled({

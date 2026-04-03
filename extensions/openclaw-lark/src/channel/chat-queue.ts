@@ -19,6 +19,8 @@ export interface ActiveDispatcherEntry {
   abortController?: AbortController;
   steer?: (text: string) => boolean;
   getCardMessageId?: () => string | undefined;
+  /** Whether the message that started this task @-mentioned this bot. */
+  wasMentioned?: boolean;
 }
 
 const chatQueues = new Map<string, Promise<void>>();
