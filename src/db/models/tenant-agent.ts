@@ -176,7 +176,7 @@ export function toConfigAgentsList(
         : undefined;
 
     const toolsDeny = a.tools?.deny ?? [];
-    const skillsDeny = Array.isArray(a.skills) ? a.skills : [];
+    const skillsEnabled = Array.isArray(a.skills) ? a.skills : [];
 
     return {
       id: a.agentId,
@@ -184,7 +184,7 @@ export function toConfigAgentsList(
       ...a.config,
       ...(modelField !== undefined ? { model: modelField } : {}),
       ...(toolsDeny.length > 0 ? { tools: { ...((a.config?.tools as Record<string, unknown>) ?? {}), deny: toolsDeny } } : {}),
-      ...(skillsDeny.length > 0 ? { skills: skillsDeny } : {}),
+      ...(skillsEnabled.length > 0 ? { skills: skillsEnabled } : {}),
     };
   });
 }
