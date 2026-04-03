@@ -59,6 +59,7 @@ export const de: TranslationMap = {
     "tenant-skills": "Skill Store",
     "tenant-traces": "Traces",
     "tenant-usage": "Nutzung",
+    "platform-tools": "Werkzeugverwaltung",
   },
   subtitles: {
     agents: "Agent-Arbeitsbereiche, Tools und Identitäten verwalten.",
@@ -84,6 +85,13 @@ export const de: TranslationMap = {
     "tenant-skills": "Skills für dieses Unternehmen anzeigen und verwalten.",
     "tenant-traces": "Jede LLM-Interaktion zur Fehlersuche und Optimierung verfolgen.",
     "tenant-usage": "Token-Nutzung und Kontingent anzeigen.",
+    "platform-tools": "Plattformweite Tool-Zugriffsrichtlinie konfigurieren, die standardmäßig für alle Agenten gilt.",
+  },
+  platformTools: {
+    infoBanner: "Dies ist die plattformweite Werkzeugrichtlinie. Sie legt fest, welche Werkzeuge allen Agenten standardmäßig zur Verfügung stehen. Einzelne Agenten oder Mandanten können darüber hinaus strengere Einschränkungen anwenden.",
+    statsTotal: "Werkzeuge gesamt",
+    statsEnabled: "Aktiviert",
+    statsDenied: "Deaktiviert",
   },
   update: {
     available: "Update verfügbar:",

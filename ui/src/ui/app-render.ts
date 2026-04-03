@@ -103,6 +103,7 @@ import "./views/tenant/tenant-skills.ts";
 import "./views/tenant/tenant-traces.ts";
 import "./views/tenant/tenant-usage.ts";
 import "./views/platform-overview.ts";
+import "./views/platform-tools.ts";
 import "./views/platform-models.ts";
 import "./views/onboarding-wizard.ts";
 import { isAuthenticated, loadAuth, clearAuth } from "./auth-store.ts";
@@ -411,7 +412,7 @@ export function renderApp(state: AppViewState) {
                   const isPlatformAdmin = userRole === "platform-admin";
                   const isTenantAdmin = userRole === "owner" || userRole === "admin";
                   const tenantOnlyTabs = new Set(["tenant-settings", "tenant-users", "tenant-agents", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage"]);
-                  const platformOnlyTabs = new Set(["overview", "platform-models"]);
+                  const platformOnlyTabs = new Set(["overview", "platform-models","platform-tools"]);
                   const visibleTabs = group.tabs.filter((tab) => {
                     if (platformOnlyTabs.has(tab)) return isPlatformAdmin;
                     if (tenantOnlyTabs.has(tab)) return isTenantAdmin;
@@ -1534,6 +1535,12 @@ export function renderApp(state: AppViewState) {
                                               <tenant-usage-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}></tenant-usage-view>` : nothing}
                                       </section>`
+                                  : nothing
+                  }
+
+                  ${
+                          state.tab === "platform-tools"
+                                  ? html`<section class="card"><platform-tools-view></platform-tools-view></section>`
                                   : nothing
                   }
 

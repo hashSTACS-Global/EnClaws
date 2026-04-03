@@ -59,6 +59,7 @@ export const pt_BR: TranslationMap = {
     "tenant-skills": "Loja de Skills",
     "tenant-traces": "Rastreamento",
     "tenant-usage": "Uso",
+    "platform-tools": "Gerenciamento de Ferramentas",
   },
   subtitles: {
     agents: "Gerenciar espaços de trabalho, ferramentas e identidades de agentes.",
@@ -84,6 +85,13 @@ export const pt_BR: TranslationMap = {
     "tenant-skills": "Visualizar e gerenciar habilidades disponíveis para esta empresa.",
     "tenant-traces": "Rastrear cada interação LLM para depuração e otimização.",
     "tenant-usage": "Visualizar uso de tokens e cota.",
+    "platform-tools": "Configurar política de acesso a ferramentas em nível de plataforma, aplicada a todos os agentes por padrão.",
+  },
+  platformTools: {
+    infoBanner: "Esta é a política de ferramentas em nível de plataforma. Ela define quais ferramentas estão disponíveis para todos os agentes por padrão. Agentes ou inquilinos individuais podem aplicar restrições mais rígidas.",
+    statsTotal: "Total de ferramentas",
+    statsEnabled: "Habilitadas",
+    statsDenied: "Desabilitadas",
   },
   update: {
     available: "Atualização disponível:",

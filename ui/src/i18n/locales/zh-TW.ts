@@ -59,6 +59,7 @@ export const zh_TW: TranslationMap = {
     "tenant-skills": "技能市場",
     "tenant-traces": "交互審計",
     "tenant-usage": "使用量",
+    "platform-tools": "工具管理",
   },
   subtitles: {
     agents: "管理代理工作區、工具和身份。",
@@ -84,6 +85,13 @@ export const zh_TW: TranslationMap = {
     "tenant-skills": "查看和管理企業可用的技能。",
     "tenant-traces": "追蹤系統與大模型的每次交互詳情。",
     "tenant-usage": "查看企業 Token 使用量和配額。",
+    "platform-tools": "設定平台級工具存取策略，預設套用至所有 Agent。",
+  },
+  platformTools: {
+    infoBanner: "這是平台級工具策略，定義了所有 Agent 預設可用的工具。各企業或 Agent 可在此基礎上疊加更嚴格的限制。",
+    statsTotal: "工具總數",
+    statsEnabled: "已啟用",
+    statsDenied: "已停用",
   },
   update: {
     available: "有新版本可用：",
