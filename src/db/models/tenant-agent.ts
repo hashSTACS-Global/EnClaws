@@ -15,7 +15,7 @@ function rowToAgent(row: Record<string, unknown>): TenantAgent {
     config: (row.config ?? {}) as Record<string, unknown>,
     modelConfig: (row.model_config ?? []) as ModelConfigEntry[],
     tools: (row.tools ?? { deny: [] }) as { deny: string[] },
-    skills: (row.skills ?? { deny: [] }) as { deny: string[] },
+    skills: (Array.isArray(row.skills) ? row.skills : []) as string[],
     isActive: row.is_active as boolean,
     createdBy: (row.created_by as string) ?? null,
     createdAt: row.created_at as Date,
@@ -30,7 +30,7 @@ export async function createTenantAgent(params: {
   config?: Record<string, unknown>;
   modelConfig?: ModelConfigEntry[];
   tools?: { deny: string[] };
-  skills?: { deny: string[] };
+  skills?: string[];
   createdBy?: string;
 }): Promise<TenantAgent> {
   if (getDbType() === DB_SQLITE) return sqliteAgent.createTenantAgent(params);
@@ -38,7 +38,7 @@ export async function createTenantAgent(params: {
     `INSERT INTO tenant_agents (tenant_id, agent_id, name, config, model_config, tools, skills, created_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? { deny: [] }), params.createdBy ?? null],
+    [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? []), params.createdBy ?? null],
   );
   return rowToAgent(result.rows[0]);
 }
@@ -176,7 +176,7 @@ export function toConfigAgentsList(
         : undefined;
 
     const toolsDeny = a.tools?.deny ?? [];
-    const skillsDeny = a.skills?.deny ?? [];
+    const skillsDeny = Array.isArray(a.skills) ? a.skills : [];
 
     return {
       id: a.agentId,

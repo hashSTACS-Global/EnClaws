@@ -618,6 +618,7 @@ export const zh_TW: TranslationMap = {
   tenantSkills: {
     title: "技能市場",
     subtitle: "多租戶功能實現中，敬請期待",
+    skillAccess: "技能權限",
     refresh: "重新整理",
     loading: "載入中...",
     skillName: "技能名稱:",

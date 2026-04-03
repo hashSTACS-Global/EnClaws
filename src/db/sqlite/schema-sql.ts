@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS tenant_agents (
   config         TEXT NOT NULL DEFAULT '{}',
   model_config   TEXT NOT NULL DEFAULT '[]',
   tools          TEXT NOT NULL DEFAULT '{"deny":[]}',
-  skills         TEXT NOT NULL DEFAULT '{"deny":[]}',
+  skills         TEXT NOT NULL DEFAULT '[]',
   is_active      INTEGER NOT NULL DEFAULT 1,
   created_by     TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),

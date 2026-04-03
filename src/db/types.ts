@@ -203,7 +203,7 @@ export interface TenantAgent {
   config: Record<string, unknown>;
   modelConfig: ModelConfigEntry[];
   tools: { deny: string[] };
-  skills: { deny: string[] };
+  skills: string[];
   isActive: boolean;
   createdBy: string | null;
   createdAt: Date;

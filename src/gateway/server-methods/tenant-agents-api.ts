@@ -122,7 +122,7 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       config?: Record<string, unknown>;
       modelConfig?: ModelConfigEntry[];
       tools?: { deny: string[] };
-      skills?: { deny: string[] };
+      skills?: string[];
     };
 
     if (!agentId || !name) {
@@ -177,8 +177,11 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
         cleanConfig = rest;
       }
       if (resolvedSkills === undefined && config.skills != null) {
-        if (Array.isArray(config.skills)) {
-          resolvedSkills = { deny: config.skills as string[] };
+        const skillsCfg = config.skills;
+        if (Array.isArray(skillsCfg)) {
+          resolvedSkills = skillsCfg as string[];
+        } else if (typeof skillsCfg === "object" && Array.isArray((skillsCfg as Record<string, unknown>).deny)) {
+          resolvedSkills = (skillsCfg as { deny: string[] }).deny;
         }
         const { skills: _s, ...rest } = cleanConfig!;
         cleanConfig = rest;
@@ -239,7 +242,7 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       config?: Record<string, unknown>;
       modelConfig?: ModelConfigEntry[];
       tools?: { deny: string[] };
-      skills?: { deny: string[] };
+      skills?: string[];
       isActive?: boolean;
     };
 
@@ -283,8 +286,11 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
         cleanConfig = rest;
       }
       if (resolvedSkills === undefined && config.skills != null) {
-        if (Array.isArray(config.skills)) {
-          resolvedSkills = { deny: config.skills as string[] };
+        const skillsCfg = config.skills;
+        if (Array.isArray(skillsCfg)) {
+          resolvedSkills = skillsCfg as string[];
+        } else if (typeof skillsCfg === "object" && Array.isArray((skillsCfg as Record<string, unknown>).deny)) {
+          resolvedSkills = (skillsCfg as { deny: string[] }).deny;
         }
         const { skills: _s, ...rest } = cleanConfig!;
         cleanConfig = rest;

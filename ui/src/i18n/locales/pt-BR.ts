@@ -621,6 +621,7 @@ export const pt_BR: TranslationMap = {
   tenantSkills: {
     title: "Loja de Skills",
     subtitle: "Recurso multi-tenant em desenvolvimento, fique atento",
+    skillAccess: "Acesso a Skills",
     refresh: "Atualizar",
     loading: "Carregando...",
     skillName: "Nome do Skill:",

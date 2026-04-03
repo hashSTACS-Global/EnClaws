@@ -616,6 +616,8 @@ export class TenantAgentsView extends LitElement {
   @state() private toolsPendingDeny: string[] | null = null;
   @state() private toolsSaving = false;
   @state() private skillsFilter = "";
+  @state() private skillsPendingDeny: string[] | null = null;
+  @state() private skillsSaving = false;
   @state() private formAgentIdManuallyEdited = false;
 
   connectedCallback() {
@@ -1010,7 +1012,7 @@ export class TenantAgentsView extends LitElement {
     const isSelected = this.selectedAgentId === agent.agentId;
     return html`
       <button type="button" class="agent-row ${isSelected ? "active" : ""}"
-        @click=${() => { this.selectedAgentId = agent.agentId; this.activePanel = "overview"; this.showForm = false; this.inlineModelConfig = null; this.toolsPendingDeny = null; }}>
+        @click=${() => { this.selectedAgentId = agent.agentId; this.activePanel = "overview"; this.showForm = false; this.inlineModelConfig = null; this.toolsPendingDeny = null; this.skillsPendingDeny = null; }}>
         <div class="agent-avatar">${initial}</div>
         <div class="agent-info">
           <div class="agent-title">${displayName}</div>
@@ -1058,7 +1060,7 @@ export class TenantAgentsView extends LitElement {
         ${this.activePanel === "overview" ? this.renderPanelOverview(agent) : nothing}
         ${this.activePanel === "files" ? this.renderPanelEmpty() : nothing}
         ${this.activePanel === "tools" ? this.renderPanelTools(agent) : nothing}
-        ${this.activePanel === "skills" ? this.renderPanelSkills() : nothing}
+        ${this.activePanel === "skills" ? this.renderPanelSkills(agent) : nothing}
         ${this.activePanel === "channels" ? this.renderPanelChannels() : nothing}
         ${this.activePanel === "cron" ? this.renderPanelEmpty() : nothing}
         ${this.activePanel === "knowledge" ? this.renderPanelEmpty() : nothing}
@@ -1199,79 +1201,105 @@ export class TenantAgentsView extends LitElement {
     return html`<div class="empty">${t("common.comingSoon")}</div>`;
   }
 
-  private renderPanelSkills() {
-    const filter = this.skillsFilter.trim().toLowerCase();
+  private async saveSkillsDeny(agent: TenantAgent, deny: string[]) {
+    this.skillsSaving = true;
+    try {
+      const config: Record<string, unknown> = { ...(agent.config ?? {}) };
+      config.skills = deny;
+      await this.rpc("tenant.agents.update", { agentId: agent.agentId, config });
+      this.skillsPendingDeny = null;
+      this.showSuccess("tenantAgents.agentUpdated");
+      await this.loadAgents();
+    } catch (err) {
+      this.showError(err instanceof Error ? err.message : "tenantAgents.saveFailed");
+    } finally {
+      this.skillsSaving = false;
+    }
+  }
+
+  private renderPanelSkills(agent: TenantAgent) {
     const allSkills = this.agentSkills;
-    const filtered = filter
-      ? allSkills.filter((s) => [s.name, s.description, s.source].join(" ").toLowerCase().includes(filter))
-      : allSkills;
-    const enabled = allSkills.filter((s) => !s.disabled).length;
+    const allSkillNames = allSkills.map((s) => s.name);
+    const savedDeny: string[] = Array.isArray((agent as any).skills) ? (agent as any).skills
+      : Array.isArray(agent.config?.skills) ? agent.config.skills as string[] : [];
+    const denySet = new Set(this.skillsPendingDeny ?? savedDeny);
+    const isDirty = this.skillsPendingDeny !== null;
+    const enabled = allSkillNames.filter((name) => !denySet.has(name)).length;
+    const filter = this.skillsFilter.trim().toLowerCase();
+
+    const toggleSkill = (name: string, checked: boolean) => {
+      const next = new Set(denySet);
+      checked ? next.delete(name) : next.add(name);
+      this.skillsPendingDeny = [...next];
+    };
 
     // Group by source
-    const groups = new Map<string, typeof filtered>();
-    for (const s of filtered) {
+    const allGrouped = new Map<string, typeof allSkills>();
+    for (const s of allSkills) {
       const key = s.source || "other";
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(s);
+      if (!allGrouped.has(key)) allGrouped.set(key, []);
+      allGrouped.get(key)!.push(s);
     }
+    const filteredGroups = [...allGrouped.entries()].map(([source, skills]) => ({
+      source,
+      skills: filter ? skills.filter((s) => [s.name, s.description].join(" ").toLowerCase().includes(filter)) : skills,
+    })).filter((g) => g.skills.length > 0);
+    const shownCount = filteredGroups.reduce((s, g) => s + g.skills.length, 0);
 
     return html`
       <div class="panel-header">
         <div class="panel-header-left">
-          <div class="panel-title">Skills</div>
-          <div class="panel-sub">
-            Per-agent skill allowlist and workspace skills.
-            ${allSkills.length > 0 ? html`<span class="mono">${enabled}/${allSkills.length}</span>` : nothing}
-          </div>
+          <div class="panel-title">${t("tenantSkills.skillAccess")} &nbsp;<span style="font-weight:400;font-size:13px;color:var(--text-muted,#525252)"><span class="mono">${enabled}/${allSkillNames.length}</span> ${t("tenantAgents.enabled")}</span></div>
         </div>
         <div class="panel-actions">
-          <button class="btn btn-outline btn-sm" ?disabled=${this.skillsLoading}
-            @click=${() => { if (this.selectedAgentId) void this.loadSkillsForAgent(this.selectedAgentId); }}>
-            ${this.skillsLoading ? "Loading\u2026" : t("tenantSkills.refresh")}
+          <button class="btn btn-outline btn-sm" ?disabled=${this.skillsSaving}
+            @click=${() => { this.skillsPendingDeny = []; }}>${t("tenantAgents.enableAll")}</button>
+          <button class="btn btn-outline btn-sm" ?disabled=${this.skillsSaving}
+            @click=${() => { this.skillsPendingDeny = [...allSkillNames]; }}>${t("tenantAgents.disableAll")}</button>
+          <button class="btn btn-outline btn-sm" ?disabled=${!isDirty || this.skillsSaving}
+            @click=${() => { this.skillsPendingDeny = null; }}>${t("tenantAgents.toolsReset")}</button>
+          <button class="btn btn-primary btn-sm" ?disabled=${!isDirty || this.skillsSaving}
+            @click=${() => this.saveSkillsDeny(agent, [...denySet])}>
+            ${this.skillsSaving ? t("tenantAgents.saving") : t("tenantAgents.save")}
           </button>
         </div>
       </div>
 
       ${this.skillsLoading && allSkills.length === 0 ? html`<div class="loading">${t("tenantSkills.loading")}</div>` : html`
         <div class="panel-filter">
-          <input placeholder="Search skills..." .value=${this.skillsFilter}
+          <input .placeholder=${t("tenantSkills.searchPlaceholder")} .value=${this.skillsFilter}
             @input=${(e: Event) => { this.skillsFilter = (e.target as HTMLInputElement).value; }} />
-          <span class="count">${filtered.length} shown</span>
+          <span class="count">${filter ? t("tenantAgents.toolsShown").replace("{count}", String(shownCount)) : ""}</span>
         </div>
 
-        ${filtered.length === 0
-          ? html`<div class="empty">No skills found.</div>`
-          : html`
-            <div class="skills-groups">
-              ${[...groups.entries()].map(([source, skills]) => html`
-                <details class="skills-group" open>
-                  <summary class="skills-header">
-                    <span>${source}</span>
-                    <span>${skills.length}</span>
-                  </summary>
-                  <div class="skills-grid">
-                    ${skills.map((s) => html`
-                      <div class="skill-row">
-                        <div class="skill-info">
-                          <div class="skill-name">${s.emoji ? `${s.emoji} ` : ""}${s.name}</div>
-                          <div class="skill-desc">${s.description}</div>
-                          <div class="chip-row" style="margin-top:6px">
-                            <span class="chip">${s.source}</span>
-                            <span class="chip ${s.disabled ? "chip-warn" : "chip-ok"}">${s.disabled ? "disabled" : "eligible"}</span>
-                          </div>
+        <div class="tools-grid">
+          ${filteredGroups.map(({ source, skills }) => {
+            const enabledCount = skills.filter((s) => !denySet.has(s.name)).length;
+            return html`
+              <div class="tools-section">
+                <div class="tools-section-header">${source} <span class="tool-row-source">${enabledCount}/${skills.length}</span></div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  ${skills.map((s) => {
+                    const allowed = !denySet.has(s.name);
+                    return html`
+                      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 8px;border:1px solid var(--border,#262626);border-radius:var(--radius-md,6px);background:var(--card,#141414)">
+                        <div style="flex:1;min-width:0;overflow:hidden">
+                          <div class="tool-row-name">${s.emoji ? `${s.emoji} ` : ""}${s.name}<span class="tool-row-source">${s.source}</span></div>
+                          <div class="tool-row-desc" title=${s.description}>${s.description}</div>
                         </div>
-                        <label class="cfg-toggle">
-                          <input type="checkbox" .checked=${!s.disabled} disabled />
+                        <label class="cfg-toggle" style="display:inline-flex;flex-shrink:0">
+                          <input type="checkbox" .checked=${allowed} ?disabled=${this.skillsSaving}
+                            @change=${(e: Event) => toggleSkill(s.name, (e.target as HTMLInputElement).checked)} />
                           <span class="cfg-toggle__track"></span>
                         </label>
                       </div>
-                    `)}
-                  </div>
-                </details>
-              `)}
-            </div>
-          `
-        }
+                    `;
+                  })}
+                </div>
+              </div>
+            `;
+          })}
+        </div>
       `}
     `;
   }
@@ -1311,7 +1339,7 @@ export class TenantAgentsView extends LitElement {
     this.toolsSaving = true;
     try {
       const config: Record<string, unknown> = { ...(agent.config ?? {}) };
-      config.tools = deny.length > 0 ? { deny } : {};
+      config.tools = { deny };
       await this.rpc("tenant.agents.update", { agentId: agent.agentId, config });
       this.toolsPendingDeny = null;
       this.showSuccess("tenantAgents.agentUpdated");
