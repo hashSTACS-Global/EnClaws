@@ -708,8 +708,8 @@ export function attachGatewayWsMessageHandler(params: {
                 tenantSlug: jwtTenant.slug,
                 userId: jwtUser.id,
                 email: jwtUser.email ?? undefined,
-                role: jwtUser.role as UserRole,
-                scopes: mapRoleToGatewayScopes(jwtUser.role as UserRole),
+                role: jwtUser.role,
+                scopes: mapRoleToGatewayScopes(jwtUser.role),
               };
             }
           } catch {

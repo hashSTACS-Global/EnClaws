@@ -122,20 +122,20 @@ export class TenantSettingsView extends LitElement {
   private showError(key: string) {
     this.errorKey = key;
     this.successKey = "";
-    if (this.msgTimer) clearTimeout(this.msgTimer);
+    if (this.msgTimer) {clearTimeout(this.msgTimer);}
     this.msgTimer = setTimeout(() => (this.errorKey = ""), 5000);
   }
 
   private showSuccess(key: string) {
     this.successKey = key;
     this.errorKey = "";
-    if (this.msgTimer) clearTimeout(this.msgTimer);
+    if (this.msgTimer) {clearTimeout(this.msgTimer);}
     this.msgTimer = setTimeout(() => (this.successKey = ""), 5000);
   }
 
   /** Translate key at render time; map known server errors, otherwise return as-is. */
   private tr(key: string): string {
-    if (key.includes("小写字母数字") || key.includes("lowercase")) return t("login.tenantSlugHint");
+    if (key.includes("小写字母数字") || key.includes("lowercase")) {return t("login.tenantSlugHint");}
     const result = t(key);
     return result === key ? key : result;
   }

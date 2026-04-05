@@ -143,3 +143,6 @@ installer/*.zip
 
 # Node.js download cache for macOS app bundling
 .node-cache
+
+# docs/superpowers/
+docs/superpowers/

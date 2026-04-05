@@ -735,6 +735,14 @@ function buildChatCommands(): ChatCommandDefinition[] {
       formatArgs: COMMAND_ARG_FORMATTERS.queue,
     }),
     defineChatCommand({
+      key: "distill",
+      nativeName: "distill",
+      description: "Distill experience candidates into refined knowledge.",
+      textAlias: "/distill",
+      acceptsArgs: true,
+      category: "tools",
+    }),
+    defineChatCommand({
       key: "bash",
       description: "Run host shell commands (host-only).",
       textAlias: "/bash",

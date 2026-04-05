@@ -37,7 +37,7 @@ const DEFAULT_QUOTAS: TenantQuotas = {
 };
 
 export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
-  if (getDbType() === DB_SQLITE) return sqliteTenant.createTenant(input);
+  if (getDbType() === DB_SQLITE) {return sqliteTenant.createTenant(input);}
   const quotas = { ...DEFAULT_QUOTAS, ...input.quotas };
   const result = await query(
     `INSERT INTO tenants (name, slug, plan, settings, quotas)
@@ -55,13 +55,13 @@ export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
 }
 
 export async function getTenantById(id: string): Promise<Tenant | null> {
-  if (getDbType() === DB_SQLITE) return sqliteTenant.getTenantById(id);
+  if (getDbType() === DB_SQLITE) {return sqliteTenant.getTenantById(id);}
   const result = await query("SELECT * FROM tenants WHERE id = $1", [id]);
   return result.rows.length > 0 ? rowToTenant(result.rows[0]) : null;
 }
 
 export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
-  if (getDbType() === DB_SQLITE) return sqliteTenant.getTenantBySlug(slug);
+  if (getDbType() === DB_SQLITE) {return sqliteTenant.getTenantBySlug(slug);}
   const result = await query("SELECT * FROM tenants WHERE slug = $1", [slug]);
   return result.rows.length > 0 ? rowToTenant(result.rows[0]) : null;
 }
@@ -71,7 +71,7 @@ export async function listTenants(opts?: {
   limit?: number;
   offset?: number;
 }): Promise<{ tenants: Tenant[]; total: number }> {
-  if (getDbType() === DB_SQLITE) return sqliteTenant.listTenants(opts);
+  if (getDbType() === DB_SQLITE) {return sqliteTenant.listTenants(opts);}
   const conditions: string[] = [];
   const values: unknown[] = [];
   let idx = 1;
@@ -104,7 +104,7 @@ export async function updateTenant(
   id: string,
   updates: Partial<Pick<Tenant, "name" | "slug" | "plan" | "status" | "settings" | "quotas" | "traceEnabled" | "identityPrompt">>,
 ): Promise<Tenant | null> {
-  if (getDbType() === DB_SQLITE) return sqliteTenant.updateTenant(id, updates);
+  if (getDbType() === DB_SQLITE) {return sqliteTenant.updateTenant(id, updates);}
   const sets: string[] = [];
   const values: unknown[] = [];
   let idx = 1;
@@ -142,7 +142,7 @@ export async function updateTenant(
     values.push(updates.identityPrompt);
   }
 
-  if (sets.length === 0) return getTenantById(id);
+  if (sets.length === 0) {return getTenantById(id);}
 
   values.push(id);
   const result = await query(
@@ -153,7 +153,7 @@ export async function updateTenant(
 }
 
 export async function deleteTenant(id: string): Promise<boolean> {
-  if (getDbType() === DB_SQLITE) return sqliteTenant.deleteTenant(id);
+  if (getDbType() === DB_SQLITE) {return sqliteTenant.deleteTenant(id);}
   const result = await query(
     "UPDATE tenants SET status = 'deleted' WHERE id = $1 AND status != 'deleted'",
     [id],
@@ -168,9 +168,9 @@ export async function checkTenantQuota(
   tenantId: string,
   resource: "users" | "agents" | "channels",
 ): Promise<{ allowed: boolean; current: number; max: number }> {
-  if (getDbType() === DB_SQLITE) return sqliteTenant.checkTenantQuota(tenantId, resource);
+  if (getDbType() === DB_SQLITE) {return sqliteTenant.checkTenantQuota(tenantId, resource);}
   const tenant = await getTenantById(tenantId);
-  if (!tenant) return { allowed: false, current: 0, max: 0 };
+  if (!tenant) {return { allowed: false, current: 0, max: 0 };}
 
   const tableMap = {
     users: "users",

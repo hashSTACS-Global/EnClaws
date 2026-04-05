@@ -79,7 +79,7 @@ async function runSingleFile(
   function record(row: ResultRow, error?: string) {
     results.push(row);
     csv.append(row);
-    if (error) errors.push(error);
+    if (error) {errors.push(error);}
   }
 
   const client = new FeishuTestClient({
@@ -122,7 +122,7 @@ async function runSingleFile(
         expected: formatAssert(tc.assert), actual: `ERROR: ${(e as Error).message}`,
         passed: false, duration: "-",
       }, `[${fileName}] "${label}": ${(e as Error).message}`);
-      if (!opts.continueOnFailure) break;
+      if (!opts.continueOnFailure) {break;}
       continue;
     }
 
@@ -167,7 +167,7 @@ async function runSingleFile(
       duration: `${reply.durationMs}ms`,
     }, failures.length > 0 ? `[${fileName}] "${label}": ${failures.join("; ")}` : undefined);
 
-    if (caseFailed && !opts.continueOnFailure) break;
+    if (caseFailed && !opts.continueOnFailure) {break;}
   }
 
   return { results, errors };

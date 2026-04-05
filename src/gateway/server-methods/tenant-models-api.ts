@@ -50,7 +50,7 @@ function sanitizeModel(m: Record<string, unknown>) {
 export const tenantModelsHandlers: GatewayRequestHandlers = {
   "tenant.models.list": async ({ client, respond }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "model.list");
@@ -85,7 +85,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
 
   "tenant.models.create": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "model.create");
@@ -134,7 +134,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
           return;
         }
         modelIds.add(m.id);
-        if (!m.contextWindow) m.contextWindow = 128000;
+        if (!m.contextWindow) {m.contextWindow = 128000;}
       }
     }
 
@@ -184,7 +184,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
 
   "tenant.models.update": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "model.update");
@@ -229,7 +229,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
           return;
         }
         modelIds.add(m.id);
-        if (!m.contextWindow) m.contextWindow = 128000;
+        if (!m.contextWindow) {m.contextWindow = 128000;}
       }
     }
 
@@ -267,15 +267,15 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
     }
 
     const updates: Record<string, unknown> = {};
-    if (providerName !== undefined) updates.providerName = providerName;
-    if (baseUrl !== undefined) updates.baseUrl = baseUrl;
-    if (apiProtocol !== undefined) updates.apiProtocol = apiProtocol;
-    if (authMode !== undefined) updates.authMode = authMode;
-    if (apiKey !== undefined) updates.apiKeyEncrypted = apiKey;
-    if (extraHeaders !== undefined) updates.extraHeaders = extraHeaders;
-    if (extraConfig !== undefined) updates.extraConfig = extraConfig;
-    if (models !== undefined) updates.models = models;
-    if (isActive !== undefined) updates.isActive = isActive;
+    if (providerName !== undefined) {updates.providerName = providerName;}
+    if (baseUrl !== undefined) {updates.baseUrl = baseUrl;}
+    if (apiProtocol !== undefined) {updates.apiProtocol = apiProtocol;}
+    if (authMode !== undefined) {updates.authMode = authMode;}
+    if (apiKey !== undefined) {updates.apiKeyEncrypted = apiKey;}
+    if (extraHeaders !== undefined) {updates.extraHeaders = extraHeaders;}
+    if (extraConfig !== undefined) {updates.extraConfig = extraConfig;}
+    if (models !== undefined) {updates.models = models;}
+    if (isActive !== undefined) {updates.isActive = isActive;}
 
     const updated = await updateTenantModel(ctx.tenantId, id, updates as any);
     if (!updated) {
@@ -311,7 +311,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
 
   "tenant.models.delete": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "model.delete");

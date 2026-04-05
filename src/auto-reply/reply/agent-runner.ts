@@ -15,6 +15,13 @@ import {
   updateSessionStoreEntry,
 } from "../../config/sessions.js";
 import type { TypingMode } from "../../config/types.js";
+import { resolveAgentWorkspaceDir } from "../../agents/agent-scope.js";
+import { resolveTenantAgentWorkspaceDir } from "../../config/sessions/tenant-paths.js";
+import { resolveExperienceCaptureSettings } from "../../experience/capture-config.js";
+import { extractCandidates } from "../../experience/capture.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
+
+const experienceLog = createSubsystemLogger("experience/agent-runner");
 import { emitAgentEvent } from "../../infra/agent-events.js";
 import { emitDiagnosticEvent, isDiagnosticsEnabled } from "../../infra/diagnostic-events.js";
 import { generateSecureUuid } from "../../infra/secure-random.js";
@@ -497,6 +504,76 @@ export async function runReplyAgent(params: {
       systemPromptReport: runResult.meta?.systemPromptReport,
       cliSessionId,
     });
+
+    // --- Experience capture: increment turn count and maybe extract ---
+    if (
+      activeSessionEntry &&
+      activeSessionStore &&
+      sessionKey &&
+      storePath &&
+      !isHeartbeat &&
+      hasNonzeroUsage(usage)
+    ) {
+      const prevTurn = activeSessionEntry.turnCount ?? 0;
+      const nextTurn = prevTurn + 1;
+      const updatedAt = Date.now();
+
+      // Update in-memory entry
+      activeSessionEntry.turnCount = nextTurn;
+      activeSessionEntry.updatedAt = updatedAt;
+      activeSessionStore[sessionKey] = activeSessionEntry;
+
+      // Check gate BEFORE persisting experienceCaptureAtTurn
+      const captureSettings = resolveExperienceCaptureSettings(cfg);
+      // Default to 0 when not set. Also reset to 0 when turnCount was reset
+      // (e.g. after /new) — detected by lastCapture > current turn.
+      const rawLastCapture = activeSessionEntry.experienceCaptureAtTurn ?? 0;
+      const lastCapture = rawLastCapture > nextTurn ? 0 : rawLastCapture;
+      const shouldCapture =
+        captureSettings != null &&
+        (activeSessionEntry.spawnDepth ?? 0) === 0 &&
+        nextTurn - lastCapture >= captureSettings.turnInterval;
+
+      experienceLog.info(
+        `turn=${nextTurn} lastCapture=${lastCapture} interval=${captureSettings?.turnInterval ?? "disabled"} shouldCapture=${shouldCapture}`,
+      );
+
+      if (shouldCapture) {
+        activeSessionEntry.experienceCaptureAtTurn = nextTurn;
+      }
+
+      // Persist turnCount (and experienceCaptureAtTurn if capture will run)
+      await updateSessionStoreEntry({
+        storePath,
+        sessionKey,
+        update: async () => ({
+          turnCount: nextTurn,
+          ...(shouldCapture ? { experienceCaptureAtTurn: nextTurn } : {}),
+          updatedAt,
+        }),
+      });
+
+      if (shouldCapture && activeSessionEntry.sessionFile) {
+        const agentIdForWorkspace = resolveAgentIdFromSessionKey(sessionKey);
+        const workspaceDir = sessionCtx.TenantId
+          ? resolveTenantAgentWorkspaceDir(sessionCtx.TenantId, agentIdForWorkspace, sessionCtx.TenantUserId)
+          : (resolveAgentWorkspaceDir(cfg, agentIdForWorkspace) ?? process.cwd());
+        experienceLog.info(`triggering capture: workspaceDir=${workspaceDir} sessionFile=${activeSessionEntry.sessionFile}`);
+        extractCandidates({
+          workspaceDir,
+          sessionKey,
+          sessionId: activeSessionEntry.sessionId,
+          sessionFilePath: activeSessionEntry.sessionFile,
+          turnsSinceLastCapture: nextTurn - lastCapture,
+          maxMessages: captureSettings.maxMessages,
+          cfg,
+          modelOverride: captureSettings.model,
+        }).catch(() => {
+          // Fire-and-forget — errors logged inside extractCandidates
+        });
+      }
+    }
+    // --- End experience capture ---
 
     // Drain any late tool/block deliveries before deciding there's "nothing to send".
     // Otherwise, a late typing trigger (e.g. from a tool callback) can outlive the run and

@@ -325,14 +325,14 @@ export class EnClawsLogin extends LitElement {
 
   /** Map raw server error to i18n at render time so language switches take effect. */
   private translateServerError(raw: string): string {
-    if (raw.includes("Invalid credentials")) return t("login.invalidCredentials");
-    if (raw.includes("slug already in use")) return t("login.slugAlreadyInUse");
-    if (raw.includes("已注册") || raw.includes("already registered") || raw.includes("duplicate key") || raw.includes("unique constraint")) return t("login.emailAlreadyRegistered");
+    if (raw.includes("Invalid credentials")) {return t("login.invalidCredentials");}
+    if (raw.includes("slug already in use")) {return t("login.slugAlreadyInUse");}
+    if (raw.includes("已注册") || raw.includes("already registered") || raw.includes("duplicate key") || raw.includes("unique constraint")) {return t("login.emailAlreadyRegistered");}
     return raw;
   }
 
   private resolveGatewayUrl(): string {
-    if (this.gatewayUrl) return this.gatewayUrl;
+    if (this.gatewayUrl) {return this.gatewayUrl;}
     const settings = loadSettings();
     return settings.gatewayUrl;
   }
@@ -347,27 +347,27 @@ export class EnClawsLogin extends LitElement {
 
   private validateLoginForm(): FieldErrors {
     const errors: FieldErrors = {};
-    if (!this.email) errors.email = t("login.errRequired", { field: t("login.email") });
-    else if (!this.validateEmail(this.email)) errors.email = t("login.errEmailInvalid");
-    if (!this.password) errors.password = t("login.errRequired", { field: t("login.password") });
+    if (!this.email) {errors.email = t("login.errRequired", { field: t("login.email") });}
+    else if (!this.validateEmail(this.email)) {errors.email = t("login.errEmailInvalid");}
+    if (!this.password) {errors.password = t("login.errRequired", { field: t("login.password") });}
     return errors;
   }
 
   private validateRegisterForm(): FieldErrors {
     const errors: FieldErrors = {};
-    if (!this.regTenantName) errors.tenantName = t("login.errRequired", { field: t("login.tenantName") });
-    if (!this.regTenantSlug) errors.tenantSlug = t("login.errRequired", { field: t("login.tenantSlug") });
-    else if (!/^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$/.test(this.regTenantSlug)) errors.tenantSlug = t("login.errSlugInvalid");
-    if (!this.regEmail) errors.regEmail = t("login.errRequired", { field: t("login.email") });
-    else if (!this.validateEmail(this.regEmail)) errors.regEmail = t("login.errEmailInvalid");
-    if (!this.regPassword) errors.regPassword = t("login.errRequired", { field: t("login.password") });
-    else if (!this.validatePasswordStrength(this.regPassword)) errors.regPassword = t("login.errPasswordWeak");
+    if (!this.regTenantName) {errors.tenantName = t("login.errRequired", { field: t("login.tenantName") });}
+    if (!this.regTenantSlug) {errors.tenantSlug = t("login.errRequired", { field: t("login.tenantSlug") });}
+    else if (!/^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$/.test(this.regTenantSlug)) {errors.tenantSlug = t("login.errSlugInvalid");}
+    if (!this.regEmail) {errors.regEmail = t("login.errRequired", { field: t("login.email") });}
+    else if (!this.validateEmail(this.regEmail)) {errors.regEmail = t("login.errEmailInvalid");}
+    if (!this.regPassword) {errors.regPassword = t("login.errRequired", { field: t("login.password") });}
+    else if (!this.validatePasswordStrength(this.regPassword)) {errors.regPassword = t("login.errPasswordWeak");}
     return errors;
   }
 
   private renderFieldError(field: string) {
     const msg = this.fieldErrors[field];
-    if (!msg) return nothing;
+    if (!msg) {return nothing;}
     return html`
       <div class="field-error">
         <svg viewBox="0 0 16 16" fill="currentColor">
@@ -399,7 +399,7 @@ export class EnClawsLogin extends LitElement {
       delete next[field];
       this.fieldErrors = next;
     }
-    if (this.serverError) this.serverError = "";
+    if (this.serverError) {this.serverError = "";}
   }
 
   private async handleLogin(e: Event) {

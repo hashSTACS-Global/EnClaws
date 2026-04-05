@@ -18,7 +18,7 @@ export async function recordUsage(params: {
   cacheWriteTokens?: number;
   sessionKey?: string;
 }): Promise<void> {
-  if (getDbType() === DB_SQLITE) return sqliteUsage.recordUsage(params);
+  if (getDbType() === DB_SQLITE) {return sqliteUsage.recordUsage(params);}
   try {
     await query(
       `INSERT INTO usage_records
@@ -56,7 +56,7 @@ export async function getTenantUsageSummary(
   tenantId: string,
   opts?: { since?: Date; until?: Date; userId?: string; agentId?: string },
 ): Promise<UsageSummary> {
-  if (getDbType() === DB_SQLITE) return sqliteUsage.getTenantUsageSummary(tenantId, opts);
+  if (getDbType() === DB_SQLITE) {return sqliteUsage.getTenantUsageSummary(tenantId, opts);}
   const conditions = ["tenant_id = $1"];
   const values: unknown[] = [tenantId];
   let idx = 2;
@@ -107,7 +107,7 @@ export async function checkTokenQuota(
   tenantId: string,
   maxTokensPerMonth: number,
 ): Promise<{ allowed: boolean; used: number; max: number }> {
-  if (getDbType() === DB_SQLITE) return sqliteUsage.checkTokenQuota(tenantId, maxTokensPerMonth);
+  if (getDbType() === DB_SQLITE) {return sqliteUsage.checkTokenQuota(tenantId, maxTokensPerMonth);}
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 

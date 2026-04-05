@@ -53,7 +53,7 @@ export const authHandlers: GatewayRequestHandlers = {
    *   displayName?: string
    */
   "auth.register": async ({ params, respond }: GatewayRequestHandlerOptions) => {
-    if (!requireDb(respond)) return;
+    if (!requireDb(respond)) {return;}
 
     const { tenantName, tenantSlug, email, password, displayName } = params as {
       tenantName: string;
@@ -187,7 +187,7 @@ export const authHandlers: GatewayRequestHandlers = {
    *   tenantSlug?: string   (optional, for disambiguation)
    */
   "auth.login": async ({ params, respond }: GatewayRequestHandlerOptions) => {
-    if (!requireDb(respond)) return;
+    if (!requireDb(respond)) {return;}
 
     const { email, password, tenantSlug } = params as {
       email: string;
@@ -235,7 +235,7 @@ export const authHandlers: GatewayRequestHandlers = {
 
     // Resolve tenant slug
     const tenant = await import("../../db/models/tenant.js").then((m) =>
-      m.getTenantById(user!.tenantId),
+      m.getTenantById(user.tenantId),
     );
     if (tenant) {
       payload.tslug = tenant.slug;
@@ -268,7 +268,7 @@ export const authHandlers: GatewayRequestHandlers = {
    *   refreshToken: string
    */
   "auth.refresh": async ({ params, respond }: GatewayRequestHandlerOptions) => {
-    if (!requireDb(respond)) return;
+    if (!requireDb(respond)) {return;}
 
     const { refreshToken } = params as { refreshToken: string };
     if (!refreshToken) {
@@ -308,7 +308,7 @@ export const authHandlers: GatewayRequestHandlers = {
    * Logout — revoke all refresh tokens for the current user.
    */
   "auth.logout": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
-    if (!requireDb(respond)) return;
+    if (!requireDb(respond)) {return;}
 
     const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
     if (!tenant) {
@@ -331,7 +331,7 @@ export const authHandlers: GatewayRequestHandlers = {
    * Get current authenticated user info.
    */
   "auth.me": async ({ client, respond }: GatewayRequestHandlerOptions) => {
-    if (!requireDb(respond)) return;
+    if (!requireDb(respond)) {return;}
 
     const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
     if (!tenant) {

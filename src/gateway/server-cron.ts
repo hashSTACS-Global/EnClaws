@@ -393,7 +393,7 @@ function resolveTenantLastDeliveryTarget(
     let bestAccountId: string | undefined;
     let latestUpdatedAt = 0;
     for (const entry of Object.values(store)) {
-      if (!entry?.lastChannel || !entry?.lastTo) continue;
+      if (!entry?.lastChannel || !entry?.lastTo) {continue;}
       const updatedAt = entry.updatedAt ?? 0;
       if (updatedAt >= latestUpdatedAt) {
         latestUpdatedAt = updatedAt;
@@ -668,7 +668,7 @@ export class MultiTenantCronScheduler {
   /** Register a user for cron scheduling. */
   registerUser(tenantId: string, userId: string): void {
     const key = `${tenantId}:${userId}`;
-    if (this.users.has(key)) return;
+    if (this.users.has(key)) {return;}
     this.users.set(key, {
       tenantId,
       userId,
@@ -697,7 +697,7 @@ export class MultiTenantCronScheduler {
 
   /** Start the scheduler. */
   start(): void {
-    if (this.timer) return;
+    if (this.timer) {return;}
     this.timer = setInterval(() => void this.tick(), this.pollIntervalMs);
     // Execute immediately on start.
     void this.tick();
@@ -715,7 +715,7 @@ export class MultiTenantCronScheduler {
 
   /** Main tick: iterate all registered users and execute due jobs. */
   private async tick(): Promise<void> {
-    if (this.running) return; // skip if previous tick still running
+    if (this.running) {return;} // skip if previous tick still running
     this.running = true;
     const startTime = Date.now();
     let executedCount = 0;
@@ -726,8 +726,8 @@ export class MultiTenantCronScheduler {
         try {
           const store = await loadCronStore(user.storePath);
           for (const job of store.jobs) {
-            if (!job.enabled) continue;
-            if (!this.isJobDue(job, startTime)) continue;
+            if (!job.enabled) {continue;}
+            if (!this.isJobDue(job, startTime)) {continue;}
             try {
               await this.executeJob(job, user);
               executedCount++;
@@ -764,8 +764,8 @@ export class MultiTenantCronScheduler {
   /** Check if a cron job is due for execution. */
   private isJobDue(job: CronJob, nowMs: number): boolean {
     const nextRunAtMs = job.state?.nextRunAtMs;
-    if (typeof nextRunAtMs !== "number") return false;
-    if (job.state?.runningAtMs) return false; // already running
+    if (typeof nextRunAtMs !== "number") {return false;}
+    if (job.state?.runningAtMs) {return false;} // already running
     return nextRunAtMs <= nowMs;
   }
 }

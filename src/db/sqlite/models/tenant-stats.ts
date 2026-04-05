@@ -5,8 +5,8 @@
 import { sqliteQuery } from "../index.js";
 
 function periodCondition(column: string, period: "all" | "month" | "today"): string {
-  if (period === "month") return `${column} >= date('now', 'start of month')`;
-  if (period === "today") return `${column} >= date('now')`;
+  if (period === "month") {return `${column} >= date('now', 'start of month')`;}
+  if (period === "today") {return `${column} >= date('now')`;}
   return "1=1";
 }
 
@@ -33,7 +33,7 @@ export function getTenantSummary(tenantId: string) {
   for (const r of modelRows) {
     try {
       const arr = typeof r.models === "string" ? JSON.parse(r.models) : r.models;
-      if (Array.isArray(arr)) modelTotal += arr.length;
+      if (Array.isArray(arr)) {modelTotal += arr.length;}
     } catch { /* skip */ }
   }
   const providerCount = modelRows.length;

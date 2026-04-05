@@ -251,7 +251,7 @@ export class TenantTracesView extends LitElement {
 
   private showError(key: string) {
     this.errorKey = key;
-    if (this.msgTimer) clearTimeout(this.msgTimer);
+    if (this.msgTimer) {clearTimeout(this.msgTimer);}
     this.msgTimer = setTimeout(() => (this.errorKey = ""), 5000);
   }
 
@@ -328,10 +328,10 @@ export class TenantTracesView extends LitElement {
 
   private get currentLocaleTag(): string {
     const loc = i18n.getLocale();
-    if (loc === "zh-CN") return "zh-CN";
-    if (loc === "zh-TW") return "zh-TW";
-    if (loc === "de") return "de-DE";
-    if (loc === "pt-BR") return "pt-BR";
+    if (loc === "zh-CN") {return "zh-CN";}
+    if (loc === "zh-TW") {return "zh-TW";}
+    if (loc === "de") {return "de-DE";}
+    if (loc === "pt-BR") {return "pt-BR";}
     return "en-US";
   }
 
@@ -341,14 +341,14 @@ export class TenantTracesView extends LitElement {
   }
 
   private formatTokens(n: number): string {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    if (n >= 1_000_000) {return `${(n / 1_000_000).toFixed(1)}M`;}
+    if (n >= 1_000) {return `${(n / 1_000).toFixed(1)}K`;}
     return String(n);
   }
 
   private formatDuration(ms: number): string {
-    if (ms >= 60000) return `${(ms / 60000).toFixed(1)}m`;
-    if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+    if (ms >= 60000) {return `${(ms / 60000).toFixed(1)}m`;}
+    if (ms >= 1000) {return `${(ms / 1000).toFixed(1)}s`;}
     return `${ms}ms`;
   }
 
@@ -361,7 +361,7 @@ export class TenantTracesView extends LitElement {
   }
 
   private truncate(text: string | null, max = 80): string {
-    if (!text) return t("tenantTraces.noInput");
+    if (!text) {return t("tenantTraces.noInput");}
     // Collapse actual and escaped newlines/tabs to spaces for single-line preview
     const clean = text.replace(/\r?\n|\t/g, " ").replace(/\\n|\\t/g, " ").replace(/\s{2,}/g, " ").trim();
     return clean.length > max ? clean.slice(0, max) + "..." : clean;
@@ -377,7 +377,7 @@ export class TenantTracesView extends LitElement {
   private parsePlatformMessage(raw: string | null): {
     platform: string; userName: string; userId: string; content: string;
   } | null {
-    if (!raw) return null;
+    if (!raw) {return null;}
 
     // Primary: match "System: [...] Platform[...] ... | UserName (uid)"
     const m = raw.match(
@@ -395,14 +395,14 @@ export class TenantTracesView extends LitElement {
     } else {
       // Fallback: extract platform from "Feishu[...]" and username from Sender JSON
       const platformM = raw.match(/([A-Za-z][A-Za-z0-9_-]*)\[[\w-]+\]/);
-      if (!platformM) return null;
+      if (!platformM) {return null;}
       platform = platformM[1];
       // Try to extract display name from Sender metadata JSON block
       const senderM = raw.match(/Sender[^\n]*\n```[\s\S]*?"(?:label|name)"\s*:\s*"([^"]+)"/);
-      if (!senderM) return null;
+      if (!senderM) {return null;}
       const candidate = senderM[1];
       // Skip if it looks like a raw user ID (e.g. ou_xxx, oc_xxx, cli_xxx)
-      if (/^[a-z]{2,4}_[0-9a-f]{8,}$/i.test(candidate)) return null;
+      if (/^[a-z]{2,4}_[0-9a-f]{8,}$/i.test(candidate)) {return null;}
       userName = candidate;
       userId = "";
     }
@@ -432,10 +432,10 @@ export class TenantTracesView extends LitElement {
   /** Extract user content or a short friendly label from a raw system message. */
   private extractSystemEventLabel(raw: string): string {
     // Classify well-known system-internal patterns first
-    if (/pre-compaction memory flush/i.test(raw)) return "[系统: 记忆整理]";
-    if (/reasoning\s*stream/i.test(raw)) return "[系统: 推理流]";
-    if (/\[cron:[^\]]+\]/i.test(raw)) return "[系统: 定时任务]";
-    if (/^IMPORTANT:/m.test(raw) && !/Feishu|WeChat|Telegram/i.test(raw)) return "[系统事件]";
+    if (/pre-compaction memory flush/i.test(raw)) {return "[系统: 记忆整理]";}
+    if (/reasoning\s*stream/i.test(raw)) {return "[系统: 推理流]";}
+    if (/\[cron:[^\]]+\]/i.test(raw)) {return "[系统: 定时任务]";}
+    if (/^IMPORTANT:/m.test(raw) && !/Feishu|WeChat|Telegram/i.test(raw)) {return "[系统事件]";}
 
     // Try to find clean user text: last non-empty segment outside code blocks
     const segments = raw.split(/```[\s\S]*?```/g);
@@ -443,7 +443,7 @@ export class TenantTracesView extends LitElement {
     for (let i = segments.length - 1; i >= 0; i--) {
       const lines = segments[i].split("\n").filter(l => l.trim() && !SYSTEM_LINE.test(l));
       const text = lines.join(" ").trim();
-      if (text) return text;
+      if (text) {return text;}
     }
     return "[系统事件]";
   }
@@ -455,18 +455,18 @@ export class TenantTracesView extends LitElement {
   private toggleRawJson(traceId: string, section: string) {
     const key = `${traceId}:${section}`;
     const next = new Set(this.rawJsonSections);
-    if (next.has(key)) next.delete(key); else next.add(key);
+    if (next.has(key)) {next.delete(key);} else {next.add(key);}
     this.rawJsonSections = next;
   }
 
   /** Extract readable text from a message content field (string or content blocks array). */
   private extractContentText(content: unknown): string {
-    if (typeof content === "string") return content;
-    if (!Array.isArray(content)) return "";
+    if (typeof content === "string") {return content;}
+    if (!Array.isArray(content)) {return "";}
     const parts: string[] = [];
     for (const block of content) {
       if (typeof block === "string") { parts.push(block); continue; }
-      if (!block || typeof block !== "object") continue;
+      if (!block || typeof block !== "object") {continue;}
       const b = block as Record<string, unknown>;
       if (b.type === "text" && typeof b.text === "string") { parts.push(b.text); }
       else if (b.type === "tool_use") { parts.push(`[Tool: ${b.name ?? "unknown"}]`); }
@@ -483,7 +483,7 @@ export class TenantTracesView extends LitElement {
   private extractToolNames(tools: unknown[]): Array<{ name: string; desc: string }> {
     const result: Array<{ name: string; desc: string }> = [];
     for (const tool of tools) {
-      if (!tool || typeof tool !== "object") continue;
+      if (!tool || typeof tool !== "object") {continue;}
       const t = tool as Record<string, unknown>;
       // Anthropic format: { name, description, ... }
       if (typeof t.name === "string") {
@@ -505,18 +505,18 @@ export class TenantTracesView extends LitElement {
   private resolvePlatform(channel: string | null, parsedPlatform?: string): string | null {
     if (channel) {
       const c = channel.toLowerCase();
-      if (c.includes("feishu") || c.includes("lark")) return "Feishu";
-      if (c.includes("wechat") || c.includes("wecom")) return "WeCom";
-      if (c === "webchat") return "WebChat";
-      if (c.includes("telegram")) return "Telegram";
-      if (c.includes("slack")) return "Slack";
-      if (c.includes("dingtalk") || c.includes("dingding")) return "DingTalk";
-      if (c === "whatsapp") return "WhatsApp";
-      if (c === "discord") return "Discord";
-      if (c === "googlechat") return "Google Chat";
-      if (c === "signal") return "Signal";
-      if (c === "imessage") return "iMessage";
-      if (c === "irc") return "IRC";
+      if (c.includes("feishu") || c.includes("lark")) {return "Feishu";}
+      if (c.includes("wechat") || c.includes("wecom")) {return "WeCom";}
+      if (c === "webchat") {return "WebChat";}
+      if (c.includes("telegram")) {return "Telegram";}
+      if (c.includes("slack")) {return "Slack";}
+      if (c.includes("dingtalk") || c.includes("dingding")) {return "DingTalk";}
+      if (c === "whatsapp") {return "WhatsApp";}
+      if (c === "discord") {return "Discord";}
+      if (c === "googlechat") {return "Google Chat";}
+      if (c === "signal") {return "Signal";}
+      if (c === "imessage") {return "iMessage";}
+      if (c === "irc") {return "IRC";}
       // Fallback: return raw channel value capitalised
       return channel.charAt(0).toUpperCase() + channel.slice(1);
     }
@@ -670,13 +670,13 @@ export class TenantTracesView extends LitElement {
     }
 
     const renderMsg = (msg: unknown) => {
-      if (!msg || typeof msg !== "object") return nothing;
+      if (!msg || typeof msg !== "object") {return nothing;}
       const m = msg as Record<string, unknown>;
       const role = (m.role as string) ?? "unknown";
       const text = this.extractContentText(m.content);
       const roleClass = role === "user" ? "user" : role === "assistant" ? "assistant" : role === "system" ? "system" : "tool";
       const roleLabel = role === "user" ? "User" : role === "assistant" ? "AI" : role === "system" ? "System" : "Tool";
-      if (!text && role !== "system") return nothing;
+      if (!text && role !== "system") {return nothing;}
       return html`
         <div class="chat-msg ${roleClass}">
           <div class="chat-role">${roleLabel}</div>
@@ -693,7 +693,7 @@ export class TenantTracesView extends LitElement {
         ${histMsgs.length > 0 ? html`
           <button class="history-toggle" @click=${() => {
             const next = new Set(this.expandedHistory);
-            if (next.has(traceId)) next.delete(traceId); else next.add(traceId);
+            if (next.has(traceId)) {next.delete(traceId);} else {next.add(traceId);}
             this.expandedHistory = next;
           }}>
             ${isHistExpanded ? "▾" : "▸"} 历史上下文 (${histMsgs.length} 条)
@@ -727,7 +727,7 @@ export class TenantTracesView extends LitElement {
 
   /** Render tools as a name list with raw JSON toggle. */
   private renderToolsSection(traceId: string, tools: unknown[] | null) {
-    if (!tools || tools.length === 0) return html`<div class="response-text">${t("tenantTraces.none")}</div>`;
+    if (!tools || tools.length === 0) {return html`<div class="response-text">${t("tenantTraces.none")}</div>`;}
     if (this.isRawJson(traceId, "tools")) {
       return html`
         <div class="code-block">${this.formatJson(tools)}</div>

@@ -101,7 +101,7 @@ export class TenantUsageView extends LitElement {
 
   private showError(msg: string) {
     this.error = msg;
-    if (this.msgTimer) clearTimeout(this.msgTimer);
+    if (this.msgTimer) {clearTimeout(this.msgTimer);}
     this.msgTimer = setTimeout(() => (this.error = ""), 5000);
   }
 
@@ -135,20 +135,20 @@ export class TenantUsageView extends LitElement {
   }
 
   private formatNumber(n: number): string {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    if (n >= 1_000_000) {return `${(n / 1_000_000).toFixed(1)}M`;}
+    if (n >= 1_000) {return `${(n / 1_000).toFixed(1)}K`;}
     return String(n);
   }
 
   private quotaClass(pct: number | null): string {
-    if (pct === null) return "low";
-    if (pct > 90) return "high";
-    if (pct > 70) return "mid";
+    if (pct === null) {return "low";}
+    if (pct > 90) {return "high";}
+    if (pct > 70) {return "mid";}
     return "low";
   }
 
   render() {
-    if (this.loading) return html`<div class="loading">加载中...</div>`;
+    if (this.loading) {return html`<div class="loading">加载中...</div>`;}
 
     return html`
       <div class="header">

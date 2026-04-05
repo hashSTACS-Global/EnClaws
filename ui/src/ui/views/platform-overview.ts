@@ -350,15 +350,15 @@ export class PlatformOverviewView extends LitElement {
   private resizeObserver: ResizeObserver | null = null;
 
   private formatNumber(n: number): string {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    if (n >= 1_000_000) {return `${(n / 1_000_000).toFixed(1)}M`;}
+    if (n >= 1_000) {return `${(n / 1_000).toFixed(1)}K`;}
     return String(n);
   }
 
   private rankClass(i: number): string {
-    if (i === 0) return "top1";
-    if (i === 1) return "top2";
-    if (i === 2) return "top3";
+    if (i === 0) {return "top1";}
+    if (i === 1) {return "top2";}
+    if (i === 2) {return "top3";}
     return "other";
   }
 
@@ -435,8 +435,8 @@ export class PlatformOverviewView extends LitElement {
     const m = Math.floor(s / 60);
     const h = Math.floor(m / 60);
     const d = Math.floor(h / 24);
-    if (d > 0) return `${d}d ${h % 24}h ${m % 60}m`;
-    if (h > 0) return `${h}h ${m % 60}m`;
+    if (d > 0) {return `${d}d ${h % 24}h ${m % 60}m`;}
+    if (h > 0) {return `${h}h ${m % 60}m`;}
     return `${m}m`;
   }
 
@@ -458,9 +458,9 @@ export class PlatformOverviewView extends LitElement {
     if (changed.has("rankPeriod")) { void this.loadRank(); }
     if (changed.has("llmPeriod")) { void this.loadLlmStats(); }
     // Init charts if not yet created (e.g. after loading state clears)
-    if (!this.trendChart) this.initTrendChart();
-    if (!this.llmPieChart) this.initLlmPieChart();
-    if (!this.channelPieChart) this.initChannelPieChart();
+    if (!this.trendChart) {this.initTrendChart();}
+    if (!this.llmPieChart) {this.initLlmPieChart();}
+    if (!this.channelPieChart) {this.initChannelPieChart();}
     // Re-render charts on data/locale changes
     this.updateTrendChart();
     this.updateLlmPieChart();
@@ -468,7 +468,7 @@ export class PlatformOverviewView extends LitElement {
 
   private initTrendChart() {
     const el = this.shadowRoot?.querySelector(".chart-container") as HTMLElement | null;
-    if (!el) return;
+    if (!el) {return;}
     this.trendChart = echarts.init(el, "dark");
     this.updateTrendChart();
     // Auto resize
@@ -477,7 +477,7 @@ export class PlatformOverviewView extends LitElement {
   }
 
   private updateTrendChart() {
-    if (!this.trendChart || this.trend.length === 0) return;
+    if (!this.trendChart || this.trend.length === 0) {return;}
     const data = this.trend;
 
     this.trendChart.setOption({
@@ -583,14 +583,14 @@ export class PlatformOverviewView extends LitElement {
 
   private initLlmPieChart() {
     const el = this.shadowRoot?.querySelector(".llm-pie-container") as HTMLElement | null;
-    if (!el) return;
+    if (!el) {return;}
     this.llmPieChart = echarts.init(el, "dark");
     this.updateLlmPieChart();
     this.resizeObserver?.observe(el);
   }
 
   private updateLlmPieChart() {
-    if (!this.llmPieChart || !this.llmStats) return;
+    if (!this.llmPieChart || !this.llmStats) {return;}
     const data = this.llmStats.modelDistribution;
     const pieColors = ["#60a5fa", "#4ade80", "#facc15", "#a78bfa", "#fb923c"];
 
@@ -637,7 +637,7 @@ export class PlatformOverviewView extends LitElement {
 
   private initChannelPieChart() {
     const el = this.shadowRoot?.querySelector(".channel-pie-container") as HTMLElement | null;
-    if (!el) return;
+    if (!el) {return;}
     this.channelPieChart = echarts.init(el, "dark");
     const pieColors = ["#60a5fa", "#4ade80", "#facc15", "#a78bfa", "#fb923c"];
     this.channelPieChart.setOption({
@@ -710,7 +710,7 @@ export class PlatformOverviewView extends LitElement {
   }
 
   render() {
-    if (this.loading) return html`<div style="text-align:center;padding:3rem;color:var(--text-muted,#525252)">${t("platformOverview.refresh")}...</div>`;
+    if (this.loading) {return html`<div style="text-align:center;padding:3rem;color:var(--text-muted,#525252)">${t("platformOverview.refresh")}...</div>`;}
     const s = this.summary;
     const ua = this.userActivity;
     return html`

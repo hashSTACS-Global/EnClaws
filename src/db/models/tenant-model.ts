@@ -39,7 +39,7 @@ export async function createTenantModel(params: {
   models?: TenantModelDefinition[];
   createdBy?: string;
 }): Promise<TenantModel> {
-  if (getDbType() === DB_SQLITE) return sqliteTenantModel.createTenantModel(params);
+  if (getDbType() === DB_SQLITE) {return sqliteTenantModel.createTenantModel(params);}
   const result = await query(
     `INSERT INTO tenant_models
        (tenant_id, provider_type, provider_name, base_url, api_protocol, auth_mode,
@@ -64,7 +64,7 @@ export async function createTenantModel(params: {
 }
 
 export async function getTenantModel(tenantId: string, id: string): Promise<TenantModel | null> {
-  if (getDbType() === DB_SQLITE) return sqliteTenantModel.getTenantModel(tenantId, id);
+  if (getDbType() === DB_SQLITE) {return sqliteTenantModel.getTenantModel(tenantId, id);}
   const result = await query(
     "SELECT * FROM tenant_models WHERE tenant_id = $1 AND id = $2",
     [tenantId, id],
@@ -76,7 +76,7 @@ export async function listTenantModels(
   tenantId: string,
   opts?: { activeOnly?: boolean },
 ): Promise<TenantModel[]> {
-  if (getDbType() === DB_SQLITE) return sqliteTenantModel.listTenantModels(tenantId, opts);
+  if (getDbType() === DB_SQLITE) {return sqliteTenantModel.listTenantModels(tenantId, opts);}
   const conditions = ["tenant_id = $1"];
   const values: unknown[] = [tenantId];
 
@@ -96,7 +96,7 @@ export async function updateTenantModel(
   id: string,
   updates: Partial<Pick<TenantModel, "providerName" | "baseUrl" | "apiProtocol" | "authMode" | "apiKeyEncrypted" | "extraHeaders" | "extraConfig" | "models" | "isActive">>,
 ): Promise<TenantModel | null> {
-  if (getDbType() === DB_SQLITE) return sqliteTenantModel.updateTenantModel(tenantId, id, updates);
+  if (getDbType() === DB_SQLITE) {return sqliteTenantModel.updateTenantModel(tenantId, id, updates);}
   const sets: string[] = [];
   const values: unknown[] = [];
   let idx = 1;
@@ -138,7 +138,7 @@ export async function updateTenantModel(
     values.push(updates.isActive);
   }
 
-  if (sets.length === 0) return getTenantModel(tenantId, id);
+  if (sets.length === 0) {return getTenantModel(tenantId, id);}
 
   values.push(tenantId, id);
   const result = await query(
@@ -150,7 +150,7 @@ export async function updateTenantModel(
 }
 
 export async function deleteTenantModel(tenantId: string, id: string): Promise<boolean> {
-  if (getDbType() === DB_SQLITE) return sqliteTenantModel.deleteTenantModel(tenantId, id);
+  if (getDbType() === DB_SQLITE) {return sqliteTenantModel.deleteTenantModel(tenantId, id);}
   const result = await query(
     "DELETE FROM tenant_models WHERE tenant_id = $1 AND id = $2",
     [tenantId, id],

@@ -8,7 +8,7 @@ import type { LlmInteractionTrace } from "../types.js";
 
 /** Sanitize a value for PostgreSQL JSONB — strip \u0000 null bytes which PG rejects. */
 function sanitizeJson(val: unknown): string | null {
-  if (val == null) return null;
+  if (val == null) {return null;}
   return JSON.stringify(val).replace(/\\u0000/g, "");
 }
 
@@ -65,7 +65,7 @@ export async function createInteractionTrace(params: {
   cacheWriteTokens?: number;
   durationMs?: number;
 }): Promise<void> {
-  if (getDbType() === DB_SQLITE) return sqliteTrace.createInteractionTrace(params);
+  if (getDbType() === DB_SQLITE) {return sqliteTrace.createInteractionTrace(params);}
   try {
     await query(
       `INSERT INTO llm_interaction_traces
@@ -116,7 +116,7 @@ export async function listInteractionTraces(
     offset?: number;
   },
 ): Promise<{ traces: LlmInteractionTrace[]; total: number }> {
-  if (getDbType() === DB_SQLITE) return sqliteTrace.listInteractionTraces(tenantId, opts);
+  if (getDbType() === DB_SQLITE) {return sqliteTrace.listInteractionTraces(tenantId, opts);}
   const conditions = ["tenant_id = $1"];
   const values: unknown[] = [tenantId];
   let idx = 2;
@@ -165,7 +165,7 @@ export async function listInteractionTraces(
 }
 
 export async function getInteractionsByTurn(turnId: string): Promise<LlmInteractionTrace[]> {
-  if (getDbType() === DB_SQLITE) return sqliteTrace.getInteractionsByTurn(turnId);
+  if (getDbType() === DB_SQLITE) {return sqliteTrace.getInteractionsByTurn(turnId);}
   const result = await query(
     "SELECT * FROM llm_interaction_traces WHERE turn_id = $1 ORDER BY turn_index ASC",
     [turnId],
@@ -174,7 +174,7 @@ export async function getInteractionsByTurn(turnId: string): Promise<LlmInteract
 }
 
 export async function getInteractionTrace(id: string): Promise<LlmInteractionTrace | null> {
-  if (getDbType() === DB_SQLITE) return sqliteTrace.getInteractionTrace(id);
+  if (getDbType() === DB_SQLITE) {return sqliteTrace.getInteractionTrace(id);}
   const result = await query(
     "SELECT * FROM llm_interaction_traces WHERE id = $1",
     [id],
@@ -214,7 +214,7 @@ export async function listInteractionTurns(
   }>;
   total: number;
 }> {
-  if (getDbType() === DB_SQLITE) return sqliteTrace.listInteractionTurns(tenantId, opts);
+  if (getDbType() === DB_SQLITE) {return sqliteTrace.listInteractionTurns(tenantId, opts);}
   const conditions = ["tenant_id = $1"];
   const values: unknown[] = [tenantId];
   let idx = 2;

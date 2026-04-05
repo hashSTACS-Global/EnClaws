@@ -10,6 +10,7 @@ import { handleApproveCommand } from "./commands-approve.js";
 import { handleBashCommand } from "./commands-bash.js";
 import { handleCompactCommand } from "./commands-compact.js";
 import { handleConfigCommand, handleDebugCommand } from "./commands-config.js";
+import { handleDistillCommand } from "./commands-distill.js";
 import {
   handleCommandsListCommand,
   handleContextCommand,
@@ -18,6 +19,7 @@ import {
   handleStatusCommand,
   handleWhoamiCommand,
 } from "./commands-info.js";
+import { handleInstallSkillCommand } from "./commands-install-skill.js";
 import { handleModelsCommand } from "./commands-models.js";
 import { handlePluginCommand } from "./commands-plugin.js";
 import {
@@ -30,7 +32,6 @@ import {
   handleUsageCommand,
 } from "./commands-session.js";
 import { handleSubagentsCommand } from "./commands-subagents.js";
-import { handleInstallSkillCommand } from "./commands-install-skill.js";
 import { handleTasksCommand } from "./commands-tasks.js";
 import { handleTtsCommands } from "./commands-tts.js";
 import type {
@@ -39,6 +40,7 @@ import type {
   HandleCommandsParams,
 } from "./commands-types.js";
 import { routeReply } from "./route-reply.js";
+import { maybeRunExperienceCapture } from "../../experience/capture-trigger.js";
 
 let HANDLERS: CommandHandler[] | null = null;
 
@@ -160,6 +162,7 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleConfigCommand,
       handleDebugCommand,
       handleModelsCommand,
+      handleDistillCommand,
       handleStopCommand,
       handleCompactCommand,
       handleAbortTrigger,
@@ -187,6 +190,21 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       previousSessionEntry: params.previousSessionEntry,
       workspaceDir: params.workspaceDir,
     });
+
+    // Experience boundary capture: force-trigger extraction for remaining turns
+    const prevEntry = params.previousSessionEntry ?? params.sessionEntry;
+    if (prevEntry && params.sessionKey) {
+      console.error(
+        `[experience] boundary capture: sessionFile=${prevEntry.sessionFile ?? "NONE"} turnCount=${prevEntry.turnCount ?? "NONE"} captureAt=${prevEntry.experienceCaptureAtTurn ?? "NONE"} usedPrevious=${prevEntry === params.previousSessionEntry}`,
+      );
+      maybeRunExperienceCapture({
+        cfg: params.cfg,
+        sessionEntry: prevEntry,
+        sessionKey: params.sessionKey,
+        workspaceDir: params.workspaceDir,
+        force: true,
+      });
+    }
   }
 
   const allowTextCommands = shouldHandleTextCommands({

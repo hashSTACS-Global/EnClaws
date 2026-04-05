@@ -196,7 +196,7 @@ export class TenantUsersView extends LitElement {
     this.errorKey = key;
     this.successKey = "";
     this.msgParams = params ?? {};
-    if (this.msgTimer) clearTimeout(this.msgTimer);
+    if (this.msgTimer) {clearTimeout(this.msgTimer);}
     this.msgTimer = setTimeout(() => (this.errorKey = ""), 5000);
   }
 
@@ -204,22 +204,22 @@ export class TenantUsersView extends LitElement {
     this.successKey = key;
     this.errorKey = "";
     this.msgParams = params ?? {};
-    if (this.msgTimer) clearTimeout(this.msgTimer);
+    if (this.msgTimer) {clearTimeout(this.msgTimer);}
     this.msgTimer = setTimeout(() => (this.successKey = ""), 5000);
   }
 
   private tr(key: string): string {
-    if (key.includes("已注册") || key.includes("duplicate key") || key.includes("unique constraint")) return t("tenantUsers.emailAlreadyRegistered");
+    if (key.includes("已注册") || key.includes("duplicate key") || key.includes("unique constraint")) {return t("tenantUsers.emailAlreadyRegistered");}
     const result = t(key, this.msgParams);
     return result === key ? key : result;
   }
 
   private get currentLocaleTag(): string {
     const loc = i18n.getLocale();
-    if (loc === "zh-CN") return "zh-CN";
-    if (loc === "zh-TW") return "zh-TW";
-    if (loc === "de") return "de-DE";
-    if (loc === "pt-BR") return "pt-BR";
+    if (loc === "zh-CN") {return "zh-CN";}
+    if (loc === "zh-TW") {return "zh-TW";}
+    if (loc === "de") {return "de-DE";}
+    if (loc === "pt-BR") {return "pt-BR";}
     return "en-US";
   }
 
@@ -238,7 +238,7 @@ export class TenantUsersView extends LitElement {
 
   private async handleInvite(e: Event) {
     e.preventDefault();
-    if (!this.inviteEmail || !this.invitePassword) return;
+    if (!this.inviteEmail || !this.invitePassword) {return;}
     this.inviting = true;
     this.errorKey = "";
     this.successKey = "";

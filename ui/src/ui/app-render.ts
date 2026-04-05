@@ -112,8 +112,8 @@ let _cachedTenantAgents: TenantAgentOption[] = [];
 let _tenantAgentsLoaded = false;
 
 async function loadTenantAgentsForChat(): Promise<TenantAgentOption[]> {
-  if (_tenantAgentsLoaded) return _cachedTenantAgents;
-  if (!isAuthenticated()) return [];
+  if (_tenantAgentsLoaded) {return _cachedTenantAgents;}
+  if (!isAuthenticated()) {return [];}
   if (loadAuth()?.user?.role === "platform-admin") { _tenantAgentsLoaded = true; return []; }
   try {
     const result = await tenantRpc("tenant.agents.list") as {
@@ -138,10 +138,10 @@ async function loadTenantAgentsForChat(): Promise<TenantAgentOption[]> {
  * first available tenant agent so the browser lands on a real chat session.
  */
 function redirectToFirstTenantAgent(state: AppViewState, agents: TenantAgentOption[]) {
-  if (agents.length === 0) return;
+  if (agents.length === 0) {return;}
   const sk = state.sessionKey ?? "";
   const isDefaultSession = !sk || sk === "main" || sk.startsWith("agent:main:");
-  if (!isDefaultSession) return;
+  if (!isDefaultSession) {return;}
   const next = `agent:${agents[0].agentId}:chat`;
   state.sessionKey = next;
   state.chatMessage = "";
@@ -411,11 +411,11 @@ export function renderApp(state: AppViewState) {
                   const tenantOnlyTabs = new Set(["tenant-settings", "tenant-users", "tenant-agents", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage"]);
                   const platformOnlyTabs = new Set(["overview"]);
                   const visibleTabs = group.tabs.filter((tab) => {
-                    if (platformOnlyTabs.has(tab)) return isPlatformAdmin;
-                    if (tenantOnlyTabs.has(tab)) return isTenantAdmin;
+                    if (platformOnlyTabs.has(tab)) {return isPlatformAdmin;}
+                    if (tenantOnlyTabs.has(tab)) {return isTenantAdmin;}
                     return !isPlatformAdmin; // platform-admin only sees overview
                   });
-                  if (visibleTabs.length === 0) return nothing;
+                  if (visibleTabs.length === 0) {return nothing;}
                   if (!group.label) {
                     return html`
                       <div class="nav-group">
@@ -469,7 +469,7 @@ export function renderApp(state: AppViewState) {
               </div>
               ${(() => {
                   const authState = loadAuth();
-                  if (!authState?.user) return nothing;
+                  if (!authState?.user) {return nothing;}
                   return html`
                       <div class="nav-user-footer"
                            style="padding: 0.75rem; border-top: 1px solid var(--border, #262626); margin-top: auto; font-size: 0.8rem;">

@@ -62,16 +62,16 @@ function getTenantCtx(
   return tenant;
 }
 
-const VALID_POLICIES: ChannelPolicy[] = ["open", "allowlist", "disabled"];
+const VALID_POLICIES: ChannelPolicy[] = new Set(["open", "allowlist", "disabled"]);
 
 function isValidPolicy(v: unknown): v is ChannelPolicy {
-  return typeof v === "string" && VALID_POLICIES.includes(v as ChannelPolicy);
+  return typeof v === "string" && VALID_POLICIES.has(v as ChannelPolicy);
 }
 
 export const tenantChannelsHandlers: GatewayRequestHandlers = {
   "tenant.channels.list": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "channel.list");
@@ -151,7 +151,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
    */
   "tenant.channels.create": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "channel.create");
@@ -408,7 +408,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
    */
   "tenant.channels.update": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "channel.update");
@@ -449,7 +449,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
     const updated = await updateTenantChannel(ctx.tenantId, channelId, {
       isActive,
       channelName,
-      channelPolicy: channelPolicy as ChannelPolicy | undefined,
+      channelPolicy: channelPolicy,
       config,
     });
     if (!updated) {
@@ -487,7 +487,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
     // Update linked agents if provided
     if (agentUpdates && agentUpdates.length > 0) {
       for (const au of agentUpdates) {
-        if (!au.agentId) continue;
+        if (!au.agentId) {continue;}
         try {
           await updateTenantAgent(ctx.tenantId, au.agentId, {
             name: au.name,
@@ -529,7 +529,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
    */
   "tenant.channels.delete": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "channel.delete");
@@ -584,7 +584,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
    */
   "tenant.channels.apps.list": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "channel.list");
@@ -629,7 +629,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
    */
   "tenant.channels.apps.add": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "channel.create");
@@ -782,7 +782,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
    */
   "tenant.channels.apps.update": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "channel.update");
@@ -842,7 +842,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
       appId,
       appSecret,
       botName,
-      groupPolicy: groupPolicy as ChannelPolicy | undefined,
+      groupPolicy: groupPolicy,
       isActive,
       ...(bindAgentId !== undefined ? { agentId: bindAgentId || null } : {}),
     });
@@ -950,7 +950,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
    */
   "tenant.channels.apps.delete": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "channel.delete");

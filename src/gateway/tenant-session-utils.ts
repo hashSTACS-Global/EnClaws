@@ -75,9 +75,9 @@ export function toStorageSessionKey(
   sessionKey: string,
   tenantId?: string,
 ): string {
-  if (!tenantId) return sessionKey;
+  if (!tenantId) {return sessionKey;}
   // Don't double-prefix
-  if (sessionKey.startsWith(`t:${tenantId}:`)) return sessionKey;
+  if (sessionKey.startsWith(`t:${tenantId}:`)) {return sessionKey;}
   return tenantScopedSessionKey(tenantId, sessionKey);
 }
 
@@ -125,7 +125,7 @@ export function verifySessionTenantAccess(
   sessionKey: string,
   tenantId?: string,
 ): boolean {
-  if (!tenantId) return true;
+  if (!tenantId) {return true;}
 
   const parsed = extractTenantFromSessionKey(sessionKey);
   if (!parsed) {

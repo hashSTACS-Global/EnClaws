@@ -370,7 +370,7 @@ export function createExecTool(
       }
 
       const defaultsExtraEnv = defaults?.extraEnv ?? {};
-      const mergedEnv = { ...baseEnv, ...(params.env ?? {}), ...defaultsExtraEnv };
+      const mergedEnv = { ...baseEnv, ...params.env, ...defaultsExtraEnv };
 
       const env = sandbox
         ? buildSandboxEnv({

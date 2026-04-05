@@ -146,6 +146,10 @@ export type SessionEntry = {
   compactionCount?: number;
   memoryFlushAt?: number;
   memoryFlushCompactionCount?: number;
+  /** Monotonic turn counter, incremented after each user+assistant turn. */
+  turnCount?: number;
+  /** Value of turnCount when experience capture last ran. */
+  experienceCaptureAtTurn?: number;
   cliSessionIds?: Record<string, string>;
   claudeCliSessionId?: string;
   label?: string;

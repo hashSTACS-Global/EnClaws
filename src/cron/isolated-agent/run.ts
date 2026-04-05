@@ -382,7 +382,7 @@ export async function runCronIsolatedAgentTurn(params: {
     let lastTo: string | undefined;
     let latestUpdatedAt = 0;
     for (const [key, entry] of Object.entries(sStore)) {
-      if (!entry?.lastChannel) continue;
+      if (!entry?.lastChannel) {continue;}
       const updatedAt = entry.updatedAt ?? 0;
       if (updatedAt >= latestUpdatedAt) {
         latestUpdatedAt = updatedAt;

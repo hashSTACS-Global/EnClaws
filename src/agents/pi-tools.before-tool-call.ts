@@ -39,13 +39,13 @@ export function setTenantUserRole(tenantId: string, userId: string, role: string
   map.set(key, { role, expiresAt: Date.now() + ROLE_TTL_MS });
   if (map.size > MAX_TENANT_ROLE_ENTRIES) {
     const oldest = map.keys().next().value;
-    if (oldest) map.delete(oldest);
+    if (oldest) {map.delete(oldest);}
   }
 }
 
 export function getTenantUserRole(tenantId: string, userId: string): string | undefined {
   const entry = getTenantUserRoleMap().get(`${tenantId}:${userId}`);
-  if (!entry) return undefined;
+  if (!entry) {return undefined;}
   if (entry.expiresAt < Date.now()) {
     getTenantUserRoleMap().delete(`${tenantId}:${userId}`);
     return undefined;
@@ -136,16 +136,16 @@ const DESTRUCTIVE_EXEC_PATTERN =
  */
 function resolveRoleForToolCall(toolName: string, params: unknown, ctx?: HookContext): { role: string | undefined; isTenantPath: boolean } {
   // Static context (set at tool creation time, usually empty for long-lived tools)
-  if (ctx?.tenantUserRole) return { role: ctx.tenantUserRole, isTenantPath: true };
+  if (ctx?.tenantUserRole) {return { role: ctx.tenantUserRole, isTenantPath: true };}
 
   // Extract tenantId from the tool params path
   const p = params as Record<string, unknown> | undefined;
-  if (!p) return { role: undefined, isTenantPath: false };
+  if (!p) {return { role: undefined, isTenantPath: false };}
 
   const pathStr = String(p.file_path ?? p.filePath ?? p.path ?? p.command ?? p.cmd ?? "");
 
   const tenantId = extractTenantIdFromPath(pathStr);
-  if (!tenantId) return { role: undefined, isTenantPath: false };
+  if (!tenantId) {return { role: undefined, isTenantPath: false };}
 
   // Look up role by exact tenantId:userId key
   const map = getTenantUserRoleMap();
@@ -174,7 +174,7 @@ function resolveRoleForToolCall(toolName: string, params: unknown, ctx?: HookCon
  */
 function checkSkillWritePermission(toolName: string, params: unknown, ctx?: HookContext): string | null {
   const p = params as Record<string, unknown> | undefined;
-  if (!p) return null;
+  if (!p) {return null;}
 
   let targetsSkills = false;
 
@@ -188,16 +188,16 @@ function checkSkillWritePermission(toolName: string, params: unknown, ctx?: Hook
     targetsSkills = /[/\\]skills[/\\]/i.test(command) && DESTRUCTIVE_EXEC_PATTERN.test(command);
   }
 
-  if (!targetsSkills) return null;
+  if (!targetsSkills) {return null;}
 
   // Targets skills dir — resolve role (fail-closed for tenant paths)
   const { role, isTenantPath } = resolveRoleForToolCall(toolName, params, ctx);
 
   // Non-tenant path (single-user mode): allow
-  if (!isTenantPath) return null;
+  if (!isTenantPath) {return null;}
 
   // Owner and admin: allow
-  if (role === "owner" || role === "admin") return null;
+  if (role === "owner" || role === "admin") {return null;}
 
   // Role is member/viewer: deny
   if (role) {

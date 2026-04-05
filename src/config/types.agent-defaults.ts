@@ -117,6 +117,33 @@ export type CliBackendConfig = {
   };
 };
 
+export type ExperienceCaptureConfig = {
+  /** Enable post-turn experience candidate extraction. Default: true. */
+  enabled?: boolean;
+  /** Number of turns between extraction runs. Default: 5. */
+  turnInterval?: number;
+  /** Model to use for extraction (provider/model). Null = follow agent's current model. */
+  model?: string | null;
+  /** Maximum messages to read per extraction. Default: 20. */
+  maxMessages?: number;
+};
+
+export type ExperienceDistillConfig = {
+  /** Enable distillation. Default: true. */
+  enabled?: boolean;
+  /** Model to use for distillation (provider/model). Null = follow agent's current model. */
+  model?: string | null;
+  /** Maximum candidates per LLM batch. Default: 50. */
+  maxCandidatesPerBatch?: number;
+};
+
+export type AgentExperienceConfig = {
+  /** Post-turn candidate capture settings. */
+  capture?: ExperienceCaptureConfig;
+  /** Distillation settings. */
+  distill?: ExperienceDistillConfig;
+};
+
 export type AgentDefaultsConfig = {
   /** Primary model and fallbacks (provider/model). Accepts string or {primary,fallbacks}. */
   model?: AgentModelConfig;
@@ -158,6 +185,8 @@ export type AgentDefaultsConfig = {
   contextPruning?: AgentContextPruningConfig;
   /** Compaction tuning and pre-compaction memory flush behavior. */
   compaction?: AgentCompactionConfig;
+  /** Experience extraction pipeline settings. */
+  experience?: AgentExperienceConfig;
   /** Embedded Pi runner hardening and compatibility controls. */
   embeddedPi?: {
     /**

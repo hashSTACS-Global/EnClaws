@@ -41,7 +41,7 @@ function resolveEffectiveCron(
   if (client?.tenant && context.resolveTenantCron) {
     context.logGateway.info(`resolveEffectiveCron: using client.tenant userId=${client.tenant.userId}`);
     const resolved = context.resolveTenantCron(client.tenant);
-    if (resolved) return resolved;
+    if (resolved) {return resolved;}
   }
   // Fallback: extract tenant info from params (injected by cron-tool.ts).
   if (context.resolveTenantCron && params) {
@@ -50,7 +50,7 @@ function resolveEffectiveCron(
     context.logGateway.info(`resolveEffectiveCron: params._tenantId=${tenantId || "(empty)"} params._tenantUserId=${userId || "(empty)"} hasResolveTenantCron=${!!context.resolveTenantCron}`);
     if (tenantId && userId) {
       const resolved = context.resolveTenantCron({ tenantId, userId });
-      if (resolved) return resolved;
+      if (resolved) {return resolved;}
     }
   } else {
     context.logGateway.info(`resolveEffectiveCron: fallback to global cron (resolveTenantCron=${!!context.resolveTenantCron}, params=${!!params}, paramKeys=${params ? Object.keys(params).join(",") : "none"})`);

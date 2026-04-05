@@ -74,7 +74,7 @@ export function seedUserDirFiles(tenantId: string, dirKey: string): void {
 }
 
 export async function createUser(input: CreateUserInput, opts?: { skipDirInit?: boolean }): Promise<SafeUser> {
-  if (getDbType() === DB_SQLITE) return sqliteUser.createUser(input, opts);
+  if (getDbType() === DB_SQLITE) {return sqliteUser.createUser(input, opts);}
   const passwordHash = input.password ? await hashPassword(input.password) : null;
   const result = await query(
     `INSERT INTO users (tenant_id, channel_id, email, password_hash, display_name, role)
@@ -114,7 +114,7 @@ export async function createUser(input: CreateUserInput, opts?: { skipDirInit?: 
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  if (getDbType() === DB_SQLITE) return sqliteUser.getUserById(id);
+  if (getDbType() === DB_SQLITE) {return sqliteUser.getUserById(id);}
   const result = await query("SELECT * FROM users WHERE id = $1", [id]);
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
@@ -123,7 +123,7 @@ export async function getUserByEmail(
   tenantId: string,
   email: string,
 ): Promise<User | null> {
-  if (getDbType() === DB_SQLITE) return sqliteUser.getUserByEmail(tenantId, email);
+  if (getDbType() === DB_SQLITE) {return sqliteUser.getUserByEmail(tenantId, email);}
   const result = await query(
     "SELECT * FROM users WHERE tenant_id = $1 AND email = $2",
     [tenantId, email.toLowerCase().trim()],
@@ -136,7 +136,7 @@ export async function getUserByEmail(
  * Returns the first active match. If ambiguous, caller should require tenant slug.
  */
 export async function findUserByEmail(email: string): Promise<User | null> {
-  if (getDbType() === DB_SQLITE) return sqliteUser.findUserByEmail(email);
+  if (getDbType() === DB_SQLITE) {return sqliteUser.findUserByEmail(email);}
   const result = await query(
     `SELECT u.* FROM users u
      JOIN tenants t ON u.tenant_id = t.id
@@ -152,7 +152,7 @@ export async function listUsers(
   tenantId: string,
   opts?: { status?: UserStatus; role?: UserRole; channelId?: string; limit?: number; offset?: number },
 ): Promise<{ users: SafeUser[]; total: number }> {
-  if (getDbType() === DB_SQLITE) return sqliteUser.listUsers(tenantId, opts);
+  if (getDbType() === DB_SQLITE) {return sqliteUser.listUsers(tenantId, opts);}
   const conditions: string[] = ["tenant_id = $1"];
   const values: unknown[] = [tenantId];
   let idx = 2;
@@ -192,7 +192,7 @@ export async function updateUser(
   id: string,
   updates: UpdateUserInput,
 ): Promise<SafeUser | null> {
-  if (getDbType() === DB_SQLITE) return sqliteUser.updateUser(id, updates);
+  if (getDbType() === DB_SQLITE) {return sqliteUser.updateUser(id, updates);}
   const sets: string[] = [];
   const values: unknown[] = [];
   let idx = 1;
@@ -232,12 +232,12 @@ export async function updateUser(
 }
 
 export async function updateLastLogin(userId: string): Promise<void> {
-  if (getDbType() === DB_SQLITE) return sqliteUser.updateLastLogin(userId);
+  if (getDbType() === DB_SQLITE) {return sqliteUser.updateLastLogin(userId);}
   await query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [userId]);
 }
 
 export async function deleteUser(id: string): Promise<boolean> {
-  if (getDbType() === DB_SQLITE) return sqliteUser.deleteUser(id);
+  if (getDbType() === DB_SQLITE) {return sqliteUser.deleteUser(id);}
   const result = await query(
     "UPDATE users SET status = 'deleted' WHERE id = $1 AND status != 'deleted'",
     [id],
@@ -278,7 +278,7 @@ export async function findOrCreateUserByOpenId(
   unionId?: string,
   channelId?: string,
 ): Promise<{ user: User; created: boolean }> {
-  if (getDbType() === DB_SQLITE) return sqliteUser.findOrCreateUserByOpenId(tenantId, openId, displayName, unionId, channelId);
+  if (getDbType() === DB_SQLITE) {return sqliteUser.findOrCreateUserByOpenId(tenantId, openId, displayName, unionId, channelId);}
 
   // Helper: lazily backfill channel_id on legacy records (NULL → current channel)
   async function backfillChannelId(user: User): Promise<void> {

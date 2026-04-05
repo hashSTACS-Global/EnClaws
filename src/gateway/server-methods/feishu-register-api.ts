@@ -93,7 +93,7 @@ export const feishuRegisterHandlers: GatewayRequestHandlers = {
    */
   "tenant.feishu.register.begin": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "channel.create");
@@ -171,7 +171,7 @@ export const feishuRegisterHandlers: GatewayRequestHandlers = {
    */
   "tenant.feishu.register.poll": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "channel.create");

@@ -25,7 +25,7 @@ export interface SqliteQueryResult<T = Record<string, unknown>> {
  * Automatically creates the database file and schema if they don't exist.
  */
 export function initSqliteDb(url: string): void {
-  if (db) return;
+  if (db) {return;}
 
   // Parse sqlite:///path/to/data.db → /path/to/data.db
   let dbPath: string;
@@ -116,10 +116,10 @@ export function sqliteQuery<T = Record<string, unknown>>(
 
   // Convert boolean values to integers for SQLite
   const adaptedParams = params.map((v) => {
-    if (v === true) return 1;
-    if (v === false) return 0;
-    if (v instanceof Date) return v.toISOString().replace("T", " ").replace("Z", "");
-    if (v === undefined) return null;
+    if (v === true) {return 1;}
+    if (v === false) {return 0;}
+    if (v instanceof Date) {return v.toISOString().replace("T", " ").replace("Z", "");}
+    if (v === undefined) {return null;}
     return v;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }) as any[];
@@ -214,7 +214,7 @@ export function sqliteQuery<T = Record<string, unknown>>(
  * - JSON TEXT fields → parsed objects
  */
 function adaptRow(row: unknown): unknown {
-  if (!row || typeof row !== "object") return row;
+  if (!row || typeof row !== "object") {return row;}
   const r = row as Record<string, unknown>;
   const adapted: Record<string, unknown> = {};
 

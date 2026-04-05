@@ -54,14 +54,14 @@ let currentAuth: AuthState | null = null;
  * Load auth state from localStorage.
  */
 export function loadAuth(): AuthState | null {
-  if (currentAuth) return currentAuth;
+  if (currentAuth) {return currentAuth;}
   try {
     const raw = localStorage.getItem(AUTH_KEY);
-    if (!raw) return null;
+    if (!raw) {return null;}
     const parsed = JSON.parse(raw) as AuthState;
-    if (!parsed.accessToken || !parsed.refreshToken) return null;
+    if (!parsed.accessToken || !parsed.refreshToken) {return null;}
     // Check if expired and no refresh possible
-    if (parsed.expiresAt < Date.now() && !parsed.refreshToken) return null;
+    if (parsed.expiresAt < Date.now() && !parsed.refreshToken) {return null;}
     currentAuth = parsed;
     // Ensure activity listener is running (covers page reload scenario)
     startActivityListener();
@@ -104,8 +104,8 @@ export function isAuthenticated(): boolean {
  */
 export function getAccessToken(): string | null {
   const auth = loadAuth();
-  if (!auth) return null;
-  if (auth.expiresAt > Date.now()) return auth.accessToken;
+  if (!auth) {return null;}
+  if (auth.expiresAt > Date.now()) {return auth.accessToken;}
   return null; // Token expired, needs refresh
 }
 
@@ -119,14 +119,14 @@ let refreshing = false;
  * trigger a refresh (throttled).
  */
 async function onUserActivity(): Promise<void> {
-  if (refreshing) return;
+  if (refreshing) {return;}
   const auth = currentAuth ?? loadAuth();
-  if (!auth?.refreshToken) return;
+  if (!auth?.refreshToken) {return;}
 
   const now = Date.now();
 
   // Throttle: don't refresh too frequently
-  if (now - lastRefreshAttempt < REFRESH_THROTTLE_MS) return;
+  if (now - lastRefreshAttempt < REFRESH_THROTTLE_MS) {return;}
 
   lastRefreshAttempt = now;
   refreshing = true;
@@ -147,7 +147,7 @@ async function onUserActivity(): Promise<void> {
 }
 
 function startActivityListener(): void {
-  if (activityListenerActive) return;
+  if (activityListenerActive) {return;}
   activityListenerActive = true;
   for (const evt of ["click", "keydown", "scroll", "mousemove", "touchstart"]) {
     document.addEventListener(evt, onUserActivity, { passive: true, capture: true });
@@ -155,7 +155,7 @@ function startActivityListener(): void {
 }
 
 function stopActivityListener(): void {
-  if (!activityListenerActive) return;
+  if (!activityListenerActive) {return;}
   activityListenerActive = false;
   for (const evt of ["click", "keydown", "scroll", "mousemove", "touchstart"]) {
     document.removeEventListener(evt, onUserActivity, true);
@@ -169,7 +169,7 @@ function stopActivityListener(): void {
  */
 export async function refreshAccessToken(): Promise<AuthState | null> {
   const auth = loadAuth();
-  if (!auth?.refreshToken) return null;
+  if (!auth?.refreshToken) {return null;}
 
   // Fast path: reuse the existing gateway connection
   if (sharedClient) {

@@ -32,16 +32,16 @@ function detectTenantDirFromContextFiles(
     // Use forward-slash normalization for detection only
     const normalized = filePath.replace(/\\/g, "/");
     const tenantsIdx = normalized.lastIndexOf("/tenants/");
-    if (tenantsIdx === -1) continue;
+    if (tenantsIdx === -1) {continue;}
     const afterTenants = normalized.slice(tenantsIdx + "/tenants/".length);
     const slashIdx = afterTenants.indexOf("/");
-    if (slashIdx === -1) continue;
+    if (slashIdx === -1) {continue;}
     const tenantId = afterTenants.slice(0, slashIdx);
-    if (!tenantId) continue;
+    if (!tenantId) {continue;}
     // Return using original path format (preserves Windows backslashes)
     const sep = filePath.includes("\\") ? "\\" : "/";
     const origTenantsIdx = filePath.lastIndexOf(`${sep}tenants${sep}`);
-    if (origTenantsIdx === -1) continue;
+    if (origTenantsIdx === -1) {continue;}
     return filePath.slice(0, origTenantsIdx + `${sep}tenants${sep}`.length + tenantId.length);
   }
   return undefined;

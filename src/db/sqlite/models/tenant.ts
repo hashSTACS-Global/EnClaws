@@ -138,7 +138,7 @@ export async function updateTenant(
     values.push(updates.identityPrompt);
   }
 
-  if (sets.length === 0) return getTenantById(id);
+  if (sets.length === 0) {return getTenantById(id);}
 
   values.push(id);
   sqliteQuery(
@@ -162,7 +162,7 @@ export async function checkTenantQuota(
   resource: "users" | "agents" | "channels",
 ): Promise<{ allowed: boolean; current: number; max: number }> {
   const tenant = await getTenantById(tenantId);
-  if (!tenant) return { allowed: false, current: 0, max: 0 };
+  if (!tenant) {return { allowed: false, current: 0, max: 0 };}
 
   const tableMap = {
     users: "users",

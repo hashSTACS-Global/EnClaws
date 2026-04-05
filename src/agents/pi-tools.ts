@@ -193,11 +193,11 @@ function buildExecExtraEnv(options?: {
   const env: Record<string, string> = {};
 
   // Tenant identity
-  if (options?.tenantId) env.ENCLAWS_TENANT_ID = options.tenantId;
-  if (options?.tenantUserId) env.ENCLAWS_TENANT_USER_ID = options.tenantUserId;
+  if (options?.tenantId) {env.ENCLAWS_TENANT_ID = options.tenantId;}
+  if (options?.tenantUserId) {env.ENCLAWS_TENANT_USER_ID = options.tenantUserId;}
 
   // User workspace path — enables skill scripts to save files to the correct user directory
-  if (options?.workspaceDir) env.ENCLAWS_USER_WORKSPACE = options.workspaceDir;
+  if (options?.workspaceDir) {env.ENCLAWS_USER_WORKSPACE = options.workspaceDir;}
 
   // Chat ID — extract from "chat:{chatId}" format in messageTo
   if (options?.messageTo?.startsWith("chat:")) {
@@ -214,8 +214,8 @@ function buildExecExtraEnv(options?: {
         provider,
         options.agentAccountId,
       ) as { appId: string; appSecret: string } | null;
-      if (creds?.appId) env.FEISHU_APP_ID = creds.appId;
-      if (creds?.appSecret) env.FEISHU_APP_SECRET = creds.appSecret;
+      if (creds?.appId) {env.FEISHU_APP_ID = creds.appId;}
+      if (creds?.appSecret) {env.FEISHU_APP_SECRET = creds.appSecret;}
     } catch {
       // Non-fatal — skill scripts fall back to config.json / enclaws.json
     }

@@ -46,7 +46,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
    */
   "tenant.onboarding.setup": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
-    if (!ctx) return;
+    if (!ctx) {return;}
 
     try {
       assertPermission(ctx.role, "agent.create");
@@ -100,7 +100,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
           if (!channelQuota.allowed) {
             throw new Error(`Channel quota reached (${channelQuota.current}/${channelQuota.max})`);
           }
-          const userConfig = (channel.config ?? {}) as Record<string, unknown>;
+          const userConfig = (channel.config ?? {});
           const appId = (userConfig.appId as string) ?? "";
           const appSecret = (userConfig.appSecret as string) ?? "";
           const defaultConfig = {

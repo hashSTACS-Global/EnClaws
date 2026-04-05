@@ -7,8 +7,8 @@ import { query, getDbType, DB_SQLITE } from "../index.js";
 import * as sqliteStats from "../sqlite/models/tenant-stats.js";
 
 function periodCondition(column: string, period: "all" | "month" | "today"): string {
-  if (period === "month") return `${column} >= DATE_TRUNC('month', NOW())`;
-  if (period === "today") return `${column} >= DATE_TRUNC('day', NOW())`;
+  if (period === "month") {return `${column} >= DATE_TRUNC('month', NOW())`;}
+  if (period === "today") {return `${column} >= DATE_TRUNC('day', NOW())`;}
   return "1=1";
 }
 
@@ -17,7 +17,7 @@ function pInt(v: unknown): number {
 }
 
 export async function getTenantSummary(tenantId: string) {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getTenantSummary(tenantId);
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getTenantSummary(tenantId);}
 
   const [
     tenantRes, agentTotal, agentActive, agentActive30d,
@@ -72,7 +72,7 @@ export async function getTenantSummary(tenantId: string) {
 }
 
 export async function getTenantTokenTrend(tenantId: string, days = 7) {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getTenantTokenTrend(tenantId, days);
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getTenantTokenTrend(tenantId, days);}
 
   const result = await query(
     `SELECT DATE(recorded_at) AS day,
@@ -90,7 +90,7 @@ export async function getTenantTokenTrend(tenantId: string, days = 7) {
 }
 
 export async function getTenantTokenRank(tenantId: string, period: "all" | "month" | "today" = "all", limit = 5) {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getTenantTokenRank(tenantId, period, limit);
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getTenantTokenRank(tenantId, period, limit);}
 
   const cond = periodCondition("ur.recorded_at", period);
 
@@ -130,7 +130,7 @@ export async function getTenantTokenRank(tenantId: string, period: "all" | "mont
 }
 
 export async function getTenantLlmStats(tenantId: string, period: "all" | "month" | "today" = "all") {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getTenantLlmStats(tenantId, period);
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getTenantLlmStats(tenantId, period);}
 
   const cond = periodCondition("created_at", period);
   const where = `tenant_id = $1 AND ${cond}`;
@@ -159,7 +159,7 @@ export async function getTenantLlmStats(tenantId: string, period: "all" | "month
 }
 
 export async function getTenantChannelDistribution(tenantId: string) {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getTenantChannelDistribution(tenantId);
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getTenantChannelDistribution(tenantId);}
 
   const result = await query(
     `SELECT tc.channel_type AS type, COUNT(ca.id) AS count
@@ -172,7 +172,7 @@ export async function getTenantChannelDistribution(tenantId: string) {
 }
 
 export async function getTenantRecentTraces(tenantId: string, limit = 10) {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getTenantRecentTraces(tenantId, limit);
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getTenantRecentTraces(tenantId, limit);}
 
   const result = await query(
     `SELECT COALESCE(ta.name, t.agent_id) AS agent_name,

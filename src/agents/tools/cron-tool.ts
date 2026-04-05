@@ -371,8 +371,8 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
       // can resolve the correct tenant-scoped cron store, even when the internal
       // gateway connection does not carry a JWT.
       const tenantParams: Record<string, string> = {};
-      if (opts?.tenantId) tenantParams._tenantId = opts.tenantId;
-      if (opts?.tenantUserId) tenantParams._tenantUserId = opts.tenantUserId;
+      if (opts?.tenantId) {tenantParams._tenantId = opts.tenantId;}
+      if (opts?.tenantUserId) {tenantParams._tenantUserId = opts.tenantUserId;}
       process.stderr.write(`[cron-tool] execute: action=${action} tenantParams=${JSON.stringify(tenantParams)} opts.tenantId=${opts?.tenantId || "(empty)"} opts.tenantUserId=${opts?.tenantUserId || "(empty)"}\n`);
 
       switch (action) {

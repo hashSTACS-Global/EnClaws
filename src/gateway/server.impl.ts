@@ -532,11 +532,11 @@ export async function startGatewayServer(
   const resolveTenantCron = (tenant: { tenantId: string; userId: string }) => {
     const key = `${tenant.tenantId}:${tenant.userId}`;
     let cached = tenantCronCache.get(key);
-    if (cached) return cached;
+    if (cached) {return cached;}
     // Skip cron init if the user's cron directory does not exist yet
     // (e.g. page-registered enterprise users whose dirs are created on-demand)
     const cronDir = resolveTenantCronDir(tenant.tenantId, tenant.userId);
-    if (!fs.existsSync(cronDir)) return undefined;
+    if (!fs.existsSync(cronDir)) {return undefined;}
     const tenantStorePath = resolveUserCronStorePath(tenant.tenantId, tenant.userId);
     const tenantCronState = buildTenantCronService({
       tenantId: tenant.tenantId,

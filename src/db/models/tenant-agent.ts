@@ -29,7 +29,7 @@ export async function createTenantAgent(params: {
   modelConfig?: ModelConfigEntry[];
   createdBy?: string;
 }): Promise<TenantAgent> {
-  if (getDbType() === DB_SQLITE) return sqliteAgent.createTenantAgent(params);
+  if (getDbType() === DB_SQLITE) {return sqliteAgent.createTenantAgent(params);}
   const result = await query(
     `INSERT INTO tenant_agents (tenant_id, agent_id, name, config, model_config, created_by)
      VALUES ($1, $2, $3, $4, $5, $6)
@@ -40,7 +40,7 @@ export async function createTenantAgent(params: {
 }
 
 export async function getTenantAgent(tenantId: string, agentId: string): Promise<TenantAgent | null> {
-  if (getDbType() === DB_SQLITE) return sqliteAgent.getTenantAgent(tenantId, agentId);
+  if (getDbType() === DB_SQLITE) {return sqliteAgent.getTenantAgent(tenantId, agentId);}
   const result = await query(
     "SELECT * FROM tenant_agents WHERE tenant_id = $1 AND agent_id = $2",
     [tenantId, agentId],
@@ -52,7 +52,7 @@ export async function listTenantAgents(
   tenantId: string,
   opts?: { activeOnly?: boolean; createdBy?: string },
 ): Promise<TenantAgent[]> {
-  if (getDbType() === DB_SQLITE) return sqliteAgent.listTenantAgents(tenantId, opts);
+  if (getDbType() === DB_SQLITE) {return sqliteAgent.listTenantAgents(tenantId, opts);}
   const conditions = ["tenant_id = $1"];
   const values: unknown[] = [tenantId];
 
@@ -77,7 +77,7 @@ export async function updateTenantAgent(
   agentId: string,
   updates: Partial<Pick<TenantAgent, "name" | "config" | "modelConfig" | "isActive">>,
 ): Promise<TenantAgent | null> {
-  if (getDbType() === DB_SQLITE) return sqliteAgent.updateTenantAgent(tenantId, agentId, updates);
+  if (getDbType() === DB_SQLITE) {return sqliteAgent.updateTenantAgent(tenantId, agentId, updates);}
   const sets: string[] = [];
   const values: unknown[] = [];
   let idx = 1;
@@ -99,7 +99,7 @@ export async function updateTenantAgent(
     values.push(updates.isActive);
   }
 
-  if (sets.length === 0) return getTenantAgent(tenantId, agentId);
+  if (sets.length === 0) {return getTenantAgent(tenantId, agentId);}
 
   values.push(tenantId, agentId);
   const result = await query(
@@ -111,7 +111,7 @@ export async function updateTenantAgent(
 }
 
 export async function deleteTenantAgent(tenantId: string, agentId: string): Promise<boolean> {
-  if (getDbType() === DB_SQLITE) return sqliteAgent.deleteTenantAgent(tenantId, agentId);
+  if (getDbType() === DB_SQLITE) {return sqliteAgent.deleteTenantAgent(tenantId, agentId);}
   const result = await query(
     "DELETE FROM tenant_agents WHERE tenant_id = $1 AND agent_id = $2",
     [tenantId, agentId],

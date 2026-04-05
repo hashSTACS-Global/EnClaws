@@ -521,17 +521,17 @@ export class OnboardingWizard extends LitElement {
   }
 
   private nextModel() {
-    if (!this.validateModel()) return;
+    if (!this.validateModel()) {return;}
     this.goNext();
   }
 
   private nextAgent() {
-    if (!this.validateAgent()) return;
+    if (!this.validateAgent()) {return;}
     this.goNext();
   }
 
   private nextChannel() {
-    if (this.selectedChannel && !this.validateChannel()) return;
+    if (this.selectedChannel && !this.validateChannel()) {return;}
     this.submitAll();
   }
 

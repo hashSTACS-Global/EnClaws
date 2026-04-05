@@ -214,17 +214,17 @@ export class TenantOverviewView extends LitElement {
   }
 
   private fmt(n: number): string {
-    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-    if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+    if (n >= 1_000_000) {return (n / 1_000_000).toFixed(1) + "M";}
+    if (n >= 1_000) {return (n / 1_000).toFixed(1) + "K";}
     return String(n);
   }
 
   private fmtTime(iso: string | null): string {
-    if (!iso) return "-";
+    if (!iso) {return "-";}
     const diff = Date.now() - new Date(iso).getTime();
-    if (diff < 60_000) return t("tenantOverview.justNow");
-    if (diff < 3600_000) return t("tenantOverview.minutesAgo", { n: String(Math.floor(diff / 60_000)) });
-    if (diff < 86400_000) return t("tenantOverview.hoursAgo", { n: String(Math.floor(diff / 3600_000)) });
+    if (diff < 60_000) {return t("tenantOverview.justNow");}
+    if (diff < 3600_000) {return t("tenantOverview.minutesAgo", { n: String(Math.floor(diff / 60_000)) });}
+    if (diff < 86400_000) {return t("tenantOverview.hoursAgo", { n: String(Math.floor(diff / 3600_000)) });}
     return new Date(iso).toLocaleDateString();
   }
 
@@ -233,9 +233,9 @@ export class TenantOverviewView extends LitElement {
     if (changed.has("rankPeriod")) { void this.loadRank(); }
     if (changed.has("llmPeriod")) { void this.loadLlm(); }
     // Init charts if not yet created (e.g. after loading state clears)
-    if (!this.trendChart) this.initTrendChart();
-    if (!this.llmPieChart) this.initLlmPieChart();
-    if (!this.channelPieChart) this.initChannelPieChart();
+    if (!this.trendChart) {this.initTrendChart();}
+    if (!this.llmPieChart) {this.initLlmPieChart();}
+    if (!this.channelPieChart) {this.initChannelPieChart();}
     this.updateTrendChart();
     this.updateLlmPieChart();
     this.updateChannelPieChart();
@@ -267,7 +267,7 @@ export class TenantOverviewView extends LitElement {
   // ── Trend line chart ──
   private initTrendChart() {
     const el = this.shadowRoot?.querySelector(".trend-chart") as HTMLElement | null;
-    if (!el) return;
+    if (!el) {return;}
     this.trendChart = echarts.init(el, "dark");
     this.updateTrendChart();
     this.resizeObserver = new ResizeObserver(() => {
@@ -279,7 +279,7 @@ export class TenantOverviewView extends LitElement {
   }
 
   private updateTrendChart() {
-    if (!this.trendChart || this.trend.length === 0) return;
+    if (!this.trendChart || this.trend.length === 0) {return;}
     const data = this.trend;
     this.trendChart.setOption({
       backgroundColor: "transparent",
@@ -327,14 +327,14 @@ export class TenantOverviewView extends LitElement {
   // ── LLM model distribution pie ──
   private initLlmPieChart() {
     const el = this.shadowRoot?.querySelector(".llm-pie-chart") as HTMLElement | null;
-    if (!el) return;
+    if (!el) {return;}
     this.llmPieChart = echarts.init(el, "dark");
     this.updateLlmPieChart();
     this.resizeObserver?.observe(el);
   }
 
   private updateLlmPieChart() {
-    if (!this.llmPieChart) return;
+    if (!this.llmPieChart) {return;}
     const colors = ["#60a5fa", "#4ade80", "#facc15", "#a78bfa", "#fb923c"];
     const data = this.llmStats?.modelDistribution ?? [];
     this.llmPieChart.setOption({
@@ -364,14 +364,14 @@ export class TenantOverviewView extends LitElement {
   // ── Channel distribution pie ──
   private initChannelPieChart() {
     const el = this.shadowRoot?.querySelector(".channel-pie-chart") as HTMLElement | null;
-    if (!el) return;
+    if (!el) {return;}
     this.channelPieChart = echarts.init(el, "dark");
     this.updateChannelPieChart();
     this.resizeObserver?.observe(el);
   }
 
   private updateChannelPieChart() {
-    if (!this.channelPieChart) return;
+    if (!this.channelPieChart) {return;}
     const colors = ["#60a5fa", "#4ade80", "#facc15", "#a78bfa", "#fb923c"];
     const data = this.channelDist;
     this.channelPieChart.setOption({
@@ -399,9 +399,9 @@ export class TenantOverviewView extends LitElement {
   }
 
   private rankClass(i: number): string {
-    if (i === 0) return "top1";
-    if (i === 1) return "top2";
-    if (i === 2) return "top3";
+    if (i === 0) {return "top1";}
+    if (i === 1) {return "top2";}
+    if (i === 2) {return "top3";}
     return "other";
   }
 
@@ -411,7 +411,7 @@ export class TenantOverviewView extends LitElement {
   }
 
   private renderRankList(items: Array<{ name: string; sub?: string; tokens: number }>) {
-    if (items.length === 0) return html`<div class="rank-empty">${t("tenantOverview.noData")}</div>`;
+    if (items.length === 0) {return html`<div class="rank-empty">${t("tenantOverview.noData")}</div>`;}
     const maxVal = items[0]?.tokens || 1;
     return html`
       <ul class="rank-list">
@@ -428,8 +428,8 @@ export class TenantOverviewView extends LitElement {
   }
 
   render() {
-    if (this.loading) return html`<div class="loading">${t("tenantOverview.loading")}</div>`;
-    if (!this.summary) return html`<div class="empty">${t("tenantOverview.noData")}</div>`;
+    if (this.loading) {return html`<div class="loading">${t("tenantOverview.loading")}</div>`;}
+    if (!this.summary) {return html`<div class="empty">${t("tenantOverview.noData")}</div>`;}
     const s = this.summary;
 
     return html`

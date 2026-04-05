@@ -93,10 +93,10 @@ export function createInteractionTraceRecorder(
       // Capture params like temperature, max_tokens from the model/options
       const modelObj = model as unknown as Record<string, unknown>;
       const requestParams: Record<string, unknown> = {};
-      if (modelObj?.maxTokens) requestParams.maxTokens = modelObj.maxTokens;
-      if (modelObj?.contextWindow) requestParams.contextWindow = modelObj.contextWindow;
-      if (ctxObj?.temperature !== undefined) requestParams.temperature = ctxObj.temperature;
-      if (ctxObj?.max_tokens !== undefined) requestParams.max_tokens = ctxObj.max_tokens;
+      if (modelObj?.maxTokens) {requestParams.maxTokens = modelObj.maxTokens;}
+      if (modelObj?.contextWindow) {requestParams.contextWindow = modelObj.contextWindow;}
+      if (ctxObj?.temperature !== undefined) {requestParams.temperature = ctxObj.temperature;}
+      if (ctxObj?.max_tokens !== undefined) {requestParams.max_tokens = ctxObj.max_tokens;}
 
       requestPayloads.push({
         systemPrompt: cachedSystemPrompt,
@@ -141,7 +141,7 @@ export function createInteractionTraceRecorder(
           tenantTraceAllowed = false;
         }
       }
-      if (!tenantTraceAllowed) return;
+      if (!tenantTraceAllowed) {return;}
 
       for (let i = 0; i < payloads.length; i += 1) {
         const payload = payloads[i];
@@ -237,8 +237,8 @@ export function createInteractionTraceRecorder(
 }
 
 function toInt(val: unknown): number {
-  if (typeof val === "number") return Math.floor(val);
-  if (typeof val === "string") return parseInt(val, 10) || 0;
+  if (typeof val === "number") {return Math.floor(val);}
+  if (typeof val === "string") {return parseInt(val, 10) || 0;}
   return 0;
 }
 
@@ -248,7 +248,7 @@ function extractUsage(
   cb: (inputTokens: number, outputTokens: number, cacheRead: number, cacheWrite: number) => void,
 ): void {
   const usage = msg.usage as Record<string, unknown> | undefined;
-  if (!usage) return;
+  if (!usage) {return;}
   cb(
     toInt(usage.input ?? usage.inputTokens ?? usage.input_tokens ?? usage.promptTokens ?? usage.prompt_tokens),
     toInt(usage.output ?? usage.outputTokens ?? usage.output_tokens ?? usage.completionTokens ?? usage.completion_tokens),

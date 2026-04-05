@@ -41,14 +41,14 @@ const DEFAULT_GIT_URL = "https://github.com/hashSTACS-Global/feishu-skills.git";
 // ---------------------------------------------------------------------------
 
 function shouldExclude(name: string): boolean {
-  if (EXCLUDE.has(name)) return true;
+  if (EXCLUDE.has(name)) {return true;}
   return EXCLUDE_EXT.some((ext) => name.endsWith(ext));
 }
 
 function copyDirRecursive(src: string, dst: string): void {
   fs.mkdirSync(dst, { recursive: true });
   for (const entry of fs.readdirSync(src)) {
-    if (shouldExclude(entry)) continue;
+    if (shouldExclude(entry)) {continue;}
     const srcPath = path.join(src, entry);
     const dstPath = path.join(dst, entry);
     if (fs.statSync(srcPath).isDirectory()) {
@@ -103,7 +103,7 @@ async function cloneToTemp(gitUrl: string): Promise<string | null> {
   // Check git availability
   try {
     const check = await runCommandWithTimeout(["git", "--version"], { timeoutMs: 5_000 });
-    if (check.code !== 0) return null;
+    if (check.code !== 0) {return null;}
   } catch {
     return null;
   }
@@ -178,7 +178,7 @@ export async function installSkillPack(tenantId: string): Promise<SkillPackResul
 
   for (const skill of SKILLS) {
     const src = path.join(sourceDir, skill);
-    if (!fs.existsSync(src)) continue;
+    if (!fs.existsSync(src)) {continue;}
     try {
       const dst = path.join(targetDir, skill);
       copyDirRecursive(src, dst);

@@ -7,8 +7,8 @@ import { sqliteQuery } from "../index.js";
 
 // Time filter helper
 function periodCondition(column: string, period: "all" | "month" | "today"): string {
-  if (period === "month") return `${column} >= DATE('now', 'start of month')`;
-  if (period === "today") return `${column} >= DATE('now')`;
+  if (period === "month") {return `${column} >= DATE('now', 'start of month')`;}
+  if (period === "today") {return `${column} >= DATE('now')`;}
   return "1=1"; // all
 }
 

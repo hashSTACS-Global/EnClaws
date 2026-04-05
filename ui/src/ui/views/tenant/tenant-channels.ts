@@ -314,7 +314,7 @@ export class TenantChannelsView extends LitElement {
     this.errorKey = key;
     this.successKey = "";
     this.msgParams = params ?? {};
-    if (this.msgTimer) clearTimeout(this.msgTimer);
+    if (this.msgTimer) {clearTimeout(this.msgTimer);}
     this.msgTimer = setTimeout(() => (this.errorKey = ""), 5000);
   }
 
@@ -322,14 +322,14 @@ export class TenantChannelsView extends LitElement {
     this.successKey = key;
     this.errorKey = "";
     this.msgParams = params ?? {};
-    if (this.msgTimer) clearTimeout(this.msgTimer);
+    if (this.msgTimer) {clearTimeout(this.msgTimer);}
     this.msgTimer = setTimeout(() => (this.successKey = ""), 5000);
   }
 
   /** Translate key at render time; map known server errors, pass through others. */
   private tr(key: string): string {
-    if (key.includes("频道名称已存在")) return t("tenantChannels.channelNameExists");
-    if (key.includes("已存在相同 App ID")) return t("tenantChannels.duplicateAppId");
+    if (key.includes("频道名称已存在")) {return t("tenantChannels.channelNameExists");}
+    if (key.includes("已存在相同 App ID")) {return t("tenantChannels.duplicateAppId");}
     const result = t(key, this.msgParams);
     return result === key ? key : result;
   }
@@ -362,7 +362,7 @@ export class TenantChannelsView extends LitElement {
       setTimeout(() => (this.scopesCopied = false), 2000);
     } catch {
       // Fallback: select textarea content
-      const textarea = this.renderRoot.querySelector(".modal-scopes-box") as HTMLTextAreaElement | null;
+      const textarea = this.renderRoot.querySelector(".modal-scopes-box");
       if (textarea) {
         textarea.select();
         document.execCommand("copy");
@@ -482,7 +482,7 @@ export class TenantChannelsView extends LitElement {
 
   private startFeishuPoll(index: number, intervalSec: number) {
     const app = this.formApps[index];
-    if (!app?.feishuDeviceCode) return;
+    if (!app?.feishuDeviceCode) {return;}
     const deviceCode = app.feishuDeviceCode;
     const domain = app.feishuDomain ?? "feishu";
     const env = app.feishuEnv ?? "prod";
@@ -673,7 +673,7 @@ export class TenantChannelsView extends LitElement {
       cancelText: t("tenantChannels.cancel"),
       danger: true,
     });
-    if (!ok) return;
+    if (!ok) {return;}
     this.errorKey = "";
     try {
       await this.rpc("tenant.channels.delete", { channelId: channel.id });

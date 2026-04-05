@@ -6,13 +6,13 @@ import { query, getDbType, DB_SQLITE } from "../index.js";
 import * as sqliteStats from "../sqlite/models/platform-stats.js";
 
 function periodCondition(column: string, period: "all" | "month" | "today"): string {
-  if (period === "month") return `${column} >= DATE_TRUNC('month', NOW())`;
-  if (period === "today") return `${column} >= DATE_TRUNC('day', NOW())`;
+  if (period === "month") {return `${column} >= DATE_TRUNC('month', NOW())`;}
+  if (period === "today") {return `${column} >= DATE_TRUNC('day', NOW())`;}
   return "1=1";
 }
 
 export async function getPlatformSummary() {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getPlatformSummary();
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getPlatformSummary();}
 
   const [tenantTotal, tenantActive, curMonth, lastMonth, agentTotal, agentEnabled, agentActive] = await Promise.all([
     query("SELECT COUNT(*) as c FROM tenants WHERE status != 'deleted' AND slug != '_platform'"),
@@ -32,7 +32,7 @@ export async function getPlatformSummary() {
 }
 
 export async function getTokenTrend(days = 30) {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getTokenTrend(days);
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getTokenTrend(days);}
 
   const result = await query(
     `SELECT DATE(recorded_at) AS day,
@@ -55,7 +55,7 @@ export async function getTokenTrend(days = 30) {
 }
 
 export async function getTokenRank(period: "all" | "month" | "today" = "all", limit = 5) {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getTokenRank(period, limit);
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getTokenRank(period, limit);}
 
   const cond = periodCondition("u.recorded_at", period);
   const condNoAlias = periodCondition("recorded_at", period);
@@ -107,7 +107,7 @@ export async function getTokenRank(period: "all" | "month" | "today" = "all", li
 }
 
 export async function getLlmStats(period: "all" | "month" | "today" = "all") {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getLlmStats(period);
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getLlmStats(period);}
 
   const cond = periodCondition("created_at", period);
 
@@ -134,7 +134,7 @@ export async function getLlmStats(period: "all" | "month" | "today" = "all") {
 }
 
 export async function getChannelDistribution() {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getChannelDistribution();
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getChannelDistribution();}
 
   const result = await query(
     `SELECT tc.channel_type AS type, COUNT(ca.id) AS count
@@ -146,7 +146,7 @@ export async function getChannelDistribution() {
 }
 
 export async function getUserActivity() {
-  if (getDbType() === DB_SQLITE) return sqliteStats.getUserActivity();
+  if (getDbType() === DB_SQLITE) {return sqliteStats.getUserActivity();}
 
   const [totalRes, activeRes, todayRes, weekRes] = await Promise.all([
     query("SELECT COUNT(*) as c FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status != 'deleted' AND t.slug != '_platform'"),

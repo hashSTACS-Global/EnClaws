@@ -528,7 +528,7 @@ export class TenantAgentsView extends LitElement {
     this.errorKey = key;
     this.successKey = "";
     this.msgParams = params ?? {};
-    if (this.msgTimer) clearTimeout(this.msgTimer);
+    if (this.msgTimer) {clearTimeout(this.msgTimer);}
     this.msgTimer = setTimeout(() => (this.errorKey = ""), 5000);
   }
 
@@ -536,7 +536,7 @@ export class TenantAgentsView extends LitElement {
     this.successKey = key;
     this.errorKey = "";
     this.msgParams = params ?? {};
-    if (this.msgTimer) clearTimeout(this.msgTimer);
+    if (this.msgTimer) {clearTimeout(this.msgTimer);}
     this.msgTimer = setTimeout(() => (this.successKey = ""), 5000);
   }
 
@@ -677,7 +677,7 @@ export class TenantAgentsView extends LitElement {
     if (idx >= 0) {
       const wasDefault = config[idx].isDefault;
       config.splice(idx, 1);
-      if (wasDefault && config.length > 0) config[0] = { ...config[0], isDefault: true };
+      if (wasDefault && config.length > 0) {config[0] = { ...config[0], isDefault: true };}
     } else {
       config.push({ providerId, modelId, isDefault: config.length === 0 });
     }
@@ -693,16 +693,16 @@ export class TenantAgentsView extends LitElement {
 
   private toggleTool(toolId: string, enabled: boolean) {
     const deny = new Set(this.formToolsDeny);
-    if (enabled) deny.delete(toolId); else deny.add(toolId);
+    if (enabled) {deny.delete(toolId);} else {deny.add(toolId);}
     this.formToolsDeny = Array.from(deny);
   }
 
   private toggleGroupTools(groupId: string, enabled: boolean) {
     const group = TOOL_GROUP_DEFS.find((g) => g.id === groupId);
-    if (!group) return;
+    if (!group) {return;}
     const deny = new Set(this.formToolsDeny);
     for (const tool of group.tools) {
-      if (enabled) deny.delete(tool.id); else deny.add(tool.id);
+      if (enabled) {deny.delete(tool.id);} else {deny.add(tool.id);}
     }
     this.formToolsDeny = Array.from(deny);
   }
@@ -723,7 +723,7 @@ export class TenantAgentsView extends LitElement {
     if (idx >= 0) {
       const wasDefault = config[idx].isDefault;
       config.splice(idx, 1);
-      if (wasDefault && config.length > 0) config[0] = { ...config[0], isDefault: true };
+      if (wasDefault && config.length > 0) {config[0] = { ...config[0], isDefault: true };}
     } else {
       config.push({ providerId, modelId, isDefault: config.length === 0 });
     }
@@ -739,7 +739,7 @@ export class TenantAgentsView extends LitElement {
   }
 
   private async inlineSaveModelConfig(agent: TenantAgent) {
-    if (!this.inlineModelConfig) return;
+    if (!this.inlineModelConfig) {return;}
     this.inlineModelSaving = true;
     try {
       await this.rpc("tenant.agents.update", {
@@ -773,7 +773,7 @@ export class TenantAgentsView extends LitElement {
       systemPrompt: this.formSystemPrompt,
     };
     const deny = this.formToolsDeny.filter(Boolean);
-    if (deny.length > 0) config.tools = { deny };
+    if (deny.length > 0) {config.tools = { deny };}
 
     try {
       if (this.editingAgentId) {
@@ -812,12 +812,12 @@ export class TenantAgentsView extends LitElement {
       cancelText: t("tenantAgents.cancel"),
       danger: true,
     });
-    if (!ok) return;
+    if (!ok) {return;}
     this.errorKey = "";
     try {
       await this.rpc("tenant.agents.delete", { agentId: agent.agentId });
       this.showSuccess("tenantAgents.agentDeleted", { name });
-      if (this.selectedAgentId === agent.agentId) this.selectedAgentId = null;
+      if (this.selectedAgentId === agent.agentId) {this.selectedAgentId = null;}
       await this.loadAgents();
     } catch (err: any) {
       this.showError(err?.message ?? "tenantAgents.deleteFailed", err?.details);
@@ -1192,7 +1192,7 @@ export class TenantAgentsView extends LitElement {
                 <div class="form-hint">
                   ${t("tenantAgents.selectedCount").replace("{count}", String(this.formModelConfig.length)).replace("{default}", (() => {
                     const d = this.formModelConfig.find((e) => e.isDefault);
-                    if (!d) return t("tenantAgents.notSet");
+                    if (!d) {return t("tenantAgents.notSet");}
                     const fm = this.flatModels.find((m) => m.providerId === d.providerId && m.modelId === d.modelId);
                     return fm ? `${fm.modelName} (${fm.providerName})` : d.modelId;
                   })())}

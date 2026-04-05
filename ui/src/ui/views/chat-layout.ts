@@ -740,7 +740,7 @@ export class ChatLayout extends LitElement {
 
   private _renderAgentSelector() {
     const agents = this.props?.tenantAgents;
-    if (!agents || agents.length === 0) return nothing;
+    if (!agents || agents.length === 0) {return nothing;}
 
     // Extract current agent from sessionKey (format: "agent:{agentId}:{session}")
     const keyMatch = this.props.sessionKey?.match(/^agent:([^:]+)/);
