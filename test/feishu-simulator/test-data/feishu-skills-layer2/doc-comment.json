@@ -1,0 +1,298 @@
+{
+  "cases": [
+    {
+      "name": "Setup-创建评论测试文件夹",
+      "message": "帮我在云空间创建一个文件夹叫「评论测试」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文件夹",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "doc-comment",
+        "setup"
+      ]
+    },
+    {
+      "name": "Setup-创建被评论文档",
+      "message": "帮我在「评论测试」文件夹下创建一个文档，标题叫《评论-基础文档》，内容写：## 第一段\n这是用于评论功能测试的基础文档。\n\n## 第二段\n这里是第二段内容，可以针对不同段落添加评论。\n\n## 第三段\n这是第三段，包含一些待讨论的要点。",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "doc-comment",
+        "setup"
+      ]
+    },
+    {
+      "name": "添加简单评论",
+      "message": "帮我在《评论-基础文档》上添加一条评论：「这个文档结构很清晰」",
+      "assert": {
+        "containsAny": [
+          "已添加",
+          "评论",
+          "成功",
+          "完成",
+          "已为"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "添加多条评论",
+      "message": "帮我在《评论-基础文档》上再添加一条评论：「建议补充更多示例」",
+      "assert": {
+        "containsAny": [
+          "已添加",
+          "评论",
+          "成功",
+          "完成",
+          "已为"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "添加长评论",
+      "message": "帮我在《评论-基础文档》上添加一条评论：「整体框架看起来不错，但是第二段的描述可以更详细一些，特别是关于实施步骤的部分需要展开说明，建议补充流程图或者示例代码方便后续维护」",
+      "assert": {
+        "containsAny": [
+          "已添加",
+          "评论",
+          "成功",
+          "完成",
+          "已为"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "查看所有评论",
+      "message": "帮我看看《评论-基础文档》上有哪些评论",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "添加问题型评论",
+      "message": "帮我在《评论-基础文档》上添加一条评论：「第三段提到的待讨论要点具体是指什么？需要明确一下」",
+      "assert": {
+        "containsAny": [
+          "已添加",
+          "评论",
+          "成功",
+          "完成",
+          "已为"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "回复评论",
+      "message": "帮我在《评论-基础文档》上最新的那条评论下面回复：「待讨论要点指的是技术选型和资源分配」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "解决评论",
+      "message": "帮我把《评论-基础文档》上第一条评论标记为已解决",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "查看已解决的评论",
+      "message": "帮我看看《评论-基础文档》里已经解决的评论有哪些",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "查看未解决的评论",
+      "message": "帮我看看《评论-基础文档》里还有哪些没解决的评论",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "@提及式评论",
+      "message": "帮我在《评论-基础文档》上添加一条评论，@许帅，内容是：「请帮忙确认下方案是否可行」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "带链接的评论",
+      "message": "帮我在《评论-基础文档》上添加一条评论：「参考资料见 https://www.feishu.cn」",
+      "assert": {
+        "containsAny": [
+          "已添加",
+          "评论",
+          "成功",
+          "完成",
+          "已为"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "评论数量统计",
+      "message": "帮我看看《评论-基础文档》一共有多少条评论",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "口语化-评论",
+      "message": "在那个评论基础文档上留个言：「明天会上一起讨论」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-comment",
+        "intent"
+      ]
+    },
+    {
+      "name": "口语化-看评论",
+      "message": "评论基础文档上别人都说了啥？",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-comment",
+        "intent"
+      ]
+    },
+    {
+      "name": "错误-不存在的文档",
+      "message": "帮我在《xyzzy_不存在的文档_99999》上添加一条评论：「测试」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-comment",
+        "error"
+      ]
+    },
+    {
+      "name": "错误-空评论内容",
+      "message": "帮我在《评论-基础文档》上添加一条评论",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "doc-comment",
+        "error",
+        "intent"
+      ]
+    },
+    {
+      "name": "融合-读文档后评论",
+      "message": "帮我读取《评论-基础文档》的内容，然后在文档上加一条评论总结主要内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "doc-comment",
+        "fusion"
+      ]
+    },
+    {
+      "name": "融合-评论生成任务",
+      "message": "帮我看看《评论-基础文档》上的所有未解决评论，把每条评论建成一个跟进任务",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "doc-comment",
+        "fusion"
+      ]
+    }
+  ]
+}

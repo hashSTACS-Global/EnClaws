@@ -8,11 +8,21 @@
  * Prerequisites:
  *   - All Layer 2 prerequisites (Gateway + Lark plugin + permissions)
  *   - Bot must be a member of the target group chat
- *   - TEST_GROUP_CHAT_ID environment variable set (or chatId in test data JSON)
+ *
+ * Credentials (env vars take precedence over JSON values; placeholders ignored):
+ *   TEST_FEISHU_APP_ID            — Feishu app ID
+ *   TEST_FEISHU_APP_SECRET        — Feishu app secret
+ *   TEST_FEISHU_USER_OPEN_ID      — User open_id for Device Flow auth
+ *   TEST_FEISHU_GROUP_CHAT_ID     — Target group chat_id (oc_xxx)
  *
  * Usage:
- *   TEST_GROUP_CHAT_ID=oc_xxx \
- *   pnpm vitest run test/feishu-simulator/test-case/feishu-skills-layer4.test.ts
+ *   TEST_FEISHU_APP_ID=cli_xxx \
+ *   TEST_FEISHU_APP_SECRET=xxx \
+ *   TEST_FEISHU_USER_OPEN_ID=ou_xxx \
+ *   TEST_FEISHU_GROUP_CHAT_ID=oc_xxx \
+ *     pnpm vitest run test/feishu-simulator/test-case/feishu-skills-layer4.test.ts
+ *
+ * Or place the same vars in test/.env (loaded automatically via dotenv).
  */
 
 import { config } from "dotenv";

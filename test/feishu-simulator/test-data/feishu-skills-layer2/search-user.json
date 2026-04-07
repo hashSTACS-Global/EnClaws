@@ -1,49 +1,83 @@
 {
-  "appId": "cli_xxx",
-  "appSecret": "xxx",
-  "userOpenId": "ou_xxx",
   "cases": [
     {
       "name": "按名字搜索",
       "message": "帮我搜索一下飞书用户「许帅」",
-      "assert": { "notContains": "error", "minLength": 2 },
-      "tags": ["P1"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1"
+      ]
     },
     {
       "name": "查看自己的信息",
       "message": "帮我查一下我自己的飞书账号信息",
-      "assert": { "notContains": "error", "minLength": 5 },
-      "tags": ["P1"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1"
+      ]
     },
     {
       "name": "搜索不存在的用户",
       "message": "帮我找一下飞书用户「xyzzy_不存在的人」",
-      "assert": { "notContains": "exception", "minLength": 2 },
-      "tags": ["P1"]
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1"
+      ]
     },
     {
       "name": "口语化-找人",
       "message": "李帅的飞书号是多少？帮我查查",
-      "assert": { "notContains": "error", "minLength": 2 },
-      "tags": ["P1", "intent"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "intent"
+      ]
     },
     {
       "name": "搜索多个用户",
       "message": "帮我查一下许帅和李帅的联系方式",
-      "assert": { "notContains": "error", "minLength": 5 },
-      "tags": ["P2"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2"
+      ]
     },
     {
       "name": "查部门信息",
       "message": "帮我查一下许帅是哪个部门的",
-      "assert": { "notContains": "error", "minLength": 2 },
-      "tags": ["P2"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2"
+      ]
     },
     {
       "name": "口语化-联系方式",
       "message": "许帅怎么联系来着？手机号或者邮箱帮我查查",
-      "assert": { "notContains": "error", "minLength": 2 },
-      "tags": ["P2", "intent"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "intent"
+      ]
     }
   ]
 }

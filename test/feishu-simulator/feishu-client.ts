@@ -89,6 +89,9 @@ export class FeishuTestClient {
       throw new Error("Client not initialized. Call init() first.");
     }
 
+    // Proactively refresh token if it's about to expire within the next 5 minutes
+    await this.ensureFreshUserToken();
+
     const isGroupMode = !!this.groupChatId;
     const activeChatId = isGroupMode ? this.groupChatId : this.p2pChatId;
     const startedAt = Date.now();
@@ -108,11 +111,11 @@ export class FeishuTestClient {
     const receiveIdType = isGroupMode ? "chat_id" : "open_id";
     const receiveId = isGroupMode ? this.groupChatId! : this.botOpenId;
 
-    const sendRes = await this.feishu("POST", `/im/v1/messages?receive_id_type=${receiveIdType}`, {
+    const sendRes = await this.withUserTokenRetry(() => this.feishu("POST", `/im/v1/messages?receive_id_type=${receiveIdType}`, {
       receive_id: receiveId,
       msg_type: "text",
       content,
-    }, this.userToken);
+    }, this.userToken!));
 
     const userMsgId = sendRes.message_id;
     if (!userMsgId) throw new Error(`Send failed: ${JSON.stringify(sendRes)}`);
@@ -167,6 +170,44 @@ export class FeishuTestClient {
       throw new Error(`Feishu API error [${endpoint}]: code=${json.code} msg=${json.msg}`);
     }
     return json.data ?? json;
+  }
+
+  /**
+   * Proactively refresh the user token if it expires within the next 5 minutes.
+   * Avoids mid-run failures from token expiration during long test runs.
+   */
+  private async ensureFreshUserToken(): Promise<void> {
+    const cached = this.loadCachedToken();
+    if (!cached) return;
+    const refreshThresholdMs = 5 * 60 * 1000;
+    if (cached.expiresAt > Date.now() + refreshThresholdMs) return;
+    if (cached.refreshToken && (cached.refreshExpiresAt ?? 0) > Date.now()) {
+      console.log(`  Token expiring soon, proactively refreshing...`);
+      this.userToken = await this.refreshAccessToken(cached.refreshToken);
+    }
+  }
+
+  /**
+   * Wraps a user-token API call with auto-refresh on token expiration (code=99991677).
+   * Refreshes the user token mid-run and retries once.
+   */
+  private async withUserTokenRetry<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg.includes("99991677") || msg.includes("token expired") || msg.includes("Authentication token expired")) {
+        console.log(`  User token expired mid-run, refreshing...`);
+        const cached = this.loadCachedToken();
+        if (cached?.refreshToken && (cached.refreshExpiresAt ?? 0) > Date.now()) {
+          this.userToken = await this.refreshAccessToken(cached.refreshToken);
+        } else {
+          this.userToken = await this.authorize();
+        }
+        return await fn();
+      }
+      throw e;
+    }
   }
 
   private async getTenantToken(): Promise<string> {
@@ -351,6 +392,23 @@ export class FeishuTestClient {
     }
   }
 
+  /**
+   * Wait for the bot's FINAL reply, not just the first interim message.
+   *
+   * Multi-step skills (e.g. orchestration) often produce several messages with the same
+   * parent_id: an initial "正在处理…" message, then the final result. The naive approach
+   * (return the first match) captures the interim message and misses the URL/confirmation
+   * in the final one.
+   *
+   * Strategy:
+   *   1. Poll until at least one matching reply (sender=app, parent_id=userMsgId) is found.
+   *   2. After finding a candidate, enter a "quiet period": keep polling for `quietPeriodMs`
+   *      additional time. If a NEWER matching reply appears, update the candidate and reset
+   *      the quiet timer.
+   *   3. If no new reply arrives within `quietPeriodMs`, return the latest candidate.
+   *   4. Bound by overall `timeoutMs`. On hard timeout, return the latest candidate (if any)
+   *      or throw.
+   */
   private async waitForBotReply(
     userMsgId: string,
     beforeMsgId: string | null,
@@ -360,6 +418,11 @@ export class FeishuTestClient {
   ): Promise<{ text: string; meta: FeishuReplyMeta }> {
     const pollChatId = chatId ?? this.groupChatId ?? this.p2pChatId;
     const deadline = Date.now() + timeoutMs;
+    // Quiet period: how long to wait after the latest reply for any follow-up messages
+    const quietPeriodMs = 3_000;
+
+    let latestMsg: any = null;
+    let latestSeenAt = 0;
 
     while (Date.now() < deadline) {
       await sleep(pollMs);
@@ -372,16 +435,33 @@ export class FeishuTestClient {
           this.tenantToken!,
         );
 
+        // Items are sorted desc (newest first). First match = newest bot reply for our msg.
+        let foundThisRound: any = null;
         for (const msg of (data.items ?? [])) {
           if (msg.message_id === userMsgId) continue;
           if (beforeMsgId && msg.message_id === beforeMsgId) break;
-          // Match bot reply by parent_id (reply to our user message)
           if (msg.sender?.sender_type === "app" && msg.parent_id === userMsgId) {
-            // Check if card is still streaming — if so, keep polling
-            if (msg.msg_type === "interactive" && this.isCardStreaming(msg)) {
-              break; // wait for streaming to finish
-            }
-            return this.extractReply(msg);
+            foundThisRound = msg;
+            break;
+          }
+        }
+
+        if (foundThisRound) {
+          // Streaming card — keep polling, don't enter quiet period yet
+          if (foundThisRound.msg_type === "interactive" && this.isCardStreaming(foundThisRound)) {
+            continue;
+          }
+
+          // New (or first) candidate — update and reset quiet timer
+          if (!latestMsg || latestMsg.message_id !== foundThisRound.message_id) {
+            latestMsg = foundThisRound;
+            latestSeenAt = Date.now();
+            continue;
+          }
+
+          // Same as last seen — check whether quiet period has elapsed
+          if (Date.now() - latestSeenAt >= quietPeriodMs) {
+            return this.extractReply(latestMsg);
           }
         }
       } catch {
@@ -389,6 +469,10 @@ export class FeishuTestClient {
       }
     }
 
+    // Hard timeout — if we have a candidate, return it; else throw
+    if (latestMsg) {
+      return this.extractReply(latestMsg);
+    }
     throw new Error(`Timeout (${timeoutMs}ms) waiting for bot reply`);
   }
 

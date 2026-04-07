@@ -1,79 +1,157 @@
 {
-  "appId": "cli_xxx",
-  "appSecret": "xxx",
-  "userOpenId": "ou_xxx",
   "cases": [
     {
       "name": "编排-创建文档到指定文件夹",
       "message": "帮我在「自动化测试」文件夹里创建一个文档，标题叫《文件夹内文档》，内容随便写一些",
-      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P1", "orchestration"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-查人建会",
       "message": "帮我找到许帅，然后创建一个明天下午2点到3点的会议邀请他，主题是需求评审",
-      "assert": { "containsAny": ["已创建", "创建成功", "日程", "会议"], "notContains": "error" },
-      "tags": ["P1", "orchestration"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-文档写入知识库",
       "message": "帮我创建一个文档叫《技术方案》，写一些关于微服务架构的内容，然后放到知识库里",
-      "assert": { "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P1", "orchestration"]
+      "assert": {
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-搜索文档后读取",
       "message": "帮我找一下关于「自动化测试」的文档，然后读取第一篇的内容给我看看",
-      "assert": { "notContains": "error", "minLength": 10 },
-      "tags": ["P1", "orchestration"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 10
+      },
+      "tags": [
+        "P1",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-查群找人",
       "message": "帮我看看「测试」群里有哪些人，然后查一下群主的详细信息",
-      "assert": { "notContains": "error", "minLength": 5 },
-      "tags": ["P1", "orchestration"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-创建任务指派给人",
       "message": "帮我创建一个任务「提交测试报告」，指派给许帅，截止到周五",
-      "assert": { "notContains": "exception", "minLength": 5 },
-      "tags": ["P1", "orchestration"]
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-读文档写摘要到新文档",
       "message": "帮我读取《自动化测试文档》的内容，然后总结成一个摘要，放到新文档《测试摘要》里",
-      "assert": { "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P2", "orchestration"]
+      "assert": {
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-创建日程并建任务",
       "message": "帮我创建一个明天下午3点到4点的评审会议，然后建个任务提醒我提前准备材料",
-      "assert": { "notContains": "error", "minLength": 5 },
-      "tags": ["P2", "orchestration"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-搜人查日程",
       "message": "帮我查一下许帅的信息，然后看看他明天有没有空，我想约他开个会",
-      "assert": { "notContains": "error", "minLength": 5 },
-      "tags": ["P2", "orchestration"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-创建表格并填数据",
       "message": "帮我创建一个表格叫《缺陷统计》，列名是模块、缺陷数、修复数，然后添加三行：登录模块5个3个、支付模块3个2个、首页1个1个",
-      "assert": { "notContains": "error", "minLength": 5 },
-      "tags": ["P2", "orchestration"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-搜索文档更新内容",
       "message": "帮我找到《自动化测试文档》，在末尾追加一段：## 更新记录\\n- 新增了集成测试用例",
-      "assert": { "notContains": "error", "minLength": 5 },
-      "tags": ["P2", "orchestration"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "orchestration"
+      ]
     },
     {
       "name": "编排-查群发消息",
       "message": "帮我搜索「测试」相关的群聊，然后看看群里最近都聊了些什么",
-      "assert": { "notContains": "error", "minLength": 5 },
-      "tags": ["P2", "orchestration"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "orchestration"
+      ]
     }
   ]
 }

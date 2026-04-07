@@ -1,0 +1,79 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-按关键词搜索",
+      "message": "帮我搜一下飞书上关于'测试'的文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-搜索无结果",
+      "message": "搜索文档，关键词是'xyzzy_nonexistent_99999'",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group",
+        "error"
+      ]
+    },
+    {
+      "name": "群聊-口语化找文档",
+      "message": "群里之前提到的那个需求文档，帮我找找",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-搜索知识库空间",
+      "message": "帮我看看有没有叫「工程」的知识库空间",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-搜索云盘文件夹",
+      "message": "帮我找一下云空间里有没有叫「项目资料」的文件夹",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-按类型搜索",
+      "message": "帮我搜索一下飞书上所有的表格文件",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+import { t } from "../../i18n/index.ts";
+import { showConfirm } from "../components/confirm-dialog.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
 import type { ConfigSchemaResponse, ConfigSnapshot, ConfigUiHints } from "../types.ts";
 import type { JsonSchema } from "../views/config-form.shared.ts";
@@ -178,26 +180,96 @@ export async function applyConfig(state: ConfigState) {
   }
 }
 
+/** Poll the gateway until it comes back online, then reload the page. */
+async function waitForGatewayAndReload(state: ConfigState, oldVersion: string | undefined) {
+  const baseUrl = (state as unknown as { settings?: { gatewayUrl?: string } }).settings?.gatewayUrl || window.location.origin;
+  const maxAttempts = 60; // ~2 minutes
+  const intervalMs = 2000;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, intervalMs));
+    try {
+      const res = await fetch(baseUrl, { method: "HEAD", cache: "no-store" });
+      if (res.ok) {
+        state.updateMessage = t("update.successDone");
+        state.updateRunning = false;
+        // Reload after a brief delay so user sees the success message
+        setTimeout(() => window.location.reload(), 1500);
+        return;
+      }
+    } catch {
+      // Gateway not ready yet, keep polling
+    }
+  }
+  // Timed out — let user manually refresh
+  state.updateMessage = t("update.connectionLost");
+  state.updateRunning = false;
+}
+
 export async function runUpdate(state: ConfigState) {
   if (!state.client || !state.connected) {
     return;
   }
   state.updateRunning = true;
+  state.updateMessage = t("update.updating");
   state.lastError = null;
+
+  const oldVersion = (state as unknown as { updateAvailable?: { currentVersion?: string } }).updateAvailable?.currentVersion;
+
+  // Yield to let Lit render the "updating" state before starting the long request
+  await new Promise((r) => setTimeout(r, 0));
+
   try {
     const res = await state.client.request("update.run", {
       sessionKey: state.applySessionKey,
     });
-    const result = (res as { result?: { status?: string; mode?: string } })?.result;
+    const body = res as { result?: { status?: string; reason?: string }; restart?: unknown };
+    const result = body?.result;
     if (result?.status === "ok") {
-      state.updateMessage = result.mode === "git"
-        ? "Update successful. Please restart the service manually to apply changes."
-        : "Update successful. Service is restarting — please refresh the page in a few seconds.";
+      state.updateMessage = t("update.successRestarting");
+      // Poll for gateway to come back after restart
+      waitForGatewayAndReload(state, oldVersion);
+      return;
+    } else if (result?.reason === "dirty") {
+      state.updateMessage = null;
+      state.updateRunning = false;
+      await showConfirm({
+        title: t("update.available"),
+        message: t("update.dirtyWorkspace"),
+        confirmText: t("update.close"),
+        hideCancel: true,
+      });
+      return;
+    } else {
+      const reason = result?.reason ?? result?.status ?? "Update failed";
+      state.updateMessage = null;
+      state.updateRunning = false;
+      await showConfirm({
+        title: t("update.available"),
+        message: t("update.failed", { reason }),
+        confirmText: t("update.close"),
+        hideCancel: true,
+      });
+      return;
     }
   } catch (err) {
-    state.lastError = String(err);
-  } finally {
-    state.updateRunning = false;
+    const msg = String(err);
+    if (msg.includes("rate limit")) {
+      state.updateMessage = null;
+      state.updateRunning = false;
+      await showConfirm({
+        title: t("update.available"),
+        message: t("update.dirtyWorkspace"),
+        confirmText: t("update.close"),
+        hideCancel: true,
+      });
+      return;
+    }
+    // Connection dropped — gateway is restarting
+    state.updateMessage = t("update.successRestarting");
+    // Poll for gateway to come back
+    waitForGatewayAndReload(state, oldVersion);
+    return;
   }
 }
 

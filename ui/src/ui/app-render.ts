@@ -560,25 +560,32 @@ export function renderApp(state: AppViewState) {
 
               <main class="content ${isChat ? "content--chat" : ""}">
                   ${
-                          state.updateMessage
+                          state.updateMessage || state.updateRunning
                                   ? html`
                                       <div class="update-banner callout success" role="alert">
-                                          <strong>${state.updateMessage}</strong>
+                                          <strong>${state.updateMessage || t("update.updating")}</strong>
                                       </div>`
                                   : availableUpdate
                                   ? html`
                                       <div class="update-banner callout danger" role="alert">
-                                          <strong>Update available:</strong>
+                                          <strong>${t("update.available")}</strong>
                                           ${availableUpdate.channel === "git"
-                                                  ? html`${availableUpdate.latestVersion}`
-                                                  : html`v${availableUpdate.latestVersion}
-                                                      (running v${availableUpdate.currentVersion})`}.
-                                          <button
-                                                  class="btn btn--sm update-banner__btn"
-                                                  ?disabled=${state.updateRunning || !state.connected}
-                                                  @click=${() => runUpdate(state)}
-                                          >${state.updateRunning ? "Updating…" : "Update now"}
-                                          </button>
+                                                  ? html`${t("update.commitsBehind", { count: availableUpdate.latestVersion })}`
+                                                  : html`${t("update.versionInfo", { latest: availableUpdate.latestVersion, current: availableUpdate.currentVersion })}`}
+                                          ${availableUpdate.downloadUrl
+                                                  ? html`<a
+                                                          class="btn btn--sm update-banner__btn"
+                                                          href=${availableUpdate.downloadUrl}
+                                                          target="_blank"
+                                                          rel="noopener noreferrer"
+                                                          style="text-decoration:none"
+                                                  >${t("update.downloadInstall")}</a>`
+                                                  : html`<button
+                                                          class="btn btn--sm update-banner__btn"
+                                                          ?disabled=${state.updateRunning || !state.connected}
+                                                          @click=${() => runUpdate(state)}
+                                                  >${state.updateRunning ? t("update.updating") : t("update.updateNow")}
+                                                  </button>`}
                                       </div>`
                                   : nothing
                   }

@@ -9,8 +9,18 @@
  *   - Feishu app has im:message + im:message.send_as_user permissions
  *   - User authorization completed (or will be prompted via Device Flow)
  *
+ * Credentials (env vars take precedence over JSON values; placeholders like cli_xxx ignored):
+ *   TEST_FEISHU_APP_ID         — Feishu app ID
+ *   TEST_FEISHU_APP_SECRET     — Feishu app secret
+ *   TEST_FEISHU_USER_OPEN_ID   — User open_id for Device Flow auth
+ *
  * Usage:
- *   pnpm vitest run test/feishu-simulator/test-case/feishu-skills-layer2.test.ts
+ *   TEST_FEISHU_APP_ID=cli_xxx \
+ *   TEST_FEISHU_APP_SECRET=xxx \
+ *   TEST_FEISHU_USER_OPEN_ID=ou_xxx \
+ *     pnpm vitest run test/feishu-simulator/test-case/feishu-skills-layer2.test.ts
+ *
+ * Or place the same vars in test/.env (loaded automatically via dotenv).
  */
 
 import { config } from "dotenv";

@@ -1,0 +1,91 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-读取群最近消息",
+      "message": "帮我看看群里最近的聊天记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-搜索群消息",
+      "message": "帮我搜搜群里谁提过「发布」",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化看聊天",
+      "message": "刚才群里聊了啥？我没注意看",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-查看今天的消息",
+      "message": "帮我看看今天群里大家都聊了些什么",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-搜索指定关键词",
+      "message": "帮我在群里搜一下谁提过「上线」这个关键词",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-读取最近N条",
+      "message": "帮我看看群里最近10条消息是什么",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-搜索无结果",
+      "message": "帮我搜搜群里有没有人说过「xyzzy_不存在的关键词」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "error"
+      ]
+    }
+  ]
+}

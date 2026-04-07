@@ -1,79 +1,180 @@
 {
-  "appId": "cli_xxx",
-  "appSecret": "xxx",
-  "userOpenId": "ou_xxx",
   "cases": [
     {
       "name": "完整参数-标题+内容",
       "message": "帮我创建一个飞书文档，标题叫《自动化测试文档》，内容写：这是一个自动化测试创建的文档。",
-      "assert": { "containsAny": ["已创建", "创建成功", "文档"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P0"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文档"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0"
+      ]
     },
     {
       "name": "只给标题-无内容",
       "message": "创建一个飞书文档，标题叫《空白文档》",
-      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P0"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0"
+      ]
     },
     {
       "name": "模糊意图-不给标题应询问",
       "message": "帮我创建一个飞书文档",
-      "assert": { "minLength": 5, "notContains": "error" },
-      "tags": ["P0", "intent"]
+      "assert": {
+        "minLength": 5,
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "intent"
+      ]
     },
     {
       "name": "带Markdown格式内容",
       "message": "帮我创建一个文档，标题叫《Markdown测试》，内容用markdown格式：\n# 一级标题\n## 二级标题\n- 列表项1\n- 列表项2\n\n**加粗**和*斜体*\n\n```python\nprint('hello')\n```",
-      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P1"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1"
+      ]
     },
     {
       "name": "创建到指定文件夹",
       "message": "帮我在「自动化测试」文件夹下创建一个文档，标题叫《文件夹内文档》，随便写点内容",
-      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P1"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1"
+      ]
     },
     {
       "name": "创建到知识库",
       "message": "帮我在知识库里创建一个文档，标题叫《知识库文档》，内容写一些关于项目规范的说明",
-      "assert": { "notContains": "exception", "minLength": 5 },
-      "tags": ["P1"]
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1"
+      ]
     },
     {
       "name": "长内容文档",
       "message": "帮我创建一个文档，标题叫《AI发展报告》，帮我写大约500字关于人工智能最新发展趋势的内容",
-      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P1"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1"
+      ]
     },
     {
       "name": "口语化表达",
       "message": "弄个文档呗，就叫《随手记》，里面写上今天的会议要点：1.确认Q2目标 2.分配任务 3.下周复盘",
-      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P1", "intent"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "intent"
+      ]
     },
     {
       "name": "创建带表格内容的文档",
       "message": "帮我创建一个文档，标题叫《Q2排期表》，内容用表格列出：第一列是任务名，第二列是负责人，第三列是截止日期",
-      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P1"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1"
+      ]
     },
     {
       "name": "创建英文文档",
       "message": "帮我创建一个文档，标题叫《Weekly Report》，内容用英文写一段关于本周进展的总结",
-      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P2"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P2"
+      ]
     },
     {
       "name": "创建文档-带链接",
       "message": "帮我创建一个文档叫《参考资料》，内容写上几个常用链接，比如GitHub和飞书官网",
-      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P2"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P2"
+      ]
     },
     {
       "name": "口语化-写个模板",
       "message": "帮我搞个会议纪要模板出来，包含日期、参会人、议题、结论这几项",
-      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
-      "tags": ["P1", "intent"]
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "intent"
+      ]
     }
   ]
 }

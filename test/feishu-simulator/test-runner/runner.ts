@@ -65,6 +65,30 @@ export async function runTestFiles(opts: RunnerOptions & { llmJudge?: LlmJudgeCo
 // Re-export for convenience so callers don't need a separate import
 export type { LlmJudgeConfig };
 
+/**
+ * Resolve a credential field, preferring env var over the JSON value.
+ * Detects common placeholder values (cli_xxx, xxx, ou_xxx, empty) as "missing".
+ */
+function resolveCredential(jsonValue: string | undefined, envVar: string): string | undefined {
+  const isPlaceholder = (v?: string): boolean => {
+    if (!v) return true;
+    const trimmed = v.trim();
+    if (!trimmed) return true;
+    return trimmed === "xxx"
+      || trimmed === "cli_xxx"
+      || trimmed === "ou_xxx"
+      || trimmed === "oc_xxx"
+      || trimmed.startsWith("oc_xxxxxxxx")
+      || /^x+$/i.test(trimmed);
+  };
+  // Env var always wins if it's set
+  const envValue = process.env[envVar];
+  if (envValue && !isPlaceholder(envValue)) return envValue;
+  // Otherwise, fall back to JSON value if it's not a placeholder
+  if (!isPlaceholder(jsonValue)) return jsonValue;
+  return undefined;
+}
+
 async function runSingleFile(
   fileName: string,
   data: TestFile,
@@ -82,17 +106,43 @@ async function runSingleFile(
     if (error) errors.push(error);
   }
 
+  // Resolve credentials: env vars take precedence, JSON values are fallback.
+  // Placeholder values (cli_xxx, xxx, ou_xxx) are treated as missing.
+  const appId = resolveCredential(data.appId, "TEST_FEISHU_APP_ID");
+  const appSecret = resolveCredential(data.appSecret, "TEST_FEISHU_APP_SECRET");
+  const userOpenId = resolveCredential(data.userOpenId, "TEST_FEISHU_USER_OPEN_ID");
+  const chatId = resolveCredential(data.chatId, "TEST_FEISHU_GROUP_CHAT_ID");
+
+  if (!appId || !appSecret || !userOpenId) {
+    const missing = [
+      !appId && "appId (TEST_FEISHU_APP_ID)",
+      !appSecret && "appSecret (TEST_FEISHU_APP_SECRET)",
+      !userOpenId && "userOpenId (TEST_FEISHU_USER_OPEN_ID)",
+    ].filter(Boolean).join(", ");
+    const errMsg = `Missing credentials: ${missing}. Set in JSON file or via env vars.`;
+    console.log(`  ${errMsg}`);
+    for (const tc of data.cases) {
+      const label = tc.name ?? tc.message.slice(0, 30);
+      record({
+        file: fileName, name: label, message: tc.message,
+        expected: formatAssert(tc.assert), actual: `ERROR: ${errMsg}`,
+        passed: false, duration: "-",
+      }, `[${fileName}] "${label}": ${errMsg}`);
+    }
+    return { results, errors };
+  }
+
   const client = new FeishuTestClient({
-    appId: data.appId,
-    appSecret: data.appSecret,
-    userOpenId: data.userOpenId,
+    appId,
+    appSecret,
+    userOpenId,
     replyTimeoutMs: opts.replyTimeoutMs,
     pollIntervalMs: opts.pollIntervalMs,
-    chatId: data.chatId,
+    chatId,
   });
 
   if (data.chatName) {
-    console.log(`  Group: ${data.chatName} (${data.chatId})`);
+    console.log(`  Group: ${data.chatName} (${chatId})`);
   }
 
   try {

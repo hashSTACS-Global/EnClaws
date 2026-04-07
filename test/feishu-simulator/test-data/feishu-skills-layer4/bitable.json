@@ -1,0 +1,78 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-查看多维表格",
+      "message": "帮我看看我有哪些多维表格",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建多维表格",
+      "message": "帮我创建一个多维表格，用来追踪群里讨论的问题，字段：问题、提出人、状态",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-新增记录",
+      "message": "帮我在多维表格里新增一条记录",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查询记录筛选",
+      "message": "帮我查一下bug追踪表里状态是「未解决」的记录有哪些",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化记录",
+      "message": "帮我在多维表格里记一下：标题是登录页面崩溃，优先级P0，负责人许帅",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-创建OKR表格",
+      "message": "帮我创建一个多维表格叫《OKR追踪》，字段有：目标、关键结果、进度百分比、负责人、截止日期",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    }
+  ]
+}

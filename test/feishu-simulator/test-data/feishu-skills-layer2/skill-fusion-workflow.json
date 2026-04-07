@@ -1,0 +1,694 @@
+{
+  "cases": [
+    {
+      "name": "工作流-Setup-创建工作流文件夹",
+      "message": "帮我在云空间创建一个文件夹叫「工作流测试」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文件夹"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "workflow",
+        "setup"
+      ]
+    },
+    {
+      "name": "工作流-Setup-创建周报模板文档",
+      "message": "帮我在「工作流测试」文件夹下创建一个文档，标题叫《工作流-周报模板》，内容写：## 本周工作 ## 下周计划 ## 风险与问题 ## 需要支持",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "workflow",
+        "setup"
+      ]
+    },
+    {
+      "name": "工作流-Setup-创建Bug追踪表",
+      "message": "帮我在「工作流测试」文件夹下创建一个多维表格，标题叫《工作流-Bug追踪》，字段是：标题、严重等级、状态、负责人",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "workflow",
+        "setup"
+      ]
+    },
+    {
+      "name": "工作流-Setup-创建会议纪要库",
+      "message": "帮我在「工作流测试」文件夹下创建一个文档，标题叫《工作流-会议纪要库》，内容写：本文档用于汇总所有会议纪要的索引",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "workflow",
+        "setup"
+      ]
+    },
+    {
+      "name": "工作流-周报-填充本周工作",
+      "message": "帮我在《工作流-周报模板》的「本周工作」段落下追加一段：完成了用户登录模块开发、修复了3个P1级bug、完成了API文档整理",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加",
+          "完成",
+          "已为",
+          "已在"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "doc"
+      ]
+    },
+    {
+      "name": "工作流-周报-填充下周计划",
+      "message": "帮我在《工作流-周报模板》末尾追加一段：## 下周计划 - 启动支付模块开发 - 完成集成测试",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加",
+          "完成",
+          "已为",
+          "已在"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "doc"
+      ]
+    },
+    {
+      "name": "工作流-周报-验证内容",
+      "message": "帮我读取《工作流-周报模板》的最新内容",
+      "assert": {
+        "notContains": "error",
+        "minLength": 10
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "doc"
+      ]
+    },
+    {
+      "name": "工作流-Bug-录入第一条",
+      "message": "帮我在《工作流-Bug追踪》多维表格里新增一条记录：标题是登录页面崩溃，严重等级P0，状态待修复，负责人许帅",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "bitable"
+      ]
+    },
+    {
+      "name": "工作流-Bug-录入第二条",
+      "message": "帮我在《工作流-Bug追踪》里再新增一条：标题是支付回调超时，严重等级P1，状态修复中，负责人李帅",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "bitable"
+      ]
+    },
+    {
+      "name": "工作流-Bug-查询P0问题",
+      "message": "帮我查一下《工作流-Bug追踪》里严重等级是P0的问题有哪些",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "bitable"
+      ]
+    },
+    {
+      "name": "工作流-Bug-Bug统计写文档",
+      "message": "帮我读取《工作流-Bug追踪》里所有记录，统计各严重等级的数量，结果写到一个新文档《工作流-Bug周报》里",
+      "assert": {
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "bitable+doc"
+      ]
+    },
+    {
+      "name": "工作流-会议-创建评审会",
+      "message": "帮我创建一个明天下午2点到3点的会议，主题是「工作流-需求评审会」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "calendar"
+      ]
+    },
+    {
+      "name": "工作流-会议-为评审会创建纪要文档",
+      "message": "帮我在「工作流测试」文件夹下创建一个文档，标题叫《工作流-需求评审纪要》，内容写：会议时间、参会人、议题、结论",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "doc"
+      ]
+    },
+    {
+      "name": "工作流-会议-纪要补充内容",
+      "message": "帮我在《工作流-需求评审纪要》末尾追加一段：会议结论：方案A通过，下周开始实施",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加",
+          "完成",
+          "已为",
+          "已在"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "doc"
+      ]
+    },
+    {
+      "name": "工作流-会议-纪要索引到纪要库",
+      "message": "帮我在《工作流-会议纪要库》末尾追加一段：- 需求评审会：详见《工作流-需求评审纪要》",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加",
+          "完成",
+          "已为",
+          "已在"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "doc"
+      ]
+    },
+    {
+      "name": "工作流-任务-创建评审准备任务",
+      "message": "帮我创建一个任务「准备需求评审材料」，截止日期明天上午",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "任务",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "task"
+      ]
+    },
+    {
+      "name": "工作流-任务-创建跟进任务",
+      "message": "帮我创建一个任务「跟进评审会结论落地」，截止日期下周五",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "任务",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "task"
+      ]
+    },
+    {
+      "name": "工作流-任务-完成准备任务",
+      "message": "帮我把「准备需求评审材料」这个任务标记为已完成",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "task"
+      ]
+    },
+    {
+      "name": "工作流-任务-生成日报",
+      "message": "帮我看看我今天完成了哪些任务，整理到一个新文档《工作流-今日日报》里",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "task+doc"
+      ]
+    },
+    {
+      "name": "工作流-人员-查自己信息",
+      "message": "帮我查一下我自己的飞书账号信息",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "user"
+      ]
+    },
+    {
+      "name": "工作流-人员-查后约同步会",
+      "message": "帮我查一下许帅的信息，然后约一个明天上午10点到11点的会议，主题是「工作流-个人同步」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "user+calendar"
+      ]
+    },
+    {
+      "name": "工作流-OKR-创建OKR表",
+      "message": "帮我在「工作流测试」文件夹下创建一个多维表格《工作流-OKR追踪》，字段是：目标、关键结果、进度、负责人",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "bitable"
+      ]
+    },
+    {
+      "name": "工作流-OKR-录入目标",
+      "message": "帮我在《工作流-OKR追踪》里新增一条记录：目标是提升产品质量，关键结果是bug率降低50%，进度0%，负责人许帅",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "bitable"
+      ]
+    },
+    {
+      "name": "工作流-OKR-建周更新提醒",
+      "message": "帮我创建一个任务「每周更新OKR进度」，截止日期本周五",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "任务",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "task"
+      ]
+    },
+    {
+      "name": "工作流-季度复盘-创建复盘文档",
+      "message": "帮我在「工作流测试」文件夹下创建一个文档《工作流-Q2复盘》，内容写：## 完成情况 ## 亮点 ## 不足 ## 改进方向",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "doc"
+      ]
+    },
+    {
+      "name": "工作流-季度复盘-填充内容",
+      "message": "帮我在《工作流-Q2复盘》末尾追加一段：本季度完成了核心功能开发、上线了支付模块、修复了20+ bug",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加",
+          "完成",
+          "已为",
+          "已在"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "doc"
+      ]
+    },
+    {
+      "name": "工作流-搜索-查所有工作流文档",
+      "message": "帮我搜索一下飞书上标题包含「工作流」的文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "search"
+      ]
+    },
+    {
+      "name": "工作流-Drive-列工作流文件夹",
+      "message": "帮我看看「工作流测试」文件夹里都有什么",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "drive"
+      ]
+    },
+    {
+      "name": "工作流-多步联动-发布前检查",
+      "message": "帮我创建一个文档《工作流-发布检查清单》写上：1.代码评审 2.测试通过 3.文档更新 4.告知相关方，然后建一个任务「执行发布检查」截止今天，最后约一个明天上午9点的发布会",
+      "assert": {
+        "notContains": "error",
+        "minLength": 10
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "doc+task+calendar"
+      ]
+    },
+    {
+      "name": "工作流-日程查询-查未来一周",
+      "message": "帮我看看接下来一周有哪些会议安排",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "calendar"
+      ]
+    },
+    {
+      "name": "工作流-日程整理到文档",
+      "message": "帮我看看明天的日程，整理到一个新文档《工作流-明日日程》里",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "workflow",
+        "calendar+doc"
+      ]
+    },
+    {
+      "name": "工作流-docx-列云盘找Word文件",
+      "message": "帮我看看云空间根目录下有没有Word或PDF文件",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "docx-download"
+      ]
+    },
+    {
+      "name": "工作流-docx+search-搜索Word文件",
+      "message": "帮我搜索一下飞书云盘里的所有.docx文件",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "search+docx-download"
+      ]
+    },
+    {
+      "name": "工作流-docx-下载并提取文本",
+      "message": "帮我下载云空间里的Word文档，并提取里面的文字内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "docx-download"
+      ]
+    },
+    {
+      "name": "工作流-docx+doc-提取后写新文档",
+      "message": "帮我下载云空间里的Word文档，提取文字内容后整理到一个新文档《工作流-Word内容整理》里",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "docx-download+doc"
+      ]
+    },
+    {
+      "name": "工作流-docx+doc-PDF提取后存档",
+      "message": "帮我提取云空间里PDF报告的文字内容，然后整理到一个新文档《工作流-PDF内容存档》里",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "workflow",
+        "docx-download+doc"
+      ]
+    },
+    {
+      "name": "工作流-docx+task-提取后建任务",
+      "message": "帮我下载云空间里的Word文档提取内容，根据里面提到的待办事项创建任务",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "workflow",
+        "docx-download+task"
+      ]
+    },
+    {
+      "name": "工作流-docx+doc-下载后写摘要",
+      "message": "帮我下载云空间里的PDF报告，提取文字然后写一份摘要文档《工作流-PDF摘要》",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "workflow",
+        "docx-download+doc"
+      ]
+    },
+    {
+      "name": "工作流-docx+wiki-提取后存知识库",
+      "message": "帮我下载云空间里的Word文档提取文字内容，整理后存到知识库里",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "workflow",
+        "docx-download+wiki"
+      ]
+    },
+    {
+      "name": "工作流-docx-错误恢复-不存在文件",
+      "message": "帮我下载一个叫《xyzzy_不存在的Word_99999.docx》的文件并提取内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "workflow",
+        "docx-download",
+        "error"
+      ]
+    }
+  ]
+}

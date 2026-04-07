@@ -1,0 +1,208 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-创建日程",
+      "message": "帮我创建一个明天下午3点到4点的会议，主题是「群聊测试会议」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查询今日日程",
+      "message": "看看我今天有什么会议",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建日程-邀请群友",
+      "message": "帮我约个会，明天上午10点到11点，主题是需求评审，把许帅也叫上",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化约会",
+      "message": "大家明天下午有空不？约个会聊聊Q2规划",
+      "assert": {
+        "minLength": 5,
+        "notContains": "exception"
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-创建日程-缺少时间应询问",
+      "message": "帮我创建一个会议，主题是项目评审",
+      "assert": {
+        "minLength": 5,
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-查询明日日程",
+      "message": "明天有什么日程？",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查空闲时间",
+      "message": "看看我明天下午有没有空闲时间",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建重复日程",
+      "message": "帮我创建一个每周三下午2点到3点的固定会议，主题是「技术分享」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建工作日站会",
+      "message": "帮我创建一个工作日每天早上9点半到10点的站会",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建全天日程",
+      "message": "帮我在后天创建一个全天的「团建活动」日程",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-取消日程",
+      "message": "帮我取消明天下午3点的「群聊测试会议」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-搜索日程",
+      "message": "帮我搜索一下最近有没有关于「评审」的会议",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建日程带地点",
+      "message": "帮我创建一个明天上午9点到10点的会议，主题是「产品评审」，地点是3楼会议室A",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查本周日程",
+      "message": "帮我看看这周还有哪些会议安排",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化查空闲",
+      "message": "我明天下午有没有空？想约个面试",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    }
+  ]
+}

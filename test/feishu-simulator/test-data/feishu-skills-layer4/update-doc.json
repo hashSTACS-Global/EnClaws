@@ -1,0 +1,102 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-追加内容",
+      "message": "帮我在《自动化测试文档》末尾追加一段：群聊测试追加的内容。",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-修改文档标题",
+      "message": "把《群聊测试文档》的标题改成《群聊测试文档-v2》",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化改文档",
+      "message": "那个文档帮我加点内容，写上「已在群里确认通过」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-模糊意图-不确定追加还是覆盖",
+      "message": "帮我修改《群聊测试文档》的内容",
+      "assert": {
+        "minLength": 5,
+        "notContains": "exception"
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-覆盖写入",
+      "message": "帮我把《群聊测试文档》的全部内容替换成：全新的文档内容，之前的不要了",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-更新不存在的文档",
+      "message": "帮我在《xyzzy_不存在的文档_99999》末尾追加内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group",
+        "error"
+      ]
+    },
+    {
+      "name": "群聊-追加Markdown内容",
+      "message": "帮我在《群聊测试文档》末尾追加一段markdown：\n## 测试结果\n- 通过: 10\n- 失败: 0",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    }
+  ]
+}

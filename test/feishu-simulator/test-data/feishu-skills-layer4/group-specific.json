@@ -1,0 +1,200 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-不@bot应无回复",
+      "message": "帮我看看今天有什么日程",
+      "mentionBot": false,
+      "assert": {
+        "expectNoReply": true
+      },
+      "tags": [
+        "P0",
+        "group",
+        "negative"
+      ]
+    },
+    {
+      "name": "群聊-@bot+@人混合",
+      "message": "帮我找到许帅，然后约个会，明天下午3点聊聊项目进度",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-连续两次@bot",
+      "message": "帮我看看我今天的日程安排",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-长消息",
+      "message": "帮我创建一个文档叫《群讨论记录》，内容写上：1. 讨论了Q2的OKR目标设定 2. 确认了技术方案选型 3. 分配了各模块的负责人 4. 约定了下次同步的时间是下周三 5. 需要补充的材料包括竞品分析报告和用户调研数据",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-简短指令",
+      "message": "查日程",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-口语化带语气词",
+      "message": "哎帮我看看明天有啥会没有啊",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-不@bot发任务指令无回复",
+      "message": "帮我创建一个任务叫测试",
+      "mentionBot": false,
+      "assert": {
+        "expectNoReply": true
+      },
+      "tags": [
+        "P0",
+        "group",
+        "negative"
+      ]
+    },
+    {
+      "name": "群聊-不@bot搜文档无回复",
+      "message": "帮我搜一下飞书文档",
+      "mentionBot": false,
+      "assert": {
+        "expectNoReply": true
+      },
+      "tags": [
+        "P1",
+        "group",
+        "negative"
+      ]
+    },
+    {
+      "name": "群聊-表情符号消息",
+      "message": "帮我看看今天日程 😊",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-带换行的消息",
+      "message": "帮我创建一个文档\n标题叫《换行测试》\n内容写点什么都行",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-极短指令-建文档",
+      "message": "建文档",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-极短指令-查任务",
+      "message": "看任务",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-重复@bot",
+      "message": "帮我查一下许帅的信息",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-问候性消息",
+      "message": "你好，帮我看看最近有什么待办任务",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-多意图消息",
+      "message": "帮我先查一下今天的日程，再看看有没有待办任务",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    }
+  ]
+}

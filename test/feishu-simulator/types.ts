@@ -16,6 +16,8 @@ export type TestCaseAssert = {
   containsAny?: string[];
   /** Assert the reply contains ALL of the given strings */
   containsAll?: string[];
+  /** Assert the bot did NOT reply (used for negative tests like mentionBot=false in groups) */
+  expectNoReply?: boolean;
 };
 
 export type TestCase = {
@@ -29,10 +31,14 @@ export type TestCase = {
 };
 
 export type TestFile = {
-  appId: string;
-  appSecret: string;
-  userOpenId: string;
-  /** Group chat ID — when set, messages are sent to this group instead of P2P */
+  /** Optional — falls back to TEST_FEISHU_APP_ID env var if missing or placeholder */
+  appId?: string;
+  /** Optional — falls back to TEST_FEISHU_APP_SECRET env var */
+  appSecret?: string;
+  /** Optional — falls back to TEST_FEISHU_USER_OPEN_ID env var */
+  userOpenId?: string;
+  /** Group chat ID — when set, messages are sent to this group instead of P2P.
+   *  Falls back to TEST_FEISHU_GROUP_CHAT_ID env var if missing. */
   chatId?: string;
   /** Group chat name (for logging / CSV report display only) */
   chatName?: string;

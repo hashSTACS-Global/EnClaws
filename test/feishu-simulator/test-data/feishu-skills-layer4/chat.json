@@ -1,0 +1,104 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-搜索群组",
+      "message": "帮我搜一下飞书里叫「测试」的群",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查看群成员",
+      "message": "帮我看看当前群里都有谁",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-获取群信息",
+      "message": "帮我看看这个群的基本信息",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-搜索不存在的群",
+      "message": "帮我搜一下有没有叫「xyzzy_不存在的群_99999」的群聊",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group",
+        "error"
+      ]
+    },
+    {
+      "name": "群聊-查看群公告",
+      "message": "帮我看看当前群的公告是什么",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查看群成员数量",
+      "message": "帮我看看这个群一共有多少人",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化找群",
+      "message": "有没有一个叫「产品」的群？帮我找找",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-口语化谁在群里",
+      "message": "这群里都有谁啊？列个名单",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    }
+  ]
+}

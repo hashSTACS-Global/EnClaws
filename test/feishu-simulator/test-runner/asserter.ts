@@ -15,11 +15,21 @@ export function formatAssert(a?: TestCaseAssert): string {
   if (a.fileNameMatches) parts.push(`fileName:/${a.fileNameMatches}/`);
   if (a.containsAny) parts.push(`containsAny:[${a.containsAny.map((s) => `"${s}"`).join(",")}]`);
   if (a.containsAll) parts.push(`containsAll:[${a.containsAll.map((s) => `"${s}"`).join(",")}]`);
+  if (a.expectNoReply) parts.push("expectNoReply");
   return parts.join(", ");
 }
 
 export function checkAssertions(text: string, assert?: TestCaseAssert, meta?: FeishuReplyMeta): string[] {
   const failures: string[] = [];
+
+  // Negative assertion: expect the bot to NOT reply
+  if (assert?.expectNoReply) {
+    if (text || meta?.fileKey || meta?.imageKey) {
+      failures.push(`expected no reply but got: "${text.slice(0, 60)}${text.length > 60 ? "..." : ""}"`);
+    }
+    return failures;
+  }
+
   if (!text && !meta?.fileKey && !meta?.imageKey) {
     failures.push("reply is empty");
   }

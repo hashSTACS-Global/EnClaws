@@ -24,6 +24,9 @@ type UpdateCheckState = {
   autoLastAttemptAt?: string;
   autoLastSuccessVersion?: string;
   autoLastSuccessAt?: string;
+  /** Set when npm install fails with EBUSY on Windows; cleared after retry on next startup. */
+  pendingRetryVersion?: string;
+  pendingRetryTag?: string;
 };
 
 type AutoUpdatePolicy = {
@@ -45,6 +48,8 @@ export type UpdateAvailable = {
   currentVersion: string;
   latestVersion: string;
   channel: string;
+  /** For installer mode: URL to download the new installer. */
+  downloadUrl?: string;
 };
 
 let updateAvailableCache: UpdateAvailable | null = null;
@@ -64,6 +69,16 @@ const AUTO_UPDATE_COMMAND_TIMEOUT_MS = 45 * 60 * 1000;
 const AUTO_STABLE_DELAY_HOURS_DEFAULT = 6;
 const AUTO_STABLE_JITTER_HOURS_DEFAULT = 12;
 const AUTO_BETA_CHECK_INTERVAL_HOURS_DEFAULT = 1;
+
+/** Resolve the download URL for the installer update. */
+function resolveInstallerDownloadUrl(version: string): string {
+  const template = process.env.ENCLAWS_UPDATE_DOWNLOAD_URL?.trim();
+  if (template) {
+    return template.replace(/\{version\}/g, version);
+  }
+  // Default: redirect to official website
+  return "https://www.baidu.com";
+}
 
 function shouldSkipCheck(allowInTests: boolean): boolean {
   if (allowInTests) {
@@ -136,6 +151,15 @@ async function readState(statePath: string): Promise<UpdateCheckState> {
 async function writeState(statePath: string, state: UpdateCheckState): Promise<void> {
   await fs.mkdir(path.dirname(statePath), { recursive: true });
   await fs.writeFile(statePath, JSON.stringify(state, null, 2), "utf-8");
+}
+
+/** Mark that npm install failed with EBUSY; the next startup should retry. */
+export async function markPendingUpdateRetry(version: string, tag: string): Promise<void> {
+  const statePath = path.join(resolveStateDir(), UPDATE_CHECK_FILENAME);
+  const state = await readState(statePath);
+  state.pendingRetryVersion = version;
+  state.pendingRetryTag = tag;
+  await writeState(statePath, state);
 }
 
 function sameUpdateAvailable(a: UpdateAvailable | null, b: UpdateAvailable | null): boolean {
@@ -333,6 +357,31 @@ export async function runGatewayUpdateCheck(params: {
 
   const statePath = path.join(resolveStateDir(), UPDATE_CHECK_FILENAME);
   const state = await readState(statePath);
+
+  // Handle pending retry from a previous EBUSY failure on Windows.
+  // After restart, file locks are released and npm install should succeed.
+  if (state.pendingRetryVersion) {
+    const retryVersion = state.pendingRetryVersion;
+    const retryTag = state.pendingRetryTag ?? "latest";
+    delete state.pendingRetryVersion;
+    delete state.pendingRetryTag;
+    await writeState(statePath, state);
+    params.log.info(`pending update retry: running npm install for v${retryVersion} (${retryTag})`);
+    const runAuto = params.runAutoUpdate ?? runAutoUpdateCommand;
+    const root = await resolveOpenClawPackageRoot({
+      moduleUrl: import.meta.url,
+      argv1: process.argv[1],
+      cwd: process.cwd(),
+    });
+    const outcome = await runAuto({ channel: retryTag as "stable" | "beta", timeoutMs: AUTO_UPDATE_COMMAND_TIMEOUT_MS, root: root ?? undefined });
+    if (outcome.ok) {
+      params.log.info(`pending update retry succeeded for v${retryVersion}`);
+    } else {
+      params.log.info(`pending update retry failed for v${retryVersion}: ${outcome.reason ?? `exit:${outcome.code}`}`);
+    }
+    return;
+  }
+
   const now = Date.now();
   const lastCheckedAt = state.lastCheckedAt ? Date.parse(state.lastCheckedAt) : null;
   if (shouldRunUpdateHints) {
@@ -347,8 +396,11 @@ export async function runGatewayUpdateCheck(params: {
       onUpdateAvailableChange: params.onUpdateAvailableChange,
     });
   }
+  // Dev/git mode: always check on startup (developers want immediate feedback)
+  const effectiveTrack = normalizeUpdateTrack(settings.track);
+  const skipIntervalCheck = effectiveTrack === "dev";
   const checkIntervalMs = resolveCheckIntervalMs(settings);
-  if (lastCheckedAt && Number.isFinite(lastCheckedAt)) {
+  if (!skipIntervalCheck && lastCheckedAt && Number.isFinite(lastCheckedAt)) {
     if (now - lastCheckedAt < checkIntervalMs) {
       return;
     }
@@ -377,7 +429,7 @@ export async function runGatewayUpdateCheck(params: {
     if (behind > 0) {
       const nextAvailable: UpdateAvailable = {
         currentVersion: VERSION,
-        latestVersion: `${behind} commit(s) behind upstream`,
+        latestVersion: String(behind),
         channel: "git",
       };
       if (shouldRunUpdateHints) {
@@ -404,7 +456,7 @@ export async function runGatewayUpdateCheck(params: {
     return;
   }
 
-  if (status.installKind !== "package") {
+  if (status.installKind !== "package" && status.installKind !== "installer") {
     delete nextState.lastAvailableVersion;
     delete nextState.lastAvailableTag;
     clearAutoState(nextState);
@@ -416,6 +468,7 @@ export async function runGatewayUpdateCheck(params: {
     return;
   }
 
+  const isInstallerMode = status.installKind === "installer";
   const channel = normalizeUpdateTrack(settings.track) ?? DEFAULT_PACKAGE_TRACK;
   const resolved = await resolveNpmChannelTag({ channel, timeoutMs: 2500 });
   const tag = resolved.tag;
@@ -426,10 +479,14 @@ export async function runGatewayUpdateCheck(params: {
 
   const cmp = compareSemverStrings(VERSION, resolved.version);
   if (cmp != null && cmp < 0) {
+    const downloadUrl = isInstallerMode
+      ? resolveInstallerDownloadUrl(resolved.version)
+      : undefined;
     const nextAvailable: UpdateAvailable = {
       currentVersion: VERSION,
       latestVersion: resolved.version,
-      channel: tag,
+      channel: isInstallerMode ? "installer" : tag,
+      downloadUrl,
     };
     if (shouldRunUpdateHints) {
       setUpdateAvailableCache({
@@ -449,7 +506,7 @@ export async function runGatewayUpdateCheck(params: {
       nextState.lastNotifiedTag = tag;
     }
 
-    if (auto.enabled && (channel === "stable" || channel === "beta")) {
+    if (auto.enabled && !isInstallerMode && (channel === "stable" || channel === "beta")) {
       const runAuto = params.runAutoUpdate ?? runAutoUpdateCommand;
       const attemptIntervalMs =
         channel === "beta"

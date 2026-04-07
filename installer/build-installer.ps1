@@ -171,6 +171,7 @@ New-Item -ItemType Directory -Force -Path $AppBundleDir | Out-Null
 # Copy application files
 $filesToCopy = @(
     @{ Src = "enclaws.mjs"; Dest = "enclaws.mjs" }
+    @{ Src = ".env.example"; Dest = ".env.example" }
 )
 foreach ($f in $filesToCopy) {
     $src = Join-Path $ProjectRoot $f.Src

@@ -16,6 +16,7 @@ export interface ConfirmDialogOptions {
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  hideCancel?: boolean;
 }
 
 @customElement("confirm-dialog")
@@ -69,6 +70,7 @@ export class ConfirmDialog extends LitElement {
   @property() confirmText = "OK";
   @property() cancelText = "Cancel";
   @property({ type: Boolean }) danger = false;
+  @property({ type: Boolean }) hideCancel = false;
 
   private _resolve?: (value: boolean) => void;
 
@@ -97,7 +99,7 @@ export class ConfirmDialog extends LitElement {
           ${this.title ? html`<div class="title">${this.title}</div>` : nothing}
           <div class="message">${this.message}</div>
           <div class="footer">
-            <button class="btn btn-cancel" @click=${this._cancel}>${this.cancelText}</button>
+            ${this.hideCancel ? nothing : html`<button class="btn btn-cancel" @click=${this._cancel}>${this.cancelText}</button>`}
             <button class="btn btn-confirm ${this.danger ? "danger" : ""}" @click=${this._confirm}>${this.confirmText}</button>
           </div>
         </div>
@@ -114,6 +116,7 @@ export function showConfirm(opts: ConfirmDialogOptions): Promise<boolean> {
     if (opts.confirmText) el.confirmText = opts.confirmText;
     if (opts.cancelText) el.cancelText = opts.cancelText;
     if (opts.danger) el.danger = true;
+    if (opts.hideCancel) el.hideCancel = true;
     el.show(resolve);
     document.body.appendChild(el);
   });
