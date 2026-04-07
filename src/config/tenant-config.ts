@@ -124,7 +124,6 @@ async function buildTenantConfig(
   // Pass tenantModelsMap so agents with model_id FK resolve correctly.
   if (agents.length > 0) {
     const agentsList = toConfigAgentsList(agents, tenantModelsMap);
-    log.info("Tenant AgentConfig loaded: %o", { agents: agentsList });
     config.agents = {
       ...config.agents,
       list: agentsList as any,

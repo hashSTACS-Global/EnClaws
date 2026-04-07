@@ -4,7 +4,7 @@ import type {IconName} from "./icons.js";
 export const TAB_GROUPS = [
     {
         label: "",
-        tabs: ["overview", "platform-models"],
+        tabs: ["overview"],
     },
     {
         label: "",
@@ -28,7 +28,7 @@ export const TAB_GROUPS = [
     },
     {
         label: "platform",
-        tabs: ["platform-tools"],
+        tabs: ["platform-tools","platform-models"],
     },
 ] as const;
 

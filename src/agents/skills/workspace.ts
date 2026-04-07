@@ -584,11 +584,33 @@ function resolveWorkspaceSkillPromptState(
       );
     }
   }
+  // When skillFilter is active, compute skills excluded by the filter and
+  // inject a <disabled_skills> block so the model knows not to invoke them
+  // via exec even if conversation history contains prior usage.
+  let disabledBlock = "";
+  if (opts?.skillFilter !== undefined) {
+    const eligibleNames = new Set(eligible.map((e) => e.skill.name));
+    const configEligible = skillEntries.filter((entry) =>
+      shouldIncludeSkill({ entry, config: opts?.config, eligibility: opts?.eligibility }),
+    );
+    const excludedNames = configEligible
+      .filter((e) => !eligibleNames.has(e.skill.name))
+      .map((e) => e.skill.name);
+    if (excludedNames.length > 0) {
+      disabledBlock = [
+        "<disabled_skills>",
+        excludedNames.join(", "),
+        "</disabled_skills>",
+        "You MUST NOT invoke disabled skills via exec or any other tool, even if conversation history shows prior usage.",
+      ].join("\n");
+    }
+  }
   const prompt = [
     remoteNote,
     truncationNote,
     formatSkillsForPrompt(compactSkillPaths(skillsForPrompt)),
     ...inlineBlocks,
+    disabledBlock,
   ]
     .filter(Boolean)
     .join("\n");
