@@ -41,8 +41,8 @@ const dbPath = join(stateDir, "data.db").replace(/\\/g, "/");
 // Resolve the bundled skill-pack directory (lives next to scripts/ in the package)
 const skillPackDir = join(appDir, "skills-pack").replace(/\\/g, "/");
 
-// Use project's .env as template (assumed to exist)
-const projectEnvPath = join(appDir, ".env");
+// Use project's .env.example as template (assumed to exist)
+const projectEnvPath = join(appDir, ".env.example");
 let content = readFileSync(projectEnvPath, "utf-8");
 // Append default dynamic values if not present
 if (!content.includes("ENCLAWS_DB_URL")) {
