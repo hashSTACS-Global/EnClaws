@@ -318,6 +318,10 @@ if [ -d "$ROOT_DIR/scripts" ]; then
   echo "    Copied scripts/"
 fi
 
+# .env template (needed by postinstall.js to create ~/.enclaws/.env)
+cp "$ROOT_DIR/.env.example" "$APP_RESOURCES/.env.example"
+echo "    Copied .env.example"
+
 # Workspace templates
 TEMPLATES_SRC="$ROOT_DIR/docs/reference/templates"
 if [ -d "$TEMPLATES_SRC" ]; then

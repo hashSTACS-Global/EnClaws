@@ -1,6 +1,6 @@
 {
   "name": "enclaws",
-  "version": "0.1.28",
+  "version": "0.1.35",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/hashSTACS-Global/EnClaws#readme",
@@ -316,6 +316,8 @@
   },
   "optionalDependencies": {
     "@discordjs/opus": "^0.10.0",
+    "@snazzah/davey-darwin-arm64": "0.1.10",
+    "@snazzah/davey-darwin-x64": "0.1.10",
     "@whiskeysockets/baileys": "7.0.0-rc.9"
   },
   "engines": {
