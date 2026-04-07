@@ -359,8 +359,11 @@ export async function runGatewayUpdateCheck(params: {
       onUpdateAvailableChange: params.onUpdateAvailableChange,
     });
   }
+  // Dev/git mode: always check on startup (developers want immediate feedback)
+  const effectiveTrack = normalizeUpdateTrack(settings.track);
+  const skipIntervalCheck = effectiveTrack === "dev";
   const checkIntervalMs = resolveCheckIntervalMs(settings);
-  if (lastCheckedAt && Number.isFinite(lastCheckedAt)) {
+  if (!skipIntervalCheck && lastCheckedAt && Number.isFinite(lastCheckedAt)) {
     if (now - lastCheckedAt < checkIntervalMs) {
       return;
     }
