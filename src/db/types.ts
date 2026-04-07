@@ -167,6 +167,8 @@ export interface TenantModelDefinition {
   compat?: Record<string, unknown>;
 }
 
+export type ModelVisibility = "private" | "shared";
+
 export interface TenantModel {
   id: string;
   tenantId: string;
@@ -179,6 +181,7 @@ export interface TenantModel {
   extraHeaders: Record<string, string>;
   extraConfig: Record<string, unknown>;
   models: TenantModelDefinition[];
+  visibility: ModelVisibility;
   isActive: boolean;
   createdBy: string | null;
   createdAt: Date;
@@ -427,6 +430,10 @@ export const PERMISSIONS = {
   // Platform management
   "platform.overview": ["platform-admin"],
   "platform.tenants": ["platform-admin"],
+  "platform.models.list": ["platform-admin"],
+  "platform.models.create": ["platform-admin"],
+  "platform.models.update": ["platform-admin"],
+  "platform.models.delete": ["platform-admin"],
 
   // Tenant management
   "tenant.read": ["owner", "admin"],

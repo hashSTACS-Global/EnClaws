@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS tenant_models (
   extra_headers     TEXT NOT NULL DEFAULT '{}',
   extra_config      TEXT NOT NULL DEFAULT '{}',
   models            TEXT NOT NULL DEFAULT '[]',
+  visibility        TEXT NOT NULL DEFAULT 'private',
   is_active         INTEGER NOT NULL DEFAULT 1,
   created_by        TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at        TEXT NOT NULL DEFAULT (datetime('now')),

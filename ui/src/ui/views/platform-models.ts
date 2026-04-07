@@ -1,17 +1,17 @@
 /**
- * Tenant model management view.
+ * Platform model management view.
  *
- * Create, edit, and delete LLM provider/model configs scoped to the current tenant.
- * Supports different provider types with dynamic form fields.
+ * Create, edit, and delete shared LLM provider/model configs visible to all tenants.
+ * Only accessible by platform-admin.
  */
 
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, state, property } from "lit/decorators.js";
-import { tenantRpc } from "./rpc.ts";
-import { PROVIDER_TYPES as SHARED_PROVIDERS, API_PROTOCOLS as SHARED_PROTOCOLS } from "../../../constants/providers.ts";
-import { t } from "../../../i18n/index.ts";
-import { I18nController } from "../../../i18n/lib/lit-controller.ts";
-import { showConfirm } from "../../components/confirm-dialog.ts";
+import { tenantRpc } from "./tenant/rpc.ts";
+import { PROVIDER_TYPES as SHARED_PROVIDERS, API_PROTOCOLS as SHARED_PROTOCOLS } from "../../constants/providers.ts";
+import { t } from "../../i18n/index.ts";
+import { I18nController } from "../../i18n/lib/lit-controller.ts";
+import { showConfirm } from "../components/confirm-dialog.ts";
 
 interface ModelDefinition {
   id: string;
@@ -20,10 +20,9 @@ interface ModelDefinition {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
-  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
 
-interface TenantModelConfig {
+interface PlatformModelConfig {
   id: string;
   providerType: string;
   providerName: string;
@@ -31,10 +30,8 @@ interface TenantModelConfig {
   apiProtocol: string;
   authMode: string;
   hasApiKey: boolean;
-  extraHeaders: Record<string, string>;
-  extraConfig: Record<string, unknown>;
   models: ModelDefinition[];
-  visibility?: string;
+  visibility: string;
   isActive: boolean;
   createdAt: string;
 }
@@ -42,8 +39,8 @@ interface TenantModelConfig {
 const PROVIDER_TYPES = SHARED_PROVIDERS;
 const API_PROTOCOLS = SHARED_PROTOCOLS;
 
-@customElement("tenant-models-view")
-export class TenantModelsView extends LitElement {
+@customElement("platform-models-view")
+export class PlatformModelsView extends LitElement {
   static styles = css`
     :host {
       display: block;
@@ -137,11 +134,10 @@ export class TenantModelsView extends LitElement {
   private i18nController = new I18nController(this);
 
   @property({ type: String }) gatewayUrl = "";
-  @state() private configs: TenantModelConfig[] = [];
+  @state() private configs: PlatformModelConfig[] = [];
   @state() private loading = false;
-  @state() private errorKey = "";
-  @state() private successKey = "";
-  private msgParams: Record<string, string> = {};
+  @state() private error = "";
+  @state() private success = "";
   private msgTimer?: ReturnType<typeof setTimeout>;
   @state() private showForm = false;
   @state() private saving = false;
@@ -161,58 +157,36 @@ export class TenantModelsView extends LitElement {
   @state() private subModelId = "";
   @state() private subModelName = "";
 
-  // Cached agent list for model-in-use checks
-  private cachedAgents: Array<{ name: string; agentId: string; modelConfig: Array<{ providerId: string; modelId: string }> }> = [];
+  private providerNameManuallyEdited = false;
 
-  private showError(key: string, params?: Record<string, string>) {
-    this.errorKey = key;
-    this.successKey = "";
-    this.msgParams = params ?? {};
+  private showError(msg: string) {
+    this.error = msg; this.success = "";
     if (this.msgTimer) clearTimeout(this.msgTimer);
-    this.msgTimer = setTimeout(() => (this.errorKey = ""), 5000);
+    this.msgTimer = setTimeout(() => (this.error = ""), 5000);
   }
-
-  private showSuccess(key: string, params?: Record<string, string>) {
-    this.successKey = key;
-    this.errorKey = "";
-    this.msgParams = params ?? {};
+  private showSuccess(msg: string) {
+    this.success = msg; this.error = "";
     if (this.msgTimer) clearTimeout(this.msgTimer);
-    this.msgTimer = setTimeout(() => (this.successKey = ""), 5000);
-  }
-
-  /** Translate key at render time; raw server messages pass through as-is. */
-  private tr(key: string): string {
-    const result = t(key, this.msgParams);
-    return result === key ? key : result;
-  }
-
-  connectedCallback() {
-    super.connectedCallback();
-    this.loadConfigs();
-    this.loadAgents();
-  }
-
-  private async loadAgents() {
-    try {
-      const result = await this.rpc("tenant.agents.list") as { agents: Array<{ name: string; agentId: string; modelConfig: Array<{ providerId: string; modelId: string }> }> };
-      this.cachedAgents = result.agents ?? [];
-    } catch {
-      this.cachedAgents = [];
-    }
+    this.msgTimer = setTimeout(() => (this.success = ""), 5000);
   }
 
   private rpc(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
     return tenantRpc(method, params, this.gatewayUrl);
   }
 
+  connectedCallback() {
+    super.connectedCallback();
+    this.loadConfigs();
+  }
+
   private async loadConfigs() {
     this.loading = true;
-    this.errorKey = "";
+    this.error = "";
     try {
-      const result = await this.rpc("tenant.models.list") as { models: TenantModelConfig[] };
+      const result = await this.rpc("platform.models.list") as { models: PlatformModelConfig[] };
       this.configs = result.models;
     } catch (err) {
-      this.showError(err instanceof Error ? err.message : "models.loadFailed");
+      this.showError(err instanceof Error ? err.message : "Failed to load models");
     } finally {
       this.loading = false;
     }
@@ -232,11 +206,11 @@ export class TenantModelsView extends LitElement {
     this.showForm = true;
   }
 
-  private startEdit(config: TenantModelConfig) {
+  private startEdit(config: PlatformModelConfig) {
     this.editingId = config.id;
     this.formProviderType = config.providerType;
     this.formProviderName = config.providerName;
-    this.providerNameManuallyEdited = true; // editing existing — treat as manual
+    this.providerNameManuallyEdited = true;
     this.formBaseUrl = config.baseUrl ?? "";
     this.formApiProtocol = config.apiProtocol;
     this.formAuthMode = config.authMode;
@@ -246,24 +220,16 @@ export class TenantModelsView extends LitElement {
     this.showForm = true;
   }
 
-  /** Track whether the user has manually edited the provider name */
-  private providerNameManuallyEdited = false;
-
   private onProviderTypeChange(value: string) {
     this.formProviderType = value;
     const provider = PROVIDER_TYPES.find((p) => p.value === value);
     if (provider) {
       this.formBaseUrl = provider.defaultBaseUrl;
       this.formApiProtocol = provider.defaultProtocol;
-      // Always sync provider name unless user has manually edited it
       if (!this.providerNameManuallyEdited) {
         this.formProviderName = provider.label;
       }
-      if (value === "ollama") {
-        this.formAuthMode = "none";
-      } else {
-        this.formAuthMode = "api-key";
-      }
+      this.formAuthMode = value === "ollama" ? "none" : "api-key";
     }
   }
 
@@ -274,42 +240,42 @@ export class TenantModelsView extends LitElement {
   }
 
   private addModel() {
-    if (!this.subModelId) {
-      this.showError("models.modelIdRequired");
-      return;
-    }
-    if (!this.subModelName) {
-      this.showError("models.displayNameRequired");
+    if (!this.subModelId || !this.subModelName) {
+      this.showError("Model ID and name are required");
       return;
     }
     if (this.formModels.some((m) => m.id === this.subModelId)) {
-      this.showError("models.duplicateModelId");
+      this.showError("Duplicate model ID");
       return;
     }
-    this.formModels = [
-      ...this.formModels,
-      {
-        id: this.subModelId,
-        name: this.subModelName,
-        reasoning: false,
-        input: ["text"],
-        contextWindow: 128000,
-        maxTokens: 128000,
-      },
-    ];
+    this.formModels = [...this.formModels, {
+      id: this.subModelId,
+      name: this.subModelName,
+      reasoning: false,
+      input: ["text"],
+      contextWindow: 128000,
+      maxTokens: 128000,
+    }];
     this.showModelForm = false;
   }
 
-  private removeModel(idx: number) {
+  private async removeModel(idx: number) {
     const model = this.formModels[idx];
     if (this.editingId && model) {
-      const conflicts = this.cachedAgents.filter((a) =>
-        (a.modelConfig ?? []).some((mc) => mc.providerId === this.editingId && mc.modelId === model.id),
-      );
-      if (conflicts.length > 0) {
-        const names = conflicts.map((a) => a.name || a.agentId).join(", ");
-        this.showError("models.removeModelInUse", { agents: names });
-        return;
+      try {
+        const result = await this.rpc("platform.models.checkModelUsage", {
+          providerId: this.editingId,
+          modelId: model.id,
+        }) as { agents: string[] };
+        if (result.agents && result.agents.length > 0) {
+          this.showError(t("platformModels.removeModelInUse", {
+            modelId: model.id,
+            agents: result.agents.join(", "),
+          }));
+          return;
+        }
+      } catch {
+        // If check fails, allow removal — backend update will catch it
       }
     }
     this.formModels = this.formModels.filter((_, i) => i !== idx);
@@ -319,17 +285,17 @@ export class TenantModelsView extends LitElement {
     e.preventDefault();
     if (!this.formProviderType || !this.formProviderName) return;
     if (this.formModels.length === 0) {
-      this.showError("models.needOneModel");
+      this.showError(t("models.needOneModel"));
       return;
     }
 
     this.saving = true;
-    this.errorKey = "";
-    this.successKey = "";
+    this.error = "";
+    this.success = "";
 
     try {
       if (this.editingId) {
-        await this.rpc("tenant.models.update", {
+        await this.rpc("platform.models.update", {
           id: this.editingId,
           providerName: this.formProviderName,
           baseUrl: this.formBaseUrl || undefined,
@@ -338,9 +304,9 @@ export class TenantModelsView extends LitElement {
           ...(this.formApiKey ? { apiKey: this.formApiKey } : {}),
           models: this.formModels,
         });
-        this.showSuccess("models.configUpdated");
+        this.showSuccess(t("models.configUpdated"));
       } else {
-        await this.rpc("tenant.models.create", {
+        await this.rpc("platform.models.create", {
           providerType: this.formProviderType,
           providerName: this.formProviderName,
           baseUrl: this.formBaseUrl || undefined,
@@ -349,18 +315,26 @@ export class TenantModelsView extends LitElement {
           ...(this.formApiKey ? { apiKey: this.formApiKey } : {}),
           models: this.formModels,
         });
-        this.showSuccess("models.configCreated");
+        this.showSuccess(t("models.configCreated"));
       }
       this.showForm = false;
       await this.loadConfigs();
     } catch (err: any) {
-      this.showError(err?.message ?? "models.saveFailed", err?.details);
+      const msg = err?.message ?? "Save failed";
+      if (msg.startsWith("platformModels.removeModelInUse:")) {
+        const parts = msg.slice("platformModels.removeModelInUse:".length).split(":");
+        const modelId = parts[0] ?? "";
+        const agents = parts.slice(1).join(":");
+        this.showError(t("platformModels.removeModelInUse", { modelId, agents }));
+      } else {
+        this.showError(msg);
+      }
     } finally {
       this.saving = false;
     }
   }
 
-  private async handleDelete(config: TenantModelConfig) {
+  private async handleDelete(config: PlatformModelConfig) {
     const ok = await showConfirm({
       title: t("models.delete"),
       message: t("models.confirmDelete", { name: config.providerName }),
@@ -369,57 +343,57 @@ export class TenantModelsView extends LitElement {
       danger: true,
     });
     if (!ok) return;
-    this.errorKey = "";
     try {
-      await this.rpc("tenant.models.delete", { id: config.id });
-      this.showSuccess("models.configDeleted", { name: config.providerName });
+      await this.rpc("platform.models.delete", { id: config.id });
+      this.showSuccess(t("models.configDeleted", { name: config.providerName }));
       await this.loadConfigs();
     } catch (err: any) {
-      this.showError(err?.message ?? "models.deleteFailed", err?.details);
+      const msg = err?.message ?? "Delete failed";
+      if (msg.startsWith("platformModels.deleteInUse:")) {
+        const agents = msg.slice("platformModels.deleteInUse:".length);
+        this.showError(t("platformModels.deleteInUse", { agents }));
+      } else {
+        this.showError(msg);
+      }
     }
   }
 
-  private async handleToggle(config: TenantModelConfig) {
+  private async handleToggle(config: PlatformModelConfig) {
     try {
-      await this.rpc("tenant.models.update", { id: config.id, isActive: !config.isActive });
+      await this.rpc("platform.models.update", { id: config.id, isActive: !config.isActive });
       await this.loadConfigs();
     } catch (err) {
-      this.showError(err instanceof Error ? err.message : "models.toggleFailed");
+      this.showError(err instanceof Error ? err.message : "Toggle failed");
     }
   }
 
   render() {
     return html`
       <div class="header">
-        <h2>${t("models.title")}</h2>
+        <h2>${t("platformModels.title", {}, "Platform Shared Models")}</h2>
         <div style="display:flex;gap:0.5rem">
           <button class="btn btn-outline" @click=${() => this.loadConfigs()}>${t("models.refresh")}</button>
           <button class="btn btn-primary" @click=${() => this.showForm ? (this.showForm = false) : this.startCreate()}>
-            ${this.showForm ? t("models.cancel") : t("models.addProvider")}
+            ${this.showForm ? t("models.cancel") : t("platformModels.addProvider", {}, "Add Shared Provider")}
           </button>
         </div>
       </div>
 
-      ${this.errorKey ? html`<div class="error-msg">${this.tr(this.errorKey)}</div>` : nothing}
-      ${this.successKey ? html`<div class="success-msg">${this.tr(this.successKey)}</div>` : nothing}
+      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
+      ${this.success ? html`<div class="success-msg">${this.success}</div>` : nothing}
 
       ${this.showForm ? this.renderForm() : nothing}
 
       ${this.loading
         ? html`<div class="loading">${t("models.loading")}</div>`
         : this.configs.length === 0
-          ? html`<div class="empty">${t("models.empty")}</div>`
-          : html`
-            <div class="card-grid">
-              ${this.configs.map((c) => this.renderCard(c))}
-            </div>
-          `}
+          ? html`<div class="empty">${t("platformModels.empty", {}, "No shared models yet. Create one to make it available to all tenants.")}</div>`
+          : html`<div class="card-grid">${this.configs.map((c) => this.renderCard(c))}</div>`}
     `;
   }
 
-  private renderCard(config: TenantModelConfig) {
+  private renderCard(config: PlatformModelConfig) {
     const providerLabel = PROVIDER_TYPES.find((p) => p.value === config.providerType)?.label ?? config.providerType;
-    const isShared = config.visibility === "shared";
     return html`
       <div class="model-card">
         <div class="model-card-header">
@@ -427,7 +401,7 @@ export class TenantModelsView extends LitElement {
             <div class="model-name">
               <span class="status-dot ${config.isActive ? "active" : "inactive"}"></span>
               ${config.providerName}
-              ${isShared ? html`<span class="shared-badge">${t("platformModels.shared", {}, "Shared")}</span>` : nothing}
+              <span class="shared-badge">${t("platformModels.shared", {}, "Shared")}</span>
               ${!config.isActive ? html`<span style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:#2d1215;color:#fca5a5;margin-left:0.4rem">${t("models.disable")}</span>` : nothing}
             </div>
             <div class="model-provider">${providerLabel} | ${config.apiProtocol}</div>
@@ -442,12 +416,10 @@ export class TenantModelsView extends LitElement {
             <span class="model-tag ${m.reasoning ? "reasoning" : ""}">${m.name} (${m.id})</span>
           `)}
         </div>
-        ${isShared ? nothing : html`
-          <div class="model-actions">
-            <button class="btn btn-outline btn-sm" @click=${() => this.startEdit(config)}>${t("models.edit")}</button>
-            <button class="btn btn-danger btn-sm" @click=${() => this.handleDelete(config)}>${t("models.delete")}</button>
-          </div>
-        `}
+        <div class="model-actions">
+          <button class="btn btn-outline btn-sm" @click=${() => this.startEdit(config)}>${t("models.edit")}</button>
+          <button class="btn btn-danger btn-sm" @click=${() => this.handleDelete(config)}>${t("models.delete")}</button>
+        </div>
       </div>
     `;
   }
@@ -455,14 +427,12 @@ export class TenantModelsView extends LitElement {
   private renderForm() {
     return html`
       <div class="form-card">
-        <h3>${this.editingId ? t("models.editTitle") : t("models.createTitle")}</h3>
+        <h3>${this.editingId ? t("models.editTitle") : t("platformModels.createTitle", {}, "Create Shared Provider")}</h3>
         <form @submit=${this.handleSave}>
-          <!-- Provider Type & Name -->
           <div class="form-row">
             <div class="form-field">
               <label>${t("models.providerType")}</label>
-              <select
-                ?disabled=${!!this.editingId}
+              <select ?disabled=${!!this.editingId}
                 @change=${(e: Event) => this.onProviderTypeChange((e.target as HTMLSelectElement).value)}>
                 ${PROVIDER_TYPES.map((p) => html`
                   <option value=${p.value} ?selected=${this.formProviderType === p.value}>${p.label}</option>
@@ -471,22 +441,15 @@ export class TenantModelsView extends LitElement {
             </div>
             <div class="form-field">
               <label>${t("models.providerName")}</label>
-              <input type="text" required .placeholder=${t("models.providerNamePlaceholder")}
-                .value=${this.formProviderName}
-                @input=${(e: InputEvent) => {
-                  this.formProviderName = (e.target as HTMLInputElement).value;
-                  this.providerNameManuallyEdited = true;
-                }} />
-              <div class="form-hint">${t("models.providerNameHint")}</div>
+              <input type="text" required .value=${this.formProviderName}
+                @input=${(e: InputEvent) => { this.formProviderName = (e.target as HTMLInputElement).value; this.providerNameManuallyEdited = true; }} />
             </div>
           </div>
 
-          <!-- Base URL & Protocol -->
           <div class="form-row">
             <div class="form-field">
               <label>${t("models.baseUrl")}</label>
-              <input type="text" .placeholder=${t("models.baseUrlPlaceholder")}
-                .value=${this.formBaseUrl}
+              <input type="text" .value=${this.formBaseUrl}
                 @input=${(e: InputEvent) => (this.formBaseUrl = (e.target as HTMLInputElement).value)} />
             </div>
             <div class="form-field">
@@ -499,7 +462,6 @@ export class TenantModelsView extends LitElement {
             </div>
           </div>
 
-          <!-- Auth -->
           <div class="form-row">
             <div class="form-field">
               <label>${t("models.authMode")}</label>
@@ -513,24 +475,16 @@ export class TenantModelsView extends LitElement {
             ${this.formAuthMode === "api-key" || this.formAuthMode === "token" ? html`
               <div class="form-field">
                 <label>${t("models.apiKey")}${this.editingId ? t("models.apiKeyKeepHint") : ""}</label>
-                <input type="password" .placeholder=${t("models.apiKeyPlaceholder")}
-                  .value=${this.formApiKey}
+                <input type="password" .value=${this.formApiKey}
                   @input=${(e: InputEvent) => (this.formApiKey = (e.target as HTMLInputElement).value)} />
               </div>
             ` : nothing}
           </div>
 
-          <!-- Models list -->
           <h4>${t("models.modelsCount", { count: String(this.formModels.length) })}</h4>
           ${this.formModels.length > 0 ? html`
             <table class="sub-models-table">
-              <thead>
-                <tr>
-                  <th>${t("models.modelId")}</th>
-                  <th>${t("models.modelName")}</th>
-                  <th></th>
-                </tr>
-              </thead>
+              <thead><tr><th>${t("models.modelId")}</th><th>${t("models.modelName")}</th><th></th></tr></thead>
               <tbody>
                 ${this.formModels.map((m, idx) => html`
                   <tr>
@@ -548,14 +502,12 @@ export class TenantModelsView extends LitElement {
               <div class="sub-model-row">
                 <div class="form-field">
                   <label>${t("models.modelId")}</label>
-                  <input type="text" .placeholder=${t("models.modelIdPlaceholder")}
-                    .value=${this.subModelId}
+                  <input type="text" .value=${this.subModelId}
                     @input=${(e: InputEvent) => (this.subModelId = (e.target as HTMLInputElement).value)} />
                 </div>
                 <div class="form-field">
                   <label>${t("models.displayName")}</label>
-                  <input type="text" .placeholder=${t("models.displayNamePlaceholder")}
-                    .value=${this.subModelName}
+                  <input type="text" .value=${this.subModelName}
                     @input=${(e: InputEvent) => (this.subModelName = (e.target as HTMLInputElement).value)} />
                 </div>
                 <div style="display:flex;align-items:flex-end">
@@ -570,7 +522,6 @@ export class TenantModelsView extends LitElement {
             <button type="button" class="btn btn-outline btn-sm" style="margin-top:0.5rem" @click=${() => this.startAddModel()}>${t("models.addModel")}</button>
           `}
 
-          <!-- Submit -->
           <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
             <button class="btn btn-primary" type="submit" ?disabled=${this.saving}>
               ${this.saving ? t("models.saving") : t("models.save")}
