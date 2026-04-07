@@ -507,11 +507,15 @@ export function buildWorkspaceSkillSnapshot(
   workspaceDir: string,
   opts?: WorkspaceSkillBuildOptions & { snapshotVersion?: number },
 ): SkillSnapshot {
-  const { eligible, prompt, resolvedSkills } = resolveWorkspaceSkillPromptState(workspaceDir, opts);
+  const { allEntries, eligible, prompt, resolvedSkills } = resolveWorkspaceSkillPromptState(workspaceDir, opts);
   const skillFilter = normalizeSkillFilter(opts?.skillFilter);
-  const skillOverrides = eligible
-    .filter((e) => e.overrides && e.overrides.length > 0)
-    .flatMap((e) => e.overrides!);
+  // Collect overrides from eligible skills (standard behavior) PLUS overrides
+  // from skills excluded by skillFilter. When a skill is filtered out, its
+  // associated plugin tools should also be disabled — not resurrected.
+  const overrideSources = skillFilter !== undefined
+    ? allEntries.filter((e) => e.overrides && e.overrides.length > 0)
+    : eligible.filter((e) => e.overrides && e.overrides.length > 0);
+  const skillOverrides = overrideSources.flatMap((e) => e.overrides!);
   return {
     prompt,
     skills: eligible.map((entry) => ({
@@ -547,6 +551,7 @@ function resolveWorkspaceSkillPromptState(
   workspaceDir: string,
   opts?: WorkspaceSkillBuildOptions,
 ): {
+  allEntries: SkillEntry[];
   eligible: SkillEntry[];
   prompt: string;
   resolvedSkills: Skill[];
@@ -587,7 +592,7 @@ function resolveWorkspaceSkillPromptState(
   ]
     .filter(Boolean)
     .join("\n");
-  return { eligible, prompt, resolvedSkills };
+  return { allEntries: skillEntries, eligible, prompt, resolvedSkills };
 }
 
 export function resolveSkillsPromptForRun(params: {
