@@ -39,6 +39,7 @@ import { tenantSettingsHandlers } from "./server-methods/tenant-settings-api.js"
 import { tenantTracesHandlers } from "./server-methods/tenant-traces-api.js";
 import { tenantUsageHandlers } from "./server-methods/tenant-usage-api.js";
 import { platformOverviewHandlers } from "./server-methods/platform-overview-api.js";
+import { platformModelsHandlers } from "./server-methods/platform-models-api.js";
 import { tenantOverviewHandlers } from "./server-methods/tenant-overview-api.js";
 import { tenantOnboardingHandlers } from "./server-methods/tenant-onboarding-api.js";
 import { ttsHandlers } from "./server-methods/tts.js";
@@ -132,6 +133,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...tenantTracesHandlers,
   ...tenantUsageHandlers,
   ...platformOverviewHandlers,
+  ...platformModelsHandlers,
   ...tenantOverviewHandlers,
   ...tenantOnboardingHandlers,
 };

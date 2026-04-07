@@ -26,6 +26,30 @@
       "message": "我云盘里都有啥东西？",
       "assert": { "notContains": "error", "minLength": 2 },
       "tags": ["P1", "intent"]
+    },
+    {
+      "name": "移动文件",
+      "message": "帮我把《自动化测试文档》移到「自动化测试」文件夹下面",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "查看文件夹不存在",
+      "message": "帮我看看「不存在的文件夹_xyzzy」里有什么",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "error"]
+    },
+    {
+      "name": "创建嵌套文件夹",
+      "message": "帮我在「自动化测试」文件夹下再创建一个子文件夹叫「测试报告」",
+      "assert": { "containsAny": ["已创建", "创建成功", "文件夹"], "notContains": "error" },
+      "tags": ["P2"]
+    },
+    {
+      "name": "口语化-整理文件",
+      "message": "帮我整理一下云盘，看看根目录下有多少个文件夹和文档",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "intent"]
     }
   ]
 }

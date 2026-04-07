@@ -1,0 +1,28 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "创建电子表格（后续读取/搜索依赖）",
+      "message": "帮我创建一个电子表格叫「AutoTest_Layer3表格」，表头是：姓名、部门、得分，再帮我加几行示例数据",
+      "assert": {
+        "llmEvaluate": "回复是否告知表格创建成功？是否提供了表格链接？是否确认了表头和数据已按要求设置？"
+      }
+    },
+    {
+      "name": "读取刚创建的表格",
+      "message": "帮我读取「AutoTest_Layer3表格」的内容",
+      "assert": {
+        "llmEvaluate": "回复是否成功读取了表格数据？数据是否以清晰的格式展示（如表格或列表）？是否能看到之前创建的表头和数据？"
+      }
+    },
+    {
+      "name": "在表格中搜索",
+      "message": "在「AutoTest_Layer3表格」里搜索包含「研发」的数据",
+      "assert": {
+        "llmEvaluate": "回复是否执行了搜索操作并展示了匹配结果？如果没有匹配项，是否给出了明确说明？"
+      }
+    }
+  ]
+}

@@ -1,4 +1,3 @@
-import { loadConfig } from "../../config/config.js";
 import { extractDeliveryInfo } from "../../config/sessions.js";
 import { resolveOpenClawPackageRoot } from "../../infra/openclaw-root.js";
 import {
@@ -7,8 +6,8 @@ import {
   writeRestartSentinel,
 } from "../../infra/restart-sentinel.js";
 import { scheduleGatewaySigusr1Restart } from "../../infra/restart.js";
-import { normalizeUpdateChannel } from "../../infra/update-channels.js";
 import { runGatewayUpdate } from "../../infra/update-runner.js";
+import { getStoredUpdateTrack } from "../../infra/update-settings.js";
 import { formatControlPlaneActor, resolveControlPlaneActor } from "../control-plane-audit.js";
 import { validateUpdateRunParams } from "../protocol/index.js";
 import { parseRestartRequestParams } from "./restart-request.js";
@@ -31,19 +30,19 @@ export const updateHandlers: GatewayRequestHandlers = {
 
     let result: Awaited<ReturnType<typeof runGatewayUpdate>>;
     try {
-      const config = loadConfig();
-      const configChannel = normalizeUpdateChannel(config.update?.channel);
-      const root =
-        (await resolveOpenClawPackageRoot({
+      const [storedTrack, root] = await Promise.all([
+        getStoredUpdateTrack(),
+        resolveOpenClawPackageRoot({
           moduleUrl: import.meta.url,
           argv1: process.argv[1],
           cwd: process.cwd(),
-        })) ?? process.cwd();
+        }).then((r) => r ?? process.cwd()),
+      ]);
       result = await runGatewayUpdate({
         timeoutMs,
         cwd: root,
         argv1: process.argv[1],
-        channel: configChannel ?? undefined,
+        track: storedTrack ?? undefined,
       });
     } catch (err) {
       result = {
@@ -95,8 +94,10 @@ export const updateHandlers: GatewayRequestHandlers = {
     // Only restart the gateway when the update actually succeeded.
     // Restarting after a failed update leaves the process in a broken state
     // (corrupted node_modules, partial builds) and causes a crash loop.
+    // Skip auto-restart for git installs — there is no process supervisor to
+    // re-launch the service, so the user must restart manually.
     const restart =
-      result.status === "ok"
+      result.status === "ok" && result.mode !== "git"
         ? scheduleGatewaySigusr1Restart({
             delayMs: restartDelayMs,
             reason: "update.run",

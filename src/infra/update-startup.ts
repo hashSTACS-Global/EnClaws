@@ -2,13 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { formatCliCommand } from "../cli/command-format.js";
-import type { loadConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { VERSION } from "../version.js";
 import { resolveOpenClawPackageRoot } from "./openclaw-root.js";
-import { normalizeUpdateChannel, DEFAULT_PACKAGE_CHANNEL } from "./update-channels.js";
+import { DEFAULT_PACKAGE_TRACK, normalizeUpdateTrack } from "./update-channels.js";
 import { compareSemverStrings, resolveNpmChannelTag, checkUpdateStatus } from "./update-check.js";
+import { readUpdateSettings } from "./update-settings.js";
 
 type UpdateCheckState = {
   lastCheckedAt?: string;
@@ -75,8 +75,15 @@ function shouldSkipCheck(allowInTests: boolean): boolean {
   return false;
 }
 
-function resolveAutoUpdatePolicy(cfg: ReturnType<typeof loadConfig>): AutoUpdatePolicy {
-  const auto = cfg.update?.auto;
+function resolveAutoUpdatePolicy(settings: {
+  auto?: {
+    enabled?: boolean;
+    stableDelayHours?: number;
+    stableJitterHours?: number;
+    betaCheckIntervalHours?: number;
+  };
+}): AutoUpdatePolicy {
+  const auto = settings.auto;
   const stableDelayHours =
     typeof auto?.stableDelayHours === "number" && Number.isFinite(auto.stableDelayHours)
       ? Math.max(0, auto.stableDelayHours)
@@ -98,16 +105,19 @@ function resolveAutoUpdatePolicy(cfg: ReturnType<typeof loadConfig>): AutoUpdate
   };
 }
 
-function resolveCheckIntervalMs(cfg: ReturnType<typeof loadConfig>): number {
-  const channel = normalizeUpdateChannel(cfg.update?.channel) ?? DEFAULT_PACKAGE_CHANNEL;
-  const auto = resolveAutoUpdatePolicy(cfg);
+function resolveCheckIntervalMs(settings: {
+  track?: string | null;
+  auto?: { enabled?: boolean; betaCheckIntervalHours?: number };
+}): number {
+  const track = normalizeUpdateTrack(settings.track) ?? DEFAULT_PACKAGE_TRACK;
+  const auto = resolveAutoUpdatePolicy(settings);
   if (!auto.enabled) {
     return UPDATE_CHECK_INTERVAL_MS;
   }
-  if (channel === "beta") {
+  if (track === "beta") {
     return Math.max(ONE_HOUR_MS / 4, Math.floor(auto.betaCheckIntervalHours * ONE_HOUR_MS));
   }
-  if (channel === "stable") {
+  if (track === "stable") {
     return ONE_HOUR_MS;
   }
   return UPDATE_CHECK_INTERVAL_MS;
@@ -233,7 +243,7 @@ async function runAutoUpdateCommand(params: {
   timeoutMs: number;
   root?: string;
 }): Promise<AutoUpdateRunResult> {
-  const baseArgs = ["update", "--yes", "--channel", params.channel, "--json"];
+  const baseArgs = ["update", "--yes", "--track", params.channel, "--json"];
   const execPath = process.execPath?.trim();
   const argv1 = process.argv[1]?.trim();
   const lowerExecBase = execPath ? path.basename(execPath).toLowerCase() : "";
@@ -298,7 +308,6 @@ function clearAutoState(nextState: UpdateCheckState): void {
 }
 
 export async function runGatewayUpdateCheck(params: {
-  cfg: ReturnType<typeof loadConfig>;
   log: { info: (msg: string, meta?: Record<string, unknown>) => void };
   isNixMode: boolean;
   allowInTests?: boolean;
@@ -315,8 +324,9 @@ export async function runGatewayUpdateCheck(params: {
   if (params.isNixMode) {
     return;
   }
-  const auto = resolveAutoUpdatePolicy(params.cfg);
-  const shouldRunUpdateHints = params.cfg.update?.checkOnStart !== false;
+  const settings = await readUpdateSettings();
+  const auto = resolveAutoUpdatePolicy(settings);
+  const shouldRunUpdateHints = settings.checkOnStart !== false;
   if (!shouldRunUpdateHints && !auto.enabled) {
     return;
   }
@@ -337,7 +347,7 @@ export async function runGatewayUpdateCheck(params: {
       onUpdateAvailableChange: params.onUpdateAvailableChange,
     });
   }
-  const checkIntervalMs = resolveCheckIntervalMs(params.cfg);
+  const checkIntervalMs = resolveCheckIntervalMs(settings);
   if (lastCheckedAt && Number.isFinite(lastCheckedAt)) {
     if (now - lastCheckedAt < checkIntervalMs) {
       return;
@@ -352,14 +362,47 @@ export async function runGatewayUpdateCheck(params: {
   const status = await checkUpdateStatus({
     root,
     timeoutMs: 2500,
-    fetchGit: false,
-    includeRegistry: false,
+    fetchGit: true,
+    includeRegistry: true,
   });
 
   const nextState: UpdateCheckState = {
     ...state,
     lastCheckedAt: new Date(now).toISOString(),
   };
+
+  // --- git mode: check if remote has new commits ---
+  if (status.installKind === "git") {
+    const behind = status.git?.behind ?? 0;
+    if (behind > 0) {
+      const nextAvailable: UpdateAvailable = {
+        currentVersion: VERSION,
+        latestVersion: `${behind} commit(s) behind upstream`,
+        channel: "git",
+      };
+      if (shouldRunUpdateHints) {
+        setUpdateAvailableCache({
+          next: nextAvailable,
+          onUpdateAvailableChange: params.onUpdateAvailableChange,
+        });
+      }
+      nextState.lastAvailableVersion = nextAvailable.latestVersion;
+      nextState.lastAvailableTag = "git";
+      if (shouldRunUpdateHints && state.lastAvailableVersion !== nextAvailable.latestVersion) {
+        params.log.info(
+          `git update available: ${behind} commit(s) behind upstream. Run: ${formatCliCommand("enclaws update")}`,
+        );
+      }
+    } else {
+      setUpdateAvailableCache({
+        next: null,
+        onUpdateAvailableChange: params.onUpdateAvailableChange,
+      });
+    }
+    clearAutoState(nextState);
+    await writeState(statePath, nextState);
+    return;
+  }
 
   if (status.installKind !== "package") {
     delete nextState.lastAvailableVersion;
@@ -373,7 +416,7 @@ export async function runGatewayUpdateCheck(params: {
     return;
   }
 
-  const channel = normalizeUpdateChannel(params.cfg.update?.channel) ?? DEFAULT_PACKAGE_CHANNEL;
+  const channel = normalizeUpdateTrack(settings.track) ?? DEFAULT_PACKAGE_TRACK;
   const resolved = await resolveNpmChannelTag({ channel, timeoutMs: 2500 });
   const tag = resolved.tag;
   if (!resolved.version) {
@@ -485,7 +528,6 @@ export async function runGatewayUpdateCheck(params: {
 }
 
 export function scheduleGatewayUpdateCheck(params: {
-  cfg: ReturnType<typeof loadConfig>;
   log: { info: (msg: string, meta?: Record<string, unknown>) => void };
   isNixMode: boolean;
   onUpdateAvailableChange?: (updateAvailable: UpdateAvailable | null) => void;
@@ -509,7 +551,8 @@ export function scheduleGatewayUpdateCheck(params: {
     if (stopped) {
       return;
     }
-    const intervalMs = resolveCheckIntervalMs(params.cfg);
+    const settings = await readUpdateSettings().catch(() => ({}));
+    const intervalMs = resolveCheckIntervalMs(settings);
     timer = setTimeout(() => {
       void tick();
     }, intervalMs);

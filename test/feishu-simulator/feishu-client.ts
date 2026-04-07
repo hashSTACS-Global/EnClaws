@@ -19,6 +19,8 @@ export type FeishuTestClientOptions = {
   tokenCacheDir?: string;
   replyTimeoutMs?: number;
   pollIntervalMs?: number;
+  /** Group chat ID — when set, messages are sent to this group instead of P2P */
+  chatId?: string;
 };
 
 export type FeishuReplyMeta = {
@@ -48,7 +50,9 @@ export class FeishuTestClient {
   private tenantToken: string | null = null;
   private userToken: string | null = null;
   private botOpenId: string | null = null;
+  private botName: string | null = null;
   private p2pChatId: string | null = null;
+  private groupChatId: string | null = null;
   private cacheDir: string;
 
   constructor(opts: FeishuTestClientOptions) {
@@ -65,50 +69,83 @@ export class FeishuTestClient {
     const botInfo = await this.feishu("GET", "/bot/v3/info", null, this.tenantToken);
     this.botOpenId = botInfo.bot?.open_id;
     if (!this.botOpenId) throw new Error("Failed to get bot open_id");
-    console.log(`  Bot: ${botInfo.bot?.app_name ?? this.botOpenId}`);
+    this.botName = botInfo.bot?.app_name ?? "Bot";
+    console.log(`  Bot: ${this.botName} (${this.botOpenId})`);
 
     // 3. Get or obtain user access token
     this.userToken = await this.loadOrAuthorize();
 
-    // 4. P2P chat will be resolved on first send (using bot open_id as receive_id)
+    // 4. Set up chat mode
+    if (this.opts.chatId) {
+      this.groupChatId = this.opts.chatId;
+      console.log(`  Mode: Group chat (${this.groupChatId})`);
+    } else {
+      console.log(`  Mode: P2P (chat will be resolved on first send)`);
+    }
   }
 
-  async send(message: string): Promise<FeishuSendResult> {
+  async send(message: string, opts?: { mentionBot?: boolean }): Promise<FeishuSendResult> {
     if (!this.userToken || !this.botOpenId) {
       throw new Error("Client not initialized. Call init() first.");
     }
 
+    const isGroupMode = !!this.groupChatId;
+    const activeChatId = isGroupMode ? this.groupChatId : this.p2pChatId;
     const startedAt = Date.now();
 
     // Get latest message before sending (if we already know the chat)
-    const beforeMsgId = this.p2pChatId ? await this.getLatestMessageId() : null;
+    const beforeMsgId = activeChatId ? await this.getLatestMessageId() : null;
 
-    // Send as user to bot's open_id — Feishu auto-creates P2P chat if needed
-    const sendRes = await this.feishu("POST", `/im/v1/messages?receive_id_type=open_id`, {
-      receive_id: this.botOpenId,
+    // Build message content — prepend @bot mention in group mode
+    let content: string;
+    if (isGroupMode && (opts?.mentionBot ?? true)) {
+      content = JSON.stringify({ text: `<at user_id="${this.botOpenId}">${this.botName}</at> ${message}` });
+    } else {
+      content = JSON.stringify({ text: message });
+    }
+
+    // Send message — group mode uses chat_id, P2P uses bot's open_id
+    const receiveIdType = isGroupMode ? "chat_id" : "open_id";
+    const receiveId = isGroupMode ? this.groupChatId! : this.botOpenId;
+
+    const sendRes = await this.feishu("POST", `/im/v1/messages?receive_id_type=${receiveIdType}`, {
+      receive_id: receiveId,
       msg_type: "text",
-      content: JSON.stringify({ text: message }),
+      content,
     }, this.userToken);
 
     const userMsgId = sendRes.message_id;
     if (!userMsgId) throw new Error(`Send failed: ${JSON.stringify(sendRes)}`);
 
-    // Extract chat_id from send response (for polling replies)
-    if (!this.p2pChatId && sendRes.chat_id) {
+    // Extract chat_id from send response (for P2P mode — group mode already has it)
+    if (!isGroupMode && !this.p2pChatId && sendRes.chat_id) {
       this.p2pChatId = sendRes.chat_id;
       console.log(`  P2P chat: ${this.p2pChatId}`);
     }
 
-    if (!this.p2pChatId) {
+    const chatIdForPoll = isGroupMode ? this.groupChatId! : this.p2pChatId;
+    if (!chatIdForPoll) {
       throw new Error("Could not determine chat_id from send response");
     }
 
     // Poll for bot reply
     const timeoutMs = this.opts.replyTimeoutMs ?? 60_000;
     const pollMs = this.opts.pollIntervalMs ?? 1000;
-    const replyData = await this.waitForBotReply(userMsgId, beforeMsgId, timeoutMs, pollMs);
 
-    return { text: replyData.text, messageId: userMsgId, durationMs: Date.now() - startedAt, reply: replyData.meta };
+    // When mentionBot is explicitly false in group mode, the bot is not expected to reply.
+    // Use a shorter timeout and treat timeout as success (empty reply).
+    const expectNoReply = isGroupMode && opts?.mentionBot === false;
+    const effectiveTimeout = expectNoReply ? Math.min(timeoutMs, 15_000) : timeoutMs;
+
+    try {
+      const replyData = await this.waitForBotReply(userMsgId, beforeMsgId, effectiveTimeout, pollMs, chatIdForPoll);
+      return { text: replyData.text, messageId: userMsgId, durationMs: Date.now() - startedAt, reply: replyData.meta };
+    } catch (e) {
+      if (expectNoReply && (e as Error).message.includes("Timeout")) {
+        return { text: "", messageId: userMsgId, durationMs: Date.now() - startedAt, reply: { msgType: "none" } };
+      }
+      throw e;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -299,11 +336,12 @@ export class FeishuTestClient {
   // ---------------------------------------------------------------------------
 
   private async getLatestMessageId(): Promise<string | null> {
-    if (!this.p2pChatId) return null;
+    const chatId = this.groupChatId ?? this.p2pChatId;
+    if (!chatId) return null;
     try {
       const data = await this.feishu(
         "GET",
-        `/im/v1/messages?container_id_type=chat&container_id=${this.p2pChatId}&page_size=1&sort_type=ByCreateTimeDesc`,
+        `/im/v1/messages?container_id_type=chat&container_id=${chatId}&page_size=1&sort_type=ByCreateTimeDesc`,
         null,
         this.tenantToken!,
       );
@@ -318,7 +356,9 @@ export class FeishuTestClient {
     beforeMsgId: string | null,
     timeoutMs: number,
     pollMs: number,
+    chatId?: string,
   ): Promise<{ text: string; meta: FeishuReplyMeta }> {
+    const pollChatId = chatId ?? this.groupChatId ?? this.p2pChatId;
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
@@ -327,7 +367,7 @@ export class FeishuTestClient {
       try {
         const data = await this.feishu(
           "GET",
-          `/im/v1/messages?container_id_type=chat&container_id=${this.p2pChatId}&page_size=10&sort_type=ByCreateTimeDesc&card_msg_content_type=raw_card_content`,
+          `/im/v1/messages?container_id_type=chat&container_id=${pollChatId}&page_size=10&sort_type=ByCreateTimeDesc&card_msg_content_type=raw_card_content`,
           null,
           this.tenantToken!,
         );

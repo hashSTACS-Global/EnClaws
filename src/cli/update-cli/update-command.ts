@@ -12,11 +12,12 @@ import {
 } from "../../config/config.js";
 import { resolveGatewayService } from "../../daemon/service.js";
 import {
-  channelToNpmTag,
-  DEFAULT_GIT_CHANNEL,
-  DEFAULT_PACKAGE_CHANNEL,
-  normalizeUpdateChannel,
+  trackToNpmTag,
+  DEFAULT_GIT_TRACK,
+  DEFAULT_PACKAGE_TRACK,
+  normalizeUpdateTrack,
 } from "../../infra/update-channels.js";
+import { getStoredUpdateTrack, patchUpdateSettings } from "../../infra/update-settings.js";
 import {
   compareSemverStrings,
   resolveNpmChannelTag,
@@ -123,9 +124,9 @@ type UpdateDryRunPreview = {
   switchToGit: boolean;
   switchToPackage: boolean;
   restart: boolean;
-  requestedChannel: "stable" | "beta" | "dev" | null;
-  storedChannel: "stable" | "beta" | "dev" | null;
-  effectiveChannel: "stable" | "beta" | "dev";
+  requestedTrack: "stable" | "beta" | "dev" | null;
+  storedTrack: "stable" | "beta" | "dev" | null;
+  effectiveTrack: "stable" | "beta" | "dev";
   tag: string;
   currentVersion: string | null;
   targetVersion: string | null;
@@ -146,7 +147,7 @@ function printDryRunPreview(preview: UpdateDryRunPreview, jsonMode: boolean): vo
   defaultRuntime.log(`  Root: ${theme.muted(preview.root)}`);
   defaultRuntime.log(`  Install kind: ${theme.muted(preview.installKind)}`);
   defaultRuntime.log(`  Mode: ${theme.muted(preview.mode)}`);
-  defaultRuntime.log(`  Channel: ${theme.muted(preview.effectiveChannel)}`);
+  defaultRuntime.log(`  Track: ${theme.muted(preview.effectiveTrack)}`);
   defaultRuntime.log(`  Tag/spec: ${theme.muted(preview.tag)}`);
   if (preview.currentVersion) {
     defaultRuntime.log(`  Current version: ${theme.muted(preview.currentVersion)}`);
@@ -364,7 +365,7 @@ async function runGitUpdate(params: {
     argv1: params.switchToGit ? undefined : process.argv[1],
     timeoutMs: params.timeoutMs,
     progress: params.progress,
-    channel: params.channel,
+    track: params.channel,
     tag: params.tag,
   });
   const steps = [...(cloneStep ? [cloneStep] : []), ...updateResult.steps];
@@ -402,7 +403,7 @@ async function runGitUpdate(params: {
 
 async function updatePluginsAfterCoreUpdate(params: {
   root: string;
-  channel: "stable" | "beta" | "dev";
+  track: "stable" | "beta" | "dev";
   configSnapshot: Awaited<ReturnType<typeof readConfigFileSnapshot>>;
   opts: UpdateCommandOptions;
 }): Promise<void> {
@@ -428,7 +429,7 @@ async function updatePluginsAfterCoreUpdate(params: {
 
   const syncResult = await syncPluginsForUpdateChannel({
     config: params.configSnapshot.config,
-    channel: params.channel,
+    channel: params.track,
     workspaceDir: params.root,
     logger: pluginLogger,
   });
@@ -644,34 +645,26 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
   });
 
   const configSnapshot = await readConfigFileSnapshot();
-  const storedChannel = configSnapshot.valid
-    ? normalizeUpdateChannel(configSnapshot.config.update?.channel)
-    : null;
 
-  const requestedChannel = normalizeUpdateChannel(opts.channel);
-  if (opts.channel && !requestedChannel) {
-    defaultRuntime.error(`--channel must be "stable", "beta", or "dev" (got "${opts.channel}")`);
-    defaultRuntime.exit(1);
-    return;
-  }
-  if (opts.channel && !configSnapshot.valid) {
-    const issues = configSnapshot.issues.map((issue) => `- ${issue.path}: ${issue.message}`);
-    defaultRuntime.error(["Config is invalid; cannot set update channel.", ...issues].join("\n"));
+  const storedTrack = await getStoredUpdateTrack();
+  const requestedTrack = normalizeUpdateTrack(opts.track);
+  if (opts.track && !requestedTrack) {
+    defaultRuntime.error(`--track must be "stable", "beta", or "dev" (got "${opts.track}")`);
     defaultRuntime.exit(1);
     return;
   }
 
   const installKind = updateStatus.installKind;
-  const switchToGit = requestedChannel === "dev" && installKind !== "git";
+  const switchToGit = requestedTrack === "dev" && installKind !== "git";
   const switchToPackage =
-    requestedChannel !== null && requestedChannel !== "dev" && installKind === "git";
+    requestedTrack !== null && requestedTrack !== "dev" && installKind === "git";
   const updateInstallKind = switchToGit ? "git" : switchToPackage ? "package" : installKind;
-  const defaultChannel =
-    updateInstallKind === "git" ? DEFAULT_GIT_CHANNEL : DEFAULT_PACKAGE_CHANNEL;
-  const channel = requestedChannel ?? storedChannel ?? defaultChannel;
+  const defaultTrack =
+    updateInstallKind === "git" ? DEFAULT_GIT_TRACK : DEFAULT_PACKAGE_TRACK;
+  const track = requestedTrack ?? storedTrack ?? defaultTrack;
 
   const explicitTag = normalizeTag(opts.tag);
-  let tag = explicitTag ?? channelToNpmTag(channel);
+  let tag = explicitTag ?? trackToNpmTag(track);
   let currentVersion: string | null = null;
   let targetVersion: string | null = null;
   let downgradeRisk = false;
@@ -681,9 +674,9 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
     currentVersion = switchToPackage ? null : await readPackageVersion(root);
     targetVersion = explicitTag
       ? await resolveTargetVersion(tag, timeoutMs)
-      : await resolveNpmChannelTag({ channel, timeoutMs }).then((resolved) => {
+      : await resolveNpmChannelTag({ channel: track, timeoutMs }).then((resolved) => {
           tag = resolved.tag;
-          fallbackToLatest = channel === "beta" && resolved.tag === "latest";
+          fallbackToLatest = track === "beta" && resolved.tag === "latest";
           return resolved.version;
         });
     const cmp =
@@ -707,15 +700,15 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
     }
 
     const actions: string[] = [];
-    if (requestedChannel && requestedChannel !== storedChannel) {
-      actions.push(`Persist update.channel=${requestedChannel} in config`);
+    if (requestedTrack && requestedTrack !== storedTrack) {
+      actions.push(`Persist update track=${requestedTrack} to update-settings.json`);
     }
     if (switchToGit) {
-      actions.push("Switch install mode from package to git checkout (dev channel)");
+      actions.push("Switch install mode from package to git checkout (dev track)");
     } else if (switchToPackage) {
       actions.push(`Switch install mode from git to package manager (${mode})`);
     } else if (updateInstallKind === "git") {
-      actions.push(`Run git update flow on channel ${channel} (fetch/rebase/build/doctor)`);
+      actions.push(`Run git update flow on track ${track} (fetch/rebase/build/doctor)`);
     } else {
       actions.push(`Run global package manager update with spec enclaws@${tag}`);
     }
@@ -745,9 +738,9 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
         switchToGit,
         switchToPackage,
         restart: shouldRestart,
-        requestedChannel,
-        storedChannel,
-        effectiveChannel: channel,
+        requestedTrack,
+        storedTrack,
+        effectiveTrack: track,
         tag,
         currentVersion,
         targetVersion,
@@ -793,17 +786,10 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
     );
   }
 
-  if (requestedChannel && configSnapshot.valid) {
-    const next = {
-      ...configSnapshot.config,
-      update: {
-        ...configSnapshot.config.update,
-        channel: requestedChannel,
-      },
-    };
-    await writeConfigFile(next);
+  if (requestedTrack) {
+    await patchUpdateSettings({ track: requestedTrack });
     if (!opts.json) {
-      defaultRuntime.log(theme.muted(`Update channel set to ${requestedChannel}.`));
+      defaultRuntime.log(theme.muted(`Update track set to ${requestedTrack}.`));
     }
   }
 
@@ -846,7 +832,7 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
         timeoutMs,
         startedAt,
         progress,
-        channel,
+        channel: track,
         tag,
         showProgress,
         opts,
@@ -887,7 +873,7 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
 
   await updatePluginsAfterCoreUpdate({
     root,
-    channel,
+    track,
     configSnapshot,
     opts,
   });

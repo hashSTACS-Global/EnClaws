@@ -1,11 +1,11 @@
-export type UpdateChannel = "stable" | "beta" | "dev";
-export type UpdateChannelSource = "config" | "git-tag" | "git-branch" | "default";
+export type UpdateTrack = "stable" | "beta" | "dev";
+export type UpdateTrackSource = "env" | "config" | "git-tag" | "git-branch" | "default";
 
-export const DEFAULT_PACKAGE_CHANNEL: UpdateChannel = "stable";
-export const DEFAULT_GIT_CHANNEL: UpdateChannel = "dev";
+export const DEFAULT_PACKAGE_TRACK: UpdateTrack = "stable";
+export const DEFAULT_GIT_TRACK: UpdateTrack = "dev";
 export const DEV_BRANCH = "main";
 
-export function normalizeUpdateChannel(value?: string | null): UpdateChannel | null {
+export function normalizeUpdateTrack(value?: string | null): UpdateTrack | null {
   if (!value) {
     return null;
   }
@@ -16,11 +16,11 @@ export function normalizeUpdateChannel(value?: string | null): UpdateChannel | n
   return null;
 }
 
-export function channelToNpmTag(channel: UpdateChannel): string {
-  if (channel === "beta") {
+export function trackToNpmTag(track: UpdateTrack): string {
+  if (track === "beta") {
     return "beta";
   }
-  if (channel === "dev") {
+  if (track === "dev") {
     return "dev";
   }
   return "latest";
@@ -34,62 +34,72 @@ export function isStableTag(tag: string): boolean {
   return !isBetaTag(tag);
 }
 
-export function resolveEffectiveUpdateChannel(params: {
-  configChannel?: UpdateChannel | null;
+export function resolveEffectiveUpdateTrack(params: {
+  storedTrack?: UpdateTrack | null;
   installKind: "git" | "package" | "unknown";
   git?: { tag?: string | null; branch?: string | null };
-}): { channel: UpdateChannel; source: UpdateChannelSource } {
-  if (params.configChannel) {
-    return { channel: params.configChannel, source: "config" };
+}): { track: UpdateTrack; source: UpdateTrackSource } {
+  // Env var takes highest priority
+  const envTrack = normalizeUpdateTrack(process.env.ENCLAWS_UPDATE_TRACK);
+  if (envTrack) {
+    return { track: envTrack, source: "env" };
+  }
+
+  // Then persisted setting (from state file or config)
+  if (params.storedTrack) {
+    return { track: params.storedTrack, source: "config" };
   }
 
   if (params.installKind === "git") {
     const tag = params.git?.tag;
     if (tag) {
-      return { channel: isBetaTag(tag) ? "beta" : "stable", source: "git-tag" };
+      return { track: isBetaTag(tag) ? "beta" : "stable", source: "git-tag" };
     }
     const branch = params.git?.branch;
     if (branch && branch !== "HEAD") {
-      return { channel: "dev", source: "git-branch" };
+      return { track: "dev", source: "git-branch" };
     }
-    return { channel: DEFAULT_GIT_CHANNEL, source: "default" };
+    return { track: DEFAULT_GIT_TRACK, source: "default" };
   }
 
   if (params.installKind === "package") {
-    return { channel: DEFAULT_PACKAGE_CHANNEL, source: "default" };
+    return { track: DEFAULT_PACKAGE_TRACK, source: "default" };
   }
 
-  return { channel: DEFAULT_PACKAGE_CHANNEL, source: "default" };
+  return { track: DEFAULT_PACKAGE_TRACK, source: "default" };
 }
 
-export function formatUpdateChannelLabel(params: {
-  channel: UpdateChannel;
-  source: UpdateChannelSource;
+export function formatUpdateTrackLabel(params: {
+  track: UpdateTrack;
+  source: UpdateTrackSource;
   gitTag?: string | null;
   gitBranch?: string | null;
 }): string {
+  if (params.source === "env") {
+    return `${params.track} (env)`;
+  }
   if (params.source === "config") {
-    return `${params.channel} (config)`;
+    return `${params.track} (config)`;
   }
   if (params.source === "git-tag") {
-    return params.gitTag ? `${params.channel} (${params.gitTag})` : `${params.channel} (tag)`;
+    return params.gitTag ? `${params.track} (${params.gitTag})` : `${params.track} (tag)`;
   }
   if (params.source === "git-branch") {
     return params.gitBranch
-      ? `${params.channel} (${params.gitBranch})`
-      : `${params.channel} (branch)`;
+      ? `${params.track} (${params.gitBranch})`
+      : `${params.track} (branch)`;
   }
-  return `${params.channel} (default)`;
+  return `${params.track} (default)`;
 }
 
-export function resolveUpdateChannelDisplay(params: {
-  configChannel?: UpdateChannel | null;
+export function resolveUpdateTrackDisplay(params: {
+  storedTrack?: UpdateTrack | null;
   installKind: "git" | "package" | "unknown";
   gitTag?: string | null;
   gitBranch?: string | null;
-}): { channel: UpdateChannel; source: UpdateChannelSource; label: string } {
-  const channelInfo = resolveEffectiveUpdateChannel({
-    configChannel: params.configChannel,
+}): { track: UpdateTrack; source: UpdateTrackSource; label: string } {
+  const trackInfo = resolveEffectiveUpdateTrack({
+    storedTrack: params.storedTrack,
     installKind: params.installKind,
     git:
       params.gitTag || params.gitBranch
@@ -97,13 +107,27 @@ export function resolveUpdateChannelDisplay(params: {
         : undefined,
   });
   return {
-    channel: channelInfo.channel,
-    source: channelInfo.source,
-    label: formatUpdateChannelLabel({
-      channel: channelInfo.channel,
-      source: channelInfo.source,
+    track: trackInfo.track,
+    source: trackInfo.source,
+    label: formatUpdateTrackLabel({
+      track: trackInfo.track,
+      source: trackInfo.source,
       gitTag: params.gitTag ?? null,
       gitBranch: params.gitBranch ?? null,
     }),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Backward-compat aliases (remove once all call sites are migrated)
+// ---------------------------------------------------------------------------
+/** @deprecated Use UpdateTrack */
+export type UpdateChannel = UpdateTrack;
+/** @deprecated Use normalizeUpdateTrack */
+export const normalizeUpdateChannel = normalizeUpdateTrack;
+/** @deprecated Use trackToNpmTag */
+export const channelToNpmTag = trackToNpmTag;
+/** @deprecated Use DEFAULT_PACKAGE_TRACK */
+export const DEFAULT_PACKAGE_CHANNEL = DEFAULT_PACKAGE_TRACK;
+/** @deprecated Use DEFAULT_GIT_TRACK */
+export const DEFAULT_GIT_CHANNEL = DEFAULT_GIT_TRACK;

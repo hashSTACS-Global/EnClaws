@@ -34,6 +34,7 @@ interface TenantModelConfig {
   extraHeaders: Record<string, string>;
   extraConfig: Record<string, unknown>;
   models: ModelDefinition[];
+  visibility?: string;
   isActive: boolean;
   createdAt: string;
 }
@@ -87,6 +88,10 @@ export class TenantModelsView extends LitElement {
       border-radius: 999px; color: var(--text-secondary, #a3a3a3);
     }
     .model-tag.reasoning { border-color: #854d0e; color: #fbbf24; }
+    .shared-badge {
+      font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 4px;
+      background: #1e3a5f; color: #93c5fd; margin-left: 0.4rem;
+    }
     .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.3rem; }
     .status-dot.active { background: #22c55e; }
     .status-dot.inactive { background: #525252; }
@@ -414,6 +419,7 @@ export class TenantModelsView extends LitElement {
 
   private renderCard(config: TenantModelConfig) {
     const providerLabel = PROVIDER_TYPES.find((p) => p.value === config.providerType)?.label ?? config.providerType;
+    const isShared = config.visibility === "shared";
     return html`
       <div class="model-card">
         <div class="model-card-header">
@@ -421,6 +427,7 @@ export class TenantModelsView extends LitElement {
             <div class="model-name">
               <span class="status-dot ${config.isActive ? "active" : "inactive"}"></span>
               ${config.providerName}
+              ${isShared ? html`<span class="shared-badge">${t("platformModels.shared", {}, "Shared")}</span>` : nothing}
               ${!config.isActive ? html`<span style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:#2d1215;color:#fca5a5;margin-left:0.4rem">${t("models.disable")}</span>` : nothing}
             </div>
             <div class="model-provider">${providerLabel} | ${config.apiProtocol}</div>
@@ -435,10 +442,12 @@ export class TenantModelsView extends LitElement {
             <span class="model-tag ${m.reasoning ? "reasoning" : ""}">${m.name} (${m.id})</span>
           `)}
         </div>
-        <div class="model-actions">
-          <button class="btn btn-outline btn-sm" @click=${() => this.startEdit(config)}>${t("models.edit")}</button>
-          <button class="btn btn-danger btn-sm" @click=${() => this.handleDelete(config)}>${t("models.delete")}</button>
-        </div>
+        ${isShared ? nothing : html`
+          <div class="model-actions">
+            <button class="btn btn-outline btn-sm" @click=${() => this.startEdit(config)}>${t("models.edit")}</button>
+            <button class="btn btn-danger btn-sm" @click=${() => this.handleDelete(config)}>${t("models.delete")}</button>
+          </div>
+        `}
       </div>
     `;
   }

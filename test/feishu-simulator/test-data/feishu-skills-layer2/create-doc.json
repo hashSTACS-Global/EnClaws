@@ -50,6 +50,30 @@
       "message": "弄个文档呗，就叫《随手记》，里面写上今天的会议要点：1.确认Q2目标 2.分配任务 3.下周复盘",
       "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
       "tags": ["P1", "intent"]
+    },
+    {
+      "name": "创建带表格内容的文档",
+      "message": "帮我创建一个文档，标题叫《Q2排期表》，内容用表格列出：第一列是任务名，第二列是负责人，第三列是截止日期",
+      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
+      "tags": ["P1"]
+    },
+    {
+      "name": "创建英文文档",
+      "message": "帮我创建一个文档，标题叫《Weekly Report》，内容用英文写一段关于本周进展的总结",
+      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
+      "tags": ["P2"]
+    },
+    {
+      "name": "创建文档-带链接",
+      "message": "帮我创建一个文档叫《参考资料》，内容写上几个常用链接，比如GitHub和飞书官网",
+      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
+      "tags": ["P2"]
+    },
+    {
+      "name": "口语化-写个模板",
+      "message": "帮我搞个会议纪要模板出来，包含日期、参会人、议题、结论这几项",
+      "assert": { "containsAny": ["已创建", "创建成功"], "matches": "feishu\\.cn", "notContains": "error" },
+      "tags": ["P1", "intent"]
     }
   ]
 }

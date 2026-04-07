@@ -17,7 +17,7 @@ import { withTicket } from '../core/lark-ticket';
 import { larkLogger } from '../core/lark-logger';
 import { handleCardAction } from '../tools/auto-auth';
 import { handleAskUserAction } from '../tools/ask-user-question';
-import { buildQueueKey, enqueueFeishuChatTask, getActiveDispatcher, hasActiveTask, setAbortedCardMessageId } from './chat-queue';
+import { buildQueueKey, enqueueFeishuChatTask, getActiveDispatcher, getLastMentionedBot, hasActiveTask, setAbortedCardMessageId, setLastMentionedBot } from './chat-queue';
 import { extractRawTextFromEvent, isLikelyAbortText } from './abort-detect';
 import type { MonitorContext } from './types';
 
@@ -70,6 +70,7 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
     // and can be processed in parallel.
     const threadId = event.message?.thread_id || event.message?.root_id || undefined;
     const senderOpenId = event.sender?.sender_id?.open_id || '';
+    const senderUnionId = event.sender?.sender_id?.union_id || '';
     const isGroup = (event.message?.chat_type as string) === 'group';
     const senderQueueId = isGroup && senderOpenId ? senderOpenId : undefined;
 
@@ -91,19 +92,28 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
     // (before the message enters the serial queue) so the streaming
     // card is terminated without waiting for the current task.
     const abortText = extractRawTextFromEvent(event);
-    const botMentionedInAbort = (event.message?.mentions ?? []).some(
+    const botMentionedHere = (event.message?.mentions ?? []).some(
       (m) => m.id?.open_id && m.id.open_id === ctx.lark.botOpenId,
     );
+
+    // Track which bot was most recently @-mentioned by this sender.
+    // Only set when the message explicitly @-mentions THIS bot, so
+    // requireMention:false bots don't overwrite each other.
+    if (isGroup && botMentionedHere && senderUnionId) {
+      setLastMentionedBot(chatId, senderUnionId, threadId, accountId);
+    }
+
     let abortFired = false;
     if (abortText && isLikelyAbortText(abortText)) {
       const queueKey = buildQueueKey(accountId, chatId, threadId, senderQueueId);
       if (hasActiveTask(queueKey)) {
         const active = getActiveDispatcher(queueKey);
-        // In groups without @bot, only abort tasks that were originally
-        // triggered by a message that @-mentioned THIS bot (wasMentioned).
-        // This prevents requireMention:false bots from aborting tasks
-        // that belong to a different bot.
-        if (active && (!isGroup || botMentionedInAbort || active.wasMentioned === true)) {
+        // When the /stop @-mentions a specific bot, only that bot aborts.
+        // When bare /stop (no @-mentions), only the bot most recently
+        // @-mentioned by this sender aborts.
+        const stopHasMentions = (event.message?.mentions ?? []).length > 0;
+        const isLastMentioned = getLastMentionedBot(chatId, senderUnionId, threadId) === accountId;
+        if (active && (!isGroup || botMentionedHere || (!stopHasMentions && isLastMentioned))) {
           // Capture card message ID before aborting for reply targeting
           const cardMsgId = active.getCardMessageId?.();
           if (cardMsgId) {
@@ -123,7 +133,7 @@ export async function handleMessageEvent(ctx: MonitorContext, data: unknown): Pr
       // intended for us — skip enqueueing so the SDK doesn't process it.
       // If the fast-path DID fire, enqueue normally so the SDK sends a
       // reply that quotes the aborted card.
-      if (isGroup && !botMentionedInAbort && !abortFired) {
+      if (isGroup && !botMentionedHere && !abortFired) {
         log(`feishu[${accountId}]: bare /stop in group, not our task, skipping`);
         return;
       }

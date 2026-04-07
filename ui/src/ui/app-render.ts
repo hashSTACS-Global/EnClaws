@@ -104,6 +104,7 @@ import "./views/tenant/tenant-traces.ts";
 import "./views/tenant/tenant-usage.ts";
 import "./views/platform-overview.ts";
 import "./views/platform-tools.ts";
+import "./views/platform-models.ts";
 import "./views/onboarding-wizard.ts";
 import { isAuthenticated, loadAuth, clearAuth } from "./auth-store.ts";
 import { tenantRpc } from "./views/tenant/rpc.ts";
@@ -173,10 +174,11 @@ async function checkTenantNeedsOnboarding(state: AppViewState) {
   try {
     const [agents, models, channels] = await Promise.all([
       tenantRpc("tenant.agents.list") as Promise<{ agents?: unknown[] }>,
-      tenantRpc("tenant.models.list") as Promise<{ models?: unknown[] }>,
+      tenantRpc("tenant.models.list") as Promise<{ models?: Array<{ visibility?: string }> }>,
       tenantRpc("tenant.channels.list") as Promise<{ channels?: unknown[] }>,
     ]);
-    const isEmpty = !(agents.agents?.length) && !(models.models?.length) && !(channels.channels?.length);
+    const privateModels = (models.models ?? []).filter((m) => m.visibility !== "shared");
+    const isEmpty = !(agents.agents?.length) && !privateModels.length && !(channels.channels?.length);
     if (isEmpty) {
       state.showOnboarding = true;
     } else {
@@ -410,7 +412,7 @@ export function renderApp(state: AppViewState) {
                   const isPlatformAdmin = userRole === "platform-admin";
                   const isTenantAdmin = userRole === "owner" || userRole === "admin";
                   const tenantOnlyTabs = new Set(["tenant-settings", "tenant-users", "tenant-agents", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage"]);
-                  const platformOnlyTabs = new Set(["overview", "platform-tools"]);
+                  const platformOnlyTabs = new Set(["overview", "platform-tools","platform-models"]);
                   const visibleTabs = group.tabs.filter((tab) => {
                     if (platformOnlyTabs.has(tab)) return isPlatformAdmin;
                     if (tenantOnlyTabs.has(tab)) return isTenantAdmin;
@@ -558,11 +560,19 @@ export function renderApp(state: AppViewState) {
 
               <main class="content ${isChat ? "content--chat" : ""}">
                   ${
-                          availableUpdate
+                          state.updateMessage
+                                  ? html`
+                                      <div class="update-banner callout success" role="alert">
+                                          <strong>${state.updateMessage}</strong>
+                                      </div>`
+                                  : availableUpdate
                                   ? html`
                                       <div class="update-banner callout danger" role="alert">
-                                          <strong>Update available:</strong> v${availableUpdate.latestVersion}
-                                          (running v${availableUpdate.currentVersion}).
+                                          <strong>Update available:</strong>
+                                          ${availableUpdate.channel === "git"
+                                                  ? html`${availableUpdate.latestVersion}`
+                                                  : html`v${availableUpdate.latestVersion}
+                                                      (running v${availableUpdate.currentVersion})`}.
                                           <button
                                                   class="btn btn--sm update-banner__btn"
                                                   ?disabled=${state.updateRunning || !state.connected}
@@ -594,6 +604,14 @@ export function renderApp(state: AppViewState) {
                                   ? html`
                                       <platform-overview-view
                                               .gatewayUrl=${state.settings.gatewayUrl}></platform-overview-view>`
+                                  : nothing
+                  }
+
+                  ${
+                          !isComingSoon && state.tab === "platform-models"
+                                  ? html`
+                                      <platform-models-view
+                                              .gatewayUrl=${state.settings.gatewayUrl}></platform-models-view>`
                                   : nothing
                   }
 
@@ -1510,12 +1528,6 @@ export function renderApp(state: AppViewState) {
                                               <tenant-usage-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}></tenant-usage-view>` : nothing}
                                       </section>`
-                                  : nothing
-                  }
-
-                  ${
-                          state.tab === "platform-tools"
-                                  ? html`<section class="card"><platform-tools-view></platform-tools-view></section>`
                                   : nothing
                   }
 

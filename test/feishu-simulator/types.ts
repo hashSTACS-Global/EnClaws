@@ -24,12 +24,18 @@ export type TestCase = {
   assert?: TestCaseAssert;
   /** Tags for filtering (e.g. ["feishu-skills", "create-doc", "P0"]) */
   tags?: string[];
+  /** Whether to auto-prepend @bot mention in group chat mode (default: true) */
+  mentionBot?: boolean;
 };
 
 export type TestFile = {
   appId: string;
   appSecret: string;
   userOpenId: string;
+  /** Group chat ID — when set, messages are sent to this group instead of P2P */
+  chatId?: string;
+  /** Group chat name (for logging / CSV report display only) */
+  chatName?: string;
   cases: TestCase[];
 };
 

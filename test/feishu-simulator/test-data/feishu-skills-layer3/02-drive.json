@@ -1,0 +1,56 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "创建文件夹（后续上传/列表依赖）",
+      "message": "在我的云盘里创建一个叫「AutoTest_Layer3文件夹」的文件夹",
+      "assert": {
+        "llmEvaluate": "回复是否明确告知文件夹创建成功？是否提供了文件夹链接？"
+      }
+    },
+    {
+      "name": "上传文件到刚创建的文件夹",
+      "message": "把本地文件 ./test-fixtures/sample.txt 上传到「AutoTest_Layer3文件夹」里",
+      "assert": {
+        "llmEvaluate": "回复是否告知上传结果？如果成功，是否提供了文件链接和大小信息？如果文件不存在，错误信息是否清晰？"
+      }
+    },
+    {
+      "name": "列出文件夹内容（验证上传结果）",
+      "message": "帮我看看「AutoTest_Layer3文件夹」里有什么文件",
+      "assert": {
+        "llmEvaluate": "回复是否列出了文件夹中的文件？是否包含刚上传的 sample.txt？信息是否结构清晰？"
+      }
+    },
+    {
+      "name": "复制 01 创建的文档",
+      "message": "帮我把「AutoTest_Layer3文档」复制一份，副本叫「AutoTest_Layer3文档_副本」",
+      "assert": {
+        "llmEvaluate": "回复是否告知复制结果？如果成功，是否提供了副本链接？如果找不到原文件，错误信息是否清晰？"
+      }
+    },
+    {
+      "name": "移动副本到文件夹",
+      "message": "把「AutoTest_Layer3文档_副本」移动到「AutoTest_Layer3文件夹」里",
+      "assert": {
+        "llmEvaluate": "回复是否清楚说明文件移动的结果？是否提及了目标文件夹？"
+      }
+    },
+    {
+      "name": "查看文档元信息",
+      "message": "帮我查一下「AutoTest_Layer3文档」的详细信息",
+      "assert": {
+        "llmEvaluate": "回复是否提供了文件的关键元信息（如标题、类型、创建者、修改时间等）？信息是否结构清晰、易读？"
+      }
+    },
+    {
+      "name": "删除副本",
+      "message": "帮我删除「AutoTest_Layer3文档_副本」",
+      "assert": {
+        "llmEvaluate": "回复是否明确告知删除操作的结果？回复语气是否恰当？"
+      }
+    }
+  ]
+}

@@ -3,12 +3,9 @@ import {
   formatUpdateOneLiner,
   resolveUpdateAvailability,
 } from "../../commands/status.update.js";
-import { readConfigFileSnapshot } from "../../config/config.js";
-import {
-  normalizeUpdateChannel,
-  resolveUpdateChannelDisplay,
-} from "../../infra/update-channels.js";
+import { resolveUpdateTrackDisplay } from "../../infra/update-channels.js";
 import { checkUpdateStatus } from "../../infra/update-check.js";
+import { getStoredUpdateTrack } from "../../infra/update-settings.js";
 import { defaultRuntime } from "../../runtime.js";
 import { renderTable } from "../../terminal/table.js";
 import { theme } from "../../terminal/theme.js";
@@ -37,10 +34,7 @@ export async function updateStatusCommand(opts: UpdateStatusOptions): Promise<vo
   }
 
   const root = await resolveUpdateRoot();
-  const configSnapshot = await readConfigFileSnapshot();
-  const configChannel = configSnapshot.valid
-    ? normalizeUpdateChannel(configSnapshot.config.update?.channel)
-    : null;
+  const storedTrack = await getStoredUpdateTrack();
 
   const update = await checkUpdateStatus({
     root,
@@ -49,13 +43,13 @@ export async function updateStatusCommand(opts: UpdateStatusOptions): Promise<vo
     includeRegistry: true,
   });
 
-  const channelInfo = resolveUpdateChannelDisplay({
-    configChannel,
+  const trackInfo = resolveUpdateTrackDisplay({
+    storedTrack,
     installKind: update.installKind,
     gitTag: update.git?.tag ?? null,
     gitBranch: update.git?.branch ?? null,
   });
-  const channelLabel = channelInfo.label;
+  const trackLabel = trackInfo.label;
 
   const gitLabel =
     update.installKind === "git"
@@ -74,11 +68,11 @@ export async function updateStatusCommand(opts: UpdateStatusOptions): Promise<vo
       JSON.stringify(
         {
           update,
-          channel: {
-            value: channelInfo.channel,
-            source: channelInfo.source,
-            label: channelLabel,
-            config: configChannel,
+          track: {
+            value: trackInfo.track,
+            source: trackInfo.source,
+            label: trackLabel,
+            stored: storedTrack,
           },
           availability: updateAvailability,
         },
@@ -99,7 +93,7 @@ export async function updateStatusCommand(opts: UpdateStatusOptions): Promise<vo
 
   const rows = [
     { Item: "Install", Value: installLabel },
-    { Item: "Channel", Value: channelLabel },
+    { Item: "Track", Value: trackLabel },
     ...(gitLabel ? [{ Item: "Git", Value: gitLabel }] : []),
     {
       Item: "Update",

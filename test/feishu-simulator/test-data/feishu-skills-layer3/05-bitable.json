@@ -1,0 +1,28 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "创建多维表格（后续查询/添加记录依赖）",
+      "message": "帮我创建一个多维表格叫「AutoTest_Layer3多维表格」",
+      "assert": {
+        "llmEvaluate": "回复是否告知多维表格创建成功？是否提供了表格链接或 app_token？回复是否简洁明了？"
+      }
+    },
+    {
+      "name": "查看刚创建的多维表格结构",
+      "message": "帮我看看「AutoTest_Layer3多维表格」里有哪些数据表和字段",
+      "assert": {
+        "llmEvaluate": "回复是否列出了数据表和字段信息？信息是否结构清晰？如果找不到表格，是否给出了合理的提示？"
+      }
+    },
+    {
+      "name": "在多维表格添加记录",
+      "message": "在「AutoTest_Layer3多维表格」里添加一条记录：标题是「测试任务」",
+      "assert": {
+        "llmEvaluate": "回复是否告知了记录添加的结果？如果字段不匹配，是否给出了恰当的提示？"
+      }
+    }
+  ]
+}

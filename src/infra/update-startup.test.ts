@@ -119,12 +119,24 @@ describe("update-startup", () => {
     });
   }
 
-  async function runUpdateCheckAndReadState(channel: "stable" | "beta") {
+  async function writeTestSettings(settings: {
+    track?: "stable" | "beta" | "dev";
+    checkOnStart?: boolean;
+    auto?: { enabled?: boolean; stableDelayHours?: number; stableJitterHours?: number; betaCheckIntervalHours?: number };
+  }) {
+    await fs.writeFile(
+      path.join(tempDir, "update-settings.json"),
+      JSON.stringify(settings, null, 2),
+      "utf-8",
+    );
+  }
+
+  async function runUpdateCheckAndReadState(track: "stable" | "beta") {
     mockPackageUpdateStatus("latest", "2.0.0");
 
+    await writeTestSettings({ track });
     const log = { info: vi.fn() };
     await runGatewayUpdateCheck({
-      cfg: { update: { channel } },
       log,
       isNixMode: false,
       allowInTests: true,
@@ -149,15 +161,15 @@ describe("update-startup", () => {
 
   it.each([
     {
-      name: "stable channel",
-      channel: "stable" as const,
+      name: "stable track",
+      track: "stable" as const,
     },
     {
-      name: "beta channel with older beta tag",
-      channel: "beta" as const,
+      name: "beta track with older beta tag",
+      track: "beta" as const,
     },
-  ])("logs latest update hint for $name", async ({ channel }) => {
-    const { log, parsed } = await runUpdateCheckAndReadState(channel);
+  ])("logs latest update hint for $name", async ({ track }) => {
+    const { log, parsed } = await runUpdateCheckAndReadState(track);
 
     expect(log.info).toHaveBeenCalledWith(
       expect.stringContaining("update available (latest): v2.0.0"),
@@ -183,9 +195,9 @@ describe("update-startup", () => {
       "utf-8",
     );
 
+    await writeTestSettings({ track: "stable" });
     const onUpdateAvailableChange = vi.fn();
     await runGatewayUpdateCheck({
-      cfg: { update: { channel: "stable" } },
       log: { info: vi.fn() },
       isNixMode: false,
       allowInTests: true,
@@ -222,9 +234,9 @@ describe("update-startup", () => {
         version: "1.0.0",
       });
 
+    await writeTestSettings({ track: "stable" });
     const onUpdateAvailableChange = vi.fn();
     await runGatewayUpdateCheck({
-      cfg: { update: { channel: "stable" } },
       log: { info: vi.fn() },
       isNixMode: false,
       allowInTests: true,
@@ -232,7 +244,6 @@ describe("update-startup", () => {
     });
     vi.setSystemTime(new Date("2026-01-18T11:00:00Z"));
     await runGatewayUpdateCheck({
-      cfg: { update: { channel: "stable" } },
       log: { info: vi.fn() },
       isNixMode: false,
       allowInTests: true,
@@ -249,10 +260,10 @@ describe("update-startup", () => {
   });
 
   it("skips update check when disabled in config", async () => {
+    await writeTestSettings({ checkOnStart: false });
     const log = { info: vi.fn() };
 
     await runGatewayUpdateCheck({
-      cfg: { update: { checkOnStart: false } },
       log,
       isNixMode: false,
       allowInTests: true,
@@ -269,19 +280,12 @@ describe("update-startup", () => {
       ok: true,
       code: 0,
     });
-    const stableAutoConfig = {
-      update: {
-        channel: "stable" as const,
-        auto: {
-          enabled: true,
-          stableDelayHours: 6,
-          stableJitterHours: 12,
-        },
-      },
-    };
+    await writeTestSettings({
+      track: "stable",
+      auto: { enabled: true, stableDelayHours: 6, stableJitterHours: 12 },
+    });
 
     await runGatewayUpdateCheck({
-      cfg: stableAutoConfig,
       log: { info: vi.fn() },
       isNixMode: false,
       allowInTests: true,
@@ -291,7 +295,6 @@ describe("update-startup", () => {
 
     vi.setSystemTime(new Date("2026-01-18T07:00:00Z"));
     await runGatewayUpdateCheck({
-      cfg: stableAutoConfig,
       log: { info: vi.fn() },
       isNixMode: false,
       allowInTests: true,
@@ -309,17 +312,9 @@ describe("update-startup", () => {
   it("runs beta auto-update checks hourly when enabled", async () => {
     mockPackageUpdateStatus("beta", "2.0.0-beta.1");
     const runAutoUpdate = createAutoUpdateSuccessMock();
+    await writeTestSettings({ track: "beta", auto: { enabled: true, betaCheckIntervalHours: 1 } });
 
     await runGatewayUpdateCheck({
-      cfg: {
-        update: {
-          channel: "beta",
-          auto: {
-            enabled: true,
-            betaCheckIntervalHours: 1,
-          },
-        },
-      },
       log: { info: vi.fn() },
       isNixMode: false,
       allowInTests: true,
@@ -337,18 +332,9 @@ describe("update-startup", () => {
   it("runs auto-update when checkOnStart is false but auto-update is enabled", async () => {
     mockPackageUpdateStatus("beta", "2.0.0-beta.1");
     const runAutoUpdate = createAutoUpdateSuccessMock();
+    await writeTestSettings({ checkOnStart: false, track: "beta", auto: { enabled: true, betaCheckIntervalHours: 1 } });
 
     await runGatewayUpdateCheck({
-      cfg: {
-        update: {
-          checkOnStart: false,
-          channel: "beta",
-          auto: {
-            enabled: true,
-            betaCheckIntervalHours: 1,
-          },
-        },
-      },
       log: { info: vi.fn() },
       isNixMode: false,
       allowInTests: true,
@@ -380,17 +366,9 @@ describe("update-startup", () => {
 
     const originalArgv = process.argv.slice();
     process.argv = [process.execPath, "/opt/enclaws/dist/entry.js"];
+    await writeTestSettings({ track: "beta", auto: { enabled: true, betaCheckIntervalHours: 1 } });
     try {
       await runGatewayUpdateCheck({
-        cfg: {
-          update: {
-            channel: "beta",
-            auto: {
-              enabled: true,
-              betaCheckIntervalHours: 1,
-            },
-          },
-        },
         log: { info: vi.fn() },
         isNixMode: false,
         allowInTests: true,
@@ -405,7 +383,7 @@ describe("update-startup", () => {
         "/opt/enclaws/dist/entry.js",
         "update",
         "--yes",
-        "--channel",
+        "--track",
         "beta",
         "--json",
       ],
@@ -422,7 +400,6 @@ describe("update-startup", () => {
     mockPackageUpdateStatus("latest", "2.0.0");
 
     const stop = scheduleGatewayUpdateCheck({
-      cfg: { update: { channel: "stable" } },
       log: { info: vi.fn() },
       isNixMode: false,
     });

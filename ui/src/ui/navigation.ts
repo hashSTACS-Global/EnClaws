@@ -4,7 +4,7 @@ import type {IconName} from "./icons.js";
 export const TAB_GROUPS = [
     {
         label: "",
-        tabs: ["overview"],
+        tabs: ["overview", "platform-models"],
     },
     {
         label: "",
@@ -12,7 +12,7 @@ export const TAB_GROUPS = [
     },
     {
         label: "workspace",
-        tabs: ["agents","tenant-agents", "chat", "sessions", "sandbox"],
+        tabs: ["tenant-agents", "chat", "sessions", "sandbox"],
     },
     {
         label: "resources",
@@ -35,6 +35,7 @@ export const TAB_GROUPS = [
 export type Tab =
     | "agents"
     | "overview"
+    | "platform-models"
     | "channels"
     | "instances"
     | "sessions"
@@ -61,6 +62,7 @@ export type Tab =
 const TAB_PATHS: Record<Tab, string> = {
     agents: "/agents",
     overview: "/overview",
+    "platform-models": "/platform-models",
     channels: "/channels",
     instances: "/instances",
     sessions: "/sessions",
@@ -174,6 +176,8 @@ export function iconForTab(tab: Tab): IconName {
             return "messageSquare";
         case "overview":
             return "barChart";
+        case "platform-models":
+            return "settings";
         case "channels":
             return "link";
         case "instances":

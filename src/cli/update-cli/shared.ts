@@ -24,7 +24,7 @@ export type UpdateCommandOptions = {
   json?: boolean;
   restart?: boolean;
   dryRun?: boolean;
-  channel?: string;
+  track?: string;
   tag?: string;
   timeout?: string;
   yes?: boolean;

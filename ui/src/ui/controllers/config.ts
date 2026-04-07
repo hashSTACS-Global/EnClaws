@@ -21,6 +21,7 @@ export type ConfigState = {
   configSaving: boolean;
   configApplying: boolean;
   updateRunning: boolean;
+  updateMessage: string | null;
   configSnapshot: ConfigSnapshot | null;
   configSchema: unknown;
   configSchemaVersion: string | null;
@@ -184,9 +185,15 @@ export async function runUpdate(state: ConfigState) {
   state.updateRunning = true;
   state.lastError = null;
   try {
-    await state.client.request("update.run", {
+    const res = await state.client.request("update.run", {
       sessionKey: state.applySessionKey,
     });
+    const result = (res as { result?: { status?: string; mode?: string } })?.result;
+    if (result?.status === "ok") {
+      state.updateMessage = result.mode === "git"
+        ? "Update successful. Please restart the service manually to apply changes."
+        : "Update successful. Service is restarting — please refresh the page in a few seconds.";
+    }
   } catch (err) {
     state.lastError = String(err);
   } finally {

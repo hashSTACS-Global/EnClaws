@@ -17,7 +17,8 @@ import { inspectPortUsage } from "../infra/ports.js";
 import { readRestartSentinel } from "../infra/restart-sentinel.js";
 import { getRemoteSkillEligibility } from "../infra/skills-remote.js";
 import { readTailscaleStatusJson } from "../infra/tailscale.js";
-import { normalizeUpdateChannel, resolveUpdateChannelDisplay } from "../infra/update-channels.js";
+import { resolveUpdateTrackDisplay } from "../infra/update-channels.js";
+import { getStoredUpdateTrack } from "../infra/update-settings.js";
 import { checkUpdateStatus, formatGitInstallLabel } from "../infra/update-check.js";
 import { runExec } from "../process/exec.js";
 import type { RuntimeEnv } from "../runtime.js";
@@ -90,9 +91,9 @@ export async function statusAllCommand(
       fetchGit: true,
       includeRegistry: true,
     });
-    const configChannel = normalizeUpdateChannel(cfg.update?.channel);
-    const channelInfo = resolveUpdateChannelDisplay({
-      configChannel,
+    const storedTrack = await getStoredUpdateTrack();
+    const channelInfo = resolveUpdateTrackDisplay({
+      storedTrack,
       installKind: update.installKind,
       gitTag: update.git?.tag ?? null,
       gitBranch: update.git?.branch ?? null,

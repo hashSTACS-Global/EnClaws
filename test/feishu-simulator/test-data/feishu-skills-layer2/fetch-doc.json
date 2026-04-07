@@ -32,6 +32,24 @@
       "message": "那个《随手记》文档里写了啥来着？帮我看看",
       "assert": { "notContains": "error", "minLength": 2 },
       "tags": ["P1", "intent"]
+    },
+    {
+      "name": "读取文档-获取摘要",
+      "message": "帮我读取《AI发展报告》，简单给我总结一下主要内容",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "读取多个文档",
+      "message": "帮我分别看看《自动化测试文档》和《随手记》里写了什么",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P2"]
+    },
+    {
+      "name": "口语化-打开看看",
+      "message": "之前写的那个测试文档还在不在？帮我打开看看",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "intent"]
     }
   ]
 }

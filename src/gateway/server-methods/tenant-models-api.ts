@@ -62,7 +62,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const models = await listTenantModels(ctx.tenantId, { activeOnly: false });
+    const models = await listTenantModels(ctx.tenantId, { activeOnly: false, includeShared: true });
     respond(true, {
       models: models.map((m) => sanitizeModel({
         id: m.id,
@@ -75,6 +75,7 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
         extraHeaders: m.extraHeaders,
         extraConfig: m.extraConfig,
         models: m.models,
+        visibility: m.visibility,
         isActive: m.isActive,
         createdBy: m.createdBy,
         createdAt: m.createdAt,

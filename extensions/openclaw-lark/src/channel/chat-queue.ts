@@ -82,6 +82,26 @@ export function enqueueFeishuChatTask(params: {
   return { status, promise: taskPromise };
 }
 
+// ---- Last @-mentioned bot tracking ----
+// Tracks which bot (accountId) was most recently @-mentioned by a sender
+// in a given chat.  Only updated when a message explicitly @-mentions
+// the bot, so requireMention:false bots processing other bots' messages
+// do not overwrite this.  Used by bare /stop to target the right bot.
+// Key: chatId:senderId[:thread:threadId]
+const lastMentionedBotMap = new Map<string, string>();
+
+function lastMentionedBotKey(chatId: string, senderId: string, threadId?: string): string {
+  return threadId ? `${chatId}:${senderId}:thread:${threadId}` : `${chatId}:${senderId}`;
+}
+
+export function setLastMentionedBot(chatId: string, senderId: string, threadId: string | undefined, accountId: string): void {
+  lastMentionedBotMap.set(lastMentionedBotKey(chatId, senderId, threadId), accountId);
+}
+
+export function getLastMentionedBot(chatId: string, senderId: string, threadId?: string): string | undefined {
+  return lastMentionedBotMap.get(lastMentionedBotKey(chatId, senderId, threadId));
+}
+
 // ---- Aborted card message ID tracking ----
 const abortedCardMessageIds = new Map<string, string>();
 
@@ -100,4 +120,5 @@ export function _resetChatQueueState(): void {
   chatQueues.clear();
   activeDispatchers.clear();
   abortedCardMessageIds.clear();
+  lastMentionedBotMap.clear();
 }
