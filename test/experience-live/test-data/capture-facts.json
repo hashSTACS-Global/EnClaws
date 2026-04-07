@@ -1,0 +1,16 @@
+{
+  "name": "事实抽取",
+  "description": "多轮对话包含明确的技术事实，验证 capture 能正确提取 fact 类型",
+  "systemPrompt": "你是一个友好的技术助手，用简短的中文回答用户问题，不要太长。",
+  "turns": [
+    { "user": "我们团队用 PostgreSQL 作为主数据库，版本是 16" },
+    { "user": "生产环境部署在 AWS 东京区域，用的 EKS 集群" },
+    { "user": "每周三下午 3 点做数据库全量备份" }
+  ],
+  "captureAssert": {
+    "minCandidates": 1,
+    "maxCandidates": 10,
+    "expectedKinds": ["fact"],
+    "summaryContainsAny": ["PostgreSQL", "AWS", "备份", "EKS", "数据库"]
+  }
+}

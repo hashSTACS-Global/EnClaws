@@ -739,6 +739,29 @@ function createZaiToolStreamWrapper(
 }
 
 /**
+ * Strip empty tools arrays from API payloads. Some providers (e.g. Qwen/DashScope)
+ * reject `tools: []` with HTTP 400 while accepting payloads without the tools field.
+ */
+function createOmitEmptyToolsWrapper(baseStreamFn: StreamFn | undefined): StreamFn {
+  const underlying = baseStreamFn ?? streamSimple;
+  return (model, context, options) => {
+    const originalOnPayload = options?.onPayload;
+    return underlying(model, context, {
+      ...options,
+      onPayload: (payload) => {
+        if (payload && typeof payload === "object") {
+          const payloadObj = payload as Record<string, unknown>;
+          if (Array.isArray(payloadObj.tools) && payloadObj.tools.length === 0) {
+            delete payloadObj.tools;
+          }
+        }
+        originalOnPayload?.(payload);
+      },
+    });
+  };
+}
+
+/**
  * Apply extra params (like temperature) to an agent's streamFn.
  * Also adds OpenRouter app attribution headers when using the OpenRouter provider.
  *
@@ -822,6 +845,12 @@ export function applyExtraParamsToAgent(
       agent.streamFn = createZaiToolStreamWrapper(agent.streamFn, true);
     }
   }
+
+  // Strip empty tools arrays from API payloads. Some providers (e.g. Qwen/DashScope)
+  // reject `tools: []` with HTTP 400 "[] is too short - 'tools'". The Pi SDK may
+  // emit an empty array when disableTools is true; omitting the field entirely is
+  // the correct behavior.
+  agent.streamFn = createOmitEmptyToolsWrapper(agent.streamFn);
 
   // Guard Google payloads against invalid negative thinking budgets emitted by
   // upstream model-ID heuristics for Gemini 3.1 variants.

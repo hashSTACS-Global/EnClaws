@@ -146,3 +146,6 @@ installer/*.zip
 
 # docs/superpowers/
 docs/superpowers/
+
+# test/*/test-results/
+test/*/test-results/

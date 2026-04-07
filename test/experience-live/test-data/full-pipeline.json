@@ -1,0 +1,21 @@
+{
+  "name": "完整链路",
+  "description": "多轮对话包含 fact 和 workflow，先跑 capture 再跑 distill，验证完整流水线",
+  "systemPrompt": "你是一个友好的技术助手，用简短的中文回答用户问题，不要太长。",
+  "turns": [
+    { "user": "我们的技术栈是 TypeScript + Node.js，用 pnpm 作为包管理器" },
+    { "user": "部署流程是：本地跑 pnpm build，然后 docker build，推到 ECR，最后 kubectl apply" },
+    { "user": "测试用的是 Vitest，覆盖率要求 70% 以上" },
+    { "user": "遇到过一个坑：Node.js 22 的 ESM 解析和 18 不兼容，升级时要注意" }
+  ],
+  "captureAssert": {
+    "minCandidates": 2,
+    "maxCandidates": 15,
+    "summaryContainsAny": ["TypeScript", "Node", "pnpm", "部署", "deploy", "Docker", "Vitest", "测试", "ESM"]
+  },
+  "distillAssert": {
+    "minRecords": 1,
+    "summaryNotEmpty": true,
+    "hasSourceCandidateIds": true
+  }
+}

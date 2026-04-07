@@ -1,0 +1,16 @@
+{
+  "name": "工作流抽取",
+  "description": "用户描述操作流程，验证 capture 能提取 workflow 类型",
+  "systemPrompt": "你是一个友好的技术助手，用简短的中文回答用户问题，不要太长。",
+  "turns": [
+    { "user": "我们的代码审查流程是这样的：先提交 PR，然后指派两个 reviewer" },
+    { "user": "reviewer 通过后，CI 自动跑测试，测试通过后合并到 main 分支" },
+    { "user": "合并后自动触发 staging 部署，人工验证通过后再部署到生产" }
+  ],
+  "captureAssert": {
+    "minCandidates": 1,
+    "maxCandidates": 10,
+    "expectedKinds": ["workflow"],
+    "summaryContainsAny": ["PR", "审查", "review", "CI", "部署", "deploy", "staging"]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "MEMORY.md 去重",
+  "description": "MEMORY.md 已包含相关知识，capture 应减少重复提取",
+  "systemPrompt": "你是一个友好的技术助手，用简短的中文回答用户问题，不要太长。",
+  "turns": [
+    { "user": "我们用 PostgreSQL 16 作为主数据库" },
+    { "user": "对，就是 PostgreSQL，部署在 AWS 上" }
+  ],
+  "memoryMd": "# 团队技术栈\n\n- 主数据库：PostgreSQL 16\n- 云平台：AWS\n",
+  "captureAssert": {
+    "maxCandidates": 2
+  }
+}

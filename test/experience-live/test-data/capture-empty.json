@@ -1,0 +1,14 @@
+{
+  "name": "空对话跳过",
+  "description": "纯闲聊对话，不包含有价值的经验知识，capture 应返回空",
+  "systemPrompt": "你是一个友好的助手，用简短的中文回答。",
+  "turns": [
+    { "user": "你好啊" },
+    { "user": "今天天气真不错" },
+    { "user": "谢谢你" }
+  ],
+  "captureAssert": {
+    "minCandidates": 0,
+    "maxCandidates": 0
+  }
+}
