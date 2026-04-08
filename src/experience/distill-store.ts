@@ -60,37 +60,54 @@ export async function addDistilledRecords(
   await writeAtomicDistilledJson(filePath, file);
 }
 
-/** 列出指定租户的所有 distilled records，可选按日期过滤 */
+/** 列出指定租户的所有 distilled records，可选按日期/状态/范围过滤 */
 export async function listDistilledRecords(
   tenantDir: string,
   tenantId: string,
   dateStr?: string,
+  filter?: { status?: DistilledStatus; scope?: "tenant" | "personal" },
 ): Promise<DistilledRecord[]> {
+  let records: DistilledRecord[];
+
   if (dateStr) {
     const filePath = resolveDistilledFilePath(tenantDir, dateStr);
     const file = await readDistilledFile(filePath, tenantId);
-    return file.records;
-  }
-
-  const distilledDir = resolveDistilledDir(tenantDir);
-  let entries: string[];
-  try {
-    entries = await fs.promises.readdir(distilledDir);
-  } catch {
-    return [];
-  }
-
-  const results: DistilledRecord[] = [];
-  for (const entry of entries) {
-    if (!entry.endsWith(".json") || entry.endsWith(".tmp")) {
-      continue;
+    records = file.records;
+  } else {
+    const distilledDir = resolveDistilledDir(tenantDir);
+    let entries: string[];
+    try {
+      entries = await fs.promises.readdir(distilledDir);
+    } catch {
+      return [];
     }
-    const filePath = path.join(distilledDir, entry);
-    const file = await readDistilledFile(filePath, tenantId);
-    results.push(...file.records);
+
+    records = [];
+    for (const entry of entries) {
+      if (!entry.endsWith(".json") || entry.endsWith(".tmp")) {
+        continue;
+      }
+      const filePath = path.join(distilledDir, entry);
+      const file = await readDistilledFile(filePath, tenantId);
+      records.push(...file.records);
+    }
   }
 
-  return results;
+  // Backfill scope for old records that lack the field
+  for (const r of records) {
+    if (!r.scope) {
+      (r as Record<string, unknown>).scope = "tenant";
+    }
+  }
+
+  if (!filter) {
+    return records;
+  }
+  return records.filter((r) => {
+    if (filter.status && r.status !== filter.status) return false;
+    if (filter.scope && r.scope !== filter.scope) return false;
+    return true;
+  });
 }
 
 /** Update status of distilled records by recordId across all date files. */
