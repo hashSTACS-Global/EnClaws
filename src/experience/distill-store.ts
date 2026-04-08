@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveDistilledDir, resolveDistilledFilePath } from "./paths.js";
-import type { DistilledFile, DistilledRecord } from "./types.js";
+import type { DistilledFile, DistilledRecord, DistilledStatus } from "./types.js";
 
 /** 读取指定日期的 distilled 文件，不存在时返回空结构 */
 async function readDistilledFile(filePath: string, tenantId: string): Promise<DistilledFile> {
@@ -91,4 +91,50 @@ export async function listDistilledRecords(
   }
 
   return results;
+}
+
+/** Update status of distilled records by recordId across all date files. */
+export async function updateDistilledRecordStatus(
+  tenantDir: string,
+  recordIds: string[],
+  newStatus: DistilledStatus,
+): Promise<number> {
+  if (recordIds.length === 0) {
+    return 0;
+  }
+  const idSet = new Set(recordIds);
+  const distilledDir = resolveDistilledDir(tenantDir);
+  let entries: string[];
+  try {
+    entries = await fs.promises.readdir(distilledDir);
+  } catch {
+    return 0;
+  }
+
+  const now = new Date().toISOString();
+  let totalUpdated = 0;
+
+  for (const entry of entries) {
+    if (!entry.endsWith(".json") || entry.endsWith(".tmp")) {
+      continue;
+    }
+    const filePath = path.join(distilledDir, entry);
+    const file = await readDistilledFile(filePath, "");
+    let fileChanged = false;
+
+    for (const record of file.records) {
+      if (idSet.has(record.recordId)) {
+        record.status = newStatus;
+        record.updatedAt = now;
+        fileChanged = true;
+        totalUpdated++;
+      }
+    }
+
+    if (fileChanged) {
+      await writeAtomicDistilledJson(filePath, file);
+    }
+  }
+
+  return totalUpdated;
 }

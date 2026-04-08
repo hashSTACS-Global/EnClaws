@@ -11,6 +11,7 @@ import { handleBashCommand } from "./commands-bash.js";
 import { handleCompactCommand } from "./commands-compact.js";
 import { handleConfigCommand, handleDebugCommand } from "./commands-config.js";
 import { handleDistillCommand } from "./commands-distill.js";
+import { handleExperienceCommand } from "./commands-experience.js";
 import {
   handleCommandsListCommand,
   handleContextCommand,
@@ -163,6 +164,7 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleDebugCommand,
       handleModelsCommand,
       handleDistillCommand,
+      handleExperienceCommand,
       handleStopCommand,
       handleCompactCommand,
       handleAbortTrigger,

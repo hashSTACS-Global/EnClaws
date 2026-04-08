@@ -19,6 +19,7 @@ import {
 import {
   addDistilledRecords,
   listDistilledRecords,
+  updateDistilledRecordStatus,
 } from "./distill-store.js";
 import { resolveExperienceCaptureSettings } from "./capture-config.js";
 import { resolveDistillSettings } from "./distill-config.js";
@@ -295,6 +296,48 @@ describe("distill store", () => {
     const result = await listDistilledRecords(tmpDir, "t1", "2026-04-05");
     expect(result).toHaveLength(0);
   });
+
+  it("updates distilled record status", async () => {
+    const tenantDir = path.join(tmpDir, "tenant");
+    const tenantId = "test-tenant";
+    const dateStr = "2026-04-07";
+
+    await addDistilledRecords(tenantDir, dateStr, tenantId, [
+      {
+        recordId: "dist_aaa",
+        tenantId,
+        kind: "fact",
+        summary: "test fact",
+        evidence: ["evidence"],
+        sourceCandidateIds: ["exp_111"],
+        sourceUserIds: ["user1"],
+        status: "pending_review",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        recordId: "dist_bbb",
+        tenantId,
+        kind: "workflow",
+        summary: "test workflow",
+        evidence: ["evidence"],
+        sourceCandidateIds: ["exp_222"],
+        sourceUserIds: ["user1"],
+        status: "pending_review",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+
+    const updated = await updateDistilledRecordStatus(tenantDir, ["dist_aaa"], "approved");
+    expect(updated).toBe(1);
+
+    const records = await listDistilledRecords(tenantDir, tenantId, dateStr);
+    const aaa = records.find((r) => r.recordId === "dist_aaa");
+    const bbb = records.find((r) => r.recordId === "dist_bbb");
+    expect(aaa?.status).toBe("approved");
+    expect(bbb?.status).toBe("pending_review");
+  });
 });
 
 // =============================================================================
@@ -392,5 +435,19 @@ describe("distill config", () => {
     } as unknown as OpenClawConfig;
     const settings = resolveDistillSettings(cfg);
     expect(settings?.model).toBe("openai/gpt-4o");
+  });
+
+  it("resolves cron field with default", () => {
+    const settings = resolveDistillSettings({} as any);
+    expect(settings).not.toBeNull();
+    expect(settings!.cron).toBe("0 3 * * *");
+  });
+
+  it("resolves custom cron from config", () => {
+    const settings = resolveDistillSettings({
+      agents: { defaults: { experience: { distill: { cron: "0 5 * * 0" } } } },
+    } as any);
+    expect(settings).not.toBeNull();
+    expect(settings!.cron).toBe("0 5 * * 0");
   });
 });

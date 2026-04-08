@@ -743,6 +743,14 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "tools",
     }),
     defineChatCommand({
+      key: "experience",
+      nativeName: "experience",
+      description: "View and manage experience extraction pipeline.",
+      textAlias: "/experience",
+      acceptsArgs: true,
+      category: "tools",
+    }),
+    defineChatCommand({
       key: "bash",
       description: "Run host shell commands (host-only).",
       textAlias: "/bash",

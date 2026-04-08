@@ -135,6 +135,8 @@ export type ExperienceDistillConfig = {
   model?: string | null;
   /** Maximum candidates per LLM batch. Default: 50. */
   maxCandidatesPerBatch?: number;
+  /** Cron expression for auto-distill. Default: "0 3 * * *" (daily 3AM). */
+  cron?: string;
 };
 
 export type AgentExperienceConfig = {

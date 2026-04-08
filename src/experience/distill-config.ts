@@ -1,11 +1,13 @@
 import type { OpenClawConfig } from "../config/config.js";
 
 export const DEFAULT_DISTILL_MAX_CANDIDATES_PER_BATCH = 50;
+export const DEFAULT_DISTILL_CRON = "0 3 * * *";
 
 export type DistillSettings = {
   enabled: boolean;
   model: string | null;
   maxCandidatesPerBatch: number;
+  cron: string;
 };
 
 const normalizePositiveInt = (value: unknown): number | null => {
@@ -30,6 +32,7 @@ export function resolveDistillSettings(cfg?: OpenClawConfig): DistillSettings | 
     normalizePositiveInt(defaults?.maxCandidatesPerBatch) ??
     DEFAULT_DISTILL_MAX_CANDIDATES_PER_BATCH;
   const model = typeof defaults?.model === "string" ? defaults.model.trim() || null : null;
+  const cron = typeof defaults?.cron === "string" && defaults.cron.trim() ? defaults.cron.trim() : DEFAULT_DISTILL_CRON;
 
-  return { enabled, model, maxCandidatesPerBatch };
+  return { enabled, model, maxCandidatesPerBatch, cron };
 }
