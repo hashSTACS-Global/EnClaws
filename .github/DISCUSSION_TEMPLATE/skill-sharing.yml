@@ -1,0 +1,40 @@
+title: "[Skill]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share a custom skill, plugin, or configuration that others can reuse.
+
+  - type: textarea
+    id: skill-description
+    attributes:
+      label: What does this skill do?
+      description: A brief summary of the skill's purpose and what it automates or enables.
+    validations:
+      required: true
+
+  - type: textarea
+    id: setup
+    attributes:
+      label: Setup instructions
+      description: How to install or configure this skill in an EnClaws instance.
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code or config
+      description: Paste the skill definition, config snippet, or link to a gist/repo.
+      render: yaml
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Any caveats, dependencies, or tips for using this skill.
+    validations:
+      required: false

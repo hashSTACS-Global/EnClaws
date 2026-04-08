@@ -38,15 +38,15 @@ export function registerUpdateCli(program: Command) {
     .option("--json", "Output result as JSON", false)
     .option("--no-restart", "Skip restarting the gateway service after a successful update")
     .option("--dry-run", "Preview update actions without making changes", false)
-    .option("--channel <stable|beta|dev>", "Persist update channel (git + npm)")
+    .option("--track <stable|beta|dev>", "Persist release track (stable/beta/dev)")
     .option("--tag <dist-tag|version>", "Override npm dist-tag or version for this update")
     .option("--timeout <seconds>", "Timeout for each update step in seconds (default: 1200)")
     .option("--yes", "Skip confirmation prompts (non-interactive)", false)
     .addHelpText("after", () => {
       const examples = [
         ["enclaws update", "Update a source checkout (git)"],
-        ["enclaws update --channel beta", "Switch to beta channel (git + npm)"],
-        ["enclaws update --channel dev", "Switch to dev channel (git + npm)"],
+        ["enclaws update --track beta", "Switch to beta release track"],
+        ["enclaws update --track dev", "Switch to dev release track"],
         ["enclaws update --tag beta", "One-off update to a dist-tag or version"],
         ["enclaws update --dry-run", "Preview actions without changing anything"],
         ["enclaws update --no-restart", "Update without restarting the service"],
@@ -63,9 +63,9 @@ ${theme.heading("What this does:")}
   - Git checkouts: fetches, rebases, installs deps, builds, and runs doctor
   - npm installs: updates via detected package manager
 
-${theme.heading("Switch channels:")}
-  - Use --channel stable|beta|dev to persist the update channel in config
-  - Run enclaws update status to see the active channel and source
+${theme.heading("Switch release track:")}
+  - Use --track stable|beta|dev to persist the release track in update-settings.json
+  - Run enclaws update status to see the active track and source
   - Use --tag <dist-tag|version> for a one-off npm update without persisting
 
 ${theme.heading("Non-interactive:")}
@@ -77,7 +77,7 @@ ${theme.heading("Examples:")}
 ${fmtExamples}
 
 ${theme.heading("Notes:")}
-  - Switch channels with --channel stable|beta|dev
+  - Switch release track with --track stable|beta|dev
   - For global installs: auto-updates via detected package manager when possible (see docs/install/updating.md)
   - Downgrades require confirmation (can break configuration)
   - Skips update if the working directory has uncommitted changes
@@ -90,7 +90,7 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/update", "docs.enclaws.ai/cli/upd
           json: Boolean(opts.json),
           restart: Boolean(opts.restart),
           dryRun: Boolean(opts.dryRun),
-          channel: opts.channel as string | undefined,
+          track: opts.track as string | undefined,
           tag: opts.tag as string | undefined,
           timeout: opts.timeout as string | undefined,
           yes: Boolean(opts.yes),

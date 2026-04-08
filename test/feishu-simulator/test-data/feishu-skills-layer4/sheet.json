@@ -1,0 +1,119 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-创建表格",
+      "message": "帮我创建一个表格叫《群聊测试表》",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "表格"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建表格带表头",
+      "message": "帮我创建一个表格叫《任务追踪》，列名分别是：任务名、负责人、状态、截止日期",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "表格"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-读取表格",
+      "message": "帮我看看《群聊测试表》里有什么内容",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-追加数据行",
+      "message": "帮我在《任务追踪》里添加一行数据：登录优化、许帅、进行中、2025-06-15",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-导出为Excel",
+      "message": "帮我把《任务追踪》导出成Excel文件",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建带初始数据",
+      "message": "帮我创建一个表格叫《项目进度》，列是：任务、状态、完成度。先填一行：首页开发、进行中、60%",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "表格"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-修改单元格",
+      "message": "帮我把《任务追踪》第一行的状态改成「已完成」",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化做表",
+      "message": "做个表帮我统计一下各部门人数，列名就叫部门和人数",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "表格"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    }
+  ]
+}

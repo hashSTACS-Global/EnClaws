@@ -311,6 +311,7 @@ RESOURCES="$APP_ROOT/Contents/Resources"
 echo "📦 Bundling JS application code..."
 
 cp "$ROOT_DIR/enclaws.mjs" "$RESOURCES/enclaws.mjs"
+cp "$ROOT_DIR/.env.example" "$RESOURCES/.env.example"
 
 for dir in dist extensions skills assets; do
   if [ -d "$ROOT_DIR/$dir" ]; then
@@ -360,11 +361,11 @@ echo "[OK] Skills-pack bundled"
 
 echo "📦 Generating production package.json..."
 NODE_BIN="$NODE_DEST/bin/node"
-NPM_CLI="$NODE_DEST/lib/node_modules/npm/bin/npm-cli.js"
 
-"$NODE_BIN" -e "
-  const pkg = require('$ROOT_DIR/package.json');
-  const prod = {
+"$NODE_BIN" --input-type=commonjs -e "
+  var fs = require('fs');
+  var pkg = JSON.parse(fs.readFileSync(process.argv[1], 'utf-8'));
+  var prod = {
     name: pkg.name,
     version: pkg.version,
     type: pkg.type,
@@ -373,12 +374,35 @@ NPM_CLI="$NODE_DEST/lib/node_modules/npm/bin/npm-cli.js"
     dependencies: pkg.dependencies
   };
   if (pkg.optionalDependencies) prod.optionalDependencies = pkg.optionalDependencies;
-  require('fs').writeFileSync('$RESOURCES/package.json', JSON.stringify(prod, null, 2));
-"
+  fs.writeFileSync(process.argv[2], JSON.stringify(prod, null, 2));
+" "$ROOT_DIR/package.json" "$RESOURCES/package.json"
 
-echo "📦 Installing production dependencies (this may take a few minutes)..."
-(cd "$RESOURCES" && "$NODE_BIN" "$NPM_CLI" install --omit=dev --no-audit --no-fund --no-update-notifier)
-echo "[OK] Dependencies installed"
+# Use system npm (not the bundled one) with explicit arch/platform so that
+# native optional dependencies (e.g. @snazzah/davey-darwin-arm64) are resolved
+# correctly regardless of which Node binary was bundled.
+# This mirrors the approach in build-mac-installer.sh.
+if [[ "$PRIMARY_ARCH" == "x86_64" ]]; then
+  TARGET_NPM_ARCH="x64"
+else
+  TARGET_NPM_ARCH="arm64"
+fi
+
+# Prefer system npm so that native optional deps (e.g. @snazzah/davey-darwin-arm64)
+# are resolved correctly via npm_config_arch/platform.
+# Fall back to the bundled npm only if system npm is unavailable.
+SYSTEM_NPM="$(command -v npm 2>/dev/null || true)"
+
+echo "📦 Installing production dependencies (target: darwin-${TARGET_NPM_ARCH})..."
+if [[ -n "$SYSTEM_NPM" ]]; then
+  (cd "$RESOURCES" && npm_config_arch="$TARGET_NPM_ARCH" npm_config_platform="darwin" \
+    "$SYSTEM_NPM" install --omit=dev --no-audit --no-fund --no-update-notifier)
+else
+  echo "WARN: system npm not found, falling back to bundled npm" >&2
+  NPM_CLI="$NODE_DEST/lib/node_modules/npm/bin/npm-cli.js"
+  (cd "$RESOURCES" && npm_config_arch="$TARGET_NPM_ARCH" npm_config_platform="darwin" \
+    "$NODE_BIN" "$NPM_CLI" install --omit=dev --no-audit --no-fund --no-update-notifier)
+fi
+echo "[OK] Dependencies installed (darwin-${TARGET_NPM_ARCH})"
 
 echo "📦 Cleaning up bundle..."
 CLEAN_NAMES=("*.md" "CHANGELOG*" "HISTORY*" ".github" "test" "tests" "__tests__" \

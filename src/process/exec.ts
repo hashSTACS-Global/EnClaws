@@ -135,7 +135,17 @@ export async function runCommandWithTimeout(
 
   const stdio = resolveCommandStdio({ hasInput, preferInherit: true });
   const resolvedCommand = resolveCommand(argv[0] ?? "");
-  const child = spawn(resolvedCommand, argv.slice(1), {
+  // On Windows, .cmd/.bat files cannot be spawned directly — they must go
+  // through cmd.exe. Wrapping explicitly here avoids EINVAL from spawn and
+  // keeps shell:true disabled (no injection risk since args are fully controlled).
+  const isCmdFile =
+    process.platform === "win32" &&
+    /\.(cmd|bat)$/i.test(path.basename(resolvedCommand));
+  const spawnCommand = isCmdFile ? "cmd.exe" : resolvedCommand;
+  const spawnArgs = isCmdFile
+    ? ["/c", resolvedCommand, ...argv.slice(1)]
+    : argv.slice(1);
+  const child = spawn(spawnCommand, spawnArgs, {
     stdio,
     cwd,
     env: resolvedEnv,

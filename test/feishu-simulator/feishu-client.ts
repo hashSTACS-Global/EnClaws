@@ -19,6 +19,8 @@ export type FeishuTestClientOptions = {
   tokenCacheDir?: string;
   replyTimeoutMs?: number;
   pollIntervalMs?: number;
+  /** Group chat ID — when set, messages are sent to this group instead of P2P */
+  chatId?: string;
 };
 
 export type FeishuReplyMeta = {
@@ -48,7 +50,9 @@ export class FeishuTestClient {
   private tenantToken: string | null = null;
   private userToken: string | null = null;
   private botOpenId: string | null = null;
+  private botName: string | null = null;
   private p2pChatId: string | null = null;
+  private groupChatId: string | null = null;
   private cacheDir: string;
 
   constructor(opts: FeishuTestClientOptions) {
@@ -64,51 +68,87 @@ export class FeishuTestClient {
     // 2. Get bot info
     const botInfo = await this.feishu("GET", "/bot/v3/info", null, this.tenantToken);
     this.botOpenId = botInfo.bot?.open_id;
-    if (!this.botOpenId) {throw new Error("Failed to get bot open_id");}
-    console.log(`  Bot: ${botInfo.bot?.app_name ?? this.botOpenId}`);
+    if (!this.botOpenId) throw new Error("Failed to get bot open_id");
+    this.botName = botInfo.bot?.app_name ?? "Bot";
+    console.log(`  Bot: ${this.botName} (${this.botOpenId})`);
 
     // 3. Get or obtain user access token
     this.userToken = await this.loadOrAuthorize();
 
-    // 4. P2P chat will be resolved on first send (using bot open_id as receive_id)
+    // 4. Set up chat mode
+    if (this.opts.chatId) {
+      this.groupChatId = this.opts.chatId;
+      console.log(`  Mode: Group chat (${this.groupChatId})`);
+    } else {
+      console.log(`  Mode: P2P (chat will be resolved on first send)`);
+    }
   }
 
-  async send(message: string): Promise<FeishuSendResult> {
+  async send(message: string, opts?: { mentionBot?: boolean }): Promise<FeishuSendResult> {
     if (!this.userToken || !this.botOpenId) {
       throw new Error("Client not initialized. Call init() first.");
     }
 
+    // Proactively refresh token if it's about to expire within the next 5 minutes
+    await this.ensureFreshUserToken();
+
+    const isGroupMode = !!this.groupChatId;
+    const activeChatId = isGroupMode ? this.groupChatId : this.p2pChatId;
     const startedAt = Date.now();
 
     // Get latest message before sending (if we already know the chat)
-    const beforeMsgId = this.p2pChatId ? await this.getLatestMessageId() : null;
+    const beforeMsgId = activeChatId ? await this.getLatestMessageId() : null;
 
-    // Send as user to bot's open_id — Feishu auto-creates P2P chat if needed
-    const sendRes = await this.feishu("POST", `/im/v1/messages?receive_id_type=open_id`, {
-      receive_id: this.botOpenId,
+    // Build message content — prepend @bot mention in group mode
+    let content: string;
+    if (isGroupMode && (opts?.mentionBot ?? true)) {
+      content = JSON.stringify({ text: `<at user_id="${this.botOpenId}">${this.botName}</at> ${message}` });
+    } else {
+      content = JSON.stringify({ text: message });
+    }
+
+    // Send message — group mode uses chat_id, P2P uses bot's open_id
+    const receiveIdType = isGroupMode ? "chat_id" : "open_id";
+    const receiveId = isGroupMode ? this.groupChatId! : this.botOpenId;
+
+    const sendRes = await this.withUserTokenRetry(() => this.feishu("POST", `/im/v1/messages?receive_id_type=${receiveIdType}`, {
+      receive_id: receiveId,
       msg_type: "text",
-      content: JSON.stringify({ text: message }),
-    }, this.userToken);
+      content,
+    }, this.userToken!));
 
     const userMsgId = sendRes.message_id;
     if (!userMsgId) {throw new Error(`Send failed: ${JSON.stringify(sendRes)}`);}
 
-    // Extract chat_id from send response (for polling replies)
-    if (!this.p2pChatId && sendRes.chat_id) {
+    // Extract chat_id from send response (for P2P mode — group mode already has it)
+    if (!isGroupMode && !this.p2pChatId && sendRes.chat_id) {
       this.p2pChatId = sendRes.chat_id;
       console.log(`  P2P chat: ${this.p2pChatId}`);
     }
 
-    if (!this.p2pChatId) {
+    const chatIdForPoll = isGroupMode ? this.groupChatId! : this.p2pChatId;
+    if (!chatIdForPoll) {
       throw new Error("Could not determine chat_id from send response");
     }
 
     // Poll for bot reply
     const timeoutMs = this.opts.replyTimeoutMs ?? 60_000;
     const pollMs = this.opts.pollIntervalMs ?? 1000;
-    const replyData = await this.waitForBotReply(userMsgId, beforeMsgId, timeoutMs, pollMs);
 
-    return { text: replyData.text, messageId: userMsgId, durationMs: Date.now() - startedAt, reply: replyData.meta };
+    // When mentionBot is explicitly false in group mode, the bot is not expected to reply.
+    // Use a shorter timeout and treat timeout as success (empty reply).
+    const expectNoReply = isGroupMode && opts?.mentionBot === false;
+    const effectiveTimeout = expectNoReply ? Math.min(timeoutMs, 15_000) : timeoutMs;
+
+    try {
+      const replyData = await this.waitForBotReply(userMsgId, beforeMsgId, effectiveTimeout, pollMs, chatIdForPoll);
+      return { text: replyData.text, messageId: userMsgId, durationMs: Date.now() - startedAt, reply: replyData.meta };
+    } catch (e) {
+      if (expectNoReply && (e as Error).message.includes("Timeout")) {
+        return { text: "", messageId: userMsgId, durationMs: Date.now() - startedAt, reply: { msgType: "none" } };
+      }
+      throw e;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -130,6 +170,44 @@ export class FeishuTestClient {
       throw new Error(`Feishu API error [${endpoint}]: code=${json.code} msg=${json.msg}`);
     }
     return json.data ?? json;
+  }
+
+  /**
+   * Proactively refresh the user token if it expires within the next 5 minutes.
+   * Avoids mid-run failures from token expiration during long test runs.
+   */
+  private async ensureFreshUserToken(): Promise<void> {
+    const cached = this.loadCachedToken();
+    if (!cached) return;
+    const refreshThresholdMs = 5 * 60 * 1000;
+    if (cached.expiresAt > Date.now() + refreshThresholdMs) return;
+    if (cached.refreshToken && (cached.refreshExpiresAt ?? 0) > Date.now()) {
+      console.log(`  Token expiring soon, proactively refreshing...`);
+      this.userToken = await this.refreshAccessToken(cached.refreshToken);
+    }
+  }
+
+  /**
+   * Wraps a user-token API call with auto-refresh on token expiration (code=99991677).
+   * Refreshes the user token mid-run and retries once.
+   */
+  private async withUserTokenRetry<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg.includes("99991677") || msg.includes("token expired") || msg.includes("Authentication token expired")) {
+        console.log(`  User token expired mid-run, refreshing...`);
+        const cached = this.loadCachedToken();
+        if (cached?.refreshToken && (cached.refreshExpiresAt ?? 0) > Date.now()) {
+          this.userToken = await this.refreshAccessToken(cached.refreshToken);
+        } else {
+          this.userToken = await this.authorize();
+        }
+        return await fn();
+      }
+      throw e;
+    }
   }
 
   private async getTenantToken(): Promise<string> {
@@ -299,11 +377,12 @@ export class FeishuTestClient {
   // ---------------------------------------------------------------------------
 
   private async getLatestMessageId(): Promise<string | null> {
-    if (!this.p2pChatId) {return null;}
+    const chatId = this.groupChatId ?? this.p2pChatId;
+    if (!chatId) return null;
     try {
       const data = await this.feishu(
         "GET",
-        `/im/v1/messages?container_id_type=chat&container_id=${this.p2pChatId}&page_size=1&sort_type=ByCreateTimeDesc`,
+        `/im/v1/messages?container_id_type=chat&container_id=${chatId}&page_size=1&sort_type=ByCreateTimeDesc`,
         null,
         this.tenantToken!,
       );
@@ -313,13 +392,37 @@ export class FeishuTestClient {
     }
   }
 
+  /**
+   * Wait for the bot's FINAL reply, not just the first interim message.
+   *
+   * Multi-step skills (e.g. orchestration) often produce several messages with the same
+   * parent_id: an initial "正在处理…" message, then the final result. The naive approach
+   * (return the first match) captures the interim message and misses the URL/confirmation
+   * in the final one.
+   *
+   * Strategy:
+   *   1. Poll until at least one matching reply (sender=app, parent_id=userMsgId) is found.
+   *   2. After finding a candidate, enter a "quiet period": keep polling for `quietPeriodMs`
+   *      additional time. If a NEWER matching reply appears, update the candidate and reset
+   *      the quiet timer.
+   *   3. If no new reply arrives within `quietPeriodMs`, return the latest candidate.
+   *   4. Bound by overall `timeoutMs`. On hard timeout, return the latest candidate (if any)
+   *      or throw.
+   */
   private async waitForBotReply(
     userMsgId: string,
     beforeMsgId: string | null,
     timeoutMs: number,
     pollMs: number,
+    chatId?: string,
   ): Promise<{ text: string; meta: FeishuReplyMeta }> {
+    const pollChatId = chatId ?? this.groupChatId ?? this.p2pChatId;
     const deadline = Date.now() + timeoutMs;
+    // Quiet period: how long to wait after the latest reply for any follow-up messages
+    const quietPeriodMs = 3_000;
+
+    let latestMsg: any = null;
+    let latestSeenAt = 0;
 
     while (Date.now() < deadline) {
       await sleep(pollMs);
@@ -327,21 +430,38 @@ export class FeishuTestClient {
       try {
         const data = await this.feishu(
           "GET",
-          `/im/v1/messages?container_id_type=chat&container_id=${this.p2pChatId}&page_size=10&sort_type=ByCreateTimeDesc&card_msg_content_type=raw_card_content`,
+          `/im/v1/messages?container_id_type=chat&container_id=${pollChatId}&page_size=10&sort_type=ByCreateTimeDesc&card_msg_content_type=raw_card_content`,
           null,
           this.tenantToken!,
         );
 
+        // Items are sorted desc (newest first). First match = newest bot reply for our msg.
+        let foundThisRound: any = null;
         for (const msg of (data.items ?? [])) {
-          if (msg.message_id === userMsgId) {continue;}
-          if (beforeMsgId && msg.message_id === beforeMsgId) {break;}
-          // Match bot reply by parent_id (reply to our user message)
+          if (msg.message_id === userMsgId) continue;
+          if (beforeMsgId && msg.message_id === beforeMsgId) break;
           if (msg.sender?.sender_type === "app" && msg.parent_id === userMsgId) {
-            // Check if card is still streaming — if so, keep polling
-            if (msg.msg_type === "interactive" && this.isCardStreaming(msg)) {
-              break; // wait for streaming to finish
-            }
-            return this.extractReply(msg);
+            foundThisRound = msg;
+            break;
+          }
+        }
+
+        if (foundThisRound) {
+          // Streaming card — keep polling, don't enter quiet period yet
+          if (foundThisRound.msg_type === "interactive" && this.isCardStreaming(foundThisRound)) {
+            continue;
+          }
+
+          // New (or first) candidate — update and reset quiet timer
+          if (!latestMsg || latestMsg.message_id !== foundThisRound.message_id) {
+            latestMsg = foundThisRound;
+            latestSeenAt = Date.now();
+            continue;
+          }
+
+          // Same as last seen — check whether quiet period has elapsed
+          if (Date.now() - latestSeenAt >= quietPeriodMs) {
+            return this.extractReply(latestMsg);
           }
         }
       } catch {
@@ -349,6 +469,10 @@ export class FeishuTestClient {
       }
     }
 
+    // Hard timeout — if we have a candidate, return it; else throw
+    if (latestMsg) {
+      return this.extractReply(latestMsg);
+    }
     throw new Error(`Timeout (${timeoutMs}ms) waiting for bot reply`);
   }
 

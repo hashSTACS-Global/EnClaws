@@ -1,0 +1,79 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-搜索用户",
+      "message": "帮我查一下许帅的飞书信息",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查自己信息",
+      "message": "帮我查查我自己的飞书账号信息",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化找人",
+      "message": "许帅的工号是多少来着？",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-搜索不存在的用户",
+      "message": "帮我找一下飞书用户「xyzzy_不存在的人」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group",
+        "error"
+      ]
+    },
+    {
+      "name": "群聊-搜索多个用户",
+      "message": "帮我查一下许帅和李帅的联系方式",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查部门",
+      "message": "帮我查一下许帅是哪个部门的",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    }
+  ]
+}

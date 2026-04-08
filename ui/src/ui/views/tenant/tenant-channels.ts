@@ -546,6 +546,13 @@ export class TenantChannelsView extends LitElement {
 
   private async handleSave(e: Event) {
     e.preventDefault();
+    // Trim whitespace from text inputs before validation
+    this.formChannelName = this.formChannelName.trim();
+    for (const app of this.formApps) {
+      app.appId = app.appId.trim();
+      app.appSecret = app.appSecret.trim();
+      app.botName = (app.botName ?? "").trim();
+    }
     if (!this.formChannelName) {
       this.showError("tenantChannels.channelNameRequired");
       return;

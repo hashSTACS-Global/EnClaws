@@ -293,6 +293,7 @@ export async function runAgentTurnWithFallback(params: {
             runId,
             authProfile,
           });
+          logVerbose(`[skills-chain] agent-runner-execution: skillsOverride=${JSON.stringify(params.opts?.skillFilter ?? null)}, snapshotSkills=${params.followupRun.run.skillsSnapshot?.skills?.length ?? 0}`);
           return runEmbeddedPiAgent({
             ...embeddedContext,
             groupId: resolveGroupSessionKey(params.sessionCtx)?.id,
@@ -314,6 +315,7 @@ export async function runAgentTurnWithFallback(params: {
               return isMarkdownCapableMessageChannel(channel) ? "markdown" : "plain";
             })(),
             suppressToolErrorWarnings: params.opts?.suppressToolErrorWarnings,
+            skillsOverride: params.opts?.skillFilter,
             images: params.opts?.images,
             abortSignal: params.opts?.abortSignal,
             blockReplyBreak: params.resolvedBlockStreamingBreak,

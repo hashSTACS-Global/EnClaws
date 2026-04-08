@@ -1,0 +1,161 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-创建文档-完整参数",
+      "message": "帮我创建一个飞书文档，标题叫《群聊测试文档》，内容写：这是在群聊中创建的文档。",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文档"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建文档-只给标题",
+      "message": "创建一个文档叫《群聊空白文档》",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建文档-模糊意图",
+      "message": "帮我建个文档",
+      "assert": {
+        "minLength": 5,
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-口语化创建",
+      "message": "弄个文档呗，就叫《群里的笔记》，记一下刚才讨论的要点",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-带Markdown格式",
+      "message": "帮我创建一个文档，标题叫《技术方案》，内容用markdown格式：\n# 背景\n## 目标\n- 目标1\n- 目标2\n\n**重点**和*注意事项*",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建到指定文件夹",
+      "message": "帮我在「自动化测试」文件夹下创建一个文档，标题叫《文件夹内文档》，随便写点内容",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建到知识库",
+      "message": "帮我在知识库里创建一个文档，标题叫《群聊知识库文档》，内容写一些关于项目规范的说明",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-长内容文档",
+      "message": "帮我创建一个文档，标题叫《AI发展趋势》，帮我写大约500字关于人工智能最新发展趋势的内容",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-带表格内容",
+      "message": "帮我创建一个文档叫《Q2排期表》，内容用表格列出：第一列是任务名，第二列是负责人，第三列是截止日期",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-会议纪要模板",
+      "message": "帮我搞个会议纪要模板出来，包含日期、参会人、议题、结论这几项",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    }
+  ]
+}

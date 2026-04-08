@@ -1,0 +1,31 @@
+title: "[Show & Tell]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share your EnClaws deployment, integration, or creative use case with the community!
+
+  - type: textarea
+    id: showcase
+    attributes:
+      label: What did you build?
+      description: Describe your setup — what channels, skills, or workflows you connected, and what problem it solves.
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or demos
+      description: Add screenshots, GIFs, or links to help others see it in action.
+    validations:
+      required: false
+
+  - type: textarea
+    id: tips
+    attributes:
+      label: Tips or lessons learned
+      description: Anything you wish you knew before starting, or advice for others trying something similar.
+    validations:
+      required: false

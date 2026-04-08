@@ -158,6 +158,7 @@ CREATE TABLE tenant_models (
   extra_headers JSONB        NOT NULL DEFAULT '{}',  -- custom headers
   extra_config  JSONB        NOT NULL DEFAULT '{}',  -- provider-specific config (accountId, gatewayId, endpoint variant, etc.)
   models        JSONB        NOT NULL DEFAULT '[]',  -- array of model definitions [{id, name, reasoning, input, contextWindow, maxTokens, cost, compat}]
+  visibility    VARCHAR(16)  NOT NULL DEFAULT 'private', -- private (tenant-only) | shared (visible to all tenants)
   is_active     BOOLEAN      NOT NULL DEFAULT true,
   created_by    UUID         REFERENCES users(id) ON DELETE SET NULL,
   created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -166,6 +167,7 @@ CREATE TABLE tenant_models (
 
 CREATE INDEX idx_tenant_models_tenant ON tenant_models (tenant_id);
 CREATE INDEX idx_tenant_models_active ON tenant_models (tenant_id, is_active) WHERE is_active = true;
+CREATE INDEX idx_tenant_models_shared ON tenant_models (visibility, is_active) WHERE visibility = 'shared' AND is_active = true;
 
 -- ============================================================
 -- 7. Agent Configs (租户级 Agent 配置) — references tenant_models
@@ -353,7 +355,7 @@ INSERT INTO sys_plugins_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS sys_tools_config (
   id                             INTEGER PRIMARY KEY CHECK (id = 1),
   allow_dangerous_tools_override BOOLEAN NOT NULL DEFAULT false,
-  profile                        VARCHAR(32),
+  profile                        VARCHAR(32) DEFAULT 'full',
   allow                          JSONB NOT NULL DEFAULT '[]',
   also_allow                     JSONB NOT NULL DEFAULT '[]',
   deny                           JSONB NOT NULL DEFAULT '["browser"]',

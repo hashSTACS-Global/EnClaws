@@ -50,6 +50,7 @@ export function restartGatewayProcessWithFreshPid(): GatewayRespawnResult {
   try {
     const args = [...process.execArgv, ...process.argv.slice(1)];
     const child = spawn(process.execPath, args, {
+      cwd: process.cwd(),
       env: process.env,
       detached: true,
       stdio: "inherit",

@@ -1,0 +1,244 @@
+{
+  "cases": [
+    {
+      "name": "Setup-创建媒体测试文件夹",
+      "message": "帮我在云空间创建一个文件夹叫「媒体测试」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文件夹",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "doc-media",
+        "setup"
+      ]
+    },
+    {
+      "name": "Setup-创建被插入媒体的文档",
+      "message": "帮我在「媒体测试」文件夹下创建一个文档，标题叫《媒体-基础文档》，内容写：## 项目文档\n这是一个用于验证媒体插入功能的文档。\n\n## 架构图区域\n这里将插入架构图。\n\n## 截图区域\n这里将插入产品截图。",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "doc-media",
+        "setup"
+      ]
+    },
+    {
+      "name": "插入图片-默认位置",
+      "message": "帮我在《媒体-基础文档》里插入一张占位图片",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "doc-media"
+      ]
+    },
+    {
+      "name": "插入图片-从URL",
+      "message": "帮我在《媒体-基础文档》里插入一张图片，图片地址是 https://example.com/test.png",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-media"
+      ]
+    },
+    {
+      "name": "插入图片-带说明文字",
+      "message": "帮我在《媒体-基础文档》里插入一张图片，图片说明写「系统架构示意图」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-media"
+      ]
+    },
+    {
+      "name": "插入图片-指定位置",
+      "message": "帮我在《媒体-基础文档》的「架构图区域」段落下面插入一张架构图",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-media"
+      ]
+    },
+    {
+      "name": "插入多张图片",
+      "message": "帮我在《媒体-基础文档》里连续插入3张占位图片",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-media"
+      ]
+    },
+    {
+      "name": "插入文件附件",
+      "message": "帮我在《媒体-基础文档》里插入一个文件附件",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-media"
+      ]
+    },
+    {
+      "name": "插入视频",
+      "message": "帮我在《媒体-基础文档》里插入一段视频",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "doc-media"
+      ]
+    },
+    {
+      "name": "插入媒体到指定段落",
+      "message": "帮我在《媒体-基础文档》的「截图区域」下面插入一张产品截图",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-media"
+      ]
+    },
+    {
+      "name": "读取文档验证媒体",
+      "message": "帮我读取《媒体-基础文档》的内容，看看媒体插入情况",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "doc-media"
+      ]
+    },
+    {
+      "name": "口语化-插图",
+      "message": "在那个媒体基础文档里加张图，随便什么图都行",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-media",
+        "intent"
+      ]
+    },
+    {
+      "name": "口语化-放个文件",
+      "message": "帮我把一个文件放到媒体基础文档里",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-media",
+        "intent"
+      ]
+    },
+    {
+      "name": "错误-不存在的文档",
+      "message": "帮我在《xyzzy_不存在的文档_99999》里插入一张图片",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "doc-media",
+        "error"
+      ]
+    },
+    {
+      "name": "错误-不存在的图片URL",
+      "message": "帮我在《媒体-基础文档》里插入一张图片，图片地址是 https://nonexistent.example.invalid/x.png",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "doc-media",
+        "error"
+      ]
+    },
+    {
+      "name": "融合-OCR后插入文档",
+      "message": "帮我识别一张图片上的文字，然后把识别结果和原图一起插入到《媒体-基础文档》里",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "doc-media",
+        "fusion"
+      ]
+    },
+    {
+      "name": "融合-下载Word附件后插图",
+      "message": "帮我下载云空间里的Word附件提取文字，然后基于内容创建一个新文档并插入一张配图",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "doc-media",
+        "fusion"
+      ]
+    },
+    {
+      "name": "融合-创建文档并插图",
+      "message": "帮我在「媒体测试」文件夹下创建一个新文档《媒体-带图文档》写一些项目说明，然后插入一张架构图",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "doc-media",
+        "fusion"
+      ]
+    }
+  ]
+}

@@ -4,22 +4,32 @@ import type { FeishuReplyMeta } from "../feishu-client.js";
 export function formatAssert(a?: TestCaseAssert): string {
   if (!a) {return "";}
   const parts: string[] = [];
-  if (a.contains) {parts.push(`contains:"${a.contains}"`);}
-  if (a.notContains) {parts.push(`!contains:"${a.notContains}"`);}
-  if (a.matches) {parts.push(`matches:/${a.matches}/`);}
-  if (a.minLength != null) {parts.push(`min:${a.minLength}`);}
-  if (a.maxLength != null) {parts.push(`max:${a.maxLength}`);}
-  if (a.msgType) {parts.push(`msgType:${a.msgType}`);}
-  if (a.hasFile) {parts.push("hasFile");}
-  if (a.hasImage) {parts.push("hasImage");}
-  if (a.fileNameMatches) {parts.push(`fileName:/${a.fileNameMatches}/`);}
-  if (a.containsAny) {parts.push(`containsAny:[${a.containsAny.map((s) => `"${s}"`).join(",")}]`);}
-  if (a.containsAll) {parts.push(`containsAll:[${a.containsAll.map((s) => `"${s}"`).join(",")}]`);}
+  if (a.contains) parts.push(`contains:"${a.contains}"`);
+  if (a.notContains) parts.push(`!contains:"${a.notContains}"`);
+  if (a.matches) parts.push(`matches:/${a.matches}/`);
+  if (a.minLength != null) parts.push(`min:${a.minLength}`);
+  if (a.maxLength != null) parts.push(`max:${a.maxLength}`);
+  if (a.msgType) parts.push(`msgType:${a.msgType}`);
+  if (a.hasFile) parts.push("hasFile");
+  if (a.hasImage) parts.push("hasImage");
+  if (a.fileNameMatches) parts.push(`fileName:/${a.fileNameMatches}/`);
+  if (a.containsAny) parts.push(`containsAny:[${a.containsAny.map((s) => `"${s}"`).join(",")}]`);
+  if (a.containsAll) parts.push(`containsAll:[${a.containsAll.map((s) => `"${s}"`).join(",")}]`);
+  if (a.expectNoReply) parts.push("expectNoReply");
   return parts.join(", ");
 }
 
 export function checkAssertions(text: string, assert?: TestCaseAssert, meta?: FeishuReplyMeta): string[] {
   const failures: string[] = [];
+
+  // Negative assertion: expect the bot to NOT reply
+  if (assert?.expectNoReply) {
+    if (text || meta?.fileKey || meta?.imageKey) {
+      failures.push(`expected no reply but got: "${text.slice(0, 60)}${text.length > 60 ? "..." : ""}"`);
+    }
+    return failures;
+  }
+
   if (!text && !meta?.fileKey && !meta?.imageKey) {
     failures.push("reply is empty");
   }

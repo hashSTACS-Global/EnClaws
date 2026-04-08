@@ -1,0 +1,42 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-识别图片文字",
+      "message": "帮我识别这张图片上的文字",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-识别截图",
+      "message": "帮我看看这个截图上写了什么内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化看图",
+      "message": "这图上写的啥？帮我认一下",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    }
+  ]
+}

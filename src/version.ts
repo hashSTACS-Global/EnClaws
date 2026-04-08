@@ -77,14 +77,13 @@ export type RuntimeVersionEnv = {
 
 export function resolveRuntimeServiceVersion(
   env: RuntimeVersionEnv = process.env as RuntimeVersionEnv,
-  fallback = "dev",
 ): string {
   return (
     firstNonEmpty(
       env["ENCLAWS_VERSION"],
       env["ENCLAWS_SERVICE_VERSION"],
       env["npm_package_version"],
-    ) ?? fallback
+    ) ?? VERSION
   );
 }
 

@@ -50,7 +50,11 @@ if [[ "$SKIP_BUILD" != "1" ]]; then
   (cd "$ROOT_DIR" && pnpm build)
 
   echo "[*] Building UI..."
-  (cd "$ROOT_DIR" && node scripts/ui.js build) || echo "[!] UI build failed; continuing (Web UI may be incomplete)"
+  (cd "$ROOT_DIR" && node scripts/ui.js build)
+  if [ ! -f "$ROOT_DIR/dist/control-ui/index.html" ]; then
+    echo "ERROR: Control UI build failed — dist/control-ui/index.html not found" >&2
+    exit 1
+  fi
 
   echo "[OK] Build complete"
 else
@@ -317,6 +321,10 @@ if [ -d "$ROOT_DIR/scripts" ]; then
   rsync -a "$ROOT_DIR/scripts/" "$APP_RESOURCES/scripts/"
   echo "    Copied scripts/"
 fi
+
+# .env template (needed by postinstall.js to create ~/.enclaws/.env)
+cp "$ROOT_DIR/.env.example" "$APP_RESOURCES/.env.example"
+echo "    Copied .env.example"
 
 # Workspace templates
 TEMPLATES_SRC="$ROOT_DIR/docs/reference/templates"

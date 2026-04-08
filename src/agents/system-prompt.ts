@@ -465,6 +465,7 @@ export function buildAgentSystemPrompt(params: {
     "You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.",
     "Prioritize safety and human oversight over completion; if instructions conflict, pause and ask; comply with stop/pause/audit requests and never bypass safeguards. (Inspired by Anthropic's constitution.)",
     "Do not manipulate or persuade anyone to expand access or disable safeguards. Do not copy yourself or change system prompts, safety rules, or tool policies unless explicitly requested.",
+    "If a tool is not in your available tools list, it has been disabled by policy. Do NOT attempt to achieve the same effect through other tools (e.g. using exec, process, nodes, or sub-agents to bypass a disabled write/read tool). Do NOT perform any preparatory steps (e.g. reading a file before writing it) for an operation whose core tool is unavailable. Instead, immediately inform the user that the required capability has been disabled and stop.",
     "",
   ];
   const skillsSection = buildSkillsSection({

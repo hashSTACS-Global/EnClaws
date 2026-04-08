@@ -3,7 +3,7 @@
  */
 
 import { loadAllSysConfig } from "../db/models/sys-config.js";
-import { setRuntimeConfigSnapshot } from "./io.js";
+import { getRuntimeConfigSnapshot, setRuntimeConfigSnapshot } from "./io.js";
 import type { OpenClawConfig } from "./types.openclaw.js";
 import type { GatewayConfig } from "./types.gateway.js";
 import type { LoggingConfig } from "./types.base.js";
@@ -176,10 +176,16 @@ function buildToolsConfig(row: SysToolsConfigRow): ToolsConfig {
 }
 
 /**
- * Load sys config from DB, build OpenClawConfig, and inject it as the runtime snapshot.
- * After this call, all `loadConfig()` consumers see the DB-backed config.
+ * Load sys config from DB, build OpenClawConfig, and merge it into the runtime snapshot.
+ * Only updates gateway/logging/plugins/tools fields — preserves existing channels, agents,
+ * bindings, and other runtime state that was populated by loadDbChannels.
  */
 export async function loadAndActivateSysConfig(): Promise<void> {
-  const config = await buildSysConfig();
-  setRuntimeConfigSnapshot(config);
+  const sysConfig = await buildSysConfig();
+  const existing = getRuntimeConfigSnapshot();
+  const merged: OpenClawConfig = {
+    ...existing,
+    ...sysConfig,
+  };
+  setRuntimeConfigSnapshot(merged);
 }

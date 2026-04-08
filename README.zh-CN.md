@@ -9,8 +9,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/hashSTACS/EnClaws/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/hashSTACS/EnClaws?style=social"></a>
-  <a href="https://github.com/hashSTACS/EnClaws/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/hashSTACS/EnClaws"></a>
+  <a href="https://github.com/hashSTACS-Global/EnClaws/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/hashSTACS-Global/EnClaws?style=social"></a>
+  <a href="https://www.npmjs.com/package/enclaws"><img alt="npm version" src="https://img.shields.io/npm/v/enclaws?color=cb3837&label=npm"></a>
+  <a href="https://github.com/hashSTACS-Global/EnClaws/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/hashSTACS-Global/EnClaws"></a>
+  <a href="https://github.com/hashSTACS-Global/EnClaws/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/hashSTACS-Global/EnClaws"></a>
+  <a href="https://discord.gg/ExT4MEnK4w"><img alt="Discord" src="https://img.shields.io/discord/1483754815434526742?color=5865F2&label=Discord&logo=discord&logoColor=white"></a>
+  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=1b6r1c67-a833-4d36-b748-5e6729d65045"><img alt="飞书" src="https://img.shields.io/badge/%E9%A3%9E%E4%B9%A6-Join%20Group-00D6B9?logo=bytedance&logoColor=white"></a>
+  <img alt="Node.js" src="https://img.shields.io/badge/node-%3E%3D22.12.0-43853d?logo=node.js&logoColor=white">
   <a href="./LICENSE"><img alt="Apache-2.0 许可证" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
 </p>
 
@@ -101,7 +106,7 @@ npm link
 enclaws gateway
 ```
 
-启动完成后，Gateway 默认可通过 `http://localhost:18789` 访问。
+启动完成后，Gateway 默认可通过 `http://localhost:18888` 访问。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/hashSTACS-Global/EnClaws/main/docs/assets/dashboard-enclaws-placeholder.jpg" alt="EnClaws dashboard placeholder" width="92%" />
@@ -213,32 +218,137 @@ A2A 协作是 EnClaws 的前进方向之一。
 
 ```text
 用户 / 团队 / 企业系统
-            │
-            ▼
- 助手运行时 + 控制平面
-            │
-   ┌────────┼────────┬────────┐
-   ▼        ▼        ▼        ▼
- 并发      记忆      技能     审计
-            │
-            ▼
-   Web 管理面板与企业级操作界面
+                 │
+                 ▼
+   助手运行时 + 控制平面
+                 │
+      ┌──────────┼──────────┬──────────┐
+      ▼          ▼          ▼          ▼
+   并发执行     记忆      技能库     审计
+                 │
+                 ▼
+      Web 管理面板与企业级接入面
 ```
 
-一个稍微更详细一些的心智模型如下：
+更细一层的概念模型：
 
 ```text
 企业用户 + 业务系统 + 工作事件
-               │
-               ▼
-     容器化助手运行时与调度器
-               │
-      ┌────────┼────────┬────────┐
-      ▼        ▼        ▼        ▼
-     隔离      记忆      技能     监控
-               │
-               ▼
-      证据、回放、运营、行动
+                 │
+                 ▼
+   容器化助手运行时与调度器
+                 │
+      ┌──────────┼──────────┬──────────┐
+      ▼          ▼          ▼          ▼
+   租户隔离     记忆      技能      监控告警
+                 │
+                 ▼
+       证据链、回放、操作、行动
+```
+
+### 系统架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                             客户端层                                    │
+│          Web 控制面板   ·   CLI / TUI   ·   macOS / iOS / Android      │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+┌────────────────────────────────▼────────────────────────────────────────┐
+│                        通道层 — 41+ 集成                                │
+│                                                                         │
+│   飞书    钉钉    企业微信    Telegram    Discord    Slack               │
+│   WhatsApp    Teams    Matrix    Signal    LINE    Mattermost    ...    │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+┌────────────────────────────────▼────────────────────────────────────────┐
+│                             网关层                                      │
+│                                                                         │
+│   ┌─────────────┐  ┌─────────────┐  ┌──────────────────────────────┐   │
+│   │  WebSocket   │  │    HTTP     │  │       认证与授权              │   │
+│   │   服务器     │  │   服务器    │  │   JWT + 五级 RBAC            │   │
+│   └──────┬───────┘  └──────┬──────┘  │   方法级权限控制             │   │
+│          │                 │         └──────────────┬───────────────┘   │
+│          └─────────┬───────┘                        │                   │
+│                    │                                │                   │
+│   ┌────────────────▼────────────────────────────────▼────────────────┐  │
+│   │  租户路由器 ──→ Session 解析器 ──→ 通道管理器                    │  │
+│   │  插件管理器                        定时任务服务                   │  │
+│   └─────────────────────────────┬───────────────────────────────────┘  │
+└─────────────────────────────────┼───────────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────────────┐
+│                             核心引擎                                    │
+│                                                                         │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐     │
+│   │   消息        │  │    回复      │  │    Agent 执行器           │     │
+│   │   分发        │  │    引擎      │  │    (pi-embedded-runner)  │     │
+│   └──────┬────────┘  └──────┬───────┘  └──────────┬──────────────┘     │
+│          │                  │                      │                    │
+│          └──────────┬───────┘                      │                    │
+│                     │                              │                    │
+│   ┌─────────────────▼──────────────────────────────▼─────────────────┐  │
+│   │              StreamFn 执行管道                                    │  │
+│   │        预处理 → LLM 调用 → 工具执行 → 后处理                     │  │
+│   └─────────────────────────────┬────────────────────────────────────┘  │
+│                                 │                                      │
+│   ┌───────────┐  ┌──────────────▼──┐  ┌─────────────────────────────┐  │
+│   │  60+ 工具  │  │  55 个 Skill    │  │  ACP — 并发任务执行器       │  │
+│   │            │  │  (可覆盖)       │  │  100+ 任务并行              │  │
+│   └────────────┘  └─────────────────┘  └─────────────────────────────┘  │
+└─────────────────────────────────┬───────────────────────────────────────┘
+                                  │
+              ┌───────────────────┼───────────────────┐
+              │                   │                   │
+┌─────────────▼──────┐ ┌─────────▼─────────┐ ┌───────▼───────────────────┐
+│    LLM 提供商       │ │     存储层         │ │       可观测性             │
+│                     │ │                    │ │                           │
+│  Anthropic Claude   │ │  PostgreSQL        │ │  交互追踪                 │
+│  OpenAI GPT-4       │ │   (多租户)         │ │   prompt/completion/成本  │
+│  Google Gemini      │ │  SQLite            │ │  审计日志                 │
+│  DeepSeek           │ │   (轻量级)         │ │   谁/做了什么/什么时候    │
+│  通义千问           │ │  LanceDB           │ │  Token 用量分析           │
+│  Moonshot           │ │   (向量记忆)       │ │   7 天/30 天趋势          │
+│  Ollama (本地)      │ │  文件系统           │ │   用户/Agent/模型排行     │
+│                     │ │   (租户隔离)       │ │                           │
+└─────────────────────┘ └────────────────────┘ └───────────────────────────┘
+```
+
+### 消息生命周期
+
+```
+ 用户（飞书 / Discord / ...）
+   │
+   │  ① 发送消息
+   ▼
+ 通道适配器 ──→ 标准化为内部格式
+   │
+   │  ② 认证
+   ▼
+ 网关 ──→ JWT 验证 + RBAC 检查
+   │
+   │  ③ 路由
+   ▼
+ 租户路由器 ──→ 从通道元数据提取租户
+   │              从 PostgreSQL 加载租户配置
+   │
+   │  ④ 分发
+   ▼
+ Agent 运行时 ──→ 加载 SOUL.md + TOOLS.md + MEMORY.md + Skills
+   │
+   │  ⑤ 推理
+   ▼
+ LLM 提供商 ──→ prompt + 上下文 → 流式响应
+   │              ↕ 工具调用（执行 → 回传结果 → 再次调用）
+   │
+   │  ⑥ 回复
+   ▼
+ 通道适配器 ──→ 格式化回复（文本 / 卡片 / 文件 / 图片）
+   │
+   │  ⑦ 观测
+   ▼
+ 交互追踪器 ──→ 记录 prompt、completion、token 数、成本
+ 审计日志 ──→ 记录事件（合规留痕）
 ```
 
 ## North Star

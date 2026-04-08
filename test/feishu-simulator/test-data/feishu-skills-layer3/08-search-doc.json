@@ -1,0 +1,28 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "搜索之前创建的所有测试资源",
+      "message": "帮我搜一下标题包含「AutoTest_Layer3」的文档",
+      "assert": {
+        "llmEvaluate": "回复是否执行了文档搜索？是否在结果中找到了之前创建的 AutoTest_Layer3 相关资源（文档、表格等）？结果是否包含标题和链接？"
+      }
+    },
+    {
+      "name": "搜索知识库空间",
+      "message": "我想找一下我们的知识库里有哪些空间",
+      "assert": {
+        "llmEvaluate": "回复是否列出了可用的知识库空间？信息是否包含空间名称？是否结构清晰易读？"
+      }
+    },
+    {
+      "name": "模糊搜索所有 AutoTest 资源",
+      "message": "帮我找找所有 AutoTest 相关的文档和文件",
+      "assert": {
+        "llmEvaluate": "回复是否理解了搜索意图并返回了 AutoTest 相关的文档？搜索结果是否包含本次测试创建的多个资源？"
+      }
+    }
+  ]
+}

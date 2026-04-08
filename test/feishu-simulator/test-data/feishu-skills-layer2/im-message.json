@@ -1,0 +1,313 @@
+{
+  "cases": [
+    {
+      "name": "发消息-给自己发文本",
+      "message": "帮我给我自己发一条飞书消息：测试消息发送功能",
+      "assert": {
+        "containsAny": [
+          "已发送",
+          "发送成功",
+          "已通知"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-按名字发给他人",
+      "message": "帮我给许帅发一条飞书消息：你好，请帮忙确认一下需求",
+      "assert": {
+        "containsAny": [
+          "已发送",
+          "发送成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-发到群聊",
+      "message": "帮我在「测试」群里发一条消息：今天的会议改到下午3点",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-富文本格式",
+      "message": "帮我给我自己发一条富文本消息，内容包含标题「本周总结」和三个要点：1.完成登录模块 2.修复3个bug 3.准备评审材料",
+      "assert": {
+        "containsAny": [
+          "已发送",
+          "发送成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-Markdown格式",
+      "message": "帮我给我自己发一条markdown格式的消息：# 测试报告\n## 通过率\n- 成功：95%\n- 失败：5%",
+      "assert": {
+        "containsAny": [
+          "已发送",
+          "发送成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-长消息",
+      "message": "帮我给我自己发一条详细的飞书消息：今天完成了用户登录模块的开发，包括手机号登录、邮箱登录和第三方OAuth登录三种方式，所有的单元测试都已通过，明天开始进行集成测试，预计周三可以提交PR",
+      "assert": {
+        "containsAny": [
+          "已发送",
+          "发送成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-带链接",
+      "message": "帮我给我自己发一条消息：参考文档 https://www.feishu.cn",
+      "assert": {
+        "containsAny": [
+          "已发送",
+          "发送成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-带emoji",
+      "message": "帮我给我自己发一条消息：今天测试都通过了 ✅ 🎉",
+      "assert": {
+        "containsAny": [
+          "已发送",
+          "发送成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-发卡片",
+      "message": "帮我给我自己发一张卡片消息，标题是「日报提醒」，内容是「请在18点前提交今日工作总结」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-发图片",
+      "message": "帮我给我自己发一张图片",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-发文件",
+      "message": "帮我给我自己发一个文件附件",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-群里@提及某人",
+      "message": "帮我在「测试」群里发一条消息：@许帅 请帮忙看下PR",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "im-message"
+      ]
+    },
+    {
+      "name": "发消息-多个提醒",
+      "message": "帮我给我自己分别发两条消息：第一条「会议5分钟后开始」，第二条「记得带笔记本」",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "im-message"
+      ]
+    },
+    {
+      "name": "口语化-提醒自己",
+      "message": "提醒我一下，记得明天交周报，发到我自己的飞书",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "im-message",
+        "intent"
+      ]
+    },
+    {
+      "name": "口语化-告诉某人",
+      "message": "告诉许帅一声，会议改到下午4点了",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "im-message",
+        "intent"
+      ]
+    },
+    {
+      "name": "口语化-群里说一声",
+      "message": "在测试群里吱一声，文档我已经更新了",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "im-message",
+        "intent"
+      ]
+    },
+    {
+      "name": "错误-不存在的用户",
+      "message": "帮我给「xyzzy_不存在的人_99999」发一条消息：测试",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "im-message",
+        "error"
+      ]
+    },
+    {
+      "name": "错误-不存在的群",
+      "message": "帮我在「xyzzy_不存在的群_99999」群里发一条消息：测试",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "im-message",
+        "error"
+      ]
+    },
+    {
+      "name": "错误-空消息内容",
+      "message": "帮我给我自己发一条消息",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "im-message",
+        "error",
+        "intent"
+      ]
+    },
+    {
+      "name": "融合-查任务后通知自己",
+      "message": "帮我看看我有哪些待办任务，然后给我自己发一条飞书消息汇总一下",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "im-message",
+        "fusion"
+      ]
+    },
+    {
+      "name": "融合-查日程后通知群",
+      "message": "帮我看看明天有哪些会议，然后在「测试」群里发一条消息汇总",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "im-message",
+        "fusion"
+      ]
+    },
+    {
+      "name": "融合-读文档后转发",
+      "message": "帮我读取《自动化测试文档》的内容，提炼成简短的几点，发给我自己",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "im-message",
+        "fusion"
+      ]
+    },
+    {
+      "name": "融合-完成任务后报告",
+      "message": "帮我把「写测试用例」这个任务标记为已完成，然后给我自己发一条消息确认",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "im-message",
+        "fusion"
+      ]
+    }
+  ]
+}

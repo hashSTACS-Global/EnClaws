@@ -58,19 +58,23 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { channel, model, agent } = params as {
+    const { channel, model, sharedModel, agent } = params as {
       channel?: {
         channelType: string;
         channelName?: string;
         config?: Record<string, unknown>;
       };
-      model: {
+      model?: {
         providerType: string;
         providerName: string;
         apiProtocol: string;
         apiKeyEncrypted: string;
         baseUrl?: string;
         models?: Array<{ id: string; name: string }>;
+      };
+      sharedModel?: {
+        providerId: string;
+        modelId: string;
       };
       agent: {
         agentId: string;
@@ -79,8 +83,8 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
       };
     };
 
-    // Validate required fields
-    if (!model || !model.providerType || !model.apiKeyEncrypted) {
+    // Validate: either model or sharedModel must be provided
+    if (!sharedModel && (!model || !model.providerType || !model.apiKeyEncrypted)) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Model configuration is required"));
       return;
     }
@@ -137,17 +141,29 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
           }
         }
 
-        // 2. Create model
-        const modelResult = await createTenantModel({
-          tenantId: ctx.tenantId,
-          providerType: model.providerType,
-          providerName: model.providerName,
-          apiProtocol: model.apiProtocol as any,
-          apiKeyEncrypted: model.apiKeyEncrypted,
-          baseUrl: model.baseUrl,
-          models: model.models ?? [],
-          createdBy: ctx.userId,
-        });
+        // 2. Create model or use shared model
+        let modelProviderId: string;
+        let modelModelId: string;
+        let modelResult: Awaited<ReturnType<typeof createTenantModel>> | null = null;
+
+        if (sharedModel) {
+          // Use existing shared model directly
+          modelProviderId = sharedModel.providerId;
+          modelModelId = sharedModel.modelId;
+        } else {
+          modelResult = await createTenantModel({
+            tenantId: ctx.tenantId,
+            providerType: model!.providerType,
+            providerName: model!.providerName,
+            apiProtocol: model!.apiProtocol as any,
+            apiKeyEncrypted: model!.apiKeyEncrypted,
+            baseUrl: model!.baseUrl,
+            models: model!.models ?? [],
+            createdBy: ctx.userId,
+          });
+          modelProviderId = modelResult.id;
+          modelModelId = (model!.models && model!.models.length > 0) ? model!.models[0].id : "default";
+        }
 
         // 3. Create agent (bind model + channel app)
         const agentQuota = await checkTenantQuota(ctx.tenantId, "agents");
@@ -156,8 +172,8 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
         }
 
         const modelConfig: ModelConfigEntry[] = [{
-          providerId: modelResult.id,
-          modelId: (model.models && model.models.length > 0) ? model.models[0].id : "default",
+          providerId: modelProviderId,
+          modelId: modelModelId,
           isDefault: true,
         }];
 
@@ -175,7 +191,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
           await updateChannelApp(channelAppResult.id, ctx.tenantId, { agentId: agent.agentId });
         }
 
-        return { channel: channelResult, channelApp: channelAppResult, model: modelResult, agent: agentResult };
+        return { channel: channelResult, channelApp: channelAppResult, model: modelResult, modelProviderId, modelModelId, agent: agentResult };
       });
 
       // Audit log
@@ -185,7 +201,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
         action: "tenant.onboarding.setup",
         detail: {
           channel: result.channel?.id ?? null,
-          model: result.model.id,
+          model: result.model?.id ?? result.modelProviderId,
           agent: result.agent.id,
         },
       });
@@ -202,7 +218,9 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
 
       respond(true, {
         channel: result.channel ? { id: result.channel.id, channelType: result.channel.channelType } : null,
-        model: { id: result.model.id, providerName: result.model.providerName },
+        model: result.model
+          ? { id: result.model.id, providerName: result.model.providerName }
+          : { id: result.modelProviderId, shared: true },
         agent: { id: result.agent.id, agentId: result.agent.agentId, name: result.agent.name },
       });
     } catch (err) {

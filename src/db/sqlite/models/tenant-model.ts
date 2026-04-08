@@ -3,7 +3,7 @@
  */
 
 import { sqliteQuery, generateUUID } from "../index.js";
-import type { TenantModel, TenantModelDefinition } from "../../types.js";
+import type { TenantModel, TenantModelDefinition, ModelVisibility } from "../../types.js";
 
 function rowToModel(row: Record<string, unknown>): TenantModel {
   return {
@@ -24,6 +24,7 @@ function rowToModel(row: Record<string, unknown>): TenantModel {
     models: (typeof row.models === "string"
       ? JSON.parse(row.models)
       : row.models ?? []) as TenantModelDefinition[],
+    visibility: (row.visibility as TenantModel["visibility"]) ?? "private",
     isActive: Boolean(row.is_active),
     createdBy: (row.created_by as string) ?? null,
     createdAt: new Date(row.created_at as string),
@@ -42,14 +43,15 @@ export async function createTenantModel(params: {
   extraHeaders?: Record<string, string>;
   extraConfig?: Record<string, unknown>;
   models?: TenantModelDefinition[];
+  visibility?: ModelVisibility;
   createdBy?: string;
 }): Promise<TenantModel> {
   const id = generateUUID();
   sqliteQuery(
     `INSERT INTO tenant_models
        (id, tenant_id, provider_type, provider_name, base_url, api_protocol, auth_mode,
-        api_key_encrypted, extra_headers, extra_config, models, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        api_key_encrypted, extra_headers, extra_config, models, visibility, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       params.tenantId,
@@ -62,6 +64,7 @@ export async function createTenantModel(params: {
       JSON.stringify(params.extraHeaders ?? {}),
       JSON.stringify(params.extraConfig ?? {}),
       JSON.stringify(params.models ?? []),
+      params.visibility ?? "private",
       params.createdBy ?? null,
     ],
   );
@@ -79,17 +82,17 @@ export async function getTenantModel(tenantId: string, id: string): Promise<Tena
 
 export async function listTenantModels(
   tenantId: string,
-  opts?: { activeOnly?: boolean },
+  opts?: { activeOnly?: boolean; includeShared?: boolean },
 ): Promise<TenantModel[]> {
-  const conditions = ["tenant_id = ?"];
   const values: unknown[] = [tenantId];
+  const activeFilter = opts?.activeOnly !== false ? " AND is_active = 1" : "";
 
-  if (opts?.activeOnly !== false) {
-    conditions.push("is_active = 1");
-  }
+  const where = opts?.includeShared !== false
+    ? `(tenant_id = ?${activeFilter}) OR (visibility = 'shared'${activeFilter})`
+    : `tenant_id = ?${activeFilter}`;
 
   const result = sqliteQuery(
-    `SELECT * FROM tenant_models WHERE ${conditions.join(" AND ")} ORDER BY created_at ASC`,
+    `SELECT * FROM tenant_models WHERE ${where} ORDER BY visibility DESC, created_at ASC`,
     values,
   );
   return result.rows.map(rowToModel);
@@ -98,7 +101,7 @@ export async function listTenantModels(
 export async function updateTenantModel(
   tenantId: string,
   id: string,
-  updates: Partial<Pick<TenantModel, "providerName" | "baseUrl" | "apiProtocol" | "authMode" | "apiKeyEncrypted" | "extraHeaders" | "extraConfig" | "models" | "isActive">>,
+  updates: Partial<Pick<TenantModel, "providerName" | "baseUrl" | "apiProtocol" | "authMode" | "apiKeyEncrypted" | "extraHeaders" | "extraConfig" | "models" | "visibility" | "isActive">>,
 ): Promise<TenantModel | null> {
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -134,6 +137,10 @@ export async function updateTenantModel(
   if (updates.models !== undefined) {
     sets.push("models = ?");
     values.push(JSON.stringify(updates.models));
+  }
+  if (updates.visibility !== undefined) {
+    sets.push("visibility = ?");
+    values.push(updates.visibility);
   }
   if (updates.isActive !== undefined) {
     sets.push("is_active = ?");

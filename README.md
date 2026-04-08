@@ -13,8 +13,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/hashSTACS/EnClaws/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/hashSTACS/EnClaws?style=social"></a>
-  <a href="https://github.com/hashSTACS/EnClaws/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/hashSTACS/EnClaws"></a>
+  <a href="https://github.com/hashSTACS-Global/EnClaws/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/hashSTACS-Global/EnClaws?style=social"></a>
+  <a href="https://www.npmjs.com/package/enclaws"><img alt="npm version" src="https://img.shields.io/npm/v/enclaws?color=cb3837&label=npm"></a>
+  <a href="https://github.com/hashSTACS-Global/EnClaws/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/hashSTACS-Global/EnClaws"></a>
+  <a href="https://github.com/hashSTACS-Global/EnClaws/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/hashSTACS-Global/EnClaws"></a>
+  <a href="https://discord.gg/ExT4MEnK4w"><img alt="Discord" src="https://img.shields.io/discord/1483754815434526742?color=5865F2&label=Discord&logo=discord&logoColor=white"></a>
+  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=1b6r1c67-a833-4d36-b748-5e6729d65045"><img alt="Feishu" src="https://img.shields.io/badge/Feishu-Join%20Group-00D6B9?logo=bytedance&logoColor=white"></a>
+  <img alt="Node.js" src="https://img.shields.io/badge/node-%3E%3D22.12.0-43853d?logo=node.js&logoColor=white">
   <a href="./LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
 </p>
 
@@ -105,7 +110,7 @@ npm link
 enclaws gateway
 ```
 
-After startup, the Gateway is available at `http://localhost:18789`.
+After startup, the Gateway is available at `http://localhost:18888`.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/hashSTACS-Global/EnClaws/main/docs/assets/dashboard-enclaws-placeholder.jpg" alt="EnClaws dashboard placeholder" width="92%" />
@@ -233,16 +238,121 @@ A slightly more detailed mental model:
 
 ```text
 Enterprise users + business systems + work events
-                      │
-                      ▼
-      containerized assistant runtime and scheduler
-                      │
-          ┌───────────┼───────────┬───────────┐
-          ▼           ▼           ▼           ▼
-     isolation     memory      skills    monitoring
-                      │
-                      ▼
-           evidence, replay, operations, action
+                 │
+                 ▼
+   containerized assistant runtime and scheduler
+                 │
+      ┌──────────┼──────────┬──────────┐
+      ▼          ▼          ▼          ▼
+  isolation    memory     skills   monitoring
+                 │
+                 ▼
+       evidence, replay, operations, action
+```
+
+### System architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                            Client Layer                                 │
+│         Web Control UI   ·   CLI / TUI   ·   macOS / iOS / Android     │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+┌────────────────────────────────▼────────────────────────────────────────┐
+│                       Channel Layer — 41+ Integrations                  │
+│                                                                         │
+│   Feishu    DingTalk    WeCom    Telegram    Discord    Slack           │
+│   WhatsApp    Teams    Matrix    Signal    LINE    Mattermost    ...    │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+┌────────────────────────────────▼────────────────────────────────────────┐
+│                            Gateway Layer                                │
+│                                                                         │
+│   ┌─────────────┐  ┌─────────────┐  ┌──────────────────────────────┐   │
+│   │  WebSocket   │  │    HTTP     │  │  Authentication & Authorization│  │
+│   │   Server     │  │   Server    │  │   JWT + 5-Level RBAC          │  │
+│   └──────┬───────┘  └──────┬──────┘  │   Method-scoped permissions   │  │
+│          │                 │         └──────────────┬───────────────┘   │
+│          └─────────┬───────┘                        │                   │
+│                    │                                │                   │
+│   ┌────────────────▼────────────────────────────────▼────────────────┐  │
+│   │  Tenant Router ──→ Session Resolver ──→ Channel Manager         │  │
+│   │  Plugin Manager                         Cron Service            │  │
+│   └─────────────────────────────┬───────────────────────────────────┘  │
+└─────────────────────────────────┼───────────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────────────────┐
+│                            Core Engine                                  │
+│                                                                         │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐     │
+│   │   Message     │  │    Reply     │  │    Agent Runner          │     │
+│   │   Dispatch    │  │    Engine    │  │    (pi-embedded-runner)  │     │
+│   └──────┬────────┘  └──────┬───────┘  └──────────┬──────────────┘     │
+│          │                  │                      │                    │
+│          └──────────┬───────┘                      │                    │
+│                     │                              │                    │
+│   ┌─────────────────▼──────────────────────────────▼─────────────────┐  │
+│   │              StreamFn Execution Pipeline                         │  │
+│   │        pre-process → LLM call → tool execution → post-process   │  │
+│   └─────────────────────────────┬────────────────────────────────────┘  │
+│                                 │                                      │
+│   ┌───────────┐  ┌──────────────▼──┐  ┌─────────────────────────────┐  │
+│   │  60+ Tools │  │  55 Skills      │  │  ACP — Concurrent Executor  │  │
+│   │            │  │  (overridable)  │  │  100+ parallel tasks        │  │
+│   └────────────┘  └─────────────────┘  └─────────────────────────────┘  │
+└─────────────────────────────────┬───────────────────────────────────────┘
+                                  │
+              ┌───────────────────┼───────────────────┐
+              │                   │                   │
+┌─────────────▼──────┐ ┌─────────▼─────────┐ ┌───────▼───────────────────┐
+│    LLM Providers    │ │   Storage Layer    │ │     Observability         │
+│                     │ │                    │ │                           │
+│  Anthropic Claude   │ │  PostgreSQL        │ │  Interaction Traces       │
+│  OpenAI GPT-4       │ │   (multi-tenant)   │ │   prompt/completion/cost  │
+│  Google Gemini      │ │  SQLite            │ │  Audit Logs               │
+│  DeepSeek           │ │   (lightweight)    │ │   who/what/when           │
+│  Qwen               │ │  LanceDB           │ │  Token Usage Analytics    │
+│  Moonshot           │ │   (vector memory)  │ │   7d/30d trends           │
+│  Ollama (local)     │ │  File System       │ │   user/agent/model ranks  │
+│                     │ │   (tenant-isolated)│ │                           │
+└─────────────────────┘ └────────────────────┘ └───────────────────────────┘
+```
+
+### Message lifecycle
+
+```
+ User (Feishu / Discord / ...)
+   │
+   │  ① Send message
+   ▼
+ Channel Adapter ──→ normalize to internal format
+   │
+   │  ② Authenticate
+   ▼
+ Gateway ──→ JWT verification + RBAC check
+   │
+   │  ③ Route
+   ▼
+ Tenant Router ──→ extract tenant from channel metadata
+   │               load tenant config from PostgreSQL
+   │
+   │  ④ Dispatch
+   ▼
+ Agent Runtime ──→ load SOUL.md + TOOLS.md + MEMORY.md + Skills
+   │
+   │  ⑤ Reason
+   ▼
+ LLM Provider ──→ prompt + context → stream response
+   │               ↕ tool calls (execute → feed back → re-call)
+   │
+   │  ⑥ Reply
+   ▼
+ Channel Adapter ──→ format reply (text / card / file / image)
+   │
+   │  ⑦ Observe
+   ▼
+ Interaction Tracer ──→ record prompt, completion, tokens, cost
+ Audit Logger ──→ log event for compliance
 ```
 
 ## North Star

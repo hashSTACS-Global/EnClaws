@@ -33,6 +33,8 @@ import { resolveDefaultModel } from "./directive-handling.js";
 import { resolveReplyDirectives } from "./get-reply-directives.js";
 import { handleInlineActions } from "./get-reply-inline-actions.js";
 import { runPreparedReply } from "./get-reply-run.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
+const skillsLog = createSubsystemLogger("skills");
 import { finalizeInboundContext } from "./inbound-context.js";
 import { applyResetModelOverride } from "./session-reset-model.js";
 import { initSessionState } from "./session.js";
@@ -78,10 +80,12 @@ export async function getReplyFromConfig(
     sessionKey: agentSessionKey,
     config: cfg,
   });
+  const agentSkillFilter = resolveAgentSkillsFilter(cfg, agentId);
   const mergedSkillFilter = mergeSkillFilters(
     opts?.skillFilter,
-    resolveAgentSkillsFilter(cfg, agentId),
+    agentSkillFilter,
   );
+  skillsLog.info(`[skills-chain] get-reply: agentId=${agentId}, agentSkillFilter=${JSON.stringify(agentSkillFilter ?? null)}, channelFilter=${JSON.stringify(opts?.skillFilter ?? null)}, merged=${JSON.stringify(mergedSkillFilter ?? null)}`);
   const resolvedOpts =
     mergedSkillFilter !== undefined ? { ...opts, skillFilter: mergedSkillFilter } : opts;
   const agentCfg = cfg.agents?.defaults;

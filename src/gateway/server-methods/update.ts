@@ -1,5 +1,5 @@
-import { loadConfig } from "../../config/config.js";
 import { extractDeliveryInfo } from "../../config/sessions.js";
+import { resolveGatewayPort } from "../../config/paths.js";
 import { resolveOpenClawPackageRoot } from "../../infra/openclaw-root.js";
 import {
   formatDoctorNonInteractiveHint,
@@ -7,8 +7,17 @@ import {
   writeRestartSentinel,
 } from "../../infra/restart-sentinel.js";
 import { scheduleGatewaySigusr1Restart } from "../../infra/restart.js";
-import { normalizeUpdateChannel } from "../../infra/update-channels.js";
+import { spawnDeferredUpdate } from "../../infra/update-deferred.js";
+import {
+  detectGlobalInstallManagerForRoot,
+  type GlobalInstallManager,
+} from "../../infra/update-global.js";
 import { runGatewayUpdate } from "../../infra/update-runner.js";
+import { getStoredUpdateTrack } from "../../infra/update-settings.js";
+import { trackToNpmTag } from "../../infra/update-channels.js";
+import { checkUpdateStatus, type InstallKind } from "../../infra/update-check.js";
+import { readPackageName } from "../../infra/package-json.js";
+import { runCommandWithTimeout } from "../../process/exec.js";
 import { formatControlPlaneActor, resolveControlPlaneActor } from "../control-plane-audit.js";
 import { validateUpdateRunParams } from "../protocol/index.js";
 import { parseRestartRequestParams } from "./restart-request.js";
@@ -29,21 +38,67 @@ export const updateHandlers: GatewayRequestHandlers = {
         ? Math.max(1000, Math.floor(timeoutMsRaw))
         : undefined;
 
+    let storedTrack: string | null | undefined;
+    const root =
+      (await resolveOpenClawPackageRoot({
+        moduleUrl: import.meta.url,
+        argv1: process.argv[1],
+        cwd: process.cwd(),
+      })) ?? process.cwd();
+    storedTrack = await getStoredUpdateTrack();
+
+    // Detect install kind to decide update strategy
+    const status = await checkUpdateStatus({ root, timeoutMs: 2500, fetchGit: false, includeRegistry: false });
+    const installKind: InstallKind = status.installKind;
+
+    // Windows package mode: use deferred update to avoid EBUSY
+    if (process.platform === "win32" && (installKind === "package" || installKind === "installer")) {
+      const globalManager = await detectGlobalInstallManagerForRoot(
+        (argv, opts) => runCommandWithTimeout(argv, { timeoutMs: opts?.timeoutMs ?? 5000, cwd: opts?.cwd }),
+        root,
+        5000,
+      );
+      if (globalManager) {
+        const packageName = (await readPackageName(root)) ?? "enclaws";
+        const track = storedTrack ?? "stable";
+        const tag = trackToNpmTag(track as "stable" | "beta" | "dev");
+        const spec = `${packageName}@${tag}`;
+        const port = resolveGatewayPort(undefined, process.env);
+
+        await spawnDeferredUpdate({
+          spec,
+          manager: globalManager as "npm" | "pnpm" | "bun",
+          port,
+          pid: process.pid,
+          restartCommand: [process.execPath, ...process.execArgv, ...process.argv.slice(1)],
+          cwd: process.cwd(),
+        });
+
+        // Respond first, then exit after a short delay so the response is sent
+        respond(true, {
+          ok: true,
+          result: { status: "ok", mode: "deferred", reason: "windows-deferred-update" },
+          restart: null,
+        }, undefined);
+
+        // Exit the process so file locks are released and the deferred script can run npm install.
+        // The deferred script will restart the gateway after npm install completes.
+        setTimeout(() => {
+          context?.logGateway?.info("update.run (deferred): exiting process for npm install");
+          process.exit(0);
+        }, 2000);
+        return;
+      }
+    }
+
+    // Standard update path (git mode, or non-Windows package mode)
     let result: Awaited<ReturnType<typeof runGatewayUpdate>>;
     try {
-      const config = loadConfig();
-      const configChannel = normalizeUpdateChannel(config.update?.channel);
-      const root =
-        (await resolveOpenClawPackageRoot({
-          moduleUrl: import.meta.url,
-          argv1: process.argv[1],
-          cwd: process.cwd(),
-        })) ?? process.cwd();
       result = await runGatewayUpdate({
         timeoutMs,
         cwd: root,
         argv1: process.argv[1],
-        channel: configChannel ?? undefined,
+        track: storedTrack ?? undefined,
       });
     } catch (err) {
       result = {
@@ -92,11 +147,9 @@ export const updateHandlers: GatewayRequestHandlers = {
       sentinelPath = null;
     }
 
-    // Only restart the gateway when the update actually succeeded.
-    // Restarting after a failed update leaves the process in a broken state
-    // (corrupted node_modules, partial builds) and causes a crash loop.
+    // Restart gateway after successful update (skip for git mode — user restarts manually)
     const restart =
-      result.status === "ok"
+      result.status === "ok" && result.mode !== "git"
         ? scheduleGatewaySigusr1Restart({
             delayMs: restartDelayMs,
             reason: "update.run",
@@ -111,11 +164,6 @@ export const updateHandlers: GatewayRequestHandlers = {
     context?.logGateway?.info(
       `update.run completed ${formatControlPlaneActor(actor)} changedPaths=<n/a> restartReason=update.run status=${result.status}`,
     );
-    if (restart?.coalesced) {
-      context?.logGateway?.warn(
-        `update.run restart coalesced ${formatControlPlaneActor(actor)} delayMs=${restart.delayMs}`,
-      );
-    }
 
     respond(
       true,

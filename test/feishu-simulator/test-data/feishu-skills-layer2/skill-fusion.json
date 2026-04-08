@@ -1,0 +1,400 @@
+{
+  "cases": [
+    {
+      "name": "融合-Setup-创建测试文件夹",
+      "message": "帮我在云空间创建一个文件夹叫「融合测试」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文件夹",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "setup"
+      ]
+    },
+    {
+      "name": "融合-Setup-创建基础文档",
+      "message": "帮我在「融合测试」文件夹下创建一个文档，标题叫《融合-基础文档》，内容写：本周需要完成的事项包括：1. 编写测试用例 2. 修复登录bug 3. 准备季度评审材料 4. 整理API文档",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "setup"
+      ]
+    },
+    {
+      "name": "融合-Setup-创建项目排期文档",
+      "message": "帮我在「融合测试」文件夹下创建一个文档，标题叫《融合-项目排期》，内容写：阶段一：需求评审，本周完成。阶段二：技术方案设计，下周完成。阶段三：开发实施，预计两周。阶段四：测试验收，最后一周。",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "setup"
+      ]
+    },
+    {
+      "name": "融合-Setup-创建数据表",
+      "message": "帮我在「融合测试」文件夹下创建一个表格，标题叫《融合-数据表》，列名分别是：任务名、负责人、状态、截止日期",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "表格",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "setup"
+      ]
+    },
+    {
+      "name": "融合-doc+calendar-读文档建会议",
+      "message": "帮我读取《融合-基础文档》的内容，基于里面提到的事项，创建一个明天下午2点到3点的评审会议",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "doc+calendar"
+      ]
+    },
+    {
+      "name": "融合-doc+task-读文档拆任务",
+      "message": "帮我读取《融合-基础文档》的内容，把里面提到的事项创建成飞书任务",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "doc+task"
+      ]
+    },
+    {
+      "name": "融合-doc+doc-读文档写摘要",
+      "message": "帮我读取《融合-项目排期》的内容，提炼出关键阶段，写到一个新文档《融合-排期摘要》里",
+      "assert": {
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "doc+doc"
+      ]
+    },
+    {
+      "name": "融合-fetch-读取刚生成的摘要",
+      "message": "帮我读取《融合-排期摘要》的内容",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "doc"
+      ]
+    },
+    {
+      "name": "融合-doc+update-读后追加",
+      "message": "帮我读取《融合-基础文档》的内容，然后在文档末尾追加一段：「以上内容已确认」",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加",
+          "完成",
+          "已为",
+          "已在"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "fetch+update"
+      ]
+    },
+    {
+      "name": "融合-sheet+update-向数据表追加行",
+      "message": "帮我在《融合-数据表》里添加一行：编写测试用例、许帅、进行中、本周五",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "sheet"
+      ]
+    },
+    {
+      "name": "融合-sheet+update-继续追加行",
+      "message": "帮我在《融合-数据表》里再添加一行：修复登录bug、李帅、待开始、下周一",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "sheet"
+      ]
+    },
+    {
+      "name": "融合-sheet+doc-表格转文档",
+      "message": "帮我读取《融合-数据表》的所有内容，整理成一篇文档叫《融合-任务清单》",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "sheet+doc"
+      ]
+    },
+    {
+      "name": "融合-user+calendar-查自己后约会",
+      "message": "帮我查一下我自己的飞书信息，然后约一个明天上午10点到11点的会议，主题是「融合测试同步」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "user+calendar"
+      ]
+    },
+    {
+      "name": "融合-calendar+task-约会后建提醒",
+      "message": "帮我创建一个明天下午4点到5点的会议，主题是「融合测试评审」，然后建一个任务「准备评审材料」提醒我",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "calendar+task"
+      ]
+    },
+    {
+      "name": "融合-calendar-查询今日日程",
+      "message": "帮我看看今天还有什么会议安排",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "calendar"
+      ]
+    },
+    {
+      "name": "融合-task+doc-任务整理到文档",
+      "message": "帮我看看我有哪些待办任务，整理成一个文档叫《融合-任务总览》",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "task+doc"
+      ]
+    },
+    {
+      "name": "融合-search+fetch-搜索后读取",
+      "message": "帮我搜索一下飞书上关于「融合」的文档，然后读取第一篇的内容",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "search+fetch"
+      ]
+    },
+    {
+      "name": "融合-三步联动-会议+材料+任务",
+      "message": "帮我在「融合测试」文件夹下创建一个文档《融合-会议材料》写一些待讨论要点，然后创建一个明天上午9点到10点的会议主题是「材料评审」，最后建个任务「会前预读材料」",
+      "assert": {
+        "notContains": "error",
+        "minLength": 10
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "doc+calendar+task"
+      ]
+    },
+    {
+      "name": "融合-doc+update-修改标题",
+      "message": "帮我把《融合-基础文档》的标题改成《融合-基础文档-已确认》",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "doc"
+      ]
+    },
+    {
+      "name": "融合-search-按关键词查融合文档",
+      "message": "帮我搜索飞书上所有标题包含「融合」的文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "search"
+      ]
+    },
+    {
+      "name": "融合-drive-列融合测试文件夹",
+      "message": "帮我看看「融合测试」文件夹下都有哪些文件",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "drive"
+      ]
+    },
+    {
+      "name": "融合-fetch+update-读后覆盖",
+      "message": "帮我读取《融合-排期摘要》的内容，然后把这个文档的内容替换成：「项目排期已通过评审」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "fetch+update"
+      ]
+    },
+    {
+      "name": "融合-calendar+doc-日程整理到文档",
+      "message": "帮我看看明天有哪些会议，整理成一个文档叫《融合-明日日程》方便查看",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "calendar+doc"
+      ]
+    },
+    {
+      "name": "融合-task-标记任务完成",
+      "message": "帮我把「准备评审材料」这个任务标记为已完成",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "task"
+      ]
+    },
+    {
+      "name": "融合-错误恢复-不存在文档",
+      "message": "帮我读取《融合-不存在的文档_xyzzy》并基于内容建会议",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "error"
+      ]
+    }
+  ]
+}

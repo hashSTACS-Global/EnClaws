@@ -1,0 +1,32 @@
+title: "[Idea]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Propose a feature idea or improvement for EnClaws.
+        This is the place for early-stage discussion before it becomes a formal feature request issue.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea description
+      description: What would you like EnClaws to do? What problem does it solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Describe a concrete scenario where this would be useful.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you found any workarounds or alternative approaches?
+    validations:
+      required: false

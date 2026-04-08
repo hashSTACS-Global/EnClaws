@@ -99,6 +99,7 @@ async function runMigrations(): Promise<void> {
       db.exec("CREATE INDEX IF NOT EXISTS idx_channel_apps_agent ON tenant_channel_apps (agent_id)");
       console.log("[migrate]   ✓ SQLite: added agent_id column to tenant_channel_apps");
     }
+
   }
 
   if (pending.length === 0) {

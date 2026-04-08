@@ -1,0 +1,99 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-列出根目录",
+      "message": "帮我看看云盘根目录下有什么",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建文件夹",
+      "message": "帮我在云空间创建一个文件夹叫「群聊测试」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文件夹"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化云盘",
+      "message": "我云盘里都有啥？",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-列出指定文件夹",
+      "message": "帮我看看「自动化测试」文件夹里有什么",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查看不存在的文件夹",
+      "message": "帮我看看「不存在的文件夹_xyzzy」里有什么",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "error"
+      ]
+    },
+    {
+      "name": "群聊-创建嵌套文件夹",
+      "message": "帮我在「群聊测试」文件夹下再创建一个子文件夹叫「会议资料」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文件夹"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-移动文件",
+      "message": "帮我把《群聊测试文档》移到「群聊测试」文件夹下面",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    }
+  ]
+}
