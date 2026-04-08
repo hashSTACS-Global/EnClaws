@@ -107,6 +107,7 @@ export const pt_BR: TranslationMap = {
     successDone: "Atualização concluída! Atualizando a página…",
     connectionLost: "O serviço está reiniciando. Atualize a página em breve para verificar o resultado.",
     ebusyRestarting: "Arquivos em uso. Reiniciando o serviço para tentar a atualização novamente…",
+    installerHint: "Este é um pacote de instalação. Atualizações online não são suportadas. Baixe a versão mais recente no site oficial.",
     failed: "Atualização falhou: {reason}",
     close: "Fechar",
   },

@@ -112,6 +112,7 @@ export const en: TranslationMap = {
     successDone: "Update successful! Refreshing page…",
     connectionLost: "Service is restarting. Please refresh the page shortly to check the update result.",
     ebusyRestarting: "Files are locked. Restarting service to retry update automatically…",
+    installerHint: "This is a bundled installer. Online updates are not supported. Please download the latest version from the official website.",
     failed: "Update failed: {reason}",
     close: "Close",
   },

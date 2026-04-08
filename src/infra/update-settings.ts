@@ -2,12 +2,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveStateDir } from "../config/paths.js";
 import { normalizeUpdateTrack, type UpdateTrack } from "./update-channels.js";
+import { resolveOpenClawPackageRoot } from "./openclaw-root.js";
 
 const UPDATE_SETTINGS_FILENAME = "update-settings.json";
+
+export type InstallKind = "git" | "package" | "installer" | "unknown";
 
 export type UpdateSettings = {
   track?: UpdateTrack;
   checkOnStart?: boolean;
+  installKind?: InstallKind;
   auto?: {
     enabled?: boolean;
     stableDelayHours?: number;
@@ -38,22 +42,37 @@ export async function patchUpdateSettings(patch: Partial<UpdateSettings>): Promi
   await writeUpdateSettings({ ...current, ...patch });
 }
 
-/** Detect if running from a git checkout. */
-async function isGitInstall(): Promise<boolean> {
+async function fileExists(p: string): Promise<boolean> {
   try {
-    // Check if the project root (two levels up from this file) has a .git directory
-    const root = path.resolve(resolveStateDir(), "..");
-    await fs.stat(path.join(root, ".git"));
+    await fs.stat(p);
     return true;
   } catch {
-    // Also check via process.cwd()
-    try {
-      await fs.stat(path.join(process.cwd(), ".git"));
-      return true;
-    } catch {
-      return false;
-    }
+    return false;
   }
+}
+
+/** Detect the install kind at startup. */
+async function detectInstallKind(): Promise<InstallKind> {
+  const root = await resolveOpenClawPackageRoot({
+    moduleUrl: import.meta.url,
+    argv1: process.argv[1],
+    cwd: process.cwd(),
+  });
+  if (!root) return "unknown";
+
+  // Check git checkout
+  const isGit = (await fileExists(path.join(root, ".git")));
+  if (isGit) return "git";
+
+  // Check bundled installer (Windows .exe / macOS .dmg)
+  const isInstaller =
+    (process.platform === "win32" &&
+      (await fileExists(path.join(root, "..", "node", "node.exe")))) ||
+    (process.platform === "darwin" &&
+      (await fileExists(path.join(root, "node", "bin", "node"))));
+  if (isInstaller) return "installer";
+
+  return "package";
 }
 
 /** Ensure update-settings.json exists with defaults. Called on gateway startup. */
@@ -63,20 +82,29 @@ export async function ensureUpdateSettings(): Promise<UpdateSettings> {
     const raw = await fs.readFile(settingsPath, "utf-8");
     const parsed = JSON.parse(raw) as UpdateSettings;
     if (parsed && typeof parsed === "object") {
+      // Always re-detect installKind on startup to correct any prior misdetection
+      const detected = await detectInstallKind();
+      if (detected !== "unknown" && parsed.installKind !== detected) {
+        parsed.installKind = detected;
+        await writeUpdateSettings(parsed);
+      }
       return parsed;
     }
   } catch {
     // File doesn't exist or is invalid — create with defaults
   }
-  const isGit = await isGitInstall();
+  const installKind = await detectInstallKind();
+  const isGit = installKind === "git";
   const defaults: UpdateSettings = isGit
     ? {
         track: "dev",
         checkOnStart: true,
+        installKind,
       }
     : {
         track: "stable",
         checkOnStart: true,
+        installKind,
         auto: {
           enabled: false,
           stableDelayHours: 6,

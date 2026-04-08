@@ -358,7 +358,7 @@ CREATE TABLE IF NOT EXISTS sys_tools_config (
   profile                        VARCHAR(32) DEFAULT 'full',
   allow                          JSONB NOT NULL DEFAULT '[]',
   also_allow                     JSONB NOT NULL DEFAULT '[]',
-  deny                           JSONB NOT NULL DEFAULT '["browser"]',
+  deny                           JSONB NOT NULL DEFAULT '[]',
   by_provider                    JSONB NOT NULL DEFAULT '{}',
   web                            JSONB NOT NULL DEFAULT '{"search":{"enabled":false}}',
   media                          JSONB NOT NULL DEFAULT '{}',

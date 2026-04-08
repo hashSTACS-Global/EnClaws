@@ -421,6 +421,9 @@ echo "[OK] Bundle cleaned (${BUNDLE_SIZE} MB)"
 
 echo "[*] Signing app bundle (ad-hoc)..."
 codesign --force --deep --sign - "$APP_ROOT" 2>/dev/null || echo "[!] Signing skipped"
+# Wait for codesign to fully release file handles before creating DMG
+sync
+sleep 2
 
 # ---------------------------------------------------------------------------
 # Step 10: Create DMG
@@ -430,21 +433,20 @@ if [[ "${SKIP_DMG:-0}" != "1" ]]; then
   DMG_PATH="$OUTPUT_DIR/EnClaws-${PKG_VERSION}-${BUILD_ARCH}.dmg"
   echo "[*] Creating DMG: $DMG_PATH"
 
+  # Detach any leftover mounts from previous runs
+  hdiutil detach "/Volumes/EnClaws" 2>/dev/null || true
+  # Remove stale DMG files that may hold locks
+  rm -f "$OUTPUT_DIR"/EnClaws-*-*.dmg
+
+  # Use a temp directory outside of dist/ to avoid any file contention
   DMG_TEMP="$(mktemp -d /tmp/enclaws-dmg.XXXXXX)"
-  cp -R "$APP_ROOT" "$DMG_TEMP/"
+  # Use ditto instead of cp -R (preserves extended attrs, more reliable on macOS)
+  ditto "$APP_ROOT" "$DMG_TEMP/EnClaws.app"
   ln -s /Applications "$DMG_TEMP/Applications"
 
-  # Create read-write DMG first
-  DMG_RW="${DMG_PATH%.dmg}-rw.dmg"
-  rm -f "$DMG_RW" "$DMG_PATH"
-  APP_SIZE_MB=$(du -sm "$APP_ROOT" | awk '{print $1}')
-  DMG_SIZE_MB=$((APP_SIZE_MB + 80))
+  # Create lzma-compressed read-only DMG directly (ULMO = smaller than UDZO/zlib)
+  hdiutil create -volname "EnClaws" -srcfolder "$DMG_TEMP" -ov -format ULMO "$DMG_PATH"
 
-  hdiutil create -volname "EnClaws" -srcfolder "$DMG_TEMP" -ov -format UDRW -size "${DMG_SIZE_MB}m" "$DMG_RW"
-
-  # Convert to compressed read-only DMG
-  hdiutil convert "$DMG_RW" -format ULMO -o "$DMG_PATH" -ov
-  rm -f "$DMG_RW"
   rm -rf "$DMG_TEMP"
 
   DMG_SIZE=$(du -sm "$DMG_PATH" | awk '{print $1}')

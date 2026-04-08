@@ -474,11 +474,15 @@ export async function checkUpdateStatus(params: {
   const gitRoot = await detectGitRoot(root);
   const isGit = gitRoot && path.resolve(gitRoot) === root;
 
-  // Detect Windows installer: node\node.exe lives next to the app\ directory
+  // Detect bundled installer:
+  // - Windows: node\node.exe lives next to the app\ directory
+  // - macOS:   node/bin/node lives inside Contents/Resources/
   const isInstaller =
     !isGit &&
-    process.platform === "win32" &&
-    (await exists(path.join(root, "..", "node", "node.exe")));
+    ((process.platform === "win32" &&
+      (await exists(path.join(root, "..", "node", "node.exe")))) ||
+     (process.platform === "darwin" &&
+      (await exists(path.join(root, "node", "bin", "node")))));
 
   const installKind: UpdateCheckResult["installKind"] = isGit
     ? "git"

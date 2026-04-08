@@ -164,7 +164,7 @@ if (Test-Path $AppBundleDir) {
     New-Item -ItemType Directory -Force -Path $emptyDir | Out-Null
     robocopy $emptyDir $AppBundleDir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
     Remove-Item -Force $emptyDir
-    Remove-Item -Force $AppBundleDir
+    Remove-Item -Force $AppBundleDir -ErrorAction SilentlyContinue
 }
 New-Item -ItemType Directory -Force -Path $AppBundleDir | Out-Null
 
@@ -189,8 +189,10 @@ foreach ($d in $dirsToCopy) {
     $src = Join-Path $ProjectRoot $d
     $dest = Join-Path $AppBundleDir $d
     if (Test-Path $src) {
-        # Use robocopy to handle long paths that exceed Windows MAX_PATH (260 chars)
-        robocopy $src $dest /E /NFL /NDL /NJH /NJS /NP | Out-Null
+        # Use robocopy to handle long paths that exceed Windows MAX_PATH (260 chars).
+        # Exclude node_modules — extension deps are pnpm symlinks pointing back to the
+        # project root, which would cause robocopy to recursively copy the entire repo.
+        robocopy $src $dest /E /NFL /NDL /NJH /NJS /NP /XD node_modules | Out-Null
         Write-Host "    Copied $d/" -ForegroundColor Gray
     } else {
         Write-Host "[!] Missing directory: $d/" -ForegroundColor Yellow

@@ -107,6 +107,7 @@ export const zh_TW: TranslationMap = {
     successDone: "更新成功！正在重新整理頁面…",
     connectionLost: "服務正在重新啟動，請稍後重新整理頁面查看更新結果。",
     ebusyRestarting: "檔案被佔用，正在重新啟動服務後自動重試更新…",
+    installerHint: "目前為安裝包模式，不支援線上更新，請前往官網下載最新版本。",
     failed: "更新失敗：{reason}",
     close: "關閉",
   },

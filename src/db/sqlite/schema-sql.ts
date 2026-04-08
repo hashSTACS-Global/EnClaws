@@ -290,7 +290,7 @@ CREATE TABLE IF NOT EXISTS sys_tools_config (
   profile                        TEXT DEFAULT 'full',
   allow                          TEXT NOT NULL DEFAULT '[]',
   also_allow                     TEXT NOT NULL DEFAULT '[]',
-  deny                           TEXT NOT NULL DEFAULT '["browser"]',
+  deny                           TEXT NOT NULL DEFAULT '[]',
   by_provider                    TEXT NOT NULL DEFAULT '{}',
   web                            TEXT NOT NULL DEFAULT '{"search":{"enabled":false}}',
   media                          TEXT NOT NULL DEFAULT '{}',

@@ -880,6 +880,13 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
         ),
       );
     }
+    if (result.reason === "installer") {
+      defaultRuntime.log(
+        theme.warn(
+          "Skipped: this is a bundled installer. Please download the latest version from https://www.enclaws.ai/",
+        ),
+      );
+    }
     if (result.reason === "not-git-install") {
       defaultRuntime.log(
         theme.warn(

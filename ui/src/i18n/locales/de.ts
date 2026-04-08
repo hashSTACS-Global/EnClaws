@@ -107,6 +107,7 @@ export const de: TranslationMap = {
     successDone: "Update erfolgreich! Seite wird aktualisiert…",
     connectionLost: "Der Dienst wird neu gestartet. Bitte aktualisieren Sie die Seite in Kürze, um das Ergebnis zu überprüfen.",
     ebusyRestarting: "Dateien sind gesperrt. Dienst wird neu gestartet und Update automatisch wiederholt…",
+    installerHint: "Dies ist ein gebündeltes Installationspaket. Online-Updates werden nicht unterstützt. Bitte laden Sie die neueste Version von der offiziellen Website herunter.",
     failed: "Update fehlgeschlagen: {reason}",
     close: "Schließen",
   },

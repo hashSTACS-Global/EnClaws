@@ -245,6 +245,17 @@ export async function runUpdate(state: ConfigState) {
         hideCancel: true,
       });
       return;
+    } else if (result?.reason === "installer") {
+      state.updateMessage = null;
+      state.updateRunning = false;
+      await showConfirm({
+        title: t("update.available"),
+        message: t("update.installerHint"),
+        confirmText: t("update.downloadInstall"),
+        hideCancel: true,
+      });
+      window.open("https://www.enclaws.ai/", "_blank");
+      return;
     } else {
       const reason = result?.reason ?? result?.status ?? "Update failed";
       state.updateMessage = null;

@@ -112,6 +112,7 @@ export const zh_CN: TranslationMap = {
     successDone: "更新成功！正在刷新页面…",
     connectionLost: "服务正在重启，请稍后刷新页面查看更新结果。",
     ebusyRestarting: "文件被占用，正在重启服务后自动重试更新…",
+    installerHint: "当前为安装包模式，不支持在线更新，请前往官网下载最新版本。",
     failed: "更新失败：{reason}",
     close: "关闭",
   },

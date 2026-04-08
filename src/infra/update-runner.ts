@@ -21,6 +21,15 @@ import {
   globalInstallFallbackArgs,
 } from "./update-global.js";
 
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export type UpdateStepResult = {
   name: string;
   command: string;
@@ -628,11 +637,18 @@ export async function runGatewayUpdate(opts: UpdateRunnerOptions = {}): Promise<
     };
   }
 
+  // Installer mode (Windows .exe / macOS .dmg) cannot be updated in-place.
+  const isInstallerBundle =
+    (process.platform === "win32" &&
+      await fileExists(path.join(pkgRoot, "..", "node", "node.exe"))) ||
+    (process.platform === "darwin" &&
+      await fileExists(path.join(pkgRoot, "node", "bin", "node")));
+
   return {
     status: "skipped",
     mode: "unknown",
     root: pkgRoot,
-    reason: "not-git-install",
+    reason: isInstallerBundle ? "installer" : "not-git-install",
     before: { version: beforeVersion },
     steps: [],
     durationMs: Date.now() - startedAt,
