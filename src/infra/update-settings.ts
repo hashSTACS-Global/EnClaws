@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveStateDir } from "../config/paths.js";
 import { normalizeUpdateTrack, type UpdateTrack } from "./update-channels.js";
+import { resolveOpenClawPackageRoot } from "./openclaw-root.js";
 
 const UPDATE_SETTINGS_FILENAME = "update-settings.json";
 
@@ -52,10 +53,15 @@ async function fileExists(p: string): Promise<boolean> {
 
 /** Detect the install kind at startup. */
 async function detectInstallKind(): Promise<InstallKind> {
+  const root = await resolveOpenClawPackageRoot({
+    moduleUrl: import.meta.url,
+    argv1: process.argv[1],
+    cwd: process.cwd(),
+  });
+  if (!root) return "unknown";
+
   // Check git checkout
-  const root = path.resolve(resolveStateDir(), "..");
-  const isGit = (await fileExists(path.join(root, ".git"))) ||
-    (await fileExists(path.join(process.cwd(), ".git")));
+  const isGit = (await fileExists(path.join(root, ".git")));
   if (isGit) return "git";
 
   // Check bundled installer (Windows .exe / macOS .dmg)
@@ -76,9 +82,10 @@ export async function ensureUpdateSettings(): Promise<UpdateSettings> {
     const raw = await fs.readFile(settingsPath, "utf-8");
     const parsed = JSON.parse(raw) as UpdateSettings;
     if (parsed && typeof parsed === "object") {
-      // Backfill installKind for existing settings files
-      if (!parsed.installKind) {
-        parsed.installKind = await detectInstallKind();
+      // Always re-detect installKind on startup to correct any prior misdetection
+      const detected = await detectInstallKind();
+      if (detected !== "unknown" && parsed.installKind !== detected) {
+        parsed.installKind = detected;
         await writeUpdateSettings(parsed);
       }
       return parsed;
