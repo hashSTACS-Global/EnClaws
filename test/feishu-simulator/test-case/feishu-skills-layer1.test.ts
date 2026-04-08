@@ -18,7 +18,7 @@ config({ override: true });
 
 import path from "node:path";
 import { describe, it } from "vitest";
-import { runLayer1TestFiles } from "../test-runner/index.js";
+import { runScriptTestFiles as runLayer1TestFiles } from "../test-runner/index.js";
 
 const SIMULATOR_DIR = path.resolve(new URL(".", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1"), "..");
 
