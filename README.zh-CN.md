@@ -106,7 +106,7 @@ npm link
 enclaws gateway
 ```
 
-启动完成后，Gateway 默认可通过 `http://localhost:18789` 访问。
+启动完成后，Gateway 默认可通过 `http://localhost:18888` 访问。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/hashSTACS-Global/EnClaws/main/docs/assets/dashboard-enclaws-placeholder.jpg" alt="EnClaws dashboard placeholder" width="92%" />

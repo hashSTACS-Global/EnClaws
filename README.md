@@ -110,7 +110,7 @@ npm link
 enclaws gateway
 ```
 
-After startup, the Gateway is available at `http://localhost:18789`.
+After startup, the Gateway is available at `http://localhost:18888`.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/hashSTACS-Global/EnClaws/main/docs/assets/dashboard-enclaws-placeholder.jpg" alt="EnClaws dashboard placeholder" width="92%" />
