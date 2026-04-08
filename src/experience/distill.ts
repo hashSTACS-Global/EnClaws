@@ -236,6 +236,7 @@ async function distillKindBatch(params: {
       sourceCandidateIds: output.sourceCandidateIds,
       sourceUserIds: [...userIds],
       status: "pending_review" as const,
+      scope: "tenant" as const,
       createdAt: now,
       updatedAt: now,
     };

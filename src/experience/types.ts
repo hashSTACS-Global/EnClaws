@@ -34,7 +34,7 @@ export interface ExperienceCandidateFile {
 }
 
 /** distilled record 的 review 状态 */
-export type DistilledStatus = "pending_review" | "approved" | "rejected" | "superseded";
+export type DistilledStatus = "pending_review" | "approved" | "rejected" | "promoted" | "superseded";
 
 /** 单条精炼知识单元 */
 export interface DistilledRecord {
@@ -46,8 +46,11 @@ export interface DistilledRecord {
   sourceCandidateIds: string[];
   sourceUserIds: string[];
   status: DistilledStatus;
+  scope: "tenant" | "personal";
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
+  promotedAt?: string; // ISO 8601, set when promoted
+  supersededBy?: string; // recordId of replacement record
 }
 
 /** 一个日期对应的 distilled 文件 */
