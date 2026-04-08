@@ -125,7 +125,7 @@ async function runSingleScriptFile(
     for (const tc of data.cases) {
       const row: ScriptResultRow = {
         file: fileName, name: tc.name, message: tc.command,
-        expected: formatScriptAssert(tc.assert), actual: `ERROR: ${errMsg}`,
+        expected: formatScriptAssert(tc.assert), actual: "", failures: `ERROR: ${errMsg}`,
         passed: false, duration: "-",
       };
       results.push(row);
@@ -150,7 +150,8 @@ async function runSingleScriptFile(
       name: tc.name,
       message: command,
       expected: formatScriptAssert(tc.assert),
-      actual: passed ? exec.stdout.trim().slice(0, 500) : failures.join("; "),
+      actual: exec.stdout.trim().slice(0, 500),
+      failures: passed ? "" : failures.join("; "),
       passed,
       duration: `${durationMs}ms`,
       exitCode: exec.exitCode,

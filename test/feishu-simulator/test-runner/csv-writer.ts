@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ResultRow } from "../types.js";
 
-const CSV_HEADER = "File Name,Case Name,Message Input,Expected Output,Actual Output,Result,Duration";
+const CSV_HEADER = "File Name,Case Name,Message Input,Expected Output,Actual Output,Failures,Result,Duration";
 const BOM = "\uFEFF";
 
 function escapeCsv(s: string): string {
@@ -20,6 +20,7 @@ function rowToCsvLine(r: ResultRow): string {
     escapeCsv(r.message),
     escapeCsv(r.expected),
     escapeCsv(r.actual),
+    escapeCsv(r.failures ?? ""),
     r.passed ? "PASS" : "FAIL",
     r.duration,
   ].join(",");

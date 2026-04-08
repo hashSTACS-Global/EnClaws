@@ -125,7 +125,7 @@ async function runSingleFile(
       const label = tc.name ?? tc.message.slice(0, 30);
       record({
         file: fileName, name: label, message: tc.message,
-        expected: formatAssert(tc.assert), actual: `ERROR: ${errMsg}`,
+        expected: formatAssert(tc.assert), actual: "", failures: `ERROR: ${errMsg}`,
         passed: false, duration: "-",
       }, `[${fileName}] "${label}": ${errMsg}`);
     }
@@ -154,7 +154,7 @@ async function runSingleFile(
       const label = tc.name ?? tc.message.slice(0, 30);
       record({
         file: fileName, name: label, message: tc.message,
-        expected: formatAssert(tc.assert), actual: `ERROR: ${errMsg}`,
+        expected: formatAssert(tc.assert), actual: "", failures: `ERROR: ${errMsg}`,
         passed: false, duration: "-",
       }, `[${fileName}] "${label}": ${errMsg}`);
     }
@@ -174,7 +174,7 @@ async function runSingleFile(
       console.log(`    Error: ${(e as Error).message}`);
       record({
         file: fileName, name: label, message: tc.message,
-        expected: formatAssert(tc.assert), actual: `ERROR: ${(e as Error).message}`,
+        expected: formatAssert(tc.assert), actual: "", failures: `ERROR: ${(e as Error).message}`,
         passed: false, duration: "-",
       }, `[${fileName}] "${label}": ${(e as Error).message}`);
       if (!opts.continueOnFailure) break;
@@ -217,7 +217,8 @@ async function runSingleFile(
     record({
       file: fileName, name: label, message: tc.message,
       expected: formatAssert(tc.assert),
-      actual: failures.length > 0 ? failures.join("; ") : reply.text,
+      actual: reply.text,
+      failures: failures.length > 0 ? failures.join("; ") : "",
       passed: failures.length === 0,
       duration: `${reply.durationMs}ms`,
     }, failures.length > 0 ? `[${fileName}] "${label}": ${failures.join("; ")}` : undefined);

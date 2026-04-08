@@ -50,7 +50,10 @@ export type ResultRow = {
   name: string;
   message: string;
   expected: string;
+  /** Bot's actual reply text (always populated, regardless of pass/fail) */
   actual: string;
+  /** Failure reasons joined by "; " (empty string if passed) */
+  failures: string;
   passed: boolean;
   duration: string;
 };
