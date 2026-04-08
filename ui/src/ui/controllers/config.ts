@@ -223,12 +223,17 @@ export async function runUpdate(state: ConfigState) {
     const res = await state.client.request("update.run", {
       sessionKey: state.applySessionKey,
     });
-    const body = res as { result?: { status?: string; reason?: string }; restart?: unknown };
+    const body = res as { result?: { status?: string; reason?: string; mode?: string }; restart?: unknown };
     const result = body?.result;
     if (result?.status === "ok") {
-      state.updateMessage = t("update.successRestarting");
-      // Poll for gateway to come back after restart
-      waitForGatewayAndReload(state, oldVersion);
+      if (body?.restart) {
+        state.updateMessage = t("update.successRestarting");
+        waitForGatewayAndReload(state, oldVersion);
+      } else {
+        // Git mode: no auto-restart, prompt user to restart manually
+        state.updateMessage = t("update.successRestart");
+        state.updateRunning = false;
+      }
       return;
     } else if (result?.reason === "dirty") {
       state.updateMessage = null;

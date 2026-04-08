@@ -147,13 +147,11 @@ export const updateHandlers: GatewayRequestHandlers = {
       sentinelPath = null;
     }
 
-    // Restart gateway after successful update
-    // For git mode, add extra delay to ensure build output is fully flushed
-    const effectiveDelayMs = result.mode === "git" ? Math.max(restartDelayMs, 3000) : restartDelayMs;
+    // Restart gateway after successful update (skip for git mode — user restarts manually)
     const restart =
-      result.status === "ok"
+      result.status === "ok" && result.mode !== "git"
         ? scheduleGatewaySigusr1Restart({
-            delayMs: effectiveDelayMs,
+            delayMs: restartDelayMs,
             reason: "update.run",
             audit: {
               actor: actor.actor,
