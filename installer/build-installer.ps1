@@ -104,6 +104,31 @@ $nodeVer = (& $nodeExe -v).Trim()
 Write-Host "[OK] Bundled Node.js: $nodeVer" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
+# Step 1b: Rename node.exe to enclaws.exe and rebrand PE version info
+# ---------------------------------------------------------------------------
+
+$enclawsExe = Join-Path $NodePortableDir "enclaws.exe"
+if (-not (Test-Path $enclawsExe)) {
+    # Download rcedit to modify PE version info (FileDescription shown in Task Manager)
+    $rceditPath = Join-Path $InstallerDir "rcedit-x64.exe"
+    if (-not (Test-Path $rceditPath)) {
+        $rceditUrl = "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe"
+        Write-Host "[*] Downloading rcedit..." -ForegroundColor Yellow
+        Invoke-WebRequest -Uri $rceditUrl -OutFile $rceditPath -UseBasicParsing
+    }
+
+    Write-Host "[*] Rebranding node.exe -> enclaws.exe..." -ForegroundColor Yellow
+    Copy-Item $nodeExe $enclawsExe
+    & $rceditPath $enclawsExe --set-version-string "FileDescription" "EnClaws"
+    & $rceditPath $enclawsExe --set-version-string "ProductName" "EnClaws"
+    & $rceditPath $enclawsExe --set-icon (Join-Path $InstallerDir "assets\enclaws-icon.ico")
+    Write-Host "[OK] enclaws.exe created with EnClaws branding" -ForegroundColor Green
+} else {
+    Write-Host "[OK] enclaws.exe already exists" -ForegroundColor Green
+}
+$nodeExe = $enclawsExe
+
+# ---------------------------------------------------------------------------
 # Step 2: Build EnClaws (optional)
 # ---------------------------------------------------------------------------
 

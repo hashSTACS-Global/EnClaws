@@ -5,7 +5,7 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
 
 ' Build paths
-nodeExe = scriptDir & "\node\node.exe"
+nodeExe = scriptDir & "\node\enclaws.exe"
 appEntry = scriptDir & "\app\enclaws.mjs"
 loadingPage = scriptDir & "\loading.html"
 
