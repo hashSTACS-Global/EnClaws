@@ -1,4 +1,5 @@
 import { parseDurationMs } from "../../../cli/parse-duration.js";
+import { isOptEnabled } from "../../../config/token-optimization.js";
 
 export type ContextPruningToolMatch = {
   allow?: string[];
@@ -63,6 +64,20 @@ export const DEFAULT_CONTEXT_PRUNING_SETTINGS: EffectiveContextPruningSettings =
     placeholder: "[Old tool result content cleared]",
   },
 };
+
+type SoftTrimThresholds = { maxChars: number; headChars: number; tailChars: number };
+
+const OPTIMIZED_SOFT_TRIM: Record<string, SoftTrimThresholds> = {
+  exec: { maxChars: 2_500, headChars: 1_000, tailChars: 1_000 },
+  web_fetch: { maxChars: 2_000, headChars: 800, tailChars: 800 },
+};
+
+const DEFAULT_SOFT_TRIM: SoftTrimThresholds = { maxChars: 4_000, headChars: 1_500, tailChars: 1_500 };
+
+export function getEffectiveSoftTrimSettings(toolName?: string): SoftTrimThresholds {
+  if (!isOptEnabled("TRIM") || !toolName) return DEFAULT_SOFT_TRIM;
+  return OPTIMIZED_SOFT_TRIM[toolName] ?? DEFAULT_SOFT_TRIM;
+}
 
 export function computeEffectiveSettings(raw: unknown): EffectiveContextPruningSettings | null {
   if (!raw || typeof raw !== "object") {
