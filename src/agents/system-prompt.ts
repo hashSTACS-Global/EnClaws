@@ -2,6 +2,7 @@ import { createHmac, createHash } from "node:crypto";
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import type { MemoryCitationsMode } from "../config/types.memory.js";
+import { isOptEnabled } from "../config/token-optimization.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
@@ -82,12 +83,24 @@ function buildMemorySection(params: {
   if (!params.availableTools.has("memory_search") && !params.availableTools.has("memory_get")) {
     return [];
   }
-  const lines = [
-    "## Memory & Deep Context Retrieval (Act as a Human Employee)",
-    "You are an active employee. Before starting ANY new task, answering questions about prior work, decisions, or preferences, you MUST run `memory_search` on MEMORY.md + memory/*.md.",
-    "Do not hallucinate past context. If you encounter a new domain, search memory first to see if you have 'learned' about it previously.",
-    "Use `memory_get` to pull specific lines. If you have low confidence after searching, explicitly state that you checked your memory but found no relevant records.",
-  ];
+  const lines = isOptEnabled("P1")
+    ? [
+        "## Memory & Deep Context Retrieval",
+        "Search memory ONLY when:",
+        "- User references prior conversations or decisions",
+        "- Task requires context from previous work",
+        '- User explicitly asks "do you remember..."',
+        "- You need to check existing notes before creating new ones",
+        "",
+        "Do NOT search memory for simple greetings, confirmations, or self-contained questions.",
+        "Use `memory_get` to pull specific lines. State explicitly if you found no relevant records.",
+      ]
+    : [
+        "## Memory & Deep Context Retrieval (Act as a Human Employee)",
+        "You are an active employee. Before starting ANY new task, answering questions about prior work, decisions, or preferences, you MUST run `memory_search` on MEMORY.md + memory/*.md.",
+        "Do not hallucinate past context. If you encounter a new domain, search memory first to see if you have 'learned' about it previously.",
+        "Use `memory_get` to pull specific lines. If you have low confidence after searching, explicitly state that you checked your memory but found no relevant records.",
+      ];
   if (params.citationsMode === "off") {
     lines.push(
       "Citations are disabled: do not mention file paths or line numbers in replies unless explicitly asked.",
