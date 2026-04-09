@@ -259,7 +259,7 @@ Enterprise users + business systems + work events
 └────────────────────────────────┬────────────────────────────────────────┘
                                  │
 ┌────────────────────────────────▼────────────────────────────────────────┐
-│                       Channel Layer — 41+ Integrations                  │
+│                       Channel Layer — 20+ Integrations                  │
 │                                                                         │
 │   Feishu    DingTalk    WeCom    Telegram    Discord    Slack           │
 │   WhatsApp    Teams    Matrix    Signal    LINE    Mattermost    ...    │
