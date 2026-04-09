@@ -686,7 +686,7 @@ export function buildAgentSystemPrompt(params: {
     ...buildVoiceSection({ isMinimal, ttsHint: params.ttsHint }),
   ];
 
-  if (extraSystemPrompt) {
+  if (extraSystemPrompt && !isOptEnabled("CACHE")) {
     // Use "Subagent Context" header for minimal mode (subagents), otherwise "Group Chat Context"
     const contextHeader =
       promptMode === "minimal" ? "## Subagent Context" : "## Group Chat Context";
@@ -800,6 +800,17 @@ export function buildAgentSystemPrompt(params: {
     "- If you used no skill: `> Skills used: none`",
     "Do NOT omit this line under any circumstances.",
   );
+
+  // Token optimization: move extraSystemPrompt to the very end to maximize cache prefix length.
+  // When CACHE toggle is enabled, dynamic content (inboundMeta, groupChatContext) goes last
+  // so all static sections above can be cached by Anthropic/OpenRouter prefix matching.
+  if (extraSystemPrompt && isOptEnabled("CACHE")) {
+    const contextHeader =
+      promptMode === "minimal" || (promptMode as string) === "worker"
+        ? "## Subagent Context"
+        : "## Group Chat Context";
+    lines.push("", contextHeader, extraSystemPrompt);
+  }
 
   return lines.filter(Boolean).join("\n");
 }
