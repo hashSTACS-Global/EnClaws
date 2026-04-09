@@ -24,7 +24,7 @@ vi.mock("./sandbox/runtime-status.js", () => ({ resolveSandboxRuntimeStatus: vi.
 vi.mock("./model-selection.js", () => ({ resolveSubagentSpawnModelSelection: vi.fn() }));
 
 import { describe, it, expect, afterEach } from "vitest";
-import { compressSubagentResult } from "./subagent-spawn.js";
+import { compressSubagentResult, resolveSubagentTools } from "./subagent-spawn.js";
 
 describe("compressSubagentResult", () => {
   afterEach(() => {
@@ -56,5 +56,27 @@ describe("compressSubagentResult", () => {
     process.env.ENCLAWS_TOKEN_OPT_COMPRESS = "true";
     const exact = "a".repeat(6_000);
     expect(compressSubagentResult(exact)).toBe(exact);
+  });
+});
+
+describe("resolveSubagentTools (OPT-11)", () => {
+  afterEach(() => {
+    delete process.env.ENCLAWS_TOKEN_OPT_TOOLSYNC;
+  });
+
+  it("passes tools through when TOOLSYNC toggle is off", () => {
+    const tools = ["exec", "read", "write"];
+    expect(resolveSubagentTools(tools)).toEqual(tools);
+  });
+
+  it("returns undefined when TOOLSYNC toggle is on", () => {
+    process.env.ENCLAWS_TOKEN_OPT_TOOLSYNC = "true";
+    const tools = ["exec", "read", "write"];
+    expect(resolveSubagentTools(tools)).toBeUndefined();
+  });
+
+  it("returns undefined when TOOLSYNC is on and tools is undefined", () => {
+    process.env.ENCLAWS_TOKEN_OPT_TOOLSYNC = "true";
+    expect(resolveSubagentTools(undefined)).toBeUndefined();
   });
 });
