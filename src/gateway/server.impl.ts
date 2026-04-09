@@ -113,6 +113,9 @@ import {
   refreshGatewayHealthSnapshot,
 } from "./server/health-state.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
+import { reconcileExperienceDistillCronJob } from "../experience/distill-cron.js";
+import { resolveDistillSettings } from "../experience/distill-config.js";
+
 // auth bootstrap removed — JWT handles auth; DB sys_config sets auth.mode = "none"
 // import { ensureGatewayStartupAuth } from "./startup-auth.js";
 // import { maybeSeedControlUiAllowedOriginsAtStartup } from "./startup-control-ui-origins.js";
@@ -667,7 +670,16 @@ export async function startGatewayServer(
       });
 
   if (!minimalTestGateway && !isMultiTenantMode()) {
-    void cron.start().catch((err) => logCron.error(`failed to start: ${String(err)}`));
+    void cron.start().then(() => {
+      const distillSettings = resolveDistillSettings(cfgAtStart);
+      if (distillSettings) {
+        return reconcileExperienceDistillCronJob({
+          cronService: cron,
+          settings: distillSettings,
+          logger: logCron,
+        });
+      }
+    }).catch((err) => logCron.error(`failed to start: ${String(err)}`));
   }
 
   // Pre-warm tenant cron services at startup so that existing cron jobs
@@ -707,7 +719,19 @@ export async function startGatewayServer(
               } catch {
                 // Non-fatal: skip directory repair for this user
               }
-              resolveTenantCron({ tenantId: tenant.id, userId: dirKey });
+              const tenantCronEntry = resolveTenantCron({ tenantId: tenant.id, userId: dirKey });
+              if (tenantCronEntry) {
+                const distillSettings = resolveDistillSettings(cfgAtStart);
+                if (distillSettings) {
+                  void reconcileExperienceDistillCronJob({
+                    cronService: tenantCronEntry.cron,
+                    settings: distillSettings,
+                    logger: logCron,
+                  }).catch((err) =>
+                    logCron.error(`experience cron reconcile failed (${tenant.id}:${dirKey}): ${String(err)}`),
+                  );
+                }
+              }
             }
           } catch (err) {
             logCron.error(`failed to load users for tenant ${tenant.id}: ${String(err)}`);

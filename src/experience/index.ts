@@ -39,4 +39,9 @@ export { handleDistill } from "./distill-command.js";
 
 export { handleExperienceStatus } from "./status-command.js";
 export { handleExperienceReview, handleExperienceApprove, handleExperienceReject } from "./review-command.js";
+export { handleExperienceReviewApproved, handleExperienceReviewPromoted } from "./review-command.js";
 export { reconcileExperienceDistillCronJob, isAutoDistillEvent, DISTILL_CRON_EVENT_TEXT } from "./distill-cron.js";
+
+export { publishPromotedToTenantMemory, generatePromotedBlock, MARKER_START, MARKER_END } from "./publish.js";
+export { handleExperiencePromote, handleExperienceRollback } from "./promote-command.js";
+export { updateDistilledRecordStatusWithMeta } from "./distill-store.js";

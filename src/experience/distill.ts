@@ -29,6 +29,10 @@ const DISTILL_SYSTEM_PROMPT = [
   "- If candidates contradict each other, keep the most specific or recent one, note the contradiction in evidence.",
   "- Output summary should be a directly usable knowledge statement, not a conversation summary.",
   "- Preserve all sourceCandidateIds for provenance.",
+  "- For each record, judge its scope:",
+  '  - "tenant": organization-level knowledge applicable to all employees and agents (tech stack, deployment, team processes, company policies)',
+  '  - "personal": only relevant to a specific user (editor preferences, personal task progress)',
+  '  - If uncertain, default to "tenant".',
   "- Return a strict JSON array.",
 ].join("\n");
 
@@ -44,7 +48,7 @@ function buildDistillPrompt(kind: ExperienceKind, candidates: ExperienceCandidat
     JSON.stringify(candidateData, null, 2),
     "",
     "Merge into refined knowledge units. Return ONLY a JSON array (no markdown fences).",
-    'Each item: {"summary": "...", "evidence": ["...", "..."], "sourceCandidateIds": ["...", "..."]}',
+    'Each item: {"summary": "...", "evidence": ["...", "..."], "sourceCandidateIds": ["...", "..."], "scope": "tenant"|"personal"}',
   ].join("\n");
 }
 
@@ -52,9 +56,10 @@ interface DistillLlmOutput {
   summary: string;
   evidence: string[];
   sourceCandidateIds: string[];
+  scope?: "tenant" | "personal";
 }
 
-function parseDistillResponse(text: string): DistillLlmOutput[] {
+export function parseDistillResponse(text: string): DistillLlmOutput[] {
   const cleaned = text
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```\s*$/, "")
@@ -78,6 +83,7 @@ function parseDistillResponse(text: string): DistillLlmOutput[] {
         sourceCandidateIds: ((item as Record<string, unknown>).sourceCandidateIds as unknown[]).map(
           String,
         ),
+        scope: (item as Record<string, unknown>).scope === "personal" ? "personal" : "tenant",
       });
     }
   }
@@ -192,7 +198,7 @@ async function distillKindBatch(params: {
       JSON.stringify(allOutputs, null, 2),
       "",
       "Merge any remaining duplicates. Return ONLY a JSON array.",
-      'Each item: {"summary": "...", "evidence": ["...", "..."], "sourceCandidateIds": ["...", "..."]}',
+      'Each item: {"summary": "...", "evidence": ["...", "..."], "sourceCandidateIds": ["...", "..."], "scope": "tenant"|"personal"}',
     ].join("\n");
 
     const mergeText = await callDistillLlm({
@@ -236,7 +242,7 @@ async function distillKindBatch(params: {
       sourceCandidateIds: output.sourceCandidateIds,
       sourceUserIds: [...userIds],
       status: "pending_review" as const,
-      scope: "tenant" as const,
+      scope: output.scope ?? "tenant",
       createdAt: now,
       updatedAt: now,
     };

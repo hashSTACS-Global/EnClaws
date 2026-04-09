@@ -544,3 +544,23 @@ describe("listDistilledRecords filtering", () => {
     expect(filtered).toHaveLength(1);
   });
 });
+
+// =============================================================================
+// distill scope annotation
+// =============================================================================
+
+describe("distill scope annotation", () => {
+  test("parseDistillResponse handles scope field", async () => {
+    const { parseDistillResponse } = await import("./distill.js");
+    const input = JSON.stringify([
+      { summary: "test", evidence: ["e"], sourceCandidateIds: ["c1"], scope: "tenant" },
+      { summary: "test2", evidence: ["e2"], sourceCandidateIds: ["c2"], scope: "personal" },
+      { summary: "test3", evidence: ["e3"], sourceCandidateIds: ["c3"] },
+    ]);
+    const result = parseDistillResponse(input);
+    expect(result).toHaveLength(3);
+    expect(result[0].scope).toBe("tenant");
+    expect(result[1].scope).toBe("personal");
+    expect(result[2].scope).toBe("tenant"); // default when missing
+  });
+});
