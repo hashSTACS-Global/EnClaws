@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
 import { loadConfig } from "../config/config.js";
+import { isOptEnabled } from "../config/token-optimization.js";
 import { callGateway } from "../gateway/call.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import {
@@ -28,6 +29,18 @@ import {
   resolveInternalSessionKey,
   resolveMainSessionAlias,
 } from "./tools/sessions-helpers.js";
+
+const MAX_RESULT_CHARS = 6_000;
+const RESULT_HEAD_CHARS = 3_000;
+const RESULT_TAIL_CHARS = 2_000;
+
+export function compressSubagentResult(result: string): string {
+  if (!isOptEnabled("COMPRESS") || result.length <= MAX_RESULT_CHARS) return result;
+  const head = result.slice(0, RESULT_HEAD_CHARS);
+  const tail = result.slice(-RESULT_TAIL_CHARS);
+  const trimmedChars = result.length - RESULT_HEAD_CHARS - RESULT_TAIL_CHARS;
+  return `${head}\n\n... [${trimmedChars} chars trimmed] ...\n\n${tail}`;
+}
 
 export const SUBAGENT_SPAWN_MODES = ["run", "session"] as const;
 export type SpawnSubagentMode = (typeof SUBAGENT_SPAWN_MODES)[number];
@@ -606,7 +619,7 @@ export async function spawnSubagentDirect(
       try {
         const text = await readLatestSubagentOutput(childSessionKey);
         if (text) {
-          completionText = text;
+          completionText = compressSubagentResult(text);
         }
       } catch {
         // Ignore read errors
