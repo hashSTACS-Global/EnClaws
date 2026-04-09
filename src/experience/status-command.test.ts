@@ -45,6 +45,7 @@ describe("handleExperienceStatus", () => {
       sourceCandidateIds: ["exp_1"],
       sourceUserIds: ["u1"],
       status: "pending_review",
+      scope: "tenant",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }]);

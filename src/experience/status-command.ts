@@ -22,7 +22,7 @@ export async function handleExperienceStatus(params: {
   }
 
   const recordStatusCounts: Record<string, number> = {
-    pending_review: 0, approved: 0, rejected: 0, superseded: 0,
+    pending_review: 0, approved: 0, promoted: 0, rejected: 0, superseded: 0,
   };
   let lastDistillAt = "";
 
@@ -40,7 +40,7 @@ export async function handleExperienceStatus(params: {
     "Candidates:",
     `  pending: ${candidateStatusCounts.pending}  |  distilled: ${candidateStatusCounts.distilled}  |  approved: ${candidateStatusCounts.approved}`,
     "Distilled Records:",
-    `  pending_review: ${recordStatusCounts.pending_review}  |  approved: ${recordStatusCounts.approved}  |  rejected: ${recordStatusCounts.rejected}`,
+    `  pending_review: ${recordStatusCounts.pending_review}  |  approved: ${recordStatusCounts.approved}  |  promoted: ${recordStatusCounts.promoted}  |  rejected: ${recordStatusCounts.rejected}`,
     "",
     `Last capture:  ${lastCaptureAt ? lastCaptureAt.slice(0, 16).replace("T", " ") : "never"}`,
     `Last distill:  ${lastDistillAt ? lastDistillAt.slice(0, 16).replace("T", " ") : "never"}`,

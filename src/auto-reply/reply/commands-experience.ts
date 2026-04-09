@@ -3,7 +3,9 @@ import path from "node:path";
 import { resolveTenantDir } from "../../config/sessions/tenant-paths.js";
 import { handleDistill } from "../../experience/distill-command.js";
 import { isAutoDistillEvent } from "../../experience/distill-cron.js";
+import { handleExperiencePromote, handleExperienceRollback } from "../../experience/promote-command.js";
 import { handleExperienceReview, handleExperienceApprove, handleExperienceReject } from "../../experience/review-command.js";
+import { handleExperienceReviewApproved, handleExperienceReviewPromoted } from "../../experience/review-command.js";
 import { handleExperienceStatus } from "../../experience/status-command.js";
 import type { CommandHandler } from "./commands-types.js";
 
@@ -94,6 +96,14 @@ export const handleExperienceCommand: CommandHandler = async (params, allowTextC
   }
 
   if (subcommand === "review") {
+    if (subargs === "approved") {
+      const result = await handleExperienceReviewApproved({ tenantId, tenantDir });
+      return { shouldContinue: false, reply: { text: result } };
+    }
+    if (subargs === "promoted") {
+      const result = await handleExperienceReviewPromoted({ tenantId, tenantDir });
+      return { shouldContinue: false, reply: { text: result } };
+    }
     const result = await handleExperienceReview({ tenantId, tenantDir });
     return { shouldContinue: false, reply: { text: result } };
   }
@@ -116,8 +126,31 @@ export const handleExperienceCommand: CommandHandler = async (params, allowTextC
     return { shouldContinue: false, reply: { text: result } };
   }
 
+  if (subcommand === "promote") {
+    const force = subargs.includes("--force");
+    const cleanArgs = subargs.replace("--force", "").trim();
+    const indices = cleanArgs ? parseIndices(cleanArgs) : undefined;
+    const result = await handleExperiencePromote({
+      tenantId,
+      tenantDir,
+      indices: indices?.length ? indices : undefined,
+      cfg: params.cfg,
+      force,
+    });
+    return { shouldContinue: false, reply: { text: result } };
+  }
+
+  if (subcommand === "rollback") {
+    const indices = parseIndices(subargs);
+    if (indices.length === 0) {
+      return { shouldContinue: false, reply: { text: "Usage: /experience rollback 1,2,3" } };
+    }
+    const result = await handleExperienceRollback({ tenantId, tenantDir, indices });
+    return { shouldContinue: false, reply: { text: result } };
+  }
+
   return {
     shouldContinue: false,
-    reply: { text: "Usage: /experience status | review | approve <n> | reject <n>" },
+    reply: { text: "Usage: /experience status | review [approved|promoted] | approve <n> | reject <n> | promote [n] | rollback <n>" },
   };
 };

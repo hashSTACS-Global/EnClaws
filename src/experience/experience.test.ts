@@ -1,7 +1,8 @@
+import nodeFs from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, test } from "vitest";
 
 import {
   sessionKeyToFilename,
@@ -205,6 +206,7 @@ describe("distill store", () => {
         sourceCandidateIds: ["exp_a1", "exp_a2"],
         sourceUserIds: ["user_001"],
         status: "pending_review",
+        scope: "tenant",
         createdAt: "2026-04-05T10:00:00.000Z",
         updatedAt: "2026-04-05T10:00:00.000Z",
       },
@@ -230,6 +232,7 @@ describe("distill store", () => {
       sourceCandidateIds: ["exp_1"],
       sourceUserIds: ["u1"],
       status: "pending_review",
+      scope: "tenant",
       createdAt: "2026-04-05T10:00:00.000Z",
       updatedAt: "2026-04-05T10:00:00.000Z",
     };
@@ -242,6 +245,7 @@ describe("distill store", () => {
       sourceCandidateIds: ["exp_2"],
       sourceUserIds: ["u1"],
       status: "pending_review",
+      scope: "tenant",
       createdAt: "2026-04-05T11:00:00.000Z",
       updatedAt: "2026-04-05T11:00:00.000Z",
     };
@@ -263,6 +267,7 @@ describe("distill store", () => {
       sourceCandidateIds: ["exp_1"],
       sourceUserIds: ["u1"],
       status: "pending_review",
+      scope: "tenant",
       createdAt: "2026-04-05T10:00:00.000Z",
       updatedAt: "2026-04-05T10:00:00.000Z",
     };
@@ -275,6 +280,7 @@ describe("distill store", () => {
       sourceCandidateIds: ["exp_2"],
       sourceUserIds: ["u1"],
       status: "pending_review",
+      scope: "tenant",
       createdAt: "2026-04-06T10:00:00.000Z",
       updatedAt: "2026-04-06T10:00:00.000Z",
     };
@@ -312,6 +318,7 @@ describe("distill store", () => {
         sourceCandidateIds: ["exp_111"],
         sourceUserIds: ["user1"],
         status: "pending_review",
+        scope: "tenant",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
@@ -324,6 +331,7 @@ describe("distill store", () => {
         sourceCandidateIds: ["exp_222"],
         sourceUserIds: ["user1"],
         status: "pending_review",
+        scope: "tenant",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
@@ -337,6 +345,32 @@ describe("distill store", () => {
     const bbb = records.find((r) => r.recordId === "dist_bbb");
     expect(aaa?.status).toBe("approved");
     expect(bbb?.status).toBe("pending_review");
+  });
+});
+
+// =============================================================================
+// Phase 3 type compatibility
+// =============================================================================
+
+describe("Phase 3 type compatibility", () => {
+  test("DistilledRecord accepts promoted status and scope field", () => {
+    const record: DistilledRecord = {
+      recordId: "dist_abc",
+      tenantId: "t1",
+      kind: "fact",
+      summary: "test",
+      evidence: ["e1"],
+      sourceCandidateIds: ["c1"],
+      sourceUserIds: ["u1"],
+      status: "promoted",
+      scope: "tenant",
+      createdAt: "2026-04-08T00:00:00.000Z",
+      updatedAt: "2026-04-08T00:00:00.000Z",
+      promotedAt: "2026-04-08T01:00:00.000Z",
+    };
+    expect(record.status).toBe("promoted");
+    expect(record.scope).toBe("tenant");
+    expect(record.promotedAt).toBeDefined();
   });
 });
 
@@ -449,5 +483,84 @@ describe("distill config", () => {
     } as any);
     expect(settings).not.toBeNull();
     expect(settings!.cron).toBe("0 5 * * 0");
+  });
+});
+
+// =============================================================================
+// distill-store.ts — listDistilledRecords filtering
+// =============================================================================
+
+describe("listDistilledRecords filtering", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "distill-filter-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  test("filters by status", async () => {
+    const tenantDir = path.join(tempDir, "filter-status");
+    const tenantId = "t-filter";
+    await addDistilledRecords(tenantDir, "2026-04-08", tenantId, [
+      { recordId: "r1", tenantId, kind: "fact", summary: "s1", evidence: [], sourceCandidateIds: [], sourceUserIds: [], status: "approved", scope: "tenant", createdAt: "2026-04-08T00:00:00Z", updatedAt: "2026-04-08T00:00:00Z" },
+      { recordId: "r2", tenantId, kind: "fact", summary: "s2", evidence: [], sourceCandidateIds: [], sourceUserIds: [], status: "promoted", scope: "tenant", createdAt: "2026-04-08T00:00:00Z", updatedAt: "2026-04-08T00:00:00Z", promotedAt: "2026-04-08T01:00:00Z" },
+      { recordId: "r3", tenantId, kind: "fact", summary: "s3", evidence: [], sourceCandidateIds: [], sourceUserIds: [], status: "rejected", scope: "tenant", createdAt: "2026-04-08T00:00:00Z", updatedAt: "2026-04-08T00:00:00Z" },
+    ]);
+    const promoted = await listDistilledRecords(tenantDir, tenantId, undefined, { status: "promoted" });
+    expect(promoted).toHaveLength(1);
+    expect(promoted[0].recordId).toBe("r2");
+    const approved = await listDistilledRecords(tenantDir, tenantId, undefined, { status: "approved" });
+    expect(approved).toHaveLength(1);
+    expect(approved[0].recordId).toBe("r1");
+  });
+
+  test("filters by scope", async () => {
+    const tenantDir = path.join(tempDir, "filter-scope");
+    const tenantId = "t-scope";
+    await addDistilledRecords(tenantDir, "2026-04-08", tenantId, [
+      { recordId: "r1", tenantId, kind: "fact", summary: "org fact", evidence: [], sourceCandidateIds: [], sourceUserIds: [], status: "approved", scope: "tenant", createdAt: "2026-04-08T00:00:00Z", updatedAt: "2026-04-08T00:00:00Z" },
+      { recordId: "r2", tenantId, kind: "preference", summary: "user pref", evidence: [], sourceCandidateIds: [], sourceUserIds: [], status: "approved", scope: "personal", createdAt: "2026-04-08T00:00:00Z", updatedAt: "2026-04-08T00:00:00Z" },
+    ]);
+    const tenant = await listDistilledRecords(tenantDir, tenantId, undefined, { scope: "tenant" });
+    expect(tenant).toHaveLength(1);
+    expect(tenant[0].recordId).toBe("r1");
+  });
+
+  test("old records without scope default to tenant", async () => {
+    const tenantDir = path.join(tempDir, "filter-compat");
+    const tenantId = "t-compat";
+    const distilledDir = path.join(tenantDir, "experience", "distilled");
+    await nodeFs.promises.mkdir(distilledDir, { recursive: true });
+    await nodeFs.promises.writeFile(path.join(distilledDir, "2026-04-01.json"), JSON.stringify({
+      tenantId,
+      records: [{ recordId: "old1", tenantId, kind: "fact", summary: "old", evidence: [], sourceCandidateIds: [], sourceUserIds: [], status: "approved", createdAt: "2026-04-01T00:00:00Z", updatedAt: "2026-04-01T00:00:00Z" }],
+    }));
+    const all = await listDistilledRecords(tenantDir, tenantId);
+    expect(all[0].scope).toBe("tenant");
+    const filtered = await listDistilledRecords(tenantDir, tenantId, undefined, { scope: "tenant" });
+    expect(filtered).toHaveLength(1);
+  });
+});
+
+// =============================================================================
+// distill scope annotation
+// =============================================================================
+
+describe("distill scope annotation", () => {
+  test("parseDistillResponse handles scope field", async () => {
+    const { parseDistillResponse } = await import("./distill.js");
+    const input = JSON.stringify([
+      { summary: "test", evidence: ["e"], sourceCandidateIds: ["c1"], scope: "tenant" },
+      { summary: "test2", evidence: ["e2"], sourceCandidateIds: ["c2"], scope: "personal" },
+      { summary: "test3", evidence: ["e3"], sourceCandidateIds: ["c3"] },
+    ]);
+    const result = parseDistillResponse(input);
+    expect(result).toHaveLength(3);
+    expect(result[0].scope).toBe("tenant");
+    expect(result[1].scope).toBe("personal");
+    expect(result[2].scope).toBe("tenant"); // default when missing
   });
 });

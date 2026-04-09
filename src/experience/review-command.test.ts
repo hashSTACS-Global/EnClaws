@@ -15,6 +15,7 @@ function makeRecord(id: string, kind: string, summary: string) {
     sourceCandidateIds: [`exp_${id}`],
     sourceUserIds: ["u1"],
     status: "pending_review" as const,
+    scope: "tenant" as const,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

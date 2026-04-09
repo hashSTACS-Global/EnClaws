@@ -65,6 +65,52 @@ export async function handleExperienceReject(params: {
   return await updateByIndices(params, "rejected");
 }
 
+export async function handleExperienceReviewApproved(params: {
+  tenantId: string;
+  tenantDir: string;
+}): Promise<string> {
+  const all = await listDistilledRecords(params.tenantDir, params.tenantId, undefined, {
+    status: "approved",
+    scope: "tenant",
+  });
+  const records = all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  if (records.length === 0) {
+    return "No approved records awaiting promotion.";
+  }
+
+  const lines = [`Approved (${records.length} records, ready to promote)`, ""];
+  for (const [i, r] of records.entries()) {
+    lines.push(`#${i + 1} [${r.kind}] ${r.summary}`);
+    lines.push(`   scope: ${r.scope ?? "tenant"} | sources: ${r.sourceCandidateIds.length} candidates`);
+    lines.push("");
+  }
+  lines.push("Use: /experience promote 1,2 or /experience promote (all)");
+  return lines.join("\n");
+}
+
+export async function handleExperienceReviewPromoted(params: {
+  tenantId: string;
+  tenantDir: string;
+}): Promise<string> {
+  const all = await listDistilledRecords(params.tenantDir, params.tenantId, undefined, {
+    status: "promoted",
+  });
+  const records = all.sort((a, b) => (a.promotedAt ?? a.createdAt).localeCompare(b.promotedAt ?? b.createdAt));
+  if (records.length === 0) {
+    return "No promoted records.";
+  }
+
+  const lines = [`Promoted (${records.length} records)`, ""];
+  for (const [i, r] of records.entries()) {
+    const promoted = r.promotedAt ? r.promotedAt.slice(0, 16).replace("T", " ") : "unknown";
+    lines.push(`#${i + 1} [${r.kind}] ${r.summary}`);
+    lines.push(`   promoted: ${promoted} | scope: ${r.scope ?? "tenant"}`);
+    lines.push("");
+  }
+  lines.push("Use: /experience rollback 1,2 to unpublish");
+  return lines.join("\n");
+}
+
 async function updateByIndices(
   params: { tenantId: string; tenantDir: string; indices: number[] },
   newStatus: DistilledStatus,

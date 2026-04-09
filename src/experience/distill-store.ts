@@ -60,37 +60,54 @@ export async function addDistilledRecords(
   await writeAtomicDistilledJson(filePath, file);
 }
 
-/** 列出指定租户的所有 distilled records，可选按日期过滤 */
+/** 列出指定租户的所有 distilled records，可选按日期/状态/范围过滤 */
 export async function listDistilledRecords(
   tenantDir: string,
   tenantId: string,
   dateStr?: string,
+  filter?: { status?: DistilledStatus; scope?: "tenant" | "personal" },
 ): Promise<DistilledRecord[]> {
+  let records: DistilledRecord[];
+
   if (dateStr) {
     const filePath = resolveDistilledFilePath(tenantDir, dateStr);
     const file = await readDistilledFile(filePath, tenantId);
-    return file.records;
-  }
-
-  const distilledDir = resolveDistilledDir(tenantDir);
-  let entries: string[];
-  try {
-    entries = await fs.promises.readdir(distilledDir);
-  } catch {
-    return [];
-  }
-
-  const results: DistilledRecord[] = [];
-  for (const entry of entries) {
-    if (!entry.endsWith(".json") || entry.endsWith(".tmp")) {
-      continue;
+    records = file.records;
+  } else {
+    const distilledDir = resolveDistilledDir(tenantDir);
+    let entries: string[];
+    try {
+      entries = await fs.promises.readdir(distilledDir);
+    } catch {
+      return [];
     }
-    const filePath = path.join(distilledDir, entry);
-    const file = await readDistilledFile(filePath, tenantId);
-    results.push(...file.records);
+
+    records = [];
+    for (const entry of entries) {
+      if (!entry.endsWith(".json") || entry.endsWith(".tmp")) {
+        continue;
+      }
+      const filePath = path.join(distilledDir, entry);
+      const file = await readDistilledFile(filePath, tenantId);
+      records.push(...file.records);
+    }
   }
 
-  return results;
+  // Backfill scope for old records that lack the field
+  for (const r of records) {
+    if (!r.scope) {
+      (r as unknown as Record<string, unknown>).scope = "tenant";
+    }
+  }
+
+  if (!filter) {
+    return records;
+  }
+  return records.filter((r) => {
+    if (filter.status && r.status !== filter.status) return false;
+    if (filter.scope && r.scope !== filter.scope) return false;
+    return true;
+  });
 }
 
 /** Update status of distilled records by recordId across all date files. */
@@ -126,6 +143,59 @@ export async function updateDistilledRecordStatus(
       if (idSet.has(record.recordId)) {
         record.status = newStatus;
         record.updatedAt = now;
+        fileChanged = true;
+        totalUpdated++;
+      }
+    }
+
+    if (fileChanged) {
+      await writeAtomicDistilledJson(filePath, file);
+    }
+  }
+
+  return totalUpdated;
+}
+
+/** Update status and set additional metadata fields on matching records. */
+export async function updateDistilledRecordStatusWithMeta(
+  tenantDir: string,
+  recordIds: string[],
+  newStatus: DistilledStatus,
+  meta: { promotedAt?: string; supersededBy?: string },
+): Promise<number> {
+  if (recordIds.length === 0) {
+    return 0;
+  }
+  const idSet = new Set(recordIds);
+  const distilledDir = resolveDistilledDir(tenantDir);
+  let entries: string[];
+  try {
+    entries = await fs.promises.readdir(distilledDir);
+  } catch {
+    return 0;
+  }
+
+  const now = new Date().toISOString();
+  let totalUpdated = 0;
+
+  for (const entry of entries) {
+    if (!entry.endsWith(".json") || entry.endsWith(".tmp")) {
+      continue;
+    }
+    const filePath = path.join(distilledDir, entry);
+    const file = await readDistilledFile(filePath, "");
+    let fileChanged = false;
+
+    for (const record of file.records) {
+      if (idSet.has(record.recordId)) {
+        record.status = newStatus;
+        record.updatedAt = now;
+        if (meta.promotedAt) {
+          record.promotedAt = meta.promotedAt;
+        }
+        if (meta.supersededBy) {
+          record.supersededBy = meta.supersededBy;
+        }
         fileChanged = true;
         totalUpdated++;
       }

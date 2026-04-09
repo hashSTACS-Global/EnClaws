@@ -745,7 +745,7 @@ function buildChatCommands(): ChatCommandDefinition[] {
     defineChatCommand({
       key: "experience",
       nativeName: "experience",
-      description: "View and manage experience extraction pipeline.",
+      description: "View, promote, and manage experience extraction pipeline.",
       textAlias: "/experience",
       acceptsArgs: true,
       category: "tools",
