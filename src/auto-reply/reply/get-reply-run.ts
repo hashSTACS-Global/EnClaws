@@ -8,6 +8,7 @@ import {
   resolveEmbeddedSessionLane,
 } from "../../agents/pi-embedded.js";
 import type { OpenClawConfig } from "../../config/config.js";
+import { isOptEnabled } from "../../config/token-optimization.js";
 import {
   resolveGroupSessionKey,
   resolveSessionFilePath,
@@ -299,7 +300,11 @@ export async function runPreparedReply(
             ? { InboundHistory: undefined, ThreadStarterBody: undefined }
             : {}),
         }
-      : { ...sessionCtx, ThreadStarterBody: undefined },
+      : {
+          ...sessionCtx,
+          ThreadStarterBody: undefined,
+          InboundHistory: isOptEnabled("DEDUP") ? undefined : sessionCtx.InboundHistory,
+        },
   );
   const baseBodyForPrompt = isBareSessionReset
     ? baseBodyFinal
