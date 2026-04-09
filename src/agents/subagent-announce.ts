@@ -1,3 +1,4 @@
+import { isOptEnabled } from "../config/token-optimization.js";
 import { resolveQueueSettings } from "../auto-reply/reply/queue.js";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
@@ -1071,6 +1072,39 @@ function loadSessionEntryByKey(sessionKey: string) {
   return store[sessionKey];
 }
 
+function buildCompactSubagentOverlay(params: {
+  requesterSessionKey?: string;
+  requesterOrigin?: DeliveryContext;
+  childSessionKey: string;
+  label?: string;
+  task?: string;
+  acpEnabled?: boolean;
+  childDepth?: number;
+  maxSpawnDepth?: number;
+}): string {
+  const lines = [
+    `## Subagent Role: ${params.label ?? "worker"}`,
+    `Task: ${params.task ?? "Execute the assigned task and return structured results."}`,
+    "",
+    "Rules: Complete task → return <task_result> JSON → stop.",
+    "Do not chat, ask questions, or spawn sub-agents unless explicitly required.",
+    "",
+    "<task_result>",
+    '{"status": "success|partial|failed", "summary": "one-line summary", "blockers": []}',
+    "</task_result>",
+  ];
+  if (params.acpEnabled !== false) {
+    lines.push("", "Sub-agent spawning: Use sessions_spawn tool. Route to ACP only for IM delivery.");
+  }
+  if (params.maxSpawnDepth && params.childDepth) {
+    lines.push(`Depth: ${params.childDepth}/${params.maxSpawnDepth}. Do not exceed max depth.`);
+  }
+  if (params.childSessionKey) {
+    lines.push("", `Session: ${params.childSessionKey}`);
+  }
+  return lines.join("\n");
+}
+
 export function buildSubagentSystemPrompt(params: {
   requesterSessionKey?: string;
   requesterOrigin?: DeliveryContext;
@@ -1084,6 +1118,9 @@ export function buildSubagentSystemPrompt(params: {
   /** Config value: max allowed spawn depth. */
   maxSpawnDepth?: number;
 }) {
+  if (isOptEnabled("WORKER")) {
+    return buildCompactSubagentOverlay(params);
+  }
   const taskText =
     typeof params.task === "string" && params.task.trim()
       ? params.task.replace(/\s+/g, " ").trim()
