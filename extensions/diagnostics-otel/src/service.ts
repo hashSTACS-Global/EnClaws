@@ -233,6 +233,27 @@ export function createDiagnosticsOtelService(): OpenClawPluginService {
         description: "Run attempts",
       });
 
+      let accumulatedCacheRead = 0;
+      let accumulatedInputTokens = 0;
+      meter.createObservableGauge("openclaw.cache.hit_rate", {
+        unit: "1",
+        description: "Cache hit rate (cacheRead / input tokens)",
+      }).addCallback((result) => {
+        const rate = accumulatedInputTokens > 0
+          ? accumulatedCacheRead / accumulatedInputTokens
+          : 0;
+        result.observe(rate);
+      });
+
+      const memorySearchCounter = meter.createCounter("openclaw.memory_search.count", {
+        unit: "1",
+        description: "Memory search invocations",
+      });
+      const subagentContextHistogram = meter.createHistogram("openclaw.subagent.context_tokens", {
+        unit: "1",
+        description: "Subagent context size in tokens",
+      });
+
       if (logsEnabled) {
         const logExporter = new OTLPLogExporter({
           ...(logUrl ? { url: logUrl } : {}),
@@ -381,12 +402,14 @@ export function createDiagnosticsOtelService(): OpenClawPluginService {
 
         const usage = evt.usage;
         if (usage.input) {
+          accumulatedInputTokens += usage.input;
           tokensCounter.add(usage.input, { ...attrs, "openclaw.token": "input" });
         }
         if (usage.output) {
           tokensCounter.add(usage.output, { ...attrs, "openclaw.token": "output" });
         }
         if (usage.cacheRead) {
+          accumulatedCacheRead += usage.cacheRead;
           tokensCounter.add(usage.cacheRead, { ...attrs, "openclaw.token": "cache_read" });
         }
         if (usage.cacheWrite) {
@@ -603,6 +626,27 @@ export function createDiagnosticsOtelService(): OpenClawPluginService {
         runAttemptCounter.add(1, { "openclaw.attempt": evt.attempt });
       };
 
+      const recordMemorySearch = (
+        evt: Extract<DiagnosticEventPayload, { type: "memory_search" }>,
+      ) => {
+        const attrs: Record<string, string | number> = {
+          "openclaw.channel": evt.channel ?? "unknown",
+          "openclaw.provider": evt.provider ?? "unknown",
+        };
+        memorySearchCounter.add(1, attrs);
+      };
+
+      const recordSubagentContext = (
+        evt: Extract<DiagnosticEventPayload, { type: "subagent.context" }>,
+      ) => {
+        const attrs: Record<string, string | number> = {
+          "openclaw.channel": evt.channel ?? "unknown",
+          "openclaw.provider": evt.provider ?? "unknown",
+          "openclaw.model": evt.model ?? "unknown",
+        };
+        subagentContextHistogram.record(evt.contextTokens, attrs);
+      };
+
       const recordHeartbeat = (
         evt: Extract<DiagnosticEventPayload, { type: "diagnostic.heartbeat" }>,
       ) => {
@@ -644,6 +688,12 @@ export function createDiagnosticsOtelService(): OpenClawPluginService {
               return;
             case "run.attempt":
               recordRunAttempt(evt);
+              return;
+            case "memory_search":
+              recordMemorySearch(evt);
+              return;
+            case "subagent.context":
+              recordSubagentContext(evt);
               return;
             case "diagnostic.heartbeat":
               recordHeartbeat(evt);
