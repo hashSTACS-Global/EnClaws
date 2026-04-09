@@ -1,4 +1,5 @@
 import {
+  resolveAgentConfig,
   resolveAgentDir,
   resolveAgentWorkspaceDir,
   resolveSessionAgentId,
@@ -158,7 +159,12 @@ export async function getReplyFromConfig(
   const agentDir = ctx.TenantId
     ? resolveTenantAgentDir(ctx.TenantId, agentId)
     : resolveAgentDir(cfg, agentId);
-  const timeoutMs = resolveAgentTimeoutMs({ cfg, overrideSeconds: opts?.timeoutOverrideSeconds });
+  const perAgentTimeoutSeconds = resolveAgentConfig(cfg, agentId)?.timeoutSeconds;
+  const timeoutMs = resolveAgentTimeoutMs({
+    cfg,
+    agentTimeoutSeconds: perAgentTimeoutSeconds,
+    overrideSeconds: opts?.timeoutOverrideSeconds,
+  });
   const configuredTypingSeconds =
     agentCfg?.typingIntervalSeconds ?? sessionCfg?.typingIntervalSeconds;
   const typingIntervalSeconds =

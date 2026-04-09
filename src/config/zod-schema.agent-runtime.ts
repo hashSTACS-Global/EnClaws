@@ -705,6 +705,7 @@ export const AgentEntrySchema = z
       .optional(),
     sandbox: AgentSandboxSchema,
     tools: AgentToolsSchema,
+    timeoutSeconds: z.number().int().positive().optional(),
   })
   .strict();
 

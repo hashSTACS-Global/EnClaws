@@ -38,6 +38,7 @@ type ResolvedAgentConfig = {
   subagents?: AgentEntry["subagents"];
   sandbox?: AgentEntry["sandbox"];
   tools?: AgentEntry["tools"];
+  timeoutSeconds?: number;
 };
 
 let defaultAgentWarned = false;
@@ -140,6 +141,10 @@ export function resolveAgentConfig(
     subagents: typeof entry.subagents === "object" && entry.subagents ? entry.subagents : undefined,
     sandbox: entry.sandbox,
     tools: entry.tools,
+    timeoutSeconds:
+      typeof entry.timeoutSeconds === "number" && Number.isFinite(entry.timeoutSeconds)
+        ? Math.max(1, Math.floor(entry.timeoutSeconds))
+        : undefined,
   };
 }
 

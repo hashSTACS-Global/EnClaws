@@ -55,6 +55,7 @@ export const FIELD_LABELS: Record<string, string> = {
   agents: "Agents",
   "agents.defaults": "Agent Defaults",
   "agents.list": "Agent List",
+  "agents.list[].timeoutSeconds": "Agent Timeout (seconds)",
   gateway: "Gateway",
   "gateway.port": "Gateway Port",
   "gateway.mode": "Gateway Mode",

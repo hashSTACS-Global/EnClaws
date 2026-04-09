@@ -340,8 +340,10 @@ export async function runCronIsolatedAgentTurn(params: {
     thinkLevel = "high";
   }
 
+  const perAgentTimeoutSeconds = resolveAgentConfig(cfgWithAgentDefaults, agentId)?.timeoutSeconds;
   const timeoutMs = resolveAgentTimeoutMs({
     cfg: cfgWithAgentDefaults,
+    agentTimeoutSeconds: perAgentTimeoutSeconds,
     overrideSeconds:
       params.job.payload.kind === "agentTurn" ? params.job.payload.timeoutSeconds : undefined,
   });

@@ -613,6 +613,7 @@ export class TenantAgentsView extends LitElement {
   @state() private formModelConfig: ModelConfigEntry[] = [];
   @state() private formToolsDeny: string[] = [];
   @state() private formToolsExpanded = false;
+  @state() private formTimeoutMinutes: number | null = null;
   @state() private toolsFilter = "";
   @state() private toolsPendingDeny: string[] | null = null;
   @state() private toolsSaving = false;
@@ -787,6 +788,7 @@ export class TenantAgentsView extends LitElement {
     this.formModelConfig = [];
     this.formToolsDeny = [];
     this.formToolsExpanded = false;
+    this.formTimeoutMinutes = null;
     this.formAgentIdManuallyEdited = false;
     this.showForm = true;
   }
@@ -803,6 +805,8 @@ export class TenantAgentsView extends LitElement {
         ? [...((agent.config.tools as { deny: string[] }).deny)]
         : [];
     this.formToolsExpanded = false;
+    const storedTimeout = agent.config?.timeoutSeconds;
+    this.formTimeoutMinutes = typeof storedTimeout === "number" ? Math.round(storedTimeout / 60) : null;
     this.formAgentIdManuallyEdited = false;
     this.showForm = true;
   }
@@ -918,6 +922,9 @@ export class TenantAgentsView extends LitElement {
       displayName: this.formName,
       systemPrompt: this.formSystemPrompt,
     };
+    if (this.formTimeoutMinutes != null) {
+      config.timeoutSeconds = this.formTimeoutMinutes * 60;
+    }
     const deny = this.formToolsDeny.filter(Boolean);
     if (deny.length > 0) config.tools = { deny };
 
@@ -1136,6 +1143,18 @@ export class TenantAgentsView extends LitElement {
           <div class="value">${new Date(agent.createdAt).toLocaleString()}</div>
         </div>
       </div>
+
+      ${(() => {
+        const timeoutSec = agent.config?.timeoutSeconds;
+        if (typeof timeoutSec !== "number") return nothing;
+        const mins = Math.round(timeoutSec / 60);
+        return html`
+          <div class="kv" style="margin:1rem 0">
+            <div class="label">${t("tenantAgents.timeoutMinutes")}</div>
+            <div class="value">${mins}</div>
+          </div>
+        `;
+      })()}
 
       ${systemPrompt ? html`
         <div class="kv" style="margin-bottom:1rem">
@@ -1529,6 +1548,27 @@ export class TenantAgentsView extends LitElement {
                 </div>
               ` : nothing}
             `}
+          </div>
+
+          <div class="divider"><span>${t("tenantAgents.advancedSettings")}</span></div>
+
+          <div class="form-field" style="margin-bottom:0.75rem">
+            <label style="display:flex;align-items:center;gap:0.4rem">${t("tenantAgents.timeoutMinutes")} <span class="help-icon" title="${t("tenantAgents.timeoutMinutesHint").replace("{default}", "10")}">?</span></label>
+            <div style="display:flex;align-items:center;gap:0.5rem">
+              <input type="number" min="1" max="120" step="1"
+                .placeholder=${t("tenantAgents.timeoutMinutesPlaceholder").replace("{default}", "10")}
+                .value=${this.formTimeoutMinutes != null ? String(this.formTimeoutMinutes) : ""}
+                @input=${(e: InputEvent) => {
+                  const raw = (e.target as HTMLInputElement).value;
+                  this.formTimeoutMinutes = raw === "" ? null : Math.max(1, Math.floor(Number(raw)));
+                }}
+                style="width:120px" />
+              ${this.formTimeoutMinutes != null ? html`
+                <button type="button" class="btn btn-outline btn-sm"
+                  @click=${() => { this.formTimeoutMinutes = null; }}
+                  title="Reset to default">↺</button>
+              ` : nothing}
+            </div>
           </div>
 
           <div class="divider"><span>${t("tenantAgents.systemPrompt")}</span></div>
