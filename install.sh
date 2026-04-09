@@ -1395,19 +1395,42 @@ WRAPPER
 setup_sqlite_db() {
     local repo_dir="$1"
     local data_dir="$HOME/.enclaws"
-    local db_path="$data_dir/data.db"
-    local env_file="$repo_dir/.env"
+    local db_path="$data_dir/.sqlite/data.db"
+    local state_env_file="$data_dir/.env"
+    local repo_env_file="$repo_dir/.env"
 
-    mkdir -p "$data_dir"
+    mkdir -p "$data_dir/.sqlite"
 
-    # Don't overwrite existing database config
-    if [[ -f "$env_file" ]] && grep -q "OPENCLAW_DB_URL" "$env_file" 2>/dev/null; then
-        ui_info "Database config already present; skipping"
-        return 0
+    local db_url="sqlite://${db_path}"
+
+    # Write to ~/.enclaws/.env (state dir) so `enclaws gateway` works from any directory.
+    # Mirrors what npm postinstall does: reads .env.example as template and writes the state dir .env.
+    if [[ ! -f "$state_env_file" ]]; then
+        local template_file="$repo_dir/.env.example"
+        if [[ -f "$template_file" ]]; then
+            local content
+            content="$(cat "$template_file")"
+            # Replace the ENCLAWS_DB_URL placeholder with the absolute path
+            if echo "$content" | grep -q "^ENCLAWS_DB_URL="; then
+                content="$(echo "$content" | sed "s|^ENCLAWS_DB_URL=.*|ENCLAWS_DB_URL=${db_url}|")"
+            else
+                content="${content}"$'\n'"ENCLAWS_DB_URL=${db_url}"
+            fi
+            # Replace SKILL_PACK_LOCAL_DIR placeholder (will be set by setup_skill_pack later)
+            echo "$content" > "$state_env_file"
+        else
+            echo "ENCLAWS_DB_URL=${db_url}" > "$state_env_file"
+        fi
+        ui_success "Config created: ${state_env_file}"
     fi
 
-    # Append SQLite config to project .env (gateway reads --env-file=.env from repo dir)
-    echo "OPENCLAW_DB_URL=sqlite://${db_path}" >> "$env_file"
+    # Also keep ENCLAWS_DB_URL in repo .env for backward compat with --env-file=.env startup
+    if [[ -f "$repo_env_file" ]] && grep -q "^ENCLAWS_DB_URL=" "$repo_env_file" 2>/dev/null; then
+        # Already present — update the value so it's absolute (not the ~ placeholder)
+        sed -i "s|^ENCLAWS_DB_URL=.*|ENCLAWS_DB_URL=${db_url}|" "$repo_env_file"
+    else
+        echo "ENCLAWS_DB_URL=${db_url}" >> "$repo_env_file"
+    fi
 
     ui_success "SQLite database configured: ${db_path}"
 }
@@ -1550,7 +1573,21 @@ start_gateway_after_install() {
         return 0
     fi
 
-    local gateway_url="http://localhost:18789"
+    # Resolve port: prefer ENCLAWS_GATEWAY_PORT from .env, fall back to 18888
+    local gateway_port=18888
+    local repo_env_file="${repo_dir}/.env"
+    local state_env_file="$HOME/.enclaws/.env"
+    for env_candidate in "$repo_env_file" "$state_env_file"; do
+        if [[ -f "$env_candidate" ]]; then
+            local extracted_port
+            extracted_port="$(grep -E '^ENCLAWS_GATEWAY_PORT=' "$env_candidate" 2>/dev/null | tail -1 | cut -d= -f2 | tr -d '[:space:]')"
+            if [[ -n "$extracted_port" ]]; then
+                gateway_port="$extracted_port"
+                break
+            fi
+        fi
+    done
+    local gateway_url="http://localhost:${gateway_port}"
 
     echo ""
     ui_section "Starting Enclaws Gateway"
@@ -1567,8 +1604,8 @@ start_gateway_after_install() {
         while [[ $elapsed -lt $max_wait ]]; do
             sleep 1
             elapsed=$((elapsed + 1))
-            if curl -sf -o /dev/null "http://localhost:18789" 2>/dev/null || \
-               wget -q -O /dev/null "http://localhost:18789" 2>/dev/null; then
+            if curl -sf -o /dev/null "${gateway_url}" 2>/dev/null || \
+               wget -q -O /dev/null "${gateway_url}" 2>/dev/null; then
                 open_browser "$gateway_url"
                 exit 0
             fi
@@ -1577,7 +1614,7 @@ start_gateway_after_install() {
     ) &
 
     cd "$repo_dir"
-    exec node --env-file=.env dist/index.js gateway --port 18789 --allow-unconfigured
+    exec node --env-file=.env dist/index.js gateway --allow-unconfigured
 }
 
 # ─── Main installation flow ──────────────────────────────────────────────────
