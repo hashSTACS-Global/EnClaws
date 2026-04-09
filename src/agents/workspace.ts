@@ -2,10 +2,12 @@ import syncFs from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { isOptEnabled } from "../config/token-optimization.js";
 import { openBoundaryFile } from "../infra/boundary-file-read.js";
 import { resolveRequiredHomeDir } from "../infra/home-dir.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../routing/session-key.js";
+import { getSubagentDepth } from "../sessions/session-key-utils.js";
 import { resolveUserPath } from "../utils.js";
 import { getEnterpriseDefault, isCurrentEnterpriseDefault } from "./enterprise-defaults.js";
 import { resolveWorkspaceTemplateDir } from "./workspace-templates.js";
@@ -942,6 +944,11 @@ const MINIMAL_BOOTSTRAP_ALLOWLIST = new Set([
   DEFAULT_USER_FILENAME,
 ]);
 
+const WORKER_BOOTSTRAP_ALLOWLIST = new Set([
+  DEFAULT_TOOLS_FILENAME,
+  DEFAULT_IDENTITY_FILENAME,
+]);
+
 export function filterBootstrapFilesForSession(
   files: WorkspaceBootstrapFile[],
   sessionKey?: string,
@@ -949,7 +956,11 @@ export function filterBootstrapFilesForSession(
   if (!sessionKey || (!isSubagentSessionKey(sessionKey) && !isCronSessionKey(sessionKey))) {
     return files;
   }
-  return files.filter((file) => MINIMAL_BOOTSTRAP_ALLOWLIST.has(file.name));
+  const allowlist =
+    isOptEnabled("WORKER") && getSubagentDepth(sessionKey) >= 2
+      ? WORKER_BOOTSTRAP_ALLOWLIST
+      : MINIMAL_BOOTSTRAP_ALLOWLIST;
+  return files.filter((file) => allowlist.has(file.name));
 }
 
 export async function loadExtraBootstrapFiles(
