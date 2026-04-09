@@ -16,7 +16,7 @@ import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
  * - "minimal": Reduced sections (Tooling, Workspace, Runtime) - used for subagents
  * - "none": Just basic identity line, no sections
  */
-export type PromptMode = "full" | "minimal" | "none";
+export type PromptMode = "full" | "minimal" | "worker" | "none";
 type OwnerIdDisplay = "raw" | "hash";
 
 /**
@@ -461,6 +461,7 @@ export function buildAgentSystemPrompt(params: {
   const messageChannelOptions = listDeliverableMessageChannels().join("|");
   const promptMode = params.promptMode ?? "full";
   const isMinimal = promptMode === "minimal" || promptMode === "none";
+  const isWorker = promptMode === "worker";
   const sandboxContainerWorkspace = params.sandboxInfo?.containerWorkspaceDir?.trim();
   const sanitizedWorkspaceDir = sanitizeForPromptLiteral(params.workspaceDir);
   const sanitizedSandboxContainerWorkspace = sandboxContainerWorkspace
@@ -495,18 +496,19 @@ export function buildAgentSystemPrompt(params: {
     skillsPrompt,
     readToolName,
   });
+  const skipExtended = isMinimal || isWorker;
   const memorySection = buildMemorySection({
-    isMinimal,
+    isMinimal: skipExtended,
     availableTools,
     citationsMode: params.memoryCitationsMode,
   });
   const tenantMemorySection = buildTenantMemorySection({
-    isMinimal,
+    isMinimal: skipExtended,
     availableTools,
   });
   const docsSection = buildDocsSection({
     docsPath: params.docsPath,
-    isMinimal,
+    isMinimal: skipExtended,
     readToolName,
   });
   const workspaceNotes = (params.workspaceNotes ?? []).map((note) => note.trim()).filter(Boolean);
@@ -562,43 +564,51 @@ export function buildAgentSystemPrompt(params: {
     "Use plain human language for narration unless in a technical context.",
     "When a first-class tool exists for an action, use the tool directly instead of asking the user to run equivalent CLI or slash commands.",
     "",
-    "## Proactivity & Scheduling (Act as a Human Assistant)",
-    "When a user asks you to perform a task in the future, follow-up later, or set a reminder (e.g., 'remind me at 3pm', 'check this tomorrow', 'run this task every Friday'):",
-    "1. DO NOT just passively say 'I will do it' or 'I have made a note'.",
-    "2. You MUST proactively and immediately use the `cron` tool (`action=add`) to schedule the job.",
-    "3. Set the job payload to `agentTurn` so that you are correctly woken up to perform the work.",
-    "4. Formulate the `message` inside the payload so your future self knows exactly what to do and what context to retrieve.",
-    "",
-    ...(availableTools.has("user_memory") || availableTools.has("tenant_memory")
+    ...(!isWorker
       ? [
-          "Memory saving rules — classify information by CONTENT TYPE, not by who said it:",
-          availableTools.has("user_memory")
-            ? "- PERSONAL info (user's name, nickname, personal role/title, personal preferences, personal background) → call `user_memory(action=save)`"
-            : "",
-          availableTools.has("tenant_memory")
-            ? "- ENTERPRISE info (company name, business domain, products, tech stack, architecture, processes, team conventions, partner/vendor details) → call `tenant_memory(action=save)`"
-            : "",
-          "If one message contains BOTH types, call BOTH tools — one call each.",
-          "Example: '我叫刘昱，我们公司做AI+区块链' → call user_memory(save, '姓名：刘昱') AND tenant_memory(save, '企业业务：AI+区块链')",
-          "1. DO NOT merge personal and enterprise info into a single tool call.",
-          "2. DO NOT save enterprise info to user_memory just because a user mentioned it.",
-          "3. You MUST call the tool(s) in THIS response — text alone persists nothing.",
+          "## Proactivity & Scheduling (Act as a Human Assistant)",
+          "When a user asks you to perform a task in the future, follow-up later, or set a reminder (e.g., 'remind me at 3pm', 'check this tomorrow', 'run this task every Friday'):",
+          "1. DO NOT just passively say 'I will do it' or 'I have made a note'.",
+          "2. You MUST proactively and immediately use the `cron` tool (`action=add`) to schedule the job.",
+          "3. Set the job payload to `agentTurn` so that you are correctly woken up to perform the work.",
+          "4. Formulate the `message` inside the payload so your future self knows exactly what to do and what context to retrieve.",
           "",
+          ...(availableTools.has("user_memory") || availableTools.has("tenant_memory")
+            ? [
+                "Memory saving rules — classify information by CONTENT TYPE, not by who said it:",
+                availableTools.has("user_memory")
+                  ? "- PERSONAL info (user's name, nickname, personal role/title, personal preferences, personal background) → call `user_memory(action=save)`"
+                  : "",
+                availableTools.has("tenant_memory")
+                  ? "- ENTERPRISE info (company name, business domain, products, tech stack, architecture, processes, team conventions, partner/vendor details) → call `tenant_memory(action=save)`"
+                  : "",
+                "If one message contains BOTH types, call BOTH tools — one call each.",
+                "Example: '我叫刘昱，我们公司做AI+区块链' → call user_memory(save, '姓名：刘昱') AND tenant_memory(save, '企业业务：AI+区块链')",
+                "1. DO NOT merge personal and enterprise info into a single tool call.",
+                "2. DO NOT save enterprise info to user_memory just because a user mentioned it.",
+                "3. You MUST call the tool(s) in THIS response — text alone persists nothing.",
+                "",
+              ]
+            : []),
         ]
       : []),
     ...safetySection,
-    "## EnClaws CLI Quick Reference",
-    "EnClaws is controlled via subcommands. Do not invent commands.",
-    "To check Gateway status: `enclaws gateway status` (read-only, always safe).",
-    "To start/stop/restart the Gateway: use the `gateway` tool (action=restart/update) if available — do NOT run shell commands like `systemctl`, `enclaws gateway start/stop/restart`, or `pkill` to control the service. If the `gateway` tool is unavailable, tell the user to run the command themselves.",
-    "If unsure, ask the user to run `enclaws help` (or `enclaws gateway --help`) and paste the output.",
-    "",
-    ...skillsSection,
+    ...(!isWorker
+      ? [
+          "## EnClaws CLI Quick Reference",
+          "EnClaws is controlled via subcommands. Do not invent commands.",
+          "To check Gateway status: `enclaws gateway status` (read-only, always safe).",
+          "To start/stop/restart the Gateway: use the `gateway` tool (action=restart/update) if available — do NOT run shell commands like `systemctl`, `enclaws gateway start/stop/restart`, or `pkill` to control the service. If the `gateway` tool is unavailable, tell the user to run the command themselves.",
+          "If unsure, ask the user to run `enclaws help` (or `enclaws gateway --help`) and paste the output.",
+          "",
+        ]
+      : []),
+    ...(!isWorker ? skillsSection : []),
     ...memorySection,
     ...tenantMemorySection,
-    // Skip self-update for subagent/none modes
-    hasGateway && !isMinimal ? "## EnClaws Self-Update" : "",
-    hasGateway && !isMinimal
+    // Skip self-update for subagent/worker/none modes
+    hasGateway && !isMinimal && !isWorker ? "## EnClaws Self-Update" : "",
+    hasGateway && !isMinimal && !isWorker
       ? [
           "Get Updates (self-update) is ONLY allowed when the user explicitly asks for it.",
           "Do not run config.apply or update.run unless the user explicitly requests an update or config change; if it's not explicit, ask first.",
@@ -607,19 +617,19 @@ export function buildAgentSystemPrompt(params: {
           "After restart, EnClaws pings the last active session automatically.",
         ].join("\n")
       : "",
-    hasGateway && !isMinimal ? "" : "",
+    hasGateway && !isMinimal && !isWorker ? "" : "",
     "",
-    // Skip model aliases for subagent/none modes
-    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal
+    // Skip model aliases for subagent/worker/none modes
+    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
       ? "## Model Aliases"
       : "",
-    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal
+    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
       ? "Prefer aliases when specifying model overrides; full provider/model is also accepted."
       : "",
-    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal
+    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
       ? params.modelAliasLines.join("\n")
       : "",
-    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal ? "" : "",
+    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker ? "" : "",
     userTimezone
       ? "If you need the current date, time, or day of week, run session_status (📊 session_status)."
       : "",
@@ -629,8 +639,8 @@ export function buildAgentSystemPrompt(params: {
     ...workspaceNotes,
     "",
     ...docsSection,
-    params.sandboxInfo?.enabled ? "## Sandbox" : "",
-    params.sandboxInfo?.enabled
+    params.sandboxInfo?.enabled && !isWorker ? "## Sandbox" : "",
+    params.sandboxInfo?.enabled && !isWorker
       ? [
           "You are running in a sandboxed runtime (tools execute in Docker).",
           "Some tools may be unavailable due to sandbox policy.",
@@ -673,8 +683,8 @@ export function buildAgentSystemPrompt(params: {
           .filter(Boolean)
           .join("\n")
       : "",
-    params.sandboxInfo?.enabled ? "" : "",
-    ...buildUserIdentitySection(ownerLine, isMinimal),
+    params.sandboxInfo?.enabled && !isWorker ? "" : "",
+    ...buildUserIdentitySection(ownerLine, skipExtended),
     ...buildTimeSection({
       userTimezone,
     }),
@@ -685,16 +695,16 @@ export function buildAgentSystemPrompt(params: {
     // Included for both full and minimal (subagent) modes since subagents also
     // need delegation and cognitive-loop guidance.
     ...(!isMinimal ? [SELF_DRIVING_MODE, ""] : []),
-    ...buildReplyTagsSection(isMinimal),
+    ...buildReplyTagsSection(skipExtended, runtimeChannel),
     ...buildMessagingSection({
-      isMinimal,
+      isMinimal: skipExtended,
       availableTools,
       messageChannelOptions,
       inlineButtonsEnabled,
       runtimeChannel,
       messageToolHints: params.messageToolHints,
     }),
-    ...buildVoiceSection({ isMinimal, ttsHint: params.ttsHint }),
+    ...buildVoiceSection({ isMinimal: skipExtended, ttsHint: params.ttsHint }),
   ];
 
   if (extraSystemPrompt && !isOptEnabled("CACHE")) {
@@ -703,7 +713,7 @@ export function buildAgentSystemPrompt(params: {
       promptMode === "minimal" ? "## Subagent Context" : "## Group Chat Context";
     lines.push(contextHeader, extraSystemPrompt, "");
   }
-  if (params.reactionGuidance) {
+  if (params.reactionGuidance && !isWorker) {
     const { level, channel } = params.reactionGuidance;
     const guidanceText =
       level === "minimal"
@@ -726,7 +736,7 @@ export function buildAgentSystemPrompt(params: {
           ].join("\n");
     lines.push("## Reactions", guidanceText, "");
   }
-  if (reasoningHint) {
+  if (reasoningHint && !isWorker) {
     lines.push("## Reasoning Format", reasoningHint, "");
   }
 
@@ -769,8 +779,8 @@ export function buildAgentSystemPrompt(params: {
     }
   }
 
-  // Skip silent replies for subagent/none modes
-  if (!isMinimal) {
+  // Skip silent replies for subagent/worker/none modes
+  if (!isMinimal && !isWorker) {
     lines.push(
       "## Silent Replies",
       `When you have nothing to say, respond with ONLY: ${SILENT_REPLY_TOKEN}`,
@@ -787,8 +797,8 @@ export function buildAgentSystemPrompt(params: {
     );
   }
 
-  // Skip heartbeats for subagent/none modes
-  if (!isMinimal) {
+  // Skip heartbeats for subagent/worker/none modes
+  if (!isMinimal && !isWorker) {
     lines.push(
       "## Heartbeats",
       heartbeatPromptLine,
@@ -805,19 +815,25 @@ export function buildAgentSystemPrompt(params: {
     buildRuntimeLine(runtimeInfo, runtimeChannel, runtimeCapabilities, params.defaultThinkLevel),
     `Reasoning: ${reasoningLevel} (hidden unless on/stream). Toggle /reasoning; /status shows Reasoning when enabled.`,
     "",
-    "## Skills Reporting (MANDATORY)",
-    "At the very end of your final reply, you MUST append exactly one line:",
-    "- If you used any skill (via inline_skill block or by reading a SKILL.md): `> Skills used: <name1>, <name2>`",
-    "- If you used no skill: `> Skills used: none`",
-    "Do NOT omit this line under any circumstances.",
   );
+
+  // Skip skills reporting for worker mode
+  if (!isWorker) {
+    lines.push(
+      "## Skills Reporting (MANDATORY)",
+      "At the very end of your final reply, you MUST append exactly one line:",
+      "- If you used any skill (via inline_skill block or by reading a SKILL.md): `> Skills used: <name1>, <name2>`",
+      "- If you used no skill: `> Skills used: none`",
+      "Do NOT omit this line under any circumstances.",
+    );
+  }
 
   // Token optimization: move extraSystemPrompt to the very end to maximize cache prefix length.
   // When CACHE toggle is enabled, dynamic content (inboundMeta, groupChatContext) goes last
   // so all static sections above can be cached by Anthropic/OpenRouter prefix matching.
   if (extraSystemPrompt && isOptEnabled("CACHE")) {
     const contextHeader =
-      promptMode === "minimal" || (promptMode as string) === "worker"
+      promptMode === "minimal" || promptMode === "worker"
         ? "## Subagent Context"
         : "## Group Chat Context";
     lines.push("", contextHeader, extraSystemPrompt);

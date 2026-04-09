@@ -20,7 +20,8 @@ import type {
   PluginHookBeforeAgentStartResult,
   PluginHookBeforePromptBuildResult,
 } from "../../../plugins/types.js";
-import { isSubagentSessionKey } from "../../../routing/session-key.js";
+import { isOptEnabled } from "../../../config/token-optimization.js";
+import { getSubagentDepth, isSubagentSessionKey } from "../../../routing/session-key.js";
 import { resolveSignalReactionLevel } from "../../../signal/reaction-level.js";
 import { resolveTelegramInlineButtonsScope } from "../../../telegram/inline-buttons.js";
 import { resolveTelegramReactionLevel } from "../../../telegram/reaction-level.js";
@@ -391,11 +392,15 @@ export async function resolvePromptBuildHookResult(params: {
   };
 }
 
-export function resolvePromptModeForSession(sessionKey?: string): "minimal" | "full" {
-  if (!sessionKey) {
+export function resolvePromptModeForSession(sessionKey?: string): "full" | "minimal" | "worker" {
+  if (!sessionKey || !isSubagentSessionKey(sessionKey)) {
     return "full";
   }
-  return isSubagentSessionKey(sessionKey) ? "minimal" : "full";
+  if (!isOptEnabled("WORKER")) {
+    return "minimal";
+  }
+  const depth = getSubagentDepth(sessionKey);
+  return depth >= 2 ? "worker" : "minimal";
 }
 
 export function resolveAttemptFsWorkspaceOnly(params: {
