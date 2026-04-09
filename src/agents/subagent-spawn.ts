@@ -34,6 +34,11 @@ const MAX_RESULT_CHARS = 6_000;
 const RESULT_HEAD_CHARS = 3_000;
 const RESULT_TAIL_CHARS = 2_000;
 
+/** When TOOLSYNC toggle is on, return undefined so subagent inherits parent's full tool set for shared cache prefix. */
+export function resolveSubagentTools(tools: string[] | undefined): string[] | undefined {
+  return isOptEnabled("TOOLSYNC") ? undefined : tools;
+}
+
 export function compressSubagentResult(result: string): string {
   if (!isOptEnabled("COMPRESS") || result.length <= MAX_RESULT_CHARS) return result;
   const head = result.slice(0, RESULT_HEAD_CHARS);
@@ -488,7 +493,7 @@ export async function spawnSubagentDirect(
         groupId: ctx.agentGroupId ?? undefined,
         groupChannel: ctx.agentGroupChannel ?? undefined,
         groupSpace: ctx.agentGroupSpace ?? undefined,
-        tools: params.tools,
+        tools: resolveSubagentTools(params.tools),
         skills: params.skills,
       },
       timeoutMs: 10_000,
