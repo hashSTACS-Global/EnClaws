@@ -54,7 +54,7 @@ function buildSkillsSection(params: { skillsPrompt?: string; readToolName: strin
   if (!trimmed) {
     return [];
   }
-  const hasInlineSkills = trimmed.includes("<inline_skill");
+  const hasInlineSkills = !isOptEnabled("PROMPT") && trimmed.includes("<inline_skill");
   return [
     "## Skills (mandatory)",
     "Before replying: scan <available_skills> <description> entries.",
@@ -120,6 +120,11 @@ function buildTenantMemorySection(params: {
   availableTools: Set<string>;
 }) {
   if (params.isMinimal) {
+    return [];
+  }
+  if (isOptEnabled("PROMPT")) {
+    // Proactivity & Scheduling section already has complete memory classification rules with examples.
+    // Skip duplicate scope descriptions to save ~100 tokens.
     return [];
   }
   const hasTenantMemory = params.availableTools.has("tenant_memory");
@@ -188,9 +193,15 @@ function buildTimeSection(params: { userTimezone?: string }) {
   return ["## Current Date & Time", `Time zone: ${params.userTimezone}`, ""];
 }
 
-function buildReplyTagsSection(isMinimal: boolean) {
+function buildReplyTagsSection(isMinimal: boolean, runtimeChannel?: string) {
   if (isMinimal) {
     return [];
+  }
+  if (isOptEnabled("PROMPT") && runtimeChannel) {
+    const imChannels = new Set(["feishu", "telegram", "discord", "slack", "whatsapp", "signal"]);
+    if (imChannels.has(runtimeChannel)) {
+      return [];
+    }
   }
   return [
     "## Reply Tags",
@@ -453,6 +464,11 @@ export function buildAgentSystemPrompt(params: {
     : "Heartbeat prompt: (configured)";
   const runtimeInfo = params.runtimeInfo;
   const runtimeChannel = runtimeInfo?.channel?.trim().toLowerCase();
+  const isImChannel = (ch?: string) => {
+    if (!ch) return false;
+    const imSet = new Set(["feishu", "telegram", "discord", "slack", "whatsapp", "signal", "imessage"]);
+    return imSet.has(ch);
+  };
   const runtimeCapabilities = (runtimeInfo?.capabilities ?? [])
     .map((cap) => String(cap).trim())
     .filter(Boolean);
@@ -593,7 +609,7 @@ export function buildAgentSystemPrompt(params: {
         ]
       : []),
     ...safetySection,
-    ...(!isWorker
+    ...(!isWorker && !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel))
       ? [
           "## EnClaws CLI Quick Reference",
           "EnClaws is controlled via subcommands. Do not invent commands.",
@@ -606,9 +622,9 @@ export function buildAgentSystemPrompt(params: {
     ...(!isWorker ? skillsSection : []),
     ...memorySection,
     ...tenantMemorySection,
-    // Skip self-update for subagent/worker/none modes
-    hasGateway && !isMinimal && !isWorker ? "## EnClaws Self-Update" : "",
-    hasGateway && !isMinimal && !isWorker
+    // Skip self-update for subagent/worker/none modes (and IM channels when PROMPT enabled)
+    hasGateway && !isMinimal && !isWorker && !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel)) ? "## EnClaws Self-Update" : "",
+    hasGateway && !isMinimal && !isWorker && !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel))
       ? [
           "Get Updates (self-update) is ONLY allowed when the user explicitly asks for it.",
           "Do not run config.apply or update.run unless the user explicitly requests an update or config change; if it's not explicit, ask first.",
@@ -617,7 +633,7 @@ export function buildAgentSystemPrompt(params: {
           "After restart, EnClaws pings the last active session automatically.",
         ].join("\n")
       : "",
-    hasGateway && !isMinimal && !isWorker ? "" : "",
+    hasGateway && !isMinimal && !isWorker && !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel)) ? "" : "",
     "",
     // Skip model aliases for subagent/worker/none modes
     params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
@@ -744,8 +760,19 @@ export function buildAgentSystemPrompt(params: {
   const validContextFiles = contextFiles.filter(
     (file) => typeof file.path === "string" && file.path.trim().length > 0,
   );
-  if (validContextFiles.length > 0) {
-    const hasSoulFile = validContextFiles.some((file) => {
+  const effectiveContextFiles = isOptEnabled("PROMPT")
+    ? validContextFiles.filter((file) => {
+        // Strip frontmatter, comments, and blank lines; skip if remaining text < 50 chars
+        const stripped = file.content
+          .replace(/^---[\s\S]*?---\s*/m, "")
+          .replace(/<!--[\s\S]*?-->/g, "")
+          .replace(/^\s*$/gm, "")
+          .trim();
+        return stripped.length >= 50;
+      })
+    : validContextFiles;
+  if (effectiveContextFiles.length > 0) {
+    const hasSoulFile = effectiveContextFiles.some((file) => {
       const normalizedPath = file.path.trim().replace(/\\/g, "/");
       const baseName = normalizedPath.split("/").pop() ?? normalizedPath;
       return baseName.toLowerCase() === "soul.md";
@@ -757,7 +784,7 @@ export function buildAgentSystemPrompt(params: {
       );
     }
     // Detect multi-tenant layout: files from tenant/agent/user dirs
-    const tenantDirPath = detectTenantDirFromContextFiles(validContextFiles);
+    const tenantDirPath = detectTenantDirFromContextFiles(effectiveContextFiles);
     if (tenantDirPath) {
       const sep = tenantDirPath.includes("\\") ? "\\" : "/";
       const tenantSkillsPath = `${tenantDirPath}${sep}skills`;
@@ -774,7 +801,7 @@ export function buildAgentSystemPrompt(params: {
       );
     }
     lines.push("");
-    for (const file of validContextFiles) {
+    for (const file of effectiveContextFiles) {
       lines.push(`## ${file.path}`, "", file.content, "");
     }
   }
