@@ -6,6 +6,7 @@
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { requireNodeSqlite } from "../../memory/sqlite.js";
@@ -41,6 +42,11 @@ export function initSqliteDb(url: string): void {
   // The path after sqlite:// may start with /D: which needs the leading slash stripped
   if (process.platform === "win32" && /^\/[A-Za-z]:/.test(dbPath)) {
     dbPath = dbPath.slice(1);
+  }
+
+  // Expand leading ~ to the user's home directory
+  if (dbPath.startsWith("~/") || dbPath === "~") {
+    dbPath = path.join(os.homedir(), dbPath.slice(1));
   }
 
   // Ensure parent directory exists

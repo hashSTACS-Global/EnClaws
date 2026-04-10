@@ -189,6 +189,13 @@
 
 * {
   box-sizing: border-box;
+  caret-color: transparent;
+}
+
+input:focus,
+textarea:focus,
+[contenteditable]:focus {
+  caret-color: auto;
 }
 
 html,

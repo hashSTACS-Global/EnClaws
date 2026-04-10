@@ -38,7 +38,7 @@ export function getTenantSummary(tenantId: string) {
   }
   const providerCount = modelRows.length;
 
-  const userTotal = pInt(sqliteQuery("SELECT COUNT(*) as c FROM users WHERE tenant_id = ? AND status != 'deleted'", [tenantId]).rows[0]?.c);
+  const userTotal = pInt(sqliteQuery("SELECT COUNT(DISTINCT COALESCE(union_id, id)) as c FROM users WHERE tenant_id = ? AND status = 'active'", [tenantId]).rows[0]?.c);
   const userActive30d = pInt(sqliteQuery("SELECT COUNT(DISTINCT user_id) as c FROM llm_interaction_traces WHERE tenant_id = ? AND created_at >= datetime('now', '-30 days')", [tenantId]).rows[0]?.c);
 
   const tokensAll = pInt(sqliteQuery("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = ?", [tenantId]).rows[0]?.c);
@@ -160,13 +160,14 @@ export function getTenantChannelDistribution(tenantId: string) {
 export function getTenantRecentTraces(tenantId: string, limit = 10) {
   const result = sqliteQuery(
     `SELECT COALESCE(ta.name, t.agent_id) AS agent_name,
-            COALESCE(u.display_name, t.user_id) AS user_name,
+            COALESCE((SELECT display_name FROM users
+                      WHERE tenant_id = t.tenant_id AND (id = t.user_id OR union_id = t.user_id)
+                      LIMIT 1), t.user_id) AS user_name,
             t.model,
             (t.input_tokens + t.output_tokens) AS tokens,
             t.created_at
      FROM llm_interaction_traces t
      LEFT JOIN tenant_agents ta ON ta.agent_id = t.agent_id AND ta.tenant_id = t.tenant_id
-     LEFT JOIN users u ON u.tenant_id = t.tenant_id AND (t.user_id = u.id OR t.user_id = u.union_id)
      WHERE t.tenant_id = ? AND t.turn_index = 0
      ORDER BY t.created_at DESC LIMIT ?`,
     [tenantId, limit],

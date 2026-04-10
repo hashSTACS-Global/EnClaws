@@ -387,7 +387,7 @@ CREATE TRIGGER IF NOT EXISTS trg_channel_apps_updated_at AFTER UPDATE ON tenant_
     UPDATE tenant_channel_apps SET updated_at = datetime('now') WHERE id = NEW.id;
   END;
 
--- Seed: Platform admin tenant + user (password: Aa123456!)
+-- Seed: Platform admin tenant + user (password: Aa123456!, stored as bcrypt(sha256(password)))
 INSERT OR IGNORE INTO tenants (id, name, slug, plan, status, quotas)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
@@ -403,7 +403,7 @@ VALUES (
   '00000000-0000-0000-0000-000000000002',
   '00000000-0000-0000-0000-000000000001',
   'admin@enclaws.local',
-  '$2b$12$KIBNGrqC9DmrXbPeutbl5.IebhcHmsWEld9jeS3XvSQk07NV3EPB.',
+  '$2b$12$YAVi.E167RF.45y49zl69uRpr8NRQQQQdMEZcP.PEERR922d5tWHC',
   'Platform Admin',
   'platform-admin',
   'active'

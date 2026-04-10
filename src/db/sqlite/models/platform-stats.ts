@@ -144,19 +144,19 @@ export function getChannelDistribution() {
 
 export function getUserActivity() {
   const total = Number(sqliteQuery(
-    "SELECT COUNT(*) as c FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status != 'deleted' AND t.slug != '_platform'"
+    "SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id) as uid FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.slug != '_platform')"
   ).rows[0].c);
 
   const active30d = Number(sqliteQuery(
-    "SELECT COUNT(DISTINCT user_id) as c FROM llm_interaction_traces WHERE created_at >= DATE('now', '-30 days')"
+    "SELECT COUNT(DISTINCT tr.user_id) as c FROM llm_interaction_traces tr JOIN tenants t ON tr.tenant_id = t.id WHERE tr.created_at >= DATE('now', '-30 days') AND t.slug != '_platform'"
   ).rows[0].c);
 
   const newToday = Number(sqliteQuery(
-    "SELECT COUNT(*) as c FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status != 'deleted' AND t.slug != '_platform' AND u.created_at >= DATE('now')"
+    "SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id) as uid FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.slug != '_platform' AND u.created_at >= DATE('now'))"
   ).rows[0].c);
 
   const newThisWeek = Number(sqliteQuery(
-    "SELECT COUNT(*) as c FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status != 'deleted' AND t.slug != '_platform' AND u.created_at >= DATE('now', '-7 days')"
+    "SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id) as uid FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.slug != '_platform' AND u.created_at >= DATE('now', '-7 days'))"
   ).rows[0].c);
 
   return { total, active30d, newToday, newThisWeek };

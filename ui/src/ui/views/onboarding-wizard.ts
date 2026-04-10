@@ -812,7 +812,7 @@ export class OnboardingWizard extends LitElement {
             <label>${t("onboarding.selectSubModel")}</label>
             <select @change=${(e: Event) => { this.selectedSharedSubModelId = (e.target as HTMLSelectElement).value; }}>
               ${selectedSharedProvider.models.map(m => html`
-                <option value=${m.id} ?selected=${this.selectedSharedSubModelId === m.id}>${m.id}</option>
+                <option value=${m.id} ?selected=${this.selectedSharedSubModelId === m.id}>${m.name}</option>
               `)}
             </select>
           </div>
@@ -820,7 +820,7 @@ export class OnboardingWizard extends LitElement {
 
         ${selectedSharedProvider && selectedSharedProvider.models.length === 1 ? html`
           <div style="font-size:0.85rem;color:var(--text-secondary,#a3a3a3);margin-top:0.5rem">
-            ${t("onboarding.selectedModel")}: <strong>${selectedSharedProvider.models[0].id}</strong>
+            ${t("onboarding.selectedModel")}: <strong>${selectedSharedProvider.models[0].name}</strong>
           </div>
         ` : nothing}
       ` : html`

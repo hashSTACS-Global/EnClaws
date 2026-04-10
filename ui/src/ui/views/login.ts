@@ -34,6 +34,12 @@ export class EnClawsLogin extends LitElement {
       color: var(--text, #e5e5e5);
       font-family: var(--font-sans, system-ui, sans-serif);
       position: relative;
+      caret-color: transparent;
+    }
+
+    :host input:focus,
+    :host textarea:focus {
+      caret-color: auto;
     }
 
     .top-toolbar {
@@ -132,12 +138,15 @@ export class EnClawsLogin extends LitElement {
     .login-header {
       text-align: center;
       margin-bottom: 1.5rem;
+      user-select: none;
     }
 
-    .login-header img {
+    .login-header .logo {
+      display: block;
       width: 72px;
       height: 72px;
-      margin-bottom: 0.75rem;
+      margin: 0 auto 0.75rem;
+      background: url("/favicon-32.png") center / contain no-repeat;
     }
 
     .login-header h1 {
@@ -557,7 +566,7 @@ export class EnClawsLogin extends LitElement {
       <div class="login-container">
         <div class="login-card">
           <div class="login-header">
-            <img src="/favicon.svg" alt="EnClaws" />
+            <div class="logo" role="img" aria-label="EnClaws"></div>
             <h1>${this.mode === "login" ? t("login.title") : t("login.titleRegister")}</h1>
             <p>${this.mode === "login" ? t("login.subtitle") : t("login.subtitleRegister")}</p>
           </div>
