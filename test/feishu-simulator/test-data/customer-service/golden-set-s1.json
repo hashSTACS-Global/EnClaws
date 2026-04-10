@@ -1,0 +1,274 @@
+{
+  "cases": [
+    {
+      "name": "F01-EC是什么",
+      "message": "EC 是什么？能帮我做什么？",
+      "assert": {
+        "containsAny": ["企业", "AI 助手", "助手", "平台"],
+        "notContains": "error"
+      },
+      "tags": ["functional", "easy", "S1"]
+    },
+    {
+      "name": "F02-支持哪些IM",
+      "message": "EC 支持哪些即时通讯工具？",
+      "assert": {
+        "containsAny": ["飞书", "IM", "渠道", "通讯"],
+        "notContains": "error"
+      },
+      "tags": ["functional", "easy", "S1"]
+    },
+    {
+      "name": "F03-SaaS还是私有化",
+      "message": "EC 有没有 SaaS 版本？我需要自己搭服务器吗？",
+      "assert": {
+        "containsAny": ["SaaS", "私有化", "服务器", "安装"],
+        "notContains": "error"
+      },
+      "tags": ["functional", "easy", "S1"]
+    },
+    {
+      "name": "F04-添加Skill",
+      "message": "我想给我的 EC 助手添加一个新的 Skill，应该怎么操作？",
+      "assert": {
+        "containsAny": ["Skill", "插件", "技能", "安装"],
+        "notContains": "error"
+      },
+      "tags": ["functional", "medium", "S1"]
+    },
+    {
+      "name": "F05-多租户隔离",
+      "message": "多个部门共用一个 EC 账户，数据会不会互相看到？",
+      "assert": {
+        "containsAny": ["隔离", "多租户", "权限", "独立"],
+        "notContains": "error"
+      },
+      "tags": ["functional", "medium", "S1"]
+    },
+    {
+      "name": "F06-成本统计",
+      "message": "我怎么看到团队每个月用了多少 AI？有成本统计吗？",
+      "assert": {
+        "containsAny": ["成本", "Token", "用量", "追踪", "统计"],
+        "notContains": "error"
+      },
+      "tags": ["functional", "medium", "S1"]
+    },
+    {
+      "name": "F07-飞书不回复排查",
+      "message": "在飞书里发消息给 EC 助手它没有回复，可能是什么原因？",
+      "assert": {
+        "containsAny": ["配置", "权限", "检查", "连接"],
+        "notContains": "error"
+      },
+      "tags": ["functional", "medium", "S1"]
+    },
+    {
+      "name": "F08-Token计费",
+      "message": "EC 的 Token 是怎么计费的？每次对话消耗多少？",
+      "assert": {
+        "containsAny": ["Token", "计费", "模型", "消耗"],
+        "notContains": "error"
+      },
+      "tags": ["functional", "hard", "S1"]
+    },
+    {
+      "name": "F09-和Dify的区别",
+      "message": "EC 和 Dify 有什么区别？我为什么不直接用 Dify？",
+      "assert": {
+        "containsAny": ["企业", "IM", "飞书", "Skill", "渠道"],
+        "notContains": "error"
+      },
+      "tags": ["functional", "hard", "S1"]
+    },
+    {
+      "name": "F10-私有化合规",
+      "message": "我们有合规要求数据不能出境，EC 私有化部署能满足吗？",
+      "assert": {
+        "containsAny": ["私有化", "部署", "联系", "销售"],
+        "notContains": "error"
+      },
+      "tags": ["functional", "hard", "S1"]
+    },
+    {
+      "name": "U01-注册账号",
+      "message": "我怎么注册 EC 账号？",
+      "assert": {
+        "containsAny": ["注册", "官网", "安装", "npm"],
+        "notContains": "error"
+      },
+      "tags": ["usage", "easy", "S1"]
+    },
+    {
+      "name": "U02-开始使用",
+      "message": "注册完之后我要怎么开始使用 EC？",
+      "assert": {
+        "containsAny": ["gateway", "启动", "飞书", "配置"],
+        "notContains": "error"
+      },
+      "tags": ["usage", "easy", "S1"]
+    },
+    {
+      "name": "U03-免费版",
+      "message": "EC 有没有免费版？免费版可以用哪些功能？",
+      "assert": {
+        "containsAny": ["免费", "开源", "Apache", "试用"],
+        "notContains": "error"
+      },
+      "tags": ["usage", "easy", "S1"]
+    },
+    {
+      "name": "U04-接入飞书",
+      "message": "我怎么把 EC 的 AI 助手接入到飞书里？",
+      "assert": {
+        "containsAny": ["飞书", "Bot", "应用", "配置", "接入"],
+        "notContains": "error"
+      },
+      "tags": ["usage", "medium", "S1"]
+    },
+    {
+      "name": "U05-上传知识库",
+      "message": "我有一批内部文档，怎么上传到知识库让 AI 能回答？",
+      "assert": {
+        "containsAny": ["知识库", "memory", "Markdown", "上传", "文档"],
+        "notContains": "error"
+      },
+      "tags": ["usage", "medium", "S1"]
+    },
+    {
+      "name": "U06-邀请团队成员",
+      "message": "怎么邀请同事加入我的企业空间？可以设不同权限吗？",
+      "assert": {
+        "containsAny": ["邀请", "成员", "权限", "角色"],
+        "notContains": "error"
+      },
+      "tags": ["usage", "medium", "S1"]
+    },
+    {
+      "name": "U07-Skill插件",
+      "message": "EC 支持哪些 Skill 插件？怎么安装和配置？",
+      "assert": {
+        "containsAny": ["Skill", "插件", "安装", "配置"],
+        "notContains": "error"
+      },
+      "tags": ["usage", "medium", "S1"]
+    },
+    {
+      "name": "U08-私有化部署流程",
+      "message": "我们不能用 SaaS，EC 私有化部署的流程是怎样的？",
+      "assert": {
+        "containsAny": ["私有化", "部署", "服务器", "安装", "联系"],
+        "notContains": "error"
+      },
+      "tags": ["usage", "hard", "S1"]
+    },
+    {
+      "name": "U09-批量迁移文档",
+      "message": "从另一个平台迁移几百篇文档到 EC，有批量导入方式吗？",
+      "assert": {
+        "containsAny": ["Markdown", "批量", "导入", "格式"],
+        "notContains": "error"
+      },
+      "tags": ["usage", "hard", "S1"]
+    },
+    {
+      "name": "U10-API集成",
+      "message": "EC 提供 API 吗？怎么做 API 集成？",
+      "assert": {
+        "containsAny": ["API", "Gateway", "接口", "集成"],
+        "notContains": "error"
+      },
+      "tags": ["usage", "hard", "S1"]
+    },
+    {
+      "name": "B01-融资信息",
+      "message": "你们 EC 公司融了多少钱？投资人是谁？",
+      "assert": {
+        "containsAny": ["无法", "不确定", "不掌握", "抱歉", "通知负责人"],
+        "notContains": "error"
+      },
+      "tags": ["boundary", "easy", "S1"]
+    },
+    {
+      "name": "B02-公司员工数",
+      "message": "你们公司有多少员工？CEO 是谁？总部在哪？",
+      "assert": {
+        "containsAny": ["无法", "不确定", "官网", "抱歉", "通知负责人"],
+        "notContains": "error"
+      },
+      "tags": ["boundary", "easy", "S1"]
+    },
+    {
+      "name": "B03-退款",
+      "message": "我上个月多付了一笔钱，要申请退款，什么时候到账？",
+      "assert": {
+        "containsAny": ["负责人", "通知", "请稍等", "同事", "人工"],
+        "notContains": "error"
+      },
+      "tags": ["boundary", "easy", "S1"]
+    },
+    {
+      "name": "B04-打折合同",
+      "message": "我们体量比较大，能打折吗？合同条款想改几条",
+      "assert": {
+        "containsAny": ["负责人", "通知", "商务", "请稍等", "同事"],
+        "notContains": "error"
+      },
+      "tags": ["boundary", "medium", "S1"]
+    },
+    {
+      "name": "B05-系统崩溃投诉",
+      "message": "你们这个破系统又崩了！已经影响我们业务了！",
+      "assert": {
+        "containsAny": ["抱歉", "理解", "负责人", "通知", "排查"],
+        "notContains": "error"
+      },
+      "tags": ["boundary", "medium", "S1"]
+    },
+    {
+      "name": "B06-威胁差评",
+      "message": "你们服务太差了！我要去各平台给你们差评！",
+      "assert": {
+        "containsAny": ["理解", "抱歉", "反馈", "负责人", "通知"],
+        "notContains": "error"
+      },
+      "tags": ["boundary", "hard", "S1"]
+    },
+    {
+      "name": "B07-模糊问题",
+      "message": "你们这个功能行不行啊？",
+      "assert": {
+        "containsAny": ["哪个", "具体", "是想问", "能否"],
+        "notContains": "error"
+      },
+      "tags": ["boundary", "easy", "S1"]
+    },
+    {
+      "name": "B08-知识库不准确",
+      "message": "我上传了知识库文档但 AI 回答不准确，怎么办？",
+      "assert": {
+        "containsAny": ["格式", "Markdown", "内容", "优化", "检查"],
+        "notContains": "error"
+      },
+      "tags": ["boundary", "medium", "S1"]
+    },
+    {
+      "name": "B09-找负责人",
+      "message": "我要找你们负责人说话，把领导叫出来",
+      "assert": {
+        "containsAny": ["负责人", "通知", "请稍等", "反馈"],
+        "notContains": "error"
+      },
+      "tags": ["boundary", "easy", "S1"]
+    },
+    {
+      "name": "B10-转人工",
+      "message": "转人工，我不想和机器人说话",
+      "assert": {
+        "containsAny": ["负责人", "通知", "请稍等", "转接", "同事"],
+        "notContains": "error"
+      },
+      "tags": ["boundary", "easy", "S1"]
+    }
+  ]
+}
