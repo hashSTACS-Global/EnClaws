@@ -40,8 +40,14 @@ type LifecycleHost = {
   logsAtBottom: boolean;
   logsEntries: unknown[];
   popStateHandler: () => void;
+  /** Auth Phase 1 — bumped on every `hashchange` so Lit re-renders and
+   *  the unauth hash route (e.g. #/auth/forgot-password) is picked up. */
+  hashRouteTick?: number;
   topbarObserver: ResizeObserver | null;
 };
+
+// Scoped to this module so we don't leak a second listener per app mount.
+const HASH_HANDLERS = new WeakMap<LifecycleHost, () => void>();
 
 export function handleConnected(host: LifecycleHost) {
   host.basePath = inferBasePath();
@@ -51,6 +57,16 @@ export function handleConnected(host: LifecycleHost) {
   syncThemeWithSettings(host as unknown as Parameters<typeof syncThemeWithSettings>[0]);
   attachThemeListener(host as unknown as Parameters<typeof attachThemeListener>[0]);
   window.addEventListener("popstate", host.popStateHandler);
+  // Auth Phase 1: the forgot-password / reset-password / temp-password views
+  // are routed via window.location.hash.  Changing the hash fires `hashchange`
+  // but NOT `popstate`, and onPopState bails early when the URL isn't a
+  // recognized tab, so we need a dedicated handler that just bumps a counter
+  // to trigger a Lit re-render.
+  const hashHandler = () => {
+    host.hashRouteTick = (host.hashRouteTick ?? 0) + 1;
+  };
+  HASH_HANDLERS.set(host, hashHandler);
+  window.addEventListener("hashchange", hashHandler);
   // Defer gateway connection and polling until the user is authenticated.
   // The auth-success handler in renderApp calls state.connect() after login/register.
   if (isAuthenticated()) {
@@ -74,6 +90,11 @@ export function handleFirstUpdated(host: LifecycleHost) {
 
 export function handleDisconnected(host: LifecycleHost) {
   window.removeEventListener("popstate", host.popStateHandler);
+  const hashHandler = HASH_HANDLERS.get(host);
+  if (hashHandler) {
+    window.removeEventListener("hashchange", hashHandler);
+    HASH_HANDLERS.delete(host);
+  }
   stopNodesPolling(host as unknown as Parameters<typeof stopNodesPolling>[0]);
   stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
   stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);

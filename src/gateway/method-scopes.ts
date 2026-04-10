@@ -38,6 +38,13 @@ export const SCOPE_BYPASS_METHODS = new Set([
   "auth.refresh",
   "auth.logout",
   "auth.me",
+  // Auth Phase 1
+  "auth.changePassword",
+  "auth.capabilities",
+  "auth.forgotPassword",
+  "auth.forgotPassword.verify",
+  "auth.adminResetPassword",
+  "auth.viewTempPassword",
   // Tenant management (handled by multi-tenant RBAC)
   "tenant.get",
   "tenant.update",

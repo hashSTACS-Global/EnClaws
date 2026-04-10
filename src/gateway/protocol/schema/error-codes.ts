@@ -9,6 +9,8 @@ export const ErrorCodes = {
   INTERNAL_ERROR: "INTERNAL_ERROR",
   UNAUTHORIZED: "UNAUTHORIZED",
   UNAVAILABLE: "UNAVAILABLE",
+  /** Auth Phase 1: returned by auth.login when rate-limited / in backoff. */
+  RATE_LIMITED: "RATE_LIMITED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

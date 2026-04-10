@@ -7,7 +7,7 @@
 
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { login, register, type AuthState } from "../auth-store.ts";
+import { login, register, LoginRateLimitedError, type AuthState } from "../auth-store.ts";
 import { loadSettings, saveSettings } from "../storage.ts";
 import { t, i18n, I18nController, SUPPORTED_LOCALES } from "../../i18n/index.ts";
 import type { Locale } from "../../i18n/index.ts";
@@ -293,6 +293,9 @@ export class EnClawsLogin extends LitElement {
   /** Stores the raw server error message; translated at render time. */
   @state() private serverError = "";
   @state() private fieldErrors: FieldErrors = {};
+  /** Countdown (seconds) when login is rate-limited; 0 = no countdown active. */
+  @state() private rateLimitCountdown = 0;
+  private rateLimitTimer: ReturnType<typeof setInterval> | null = null;
 
   // Login fields
   @state() private email = "";
@@ -402,6 +405,24 @@ export class EnClawsLogin extends LitElement {
     if (this.serverError) this.serverError = "";
   }
 
+  private startRateLimitCountdown(retryAfterMs: number): void {
+    if (this.rateLimitTimer) clearInterval(this.rateLimitTimer);
+    this.rateLimitCountdown = Math.max(1, Math.ceil(retryAfterMs / 1000));
+    this.rateLimitTimer = setInterval(() => {
+      this.rateLimitCountdown -= 1;
+      if (this.rateLimitCountdown <= 0) {
+        if (this.rateLimitTimer) clearInterval(this.rateLimitTimer);
+        this.rateLimitTimer = null;
+        this.rateLimitCountdown = 0;
+      }
+    }, 1000);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this.rateLimitTimer) clearInterval(this.rateLimitTimer);
+  }
+
   private async handleLogin(e: Event) {
     e.preventDefault();
     this.fieldErrors = {};
@@ -413,6 +434,8 @@ export class EnClawsLogin extends LitElement {
       return;
     }
 
+    if (this.rateLimitCountdown > 0) return;
+
     this.loading = true;
 
     try {
@@ -422,9 +445,20 @@ export class EnClawsLogin extends LitElement {
         password: this.password,
         tenantSlug: this.tenantSlug || undefined,
       });
-      this.dispatchEvent(new CustomEvent("auth-success", { detail: auth, bubbles: true, composed: true }));
+      // If the server flagged force-change-password, surface it via the event
+      // detail so the app shell can route to the change-password view.
+      this.dispatchEvent(new CustomEvent("auth-success", {
+        detail: { ...auth, forceChangePassword: auth.user.forceChangePassword === true },
+        bubbles: true,
+        composed: true,
+      }));
     } catch (err) {
-      this.serverError = err instanceof Error ? err.message : t("login.loginFailed");
+      if (err instanceof LoginRateLimitedError) {
+        this.startRateLimitCountdown(err.retryAfterMs);
+        this.serverError = err.message;
+      } else {
+        this.serverError = err instanceof Error ? err.message : t("login.loginFailed");
+      }
     } finally {
       this.loading = false;
     }
@@ -573,8 +607,21 @@ export class EnClawsLogin extends LitElement {
           ${this.renderFieldError("password")}
         </div>
         ${this.serverError ? this.renderFormError(this.translateServerError(this.serverError)) : nothing}
-        <button class="btn-primary" type="submit" ?disabled=${this.loading}>
-          ${this.loading ? t("login.loggingIn") : t("login.loginBtn")}
+        <div style="text-align:right;font-size:0.78rem;margin:-0.25rem 0 0.6rem 0;">
+          <a
+            style="color:var(--accent,#3b82f6);cursor:pointer;text-decoration:none;"
+            @click=${() => {
+              // Assigning to location.hash natively fires `hashchange`,
+              // so we don't manually dispatch it here (the app-lifecycle
+              // listener bumps hashRouteTick and triggers a re-render).
+              window.location.hash = "#/auth/forgot-password";
+            }}
+          >${t("login.forgotPassword")}</a>
+        </div>
+        <button class="btn-primary" type="submit" ?disabled=${this.loading || this.rateLimitCountdown > 0}>
+          ${this.rateLimitCountdown > 0
+            ? `${this.rateLimitCountdown}s`
+            : (this.loading ? t("login.loggingIn") : t("login.loginBtn"))}
         </button>
       </form>
     `;

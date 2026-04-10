@@ -37,6 +37,8 @@ function rowToUser(row: Record<string, unknown>): User {
     avatarUrl: (row.avatar_url as string) ?? null,
     lastLoginAt: (row.last_login_at as Date) ?? null,
     settings: (row.settings ?? {}) as User["settings"],
+    forceChangePassword: Number(row.force_change_password ?? 0) === 1,
+    passwordChangedAt: (row.password_changed_at as Date) ?? null,
     createdAt: row.created_at as Date,
     updatedAt: row.updated_at as Date,
   };
@@ -73,12 +75,17 @@ export function seedUserDirFiles(tenantId: string, dirKey: string): void {
   }
 }
 
-export async function createUser(input: CreateUserInput, opts?: { skipDirInit?: boolean }): Promise<SafeUser> {
+export async function createUser(
+  input: CreateUserInput & { forceChangePassword?: boolean },
+  opts?: { skipDirInit?: boolean },
+): Promise<SafeUser> {
   if (getDbType() === DB_SQLITE) return sqliteUser.createUser(input, opts);
   const passwordHash = input.password ? await hashPassword(input.password) : null;
+  const fcp = input.forceChangePassword ? 1 : 0;
   const result = await query(
-    `INSERT INTO users (tenant_id, channel_id, email, password_hash, display_name, role)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO users (tenant_id, channel_id, email, password_hash, display_name, role,
+                        force_change_password, password_changed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $4 IS NULL THEN NULL ELSE NOW() END)
      RETURNING *`,
     [
       input.tenantId,
@@ -87,6 +94,7 @@ export async function createUser(input: CreateUserInput, opts?: { skipDirInit?: 
       passwordHash,
       input.displayName ?? null,
       input.role ?? "member",
+      fcp,
     ],
   );
   const user = rowToUser(result.rows[0]);
@@ -234,6 +242,39 @@ export async function updateUser(
 export async function updateLastLogin(userId: string): Promise<void> {
   if (getDbType() === DB_SQLITE) return sqliteUser.updateLastLogin(userId);
   await query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [userId]);
+}
+
+/**
+ * Update the user's password hash and clear the force-change-password flag.
+ * Also stamps password_changed_at = now (for Phase 2 expiry policy).
+ */
+export async function updateUserPassword(
+  userId: string,
+  newPassword: string,
+  opts?: { keepForceFlag?: boolean },
+): Promise<void> {
+  if (getDbType() === DB_SQLITE) {
+    return sqliteUser.updateUserPassword(userId, newPassword, opts);
+  }
+  const hash = await hashPassword(newPassword);
+  const fcpClause = opts?.keepForceFlag ? "" : ", force_change_password = 0";
+  await query(
+    `UPDATE users SET password_hash = $1, password_changed_at = NOW()${fcpClause}, updated_at = NOW() WHERE id = $2`,
+    [hash, userId],
+  );
+}
+
+/**
+ * Set or clear the force-change-password flag (used by admin reset / invite flows).
+ */
+export async function setForceChangePassword(userId: string, force: boolean): Promise<void> {
+  if (getDbType() === DB_SQLITE) {
+    return sqliteUser.setForceChangePassword(userId, force);
+  }
+  await query(
+    "UPDATE users SET force_change_password = $1 WHERE id = $2",
+    [force ? 1 : 0, userId],
+  );
 }
 
 export async function deleteUser(id: string): Promise<boolean> {

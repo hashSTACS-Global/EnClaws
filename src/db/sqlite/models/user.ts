@@ -41,6 +41,8 @@ function rowToUser(row: Record<string, unknown>): User {
     avatarUrl: (row.avatar_url as string) ?? null,
     lastLoginAt: row.last_login_at ? new Date(row.last_login_at as string) : null,
     settings: (typeof row.settings === "string" ? JSON.parse(row.settings) : row.settings ?? {}) as User["settings"],
+    forceChangePassword: Number(row.force_change_password ?? 0) === 1,
+    passwordChangedAt: row.password_changed_at ? new Date(row.password_changed_at as string) : null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };
@@ -51,13 +53,19 @@ export function toSafeUser(user: User): SafeUser {
   return safe;
 }
 
-export async function createUser(input: CreateUserInput, opts?: { skipDirInit?: boolean }): Promise<SafeUser> {
+export async function createUser(
+  input: CreateUserInput & { forceChangePassword?: boolean },
+  opts?: { skipDirInit?: boolean },
+): Promise<SafeUser> {
   const id = generateUUID();
   const passwordHash = input.password ? await hashPassword(input.password) : null;
+  const fcp = input.forceChangePassword ? 1 : 0;
+  const passwordChangedAt = passwordHash ? new Date().toISOString() : null;
 
   sqliteQuery(
-    `INSERT INTO users (id, tenant_id, channel_id, email, password_hash, display_name, role)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (id, tenant_id, channel_id, email, password_hash, display_name, role,
+                        force_change_password, password_changed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.tenantId,
@@ -66,6 +74,8 @@ export async function createUser(input: CreateUserInput, opts?: { skipDirInit?: 
       passwordHash,
       input.displayName ?? null,
       input.role ?? "member",
+      fcp,
+      passwordChangedAt,
     ],
   );
 
@@ -204,6 +214,29 @@ export async function updateUser(
 
 export async function updateLastLogin(userId: string): Promise<void> {
   sqliteQuery("UPDATE users SET last_login_at = datetime('now') WHERE id = ?", [userId]);
+}
+
+export async function updateUserPassword(
+  userId: string,
+  newPassword: string,
+  opts?: { keepForceFlag?: boolean },
+): Promise<void> {
+  const hash = await hashPassword(newPassword);
+  if (opts?.keepForceFlag) {
+    sqliteQuery(
+      "UPDATE users SET password_hash = ?, password_changed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+      [hash, userId],
+    );
+  } else {
+    sqliteQuery(
+      "UPDATE users SET password_hash = ?, password_changed_at = datetime('now'), force_change_password = 0, updated_at = datetime('now') WHERE id = ?",
+      [hash, userId],
+    );
+  }
+}
+
+export async function setForceChangePassword(userId: string, force: boolean): Promise<void> {
+  sqliteQuery("UPDATE users SET force_change_password = ? WHERE id = ?", [force ? 1 : 0, userId]);
 }
 
 export async function deleteUser(id: string): Promise<boolean> {

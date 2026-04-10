@@ -73,6 +73,10 @@ export interface User {
   avatarUrl: string | null;
   lastLoginAt: Date | null;
   settings: UserSettings;
+  /** When 1, user must change password on next login (set on invite/admin-reset). */
+  forceChangePassword: boolean;
+  /** Timestamp of the last password change; used by Phase 2 expiry policy. */
+  passwordChangedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -107,6 +111,10 @@ export interface JwtPayload {
   email: string | null;
   role: UserRole;
   tslug: string;     // tenant slug
+  /** Force-change-password flag — when true, the client must redirect to change-password. */
+  fcp?: boolean;
+  /** Phase 2: password expiry timestamp (epoch ms). Absent when policy is disabled. */
+  pwExp?: number;
 }
 
 export interface JwtTokenPair {

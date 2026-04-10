@@ -31,6 +31,16 @@ export interface AuthUser {
   role: string;
   displayName: string | null;
   tenantId: string;
+  /** Phase 1 — set on first login after invite or admin reset. */
+  forceChangePassword?: boolean;
+}
+
+/** Thrown by login() when the gateway returns RATE_LIMITED. */
+export class LoginRateLimitedError extends Error {
+  constructor(public readonly retryAfterMs: number, message: string) {
+    super(message);
+    this.name = "LoginRateLimitedError";
+  }
 }
 
 export interface AuthTenant {
@@ -46,6 +56,8 @@ export interface AuthState {
   expiresAt: number; // Unix timestamp in ms
   user: AuthUser;
   tenant: AuthTenant;
+  /** Phase 2: password expiry timestamp (epoch ms). Absent when policy is disabled. */
+  pwExp?: number;
 }
 
 let currentAuth: AuthState | null = null;
@@ -339,17 +351,26 @@ export async function login(params: {
                 role: p.user.role,
                 displayName: p.user.displayName,
                 tenantId: p.user.tenantId,
+                forceChangePassword: Boolean(p.user.forceChangePassword),
               },
               tenant: {
                 id: p.user.tenantId,
                 name: "",
                 slug: "",
               },
+              pwExp: typeof p.pwExp === "number" ? p.pwExp : undefined,
             };
             saveAuth(auth);
             resolve(auth);
           } else {
-            reject(new Error(frame.error?.message ?? "Login failed"));
+            const code = frame.error?.code;
+            const msg = frame.error?.message ?? "Login failed";
+            if (code === "RATE_LIMITED") {
+              const wait = Number(frame.error?.retryAfterMs ?? 0);
+              reject(new LoginRateLimitedError(wait, msg));
+            } else {
+              reject(new Error(msg));
+            }
           }
         }
       } catch (err) {
@@ -366,6 +387,191 @@ export async function login(params: {
       reject(new Error("Login timeout"));
     }, 15_000);
   });
+}
+
+// ===========================================================================
+// Phase 1 — public RPC wrapper for unauthenticated flows
+// (forgot password, reset, capabilities, view temp password)
+// ===========================================================================
+
+interface PublicRpcResult<T> {
+  ok: boolean;
+  payload?: T;
+  errorMessage?: string;
+  errorCode?: string;
+}
+
+/**
+ * Open a temporary WebSocket, perform connect handshake, then issue a single
+ * RPC.  Used by forgot-password / reset-password / view-temp flows that run
+ * before login, and as a fallback for authenticated flows (force-change-password)
+ * where the main shared gateway client isn't yet established.
+ *
+ * When `jwtToken` is provided, it is placed in `auth.token` of the connect
+ * params — the gateway's early tenant-context resolver detects the "." in
+ * a JWT and attaches the tenant context to the connection, so subsequent
+ * calls on this socket carry authenticated state.
+ */
+export function callPublicRpc<T = unknown>(
+  gatewayUrl: string,
+  method: string,
+  params: Record<string, unknown>,
+  jwtToken?: string,
+): Promise<PublicRpcResult<T>> {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(gatewayUrl);
+    let handshakeDone = false;
+    let settled = false;
+    const finish = (r: PublicRpcResult<T>) => {
+      if (settled) return;
+      settled = true;
+      try { ws.close(); } catch { /* ignore */ }
+      resolve(r);
+    };
+
+    ws.onopen = () => {
+      const connectParams = buildConnectParams();
+      if (jwtToken) {
+        connectParams.auth = { ...(connectParams.auth ?? {}), token: jwtToken };
+      }
+      ws.send(JSON.stringify({
+        type: "req",
+        id: generateUUID(),
+        method: "connect",
+        params: connectParams,
+      }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const frame = JSON.parse(event.data);
+        if (frame.type === "res" && !handshakeDone) {
+          handshakeDone = true;
+          ws.send(JSON.stringify({
+            type: "req",
+            id: generateUUID(),
+            method,
+            params,
+          }));
+          return;
+        }
+        if (frame.type === "res" && handshakeDone) {
+          if (frame.ok) {
+            finish({ ok: true, payload: frame.payload as T });
+          } else {
+            finish({
+              ok: false,
+              errorCode: frame.error?.code,
+              errorMessage: frame.error?.message ?? "request failed",
+            });
+          }
+        }
+      } catch (err) {
+        finish({ ok: false, errorMessage: String(err) });
+      }
+    };
+
+    ws.onerror = () => finish({ ok: false, errorMessage: "Connection failed" });
+
+    setTimeout(() => finish({ ok: false, errorMessage: "Request timeout" }), 15_000);
+  });
+}
+
+/**
+ * Authenticated RPC wrapper used by self-service password change.
+ * Reuses the shared gateway connection when available; otherwise opens
+ * a temporary WebSocket and performs an authenticated connect handshake
+ * with the current access token.
+ *
+ * The fallback path matters for the force-change-password flow: those
+ * users are logged in (fcp=true) but the main app shell skipped
+ * state.connect() because it immediately routed to the overlay, so
+ * sharedClient is null.
+ */
+export async function callAuthRpc<T = unknown>(
+  method: string,
+  params: Record<string, unknown>,
+): Promise<T> {
+  if (sharedClient) {
+    return sharedClient.request<T>(method, params);
+  }
+  // Fallback: open a temporary WebSocket carrying the current JWT.
+  const auth = loadAuth();
+  if (!auth?.accessToken) {
+    throw new Error("auth: not authenticated");
+  }
+  const settings = loadSettings();
+  const gatewayUrl = settings.gatewayUrl;
+  const result = await callPublicRpc<T>(gatewayUrl, method, params, auth.accessToken);
+  if (!result.ok) {
+    const err = new Error(result.errorMessage ?? `${method} failed`);
+    (err as Error & { code?: string }).code = result.errorCode;
+    throw err;
+  }
+  return result.payload as T;
+}
+
+// ---- Phase 1 helper wrappers ----
+
+export async function getAuthCapabilities(gatewayUrl: string): Promise<{ email: boolean }> {
+  const r = await callPublicRpc<{ email: boolean }>(gatewayUrl, "auth.capabilities", {});
+  if (!r.ok) throw new Error(r.errorMessage ?? "capabilities failed");
+  return r.payload ?? { email: false };
+}
+
+export async function requestForgotPassword(
+  gatewayUrl: string,
+  email: string,
+): Promise<{ ok: boolean; email: boolean }> {
+  const r = await callPublicRpc<{ ok: boolean; email: boolean }>(
+    gatewayUrl,
+    "auth.forgotPassword",
+    { email },
+  );
+  if (!r.ok) throw new Error(r.errorMessage ?? "forgotPassword failed");
+  return r.payload ?? { ok: false, email: false };
+}
+
+export async function verifyForgotPassword(
+  gatewayUrl: string,
+  token: string,
+  newPassword: string,
+): Promise<void> {
+  const r = await callPublicRpc(gatewayUrl, "auth.forgotPassword.verify", {
+    token,
+    newPassword,
+  });
+  if (!r.ok) throw new Error(r.errorMessage ?? "reset failed");
+}
+
+export async function viewTempPassword(
+  gatewayUrl: string,
+  token: string,
+): Promise<{ tempPassword: string }> {
+  const r = await callPublicRpc<{ tempPassword: string }>(
+    gatewayUrl,
+    "auth.viewTempPassword",
+    { token },
+  );
+  if (!r.ok) throw new Error(r.errorMessage ?? "view failed");
+  if (!r.payload) throw new Error("empty response");
+  return r.payload;
+}
+
+export async function changePasswordAuthed(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  await callAuthRpc("auth.changePassword", { currentPassword, newPassword });
+  // After a successful change, the server has revoked all refresh tokens.
+  // Clear local auth so the user is forced through a fresh login.
+  clearAuth();
+}
+
+export async function adminResetPassword(
+  userId: string,
+): Promise<{ viewToken: string; viewUrl: string; expiresAt: string }> {
+  return callAuthRpc("auth.adminResetPassword", { userId });
 }
 
 /**

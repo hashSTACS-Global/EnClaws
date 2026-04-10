@@ -123,6 +123,10 @@ export class EnClawsApp extends LitElement {
   }
   @state() password = "";
   @state() tab: Tab = "chat";
+  /** Auth Phase 1 — bumped on every window `hashchange` so that the unauth
+   *  hash router (#/auth/forgot-password, #/auth/reset-password,
+   *  #/auth/temp-password) picks up the new URL without a full page reload. */
+  @state() hashRouteTick = 0;
   @state() onboarding = resolveOnboardingMode();
   @state() showOnboarding = false;
   @state() connected = false;

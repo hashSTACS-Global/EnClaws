@@ -106,6 +106,8 @@ import "./views/platform-overview.ts";
 import "./views/platform-tools.ts";
 import "./views/platform-models.ts";
 import "./views/onboarding-wizard.ts";
+import "./views/auth-phase1.ts";
+import "./views/password-expiry-banner.ts";
 import { isAuthenticated, loadAuth, clearAuth } from "./auth-store.ts";
 import { tenantRpc } from "./views/tenant/rpc.ts";
 import type { TenantAgentOption } from "./views/chat.ts";
@@ -340,7 +342,25 @@ export function renderApp(state: AppViewState) {
   }
   if (!isAuthenticated()) {
     if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-      window.history.replaceState(null, "", "/login");
+      // Preserve the hash (for email reset / temp-password landing pages) and
+      // the search string (for session params). A naive replaceState(null, "", "/login")
+      // would strip them and break new-tab landings like /#/auth/reset-password?token=xxx.
+      const preserved = `/login${window.location.search}${window.location.hash}`;
+      window.history.replaceState(null, "", preserved);
+    }
+    // Phase 1: route to forgot-password / reset-password / temp-password views
+    // based on the URL hash. These flows are unauthenticated by design.
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash || "";
+      if (hash.startsWith("#/auth/forgot-password")) {
+        return html`<enclaws-forgot-password .gatewayUrl=${state.settings.gatewayUrl}></enclaws-forgot-password>`;
+      }
+      if (hash.startsWith("#/auth/reset-password")) {
+        return html`<enclaws-reset-password .gatewayUrl=${state.settings.gatewayUrl}></enclaws-reset-password>`;
+      }
+      if (hash.startsWith("#/auth/temp-password")) {
+        return html`<enclaws-temp-password-view .gatewayUrl=${state.settings.gatewayUrl}></enclaws-temp-password-view>`;
+      }
     }
     return html`<enclaws-login
       .gatewayUrl=${state.settings.gatewayUrl}
@@ -349,6 +369,13 @@ export function renderApp(state: AppViewState) {
         const loc = state.settings.locale;
         if (isSupportedLocale(loc)) {
           void i18n.setLocale(loc);
+        }
+        // Phase 1: if the user must change their password, force-render the
+        // change-password overlay before doing anything else.  Setting any
+        // tab triggers a re-render; the next pass hits the fcp branch.
+        if (e.detail?.forceChangePassword) {
+          state.setTab("tenant-overview");
+          return;
         }
         const role = loadAuth()?.user?.role;
         state.setTab(role === "platform-admin" ? "overview" : "tenant-overview");
@@ -364,7 +391,20 @@ export function renderApp(state: AppViewState) {
     ></enclaws-login>`;
   }
 
+  // Phase 1: post-login force-change-password overlay (covers invite + admin reset)
+  const _auth = loadAuth();
+  if (_auth?.user?.forceChangePassword) {
+    return html`<enclaws-force-change-password></enclaws-force-change-password>`;
+  }
+
+  // Phase 2: authenticated /change-password route (for the banner "立即修改" button
+  // and a voluntary user-initiated change)
+  if (typeof window !== "undefined" && (window.location.hash || "").startsWith("#/auth/change-password")) {
+    return html`<enclaws-change-password></enclaws-change-password>`;
+  }
+
   return html`
+      <enclaws-password-expiry-banner></enclaws-password-expiry-banner>
       ${state.showOnboarding ? html`
         <onboarding-wizard
           .gatewayUrl=${state.settings.gatewayUrl}
@@ -457,35 +497,52 @@ export function renderApp(state: AppViewState) {
               ${(() => {
                   const authState = loadAuth();
                   if (!authState?.user) return nothing;
+                  const goChangePassword = () => {
+                      // Native hashchange fires from location.hash assignment;
+                      // app-lifecycle bumps hashRouteTick → Lit re-renders.
+                      window.location.hash = "#/auth/change-password";
+                  };
+                  const doLogout = () => {
+                      clearAuth();
+                      window.location.reload();
+                  };
                   return html`
                       <div class="nav-user-footer"
                            style="padding: 0.75rem; border-top: 1px solid var(--border, #262626); margin-top: auto; font-size: 0.8rem;">
                           <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
                               ${state.settings.navCollapsed
                                       ? html`
-                                          <button
-                                                  style="background: none; border: none; color: var(--text-muted, #a3a3a3); cursor: pointer; padding: 0.3rem; font-size: 0.75rem;"
-                                                  title="${authState.user.email} — ${t("nav.logoutTitle")}"
-                                                  @click=${() => {
-                                                      clearAuth();
-                                                      window.location.reload();
-                                                  }}
-                                          >⏻
-                                          </button>`
+                                          <div style="display: flex; flex-direction: column; gap: 0.3rem; width: 100%; align-items: center;">
+                                              <button
+                                                      style="background: none; border: none; color: var(--text-muted, #a3a3a3); cursor: pointer; padding: 0.3rem; font-size: 0.9rem;"
+                                                      title=${t("nav.changePasswordTitle")}
+                                                      aria-label=${t("nav.changePasswordTitle")}
+                                                      @click=${goChangePassword}
+                                              >🔑</button>
+                                              <button
+                                                      style="background: none; border: none; color: var(--text-muted, #a3a3a3); cursor: pointer; padding: 0.3rem; font-size: 0.75rem;"
+                                                      title="${authState.user.email} — ${t("nav.logoutTitle")}"
+                                                      @click=${doLogout}
+                                              >⏻</button>
+                                          </div>`
                                       : html`
-                                          <span style="color: var(--text-secondary, #a3a3a3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                                          <span style="color: var(--text-secondary, #a3a3a3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;"
                                                 title=${authState.user.email}>
                       ${authState.user.displayName || authState.user.email}
                     </span>
-                                          <button
-                                                  style="background: none; border: none; color: var(--text-muted, #737373); cursor: pointer; padding: 0.2rem 0.4rem; font-size: 0.75rem; flex-shrink: 0;"
-                                                  title=${t("nav.logoutTitle")}
-                                                  @click=${() => {
-                                                      clearAuth();
-                                                      window.location.reload();
-                                                  }}
-                                          >${t("nav.logout")}
-                                          </button>
+                                          <div style="display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0;">
+                                              <button
+                                                      style="background: none; border: none; color: var(--text-muted, #737373); cursor: pointer; padding: 0.2rem 0.4rem; font-size: 0.75rem;"
+                                                      title=${t("nav.changePasswordTitle")}
+                                                      @click=${goChangePassword}
+                                              >${t("nav.changePassword")}</button>
+                                              <span style="color: var(--border, #262626); font-size: 0.7rem;">·</span>
+                                              <button
+                                                      style="background: none; border: none; color: var(--text-muted, #737373); cursor: pointer; padding: 0.2rem 0.4rem; font-size: 0.75rem;"
+                                                      title=${t("nav.logoutTitle")}
+                                                      @click=${doLogout}
+                                              >${t("nav.logout")}</button>
+                                          </div>
                                       `}
                           </div>
                       </div>

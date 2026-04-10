@@ -15,6 +15,7 @@ import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./typ
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import { getTenantById, updateTenant, checkTenantQuota } from "../../db/models/tenant.js";
 import { createUser, listUsers, updateUser, deleteUser, getUserById, findUserByEmail } from "../../db/models/user.js";
+import { validatePasswordStrength } from "../../auth/password-policy.js";
 import { listAuditLogs, createAuditLog } from "../../db/models/audit-log.js";
 import { assertPermission } from "../../auth/rbac.js";
 import { RbacError } from "../../auth/rbac.js";
@@ -194,6 +195,13 @@ export const tenantHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    // Phase 1: enforce password policy on the temporary password the inviter chose.
+    const policy = validatePasswordStrength(password, email);
+    if (!policy.ok) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, policy.message ?? "密码不符合安全策略"));
+      return;
+    }
+
     // Prevent non-owners from creating owner/admin users
     const targetRole = role ?? "member";
     if (targetRole === "owner") {
@@ -229,12 +237,14 @@ export const tenantHandlers: GatewayRequestHandlers = {
     }
 
     try {
+      // Phase 1: invited users must change the temporary password on first login.
       const user = await createUser({
         tenantId: ctx.tenantId,
         email,
         password,
         displayName,
         role: targetRole,
+        forceChangePassword: true,
       });
 
       await createAuditLog({
