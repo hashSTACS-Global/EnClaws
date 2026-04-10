@@ -576,11 +576,17 @@ export const chatHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const { sessionKey, limit } = params as {
+    const { sessionKey, limit, _tenantId, _tenantUserId } = params as {
       sessionKey: string;
       limit?: number;
+      _tenantId?: string;
+      _tenantUserId?: string;
     };
-    const historyTenant = client?.tenant;
+    const historyTenant =
+      client?.tenant ??
+      (_tenantId && _tenantUserId
+        ? { tenantId: _tenantId, userId: _tenantUserId }
+        : undefined);
     const { cfg, storePath, entry } = historyTenant
       ? await loadTenantAwareSessionEntry(sessionKey, historyTenant)
       : loadSessionEntry(sessionKey);

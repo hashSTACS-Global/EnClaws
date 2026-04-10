@@ -417,11 +417,19 @@ function extractSubagentOutputText(message: unknown): string {
   return "";
 }
 
-export async function readLatestSubagentOutput(sessionKey: string): Promise<string | undefined> {
+export async function readLatestSubagentOutput(
+  sessionKey: string,
+  tenant?: { tenantId?: string; tenantUserId?: string },
+): Promise<string | undefined> {
+  const tenantParams =
+    tenant?.tenantId && tenant?.tenantUserId
+      ? { _tenantId: tenant.tenantId, _tenantUserId: tenant.tenantUserId }
+      : {};
   try {
     const latestAssistant = await readLatestAssistantReply({
       sessionKey,
       limit: 50,
+      ...tenantParams,
     });
     if (latestAssistant?.trim()) {
       return latestAssistant;
@@ -431,7 +439,7 @@ export async function readLatestSubagentOutput(sessionKey: string): Promise<stri
   }
   const history = await callGateway<{ messages?: Array<unknown> }>({
     method: "chat.history",
-    params: { sessionKey, limit: 50 },
+    params: { sessionKey, limit: 50, ...tenantParams },
   });
   const messages = Array.isArray(history?.messages) ? history.messages : [];
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -447,12 +455,13 @@ export async function readLatestSubagentOutput(sessionKey: string): Promise<stri
 async function readLatestSubagentOutputWithRetry(params: {
   sessionKey: string;
   maxWaitMs: number;
+  tenant?: { tenantId?: string; tenantUserId?: string };
 }): Promise<string | undefined> {
   const RETRY_INTERVAL_MS = FAST_TEST_MODE ? FAST_TEST_RETRY_INTERVAL_MS : 100;
   const deadline = Date.now() + Math.max(0, Math.min(params.maxWaitMs, 15_000));
   let result: string | undefined;
   while (Date.now() < deadline) {
-    result = await readLatestSubagentOutput(params.sessionKey);
+    result = await readLatestSubagentOutput(params.sessionKey, params.tenant);
     if (result?.trim()) {
       return result;
     }
@@ -465,6 +474,7 @@ async function waitForSubagentOutputChange(params: {
   sessionKey: string;
   baselineReply: string;
   maxWaitMs: number;
+  tenant?: { tenantId?: string; tenantUserId?: string };
 }): Promise<string> {
   const baseline = params.baselineReply.trim();
   if (!baseline) {
@@ -474,7 +484,7 @@ async function waitForSubagentOutputChange(params: {
   const deadline = Date.now() + Math.max(0, Math.min(params.maxWaitMs, 5_000));
   let latest = params.baselineReply;
   while (Date.now() < deadline) {
-    const next = await readLatestSubagentOutput(params.sessionKey);
+    const next = await readLatestSubagentOutput(params.sessionKey, params.tenant);
     if (next?.trim()) {
       latest = next;
       if (next.trim() !== baseline) {
@@ -1361,17 +1371,29 @@ export async function runSubagentAnnounceFlow(params: {
           outcome = { status: "timeout" };
         }
       }
-      reply = await readLatestSubagentOutput(params.childSessionKey);
+      const announceTenant =
+        params.tenantId && params.tenantUserId
+          ? { tenantId: params.tenantId, tenantUserId: params.tenantUserId }
+          : undefined;
+      reply = await readLatestSubagentOutput(params.childSessionKey, announceTenant);
     }
 
     if (!reply) {
-      reply = await readLatestSubagentOutput(params.childSessionKey);
+      const announceTenant =
+        params.tenantId && params.tenantUserId
+          ? { tenantId: params.tenantId, tenantUserId: params.tenantUserId }
+          : undefined;
+      reply = await readLatestSubagentOutput(params.childSessionKey, announceTenant);
     }
 
     if (!reply?.trim()) {
       reply = await readLatestSubagentOutputWithRetry({
         sessionKey: params.childSessionKey,
         maxWaitMs: params.timeoutMs,
+        tenant:
+          params.tenantId && params.tenantUserId
+            ? { tenantId: params.tenantId, tenantUserId: params.tenantUserId }
+            : undefined,
       });
     }
 
@@ -1419,6 +1441,10 @@ export async function runSubagentAnnounceFlow(params: {
         sessionKey: params.childSessionKey,
         baselineReply: reply,
         maxWaitMs: Math.max(minReplyChangeWaitMs, Math.min(params.timeoutMs, 2_000)),
+        tenant:
+          params.tenantId && params.tenantUserId
+            ? { tenantId: params.tenantId, tenantUserId: params.tenantUserId }
+            : undefined,
       });
     }
 
