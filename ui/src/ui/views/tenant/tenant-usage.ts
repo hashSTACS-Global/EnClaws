@@ -61,52 +61,46 @@ export class TenantUsageView extends LitElement {
 
   static styles = [caretFix, css`
     :host {
-      display: block; padding: 1.5rem; color: var(--text, #e5e5e5);
+      display: block; padding: 1.5rem; color: var(--text);
       font-family: var(--font-sans, system-ui, sans-serif);
     }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
     h3 { margin: 0 0 1rem; font-size: 0.95rem; font-weight: 600; }
     .btn {
-      padding: 0.45rem 0.9rem; border: none; border-radius: var(--radius-md, 6px);
+      padding: 0.45rem 0.9rem; border: none; border-radius: var(--radius-md);
       font-size: 0.85rem; cursor: pointer; transition: opacity 0.15s;
     }
     .btn:hover { opacity: 0.85; }
-    .btn-outline { background: transparent; border: 1px solid var(--border, #262626); color: var(--text, #e5e5e5); }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
     .stats-grid {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 1rem; margin-bottom: 1.5rem;
     }
     .stat-card {
-      background: var(--card, #141414); border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px); padding: 1.25rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 1.25rem;
     }
     .stat-label { font-size: 0.8rem; color: var(--text-secondary, #a3a3a3); margin-bottom: 0.35rem; }
-    .stat-label-row {
-      display: flex; justify-content: space-between; align-items: baseline;
-      margin-bottom: 0.35rem;
-    }
-    .stat-label-row .stat-label { margin-bottom: 0; }
-    .stat-percent { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary, #a3a3a3); }
     .stat-value { font-size: 1.5rem; font-weight: 700; }
-    .stat-sub { font-size: 0.75rem; color: var(--text-muted, #525252); margin-top: 0.25rem; }
+    .stat-sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
     .quota-bar {
-      height: 8px; border-radius: 4px; background: var(--border, #262626);
+      height: 8px; border-radius: 4px; background: var(--border);
       margin-top: 0.5rem; overflow: hidden;
     }
     .quota-fill {
       height: 100%; border-radius: 4px; transition: width 0.3s;
     }
-    .quota-fill.low { background: #22c55e; }
-    .quota-fill.mid { background: #eab308; }
-    .quota-fill.high { background: #ef4444; }
+    .quota-fill.low { background: var(--ok); }
+    .quota-fill.mid { background: var(--warn); }
+    .quota-fill.high { background: var(--danger); }
     .section {
-      background: var(--card, #141414); border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px); padding: 1.25rem; margin-bottom: 1rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem;
     }
     .error-msg {
-      background: var(--bg-destructive, #2d1215); border: 1px solid var(--border-destructive, #7f1d1d);
-      border-radius: var(--radius-md, 6px); color: var(--text-destructive, #fca5a5);
+      background: var(--danger-subtle); border: 1px solid var(--danger);
+      border-radius: var(--radius-md); color: var(--danger);
       padding: 0.5rem 0.75rem; font-size: 0.8rem; margin-bottom: 1rem;
     }
     .loading { text-align: center; padding: 2rem; color: var(--text-muted, #525252); }

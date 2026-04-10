@@ -30,7 +30,7 @@ export class TenantUsersView extends LitElement {
     :host {
       display: block;
       padding: 1.5rem;
-      color: var(--text, #e5e5e5);
+      color: var(--text);
       font-family: var(--font-sans, system-ui, sans-serif);
     }
     .header {
@@ -43,21 +43,15 @@ export class TenantUsersView extends LitElement {
     .btn {
       padding: 0.45rem 0.9rem;
       border: none;
-      border-radius: var(--radius-md, 6px);
+      border-radius: var(--radius-md);
       font-size: 0.85rem;
       cursor: pointer;
       transition: opacity 0.15s;
     }
     .btn:hover { opacity: 0.85; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-primary {
-      background: var(--accent, #3b82f6);
-      color: white;
-    }
-    .btn-danger {
-      background: var(--bg-destructive, #7f1d1d);
-      color: var(--text-destructive, #fca5a5);
-    }
+    .btn-primary { background: var(--accent); color: var(--accent-foreground); }
+    .btn-danger { background: var(--danger-subtle); color: var(--danger); }
     .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
     table {
       width: 100%;
@@ -67,11 +61,11 @@ export class TenantUsersView extends LitElement {
     th, td {
       text-align: left;
       padding: 0.6rem 0.75rem;
-      border-bottom: 1px solid var(--border, #262626);
+      border-bottom: 1px solid var(--border);
     }
     th {
       font-weight: 500;
-      color: var(--text-secondary, #a3a3a3);
+      color: var(--text-2);
       font-size: 0.8rem;
     }
     .role-badge {
@@ -80,20 +74,14 @@ export class TenantUsersView extends LitElement {
       border-radius: 4px;
       font-size: 0.75rem;
       font-weight: 500;
-      background: var(--border, #262626);
+      background: var(--border);
     }
-    .role-badge.owner { background: #7c3aed33; color: #a78bfa; }
-    .role-badge.admin { background: #2563eb33; color: #60a5fa; }
-    .role-badge.member { background: #059669; color: #6ee7b7; }
-    .role-badge.viewer { background: #525252; color: #a3a3a3; }
-    .btn-warn {
-      background: #78350f;
-      color: #fbbf24;
-    }
-    .btn-success {
-      background: #064e3b;
-      color: #6ee7b7;
-    }
+    .role-badge.owner { background: var(--accent-light); color: var(--accent); }
+    .role-badge.admin { background: var(--accent-light); color: var(--accent-2); }
+    .role-badge.member { background: var(--ok-subtle); color: var(--ok); }
+    .role-badge.viewer { background: var(--border); color: var(--muted); }
+    .btn-warn { background: var(--warn-subtle); color: var(--warn); }
+    .btn-success { background: var(--ok-subtle); color: var(--ok); }
     .status-badge {
       display: inline-block;
       padding: 0.15rem 0.45rem;
@@ -101,34 +89,34 @@ export class TenantUsersView extends LitElement {
       font-size: 0.75rem;
       font-weight: 500;
     }
-    .status-badge.active { background: #059669; color: #6ee7b7; }
-    .status-badge.suspended { background: #78350f; color: #fbbf24; }
-    .status-badge.deleted { background: #7f1d1d; color: #fca5a5; }
+    .status-badge.active { background: var(--ok-subtle); color: var(--ok); }
+    .status-badge.suspended { background: var(--warn-subtle); color: var(--warn); }
+    .status-badge.deleted { background: var(--danger-subtle); color: var(--danger); }
     .actions { display: flex; gap: 0.4rem; }
     .error-msg a { color: inherit; text-decoration: underline; font-weight: 600; }
     .error-msg a:hover { opacity: 0.85; }
     .error-msg {
-      background: var(--bg-destructive, #2d1215);
-      border: 1px solid var(--border-destructive, #7f1d1d);
-      border-radius: var(--radius-md, 6px);
-      color: var(--text-destructive, #fca5a5);
+      background: var(--danger-subtle);
+      border: 1px solid var(--danger);
+      border-radius: var(--radius-md);
+      color: var(--danger);
       padding: 0.5rem 0.75rem;
       font-size: 0.8rem;
       margin-bottom: 1rem;
     }
     .success-msg {
-      background: #052e16;
-      border: 1px solid #166534;
-      border-radius: var(--radius-md, 6px);
-      color: #86efac;
+      background: var(--ok-subtle);
+      border: 1px solid var(--ok);
+      border-radius: var(--radius-md);
+      color: var(--ok);
       padding: 0.5rem 0.75rem;
       font-size: 0.8rem;
       margin-bottom: 1rem;
     }
     .invite-form {
-      background: var(--card, #141414);
-      border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
       padding: 1.25rem;
       margin-bottom: 1.5rem;
     }
@@ -148,29 +136,27 @@ export class TenantUsersView extends LitElement {
       display: block;
       font-size: 0.8rem;
       margin-bottom: 0.3rem;
-      color: var(--text-secondary, #a3a3a3);
+      color: var(--text-2);
     }
     .form-field input, .form-field select {
       width: 100%;
       padding: 0.45rem 0.65rem;
-      background: var(--bg, #0a0a0a);
-      border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-md, 6px);
-      color: var(--text, #e5e5e5);
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: var(--radius-md);
+      color: var(--text);
       font-size: 0.85rem;
       outline: none;
       box-sizing: border-box;
     }
-    .form-field input:focus, .form-field select:focus {
-      border-color: var(--accent, #3b82f6);
-    }
+    .form-field input:focus, .form-field select:focus { border-color: var(--accent); }
     .empty {
       text-align: center;
       padding: 2rem;
-      color: var(--text-muted, #525252);
+      color: var(--muted);
       font-size: 0.85rem;
     }
-    .loading { text-align: center; padding: 2rem; color: var(--text-muted, #525252); }
+    .loading { text-align: center; padding: 2rem; color: var(--muted); }
   `];
 
   @property({ type: String }) gatewayUrl = "";

@@ -42,7 +42,7 @@ export class OnboardingWizard extends LitElement {
       position: fixed;
       inset: 0;
       z-index: 9999;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0, 0, 0, 0.7);
       backdrop-filter: blur(8px);
       display: flex;
       align-items: center;
@@ -80,7 +80,7 @@ export class OnboardingWizard extends LitElement {
       background: var(--accent, #3b82f6);
     }
     .progress-step.done {
-      background: #22c55e;
+      background: var(--ok);
     }
 
     /* ── Header ── */
@@ -164,7 +164,7 @@ export class OnboardingWizard extends LitElement {
       margin-bottom: 0.35rem;
       color: var(--text-secondary, #a3a3a3);
     }
-    .required { color: #ef4444; }
+    .required { color: var(--danger); }
     .form-group input, .form-group select, .form-group textarea {
       width: 100%;
       padding: 0.6rem 0.75rem 0.7rem;
@@ -182,7 +182,7 @@ export class OnboardingWizard extends LitElement {
       border-color: var(--accent, #3b82f6);
     }
     .form-group input:required:invalid:not(:placeholder-shown) {
-      border-color: #ef4444;
+      border-color: var(--danger);
     }
     .form-group textarea {
       min-height: 80px;
@@ -271,7 +271,7 @@ export class OnboardingWizard extends LitElement {
     }
     .btn-ghost:hover { color: var(--text, #e5e5e5); }
     .btn-success {
-      background: #22c55e;
+      background: var(--ok);
       color: white;
       font-size: 0.95rem;
       padding: 0.65rem 2rem;
@@ -315,7 +315,7 @@ export class OnboardingWizard extends LitElement {
       font-size: 0.7rem;
       flex-shrink: 0;
     }
-    .check-icon.done { background: #22c55e33; color: #22c55e; }
+    .check-icon.done { background: var(--ok-subtle); color: var(--ok); }
     .check-icon.skip { background: #52525233; color: #525252; }
 
     /* ── Skip confirm dialog ── */

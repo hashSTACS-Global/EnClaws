@@ -444,20 +444,21 @@ export function renderApp(state: AppViewState) {
               <div class="nav-brand-header">
                   <div class="brand">
                       <div class="brand-logo">
-                          <img src=${basePath ? `${basePath}/favicon.svg` : "/favicon.svg"} alt="EnClaws"/>
+                          <img src="/favicon.svg" alt="EnClaws" />
                       </div>
                       ${
                               !state.settings.navCollapsed
                                       ? html`
                                           <div class="brand-text">
                                               <div class="brand-title">EnClaws</div>
-                                              <div class="brand-sub">Gateway Dashboard</div>
                                           </div>
+                                          <span class="brand-version-badge">${enClawsVersion !== t("common.na") ? enClawsVersion : "v2"}</span>
                                       `
                                       : nothing
                       }
                   </div>
               </div>
+              <div class="nav-scroll-area">
               ${TAB_GROUPS.map((group) => {
                   // Filter tabs by user role
                   const authState = loadAuth();
@@ -506,58 +507,52 @@ export function renderApp(state: AppViewState) {
                       </div>
                   `;
               })}
-              <!-- resources / docs link hidden -->
+              </div>
               ${(() => {
                   const authState = loadAuth();
                   if (!authState?.user) return nothing;
                   const goChangePassword = () => {
-                      // Native hashchange fires from location.hash assignment;
-                      // app-lifecycle bumps hashRouteTick → Lit re-renders.
                       window.location.hash = "#/auth/change-password";
                   };
                   const doLogout = () => {
                       clearAuth();
                       window.location.reload();
                   };
+                  const displayName = authState.user.displayName || authState.user.email || "";
+                  const initials = displayName.slice(0, 2).toUpperCase();
+                  const roleLabel = authState.user.role === "platform-admin" ? "Platform Admin"
+                    : authState.user.role === "owner" ? "Owner"
+                    : authState.user.role === "admin" ? "Admin"
+                    : "Member";
                   return html`
-                      <div class="nav-user-footer"
-                           style="padding: 0.75rem; border-top: 1px solid var(--border, #262626); margin-top: auto; font-size: 0.8rem;">
-                          <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-                              ${state.settings.navCollapsed
-                                      ? html`
-                                          <div style="display: flex; flex-direction: column; gap: 0.3rem; width: 100%; align-items: center;">
-                                              <button
-                                                      style="background: none; border: none; color: var(--text-muted, #a3a3a3); cursor: pointer; padding: 0.3rem; font-size: 0.9rem;"
-                                                      title=${t("nav.changePasswordTitle")}
-                                                      aria-label=${t("nav.changePasswordTitle")}
-                                                      @click=${goChangePassword}
-                                              >🔑</button>
-                                              <button
-                                                      style="background: none; border: none; color: var(--text-muted, #a3a3a3); cursor: pointer; padding: 0.3rem; font-size: 0.75rem;"
-                                                      title="${authState.user.email} — ${t("nav.logoutTitle")}"
-                                                      @click=${doLogout}
-                                              >⏻</button>
-                                          </div>`
-                                      : html`
-                                          <span style="color: var(--text-secondary, #a3a3a3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;"
-                                                title=${authState.user.email}>
-                      ${authState.user.displayName || authState.user.email}
-                    </span>
-                                          <div style="display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0;">
-                                              <button
-                                                      style="background: none; border: none; color: var(--text-muted, #737373); cursor: pointer; padding: 0.2rem 0.4rem; font-size: 0.75rem;"
-                                                      title=${t("nav.changePasswordTitle")}
-                                                      @click=${goChangePassword}
-                                              >${t("nav.changePassword")}</button>
-                                              <span style="color: var(--border, #262626); font-size: 0.7rem;">·</span>
-                                              <button
-                                                      style="background: none; border: none; color: var(--text-muted, #737373); cursor: pointer; padding: 0.2rem 0.4rem; font-size: 0.75rem;"
-                                                      title=${t("nav.logoutTitle")}
-                                                      @click=${doLogout}
-                                              >${t("nav.logout")}</button>
-                                          </div>
-                                      `}
-                          </div>
+                      <div class="nav-user-footer">
+                          ${state.settings.navCollapsed
+                              ? html`
+                                  <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                                      <div class="user-avatar" title=${authState.user.email}>${initials}</div>
+                                      <button class="user-action-btn" title=${t("nav.changePasswordTitle")} @click=${goChangePassword}>
+                                          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                      </button>
+                                      <button class="user-action-btn" title=${t("nav.logoutTitle")} @click=${doLogout}>
+                                          <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                      </button>
+                                  </div>`
+                              : html`
+                                  <div class="user-row">
+                                      <div class="user-avatar" title=${authState.user.email}>${initials}</div>
+                                      <div class="user-info">
+                                          <div class="user-name">${displayName}</div>
+                                          <div class="user-role">${roleLabel}</div>
+                                      </div>
+                                      <div class="user-actions">
+                                          <button class="user-action-btn" title=${t("nav.changePasswordTitle")} @click=${goChangePassword}>
+                                              <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                          </button>
+                                          <button class="user-action-btn" title=${t("nav.logoutTitle")} @click=${doLogout}>
+                                              <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                          </button>
+                                      </div>
+                                  </div>`}
                       </div>
                   `;
               })()}
@@ -591,7 +586,7 @@ export function renderApp(state: AppViewState) {
                   </div>
                   <div class="header-right">
                       <language-switcher
-                              .locale=${state.settings.locale || "en"}
+                              .locale=${state.settings.locale || i18n.getLocale()}
                               @locale-change=${(e: CustomEvent) => {
                                   const loc = e.detail.locale;
                                   state.applySettings({...state.settings, locale: loc});

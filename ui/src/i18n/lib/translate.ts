@@ -1,4 +1,8 @@
 import { en } from "../locales/en.ts";
+import { zh_CN } from "../locales/zh-CN.ts";
+import { zh_TW } from "../locales/zh-TW.ts";
+import { pt_BR } from "../locales/pt-BR.ts";
+import { de } from "../locales/de.ts";
 import type { Locale, TranslationMap } from "./types.ts";
 
 type Subscriber = (locale: Locale) => void;
@@ -11,7 +15,13 @@ export function isSupportedLocale(value: string | null | undefined): value is Lo
 
 class I18nManager {
   private locale: Locale = "en";
-  private translations: Record<Locale, TranslationMap> = { en } as Record<Locale, TranslationMap>;
+  private translations: Record<Locale, TranslationMap> = {
+    en,
+    "zh-CN": zh_CN,
+    "zh-TW": zh_TW,
+    "pt-BR": pt_BR,
+    de,
+  };
   private subscribers: Set<Subscriber> = new Set();
 
   constructor() {
@@ -37,14 +47,7 @@ class I18nManager {
   }
 
   private loadLocale() {
-    const initialLocale = this.resolveInitialLocale();
-    if (initialLocale === "en") {
-      this.locale = "en";
-      return;
-    }
-    // Use the normal locale setter so startup locale loading follows the same
-    // translation-loading + notify path as manual locale changes.
-    void this.setLocale(initialLocale);
+    this.locale = this.resolveInitialLocale();
   }
 
   public getLocale(): Locale {

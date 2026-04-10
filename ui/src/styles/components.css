@@ -163,7 +163,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 12px;
-  background: var(--bg-elevated);
+  background: var(--surface);
   transition: border-color var(--duration-fast) ease;
 }
 
@@ -343,7 +343,7 @@
   justify-content: center;
   gap: 8px;
   border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background: var(--surface);
   padding: 9px 16px;
   border-radius: var(--radius-md);
   font-size: 13px;
@@ -572,7 +572,7 @@
 .cron-summary-item {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  background: var(--surface);
   padding: 10px 12px;
   min-height: 62px;
   display: grid;
@@ -637,7 +637,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 14px;
-  background: var(--bg-elevated);
+  background: var(--surface);
   display: grid;
   gap: 12px;
 }
@@ -781,7 +781,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 12px;
-  background: var(--bg-elevated);
+  background: var(--surface);
   display: grid;
   gap: 10px;
 }
@@ -876,7 +876,7 @@
   width: min(360px, calc(100vw - 48px));
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  background: var(--surface);
   padding: 10px;
   display: grid;
   gap: 10px;
@@ -2672,7 +2672,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 10px;
-  background: var(--bg-elevated);
+  background: var(--surface);
 }
 
 .agent-tools-header {
