@@ -423,7 +423,7 @@ CREATE INDEX IF NOT EXISTS idx_traces_created_at ON llm_interaction_traces (crea
 CREATE INDEX IF NOT EXISTS idx_traces_model_time ON llm_interaction_traces (model, created_at);
 
 -- ============================================================
--- Seed: Platform admin tenant + user (password: Aa123456!)
+-- Seed: Platform admin tenant + user (password: Aa123456!, stored as bcrypt(sha256(password)))
 -- ============================================================
 INSERT INTO tenants (id, name, slug, plan, status, quotas)
 VALUES (
@@ -441,7 +441,7 @@ VALUES (
   '00000000-0000-0000-0000-000000000002',
   '00000000-0000-0000-0000-000000000001',
   'admin@enclaws.local',
-  '$2b$12$KIBNGrqC9DmrXbPeutbl5.IebhcHmsWEld9jeS3XvSQk07NV3EPB.',
+  '$2b$12$YAVi.E167RF.45y49zl69uRpr8NRQQQQdMEZcP.PEERR922d5tWHC',
   'Platform Admin',
   'platform-admin',
   'active'

@@ -11,6 +11,18 @@ import { generateUUID } from "./uuid.ts";
 
 const AUTH_KEY = "enclaws.auth.v1";
 
+/**
+ * Hash a password with SHA-256 before sending over the wire.
+ * Returns a hex-encoded digest so plaintext never leaves the browser.
+ */
+export async function hashPasswordForTransport(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // ── Shared gateway client for token refresh ──────────────────
 // Set by app-gateway.ts when the main connection is established.
 // Allows refreshAccessToken to reuse the existing WebSocket
@@ -290,6 +302,7 @@ export async function login(params: {
   password: string;
   tenantSlug?: string;
 }): Promise<AuthState> {
+  const hashedPassword = await hashPasswordForTransport(params.password);
   return new Promise((resolve, reject) => {
     const wsUrl = params.gatewayUrl;
     const ws = new WebSocket(wsUrl);
@@ -318,7 +331,7 @@ export async function login(params: {
               method: "auth.login",
               params: {
                 email: params.email,
-                password: params.password,
+                password: hashedPassword,
                 tenantSlug: params.tenantSlug,
               },
             }),
@@ -379,6 +392,7 @@ export async function register(params: {
   password: string;
   displayName?: string;
 }): Promise<AuthState> {
+  const hashedPassword = await hashPasswordForTransport(params.password);
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(params.gatewayUrl);
     let handshakeDone = false;
@@ -408,7 +422,7 @@ export async function register(params: {
                 tenantName: params.tenantName,
                 tenantSlug: params.tenantSlug,
                 email: params.email,
-                password: params.password,
+                password: hashedPassword,
                 displayName: params.displayName,
               },
             }),

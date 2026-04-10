@@ -7,7 +7,7 @@
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, i18n, I18nController } from "../../../i18n/index.ts";
-import { loadAuth } from "../../auth-store.ts";
+import { loadAuth, hashPasswordForTransport } from "../../auth-store.ts";
 import { tenantRpc } from "./rpc.ts";
 
 interface TenantUser {
@@ -243,9 +243,10 @@ export class TenantUsersView extends LitElement {
     this.errorKey = "";
     this.successKey = "";
     try {
+      const hashedPassword = await hashPasswordForTransport(this.invitePassword);
       await this.rpc("tenant.users.invite", {
         email: this.inviteEmail,
-        password: this.invitePassword,
+        password: hashedPassword,
         role: this.inviteRole,
         displayName: this.inviteDisplayName || undefined,
       });
