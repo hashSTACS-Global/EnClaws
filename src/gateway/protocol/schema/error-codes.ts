@@ -33,3 +33,14 @@ export function errorShape(
     ...opts,
   };
 }
+
+/**
+ * Read the configured "contact admin to upgrade plan" link from env.
+ * Used by all QUOTA_EXCEEDED errors so the UI / IM channels can render
+ * a clickable upgrade link. Returns undefined when unset so callers can
+ * gracefully omit it from the message.
+ */
+export function getPlanUpgradeLink(): string | undefined {
+  const v = process.env.ENCLAWS_PLAN_UPGRADE_LINK;
+  return v && v.trim() ? v.trim() : undefined;
+}

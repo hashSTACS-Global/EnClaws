@@ -873,11 +873,11 @@ export const de: TranslationMap = {
   },
   errors: {
     quotaExceeded: {
-      agents: "Agent-Kontingent erreicht ({current}/{max}). Bitte kontaktieren Sie Ihren Administrator, um Ihren Tarif zu aktualisieren.",
-      channels: "Kanal-Kontingent erreicht ({current}/{max}). Bitte kontaktieren Sie Ihren Administrator, um Ihren Tarif zu aktualisieren.",
-      users: "Benutzer-Kontingent erreicht ({current}/{max}). Bitte kontaktieren Sie Ihren Administrator, um Ihren Tarif zu aktualisieren.",
-      tokensPerMonth: "Monatliches Token-Kontingent erreicht ({current}/{max}). Bitte kontaktieren Sie Ihren Administrator, um Ihren Tarif zu aktualisieren.",
-      generic: "Tarif-Kontingent erreicht ({current}/{max}). Bitte kontaktieren Sie Ihren Administrator, um Ihren Tarif zu aktualisieren.",
+      agents: "Agent-Kontingent erreicht ({current}/{max}). Bitte <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>kontaktieren Sie Ihren Administrator</a>, um Ihren Tarif zu aktualisieren.",
+      channels: "Kanal-Kontingent erreicht ({current}/{max}). Bitte <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>kontaktieren Sie Ihren Administrator</a>, um Ihren Tarif zu aktualisieren.",
+      users: "Benutzer-Kontingent erreicht ({current}/{max}). Bitte <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>kontaktieren Sie Ihren Administrator</a>, um Ihren Tarif zu aktualisieren.",
+      tokensPerMonth: "Monatliches Token-Kontingent erreicht ({current}/{max}). Bitte <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>kontaktieren Sie Ihren Administrator</a>, um Ihren Tarif zu aktualisieren.",
+      generic: "Tarif-Kontingent erreicht ({current}/{max}). Bitte <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>kontaktieren Sie Ihren Administrator</a>, um Ihren Tarif zu aktualisieren.",
     },
   },
   tenantSettings: {

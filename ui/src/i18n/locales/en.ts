@@ -1212,11 +1212,11 @@ export const en: TranslationMap = {
   },
   errors: {
     quotaExceeded: {
-      agents: "Agent quota reached ({current}/{max}). Please contact your administrator to upgrade your plan.",
-      channels: "Channel quota reached ({current}/{max}). Please contact your administrator to upgrade your plan.",
-      users: "User quota reached ({current}/{max}). Please contact your administrator to upgrade your plan.",
-      tokensPerMonth: "Monthly token quota reached ({current}/{max}). Please contact your administrator to upgrade your plan.",
-      generic: "Plan quota reached ({current}/{max}). Please contact your administrator to upgrade your plan.",
+      agents: "Agent quota reached ({current}/{max}). Please <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>contact your administrator</a> to upgrade your plan.",
+      channels: "Channel quota reached ({current}/{max}). Please <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>contact your administrator</a> to upgrade your plan.",
+      users: "User quota reached ({current}/{max}). Please <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>contact your administrator</a> to upgrade your plan.",
+      tokensPerMonth: "Monthly token quota reached ({current}/{max}). Please <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>contact your administrator</a> to upgrade your plan.",
+      generic: "Plan quota reached ({current}/{max}). Please <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>contact your administrator</a> to upgrade your plan.",
     },
   },
   tenantSettings: {

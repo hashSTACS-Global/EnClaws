@@ -872,11 +872,11 @@ export const pt_BR: TranslationMap = {
   },
   errors: {
     quotaExceeded: {
-      agents: "Cota de agents atingida ({current}/{max}). Entre em contato com o administrador para fazer upgrade do plano.",
-      channels: "Cota de canais atingida ({current}/{max}). Entre em contato com o administrador para fazer upgrade do plano.",
-      users: "Cota de usuários atingida ({current}/{max}). Entre em contato com o administrador para fazer upgrade do plano.",
-      tokensPerMonth: "Cota mensal de tokens atingida ({current}/{max}). Entre em contato com o administrador para fazer upgrade do plano.",
-      generic: "Cota do plano atingida ({current}/{max}). Entre em contato com o administrador para fazer upgrade do plano.",
+      agents: "Cota de agents atingida ({current}/{max}). <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>Entre em contato com o administrador</a> para fazer upgrade do plano.",
+      channels: "Cota de canais atingida ({current}/{max}). <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>Entre em contato com o administrador</a> para fazer upgrade do plano.",
+      users: "Cota de usuários atingida ({current}/{max}). <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>Entre em contato com o administrador</a> para fazer upgrade do plano.",
+      tokensPerMonth: "Cota mensal de tokens atingida ({current}/{max}). <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>Entre em contato com o administrador</a> para fazer upgrade do plano.",
+      generic: "Cota do plano atingida ({current}/{max}). <a href='{contactLink}' target='_blank' rel='noopener noreferrer'>Entre em contato com o administrador</a> para fazer upgrade do plano.",
     },
   },
   tenantSettings: {

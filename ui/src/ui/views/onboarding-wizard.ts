@@ -6,6 +6,7 @@
 
 import { html, css, LitElement, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../i18n/index.ts";
 import { tenantRpc, quotaErrorKey } from "./tenant/rpc.ts";
@@ -277,6 +278,8 @@ export class OnboardingWizard extends LitElement {
     }
 
     /* ── Error ── */
+    .error-msg a { color: inherit; text-decoration: underline; font-weight: 600; }
+    .error-msg a:hover { opacity: 0.85; }
     .error-msg {
       background: #2d1215;
       border: 1px solid #7f1d1d;
@@ -356,6 +359,9 @@ export class OnboardingWizard extends LitElement {
   @state() private step: WizardStep = "welcome";
   @state() private saving = false;
   @state() private error = "";
+  /** When true, `this.error` contains HTML and should be rendered with unsafeHTML
+   *  (used for quota-exceeded messages that embed an <a> upgrade link). */
+  @state() private errorIsHtml = false;
   @state() private showSkipConfirm = false;
 
   // Channel step
@@ -620,8 +626,10 @@ export class OnboardingWizard extends LitElement {
       const q = quotaErrorKey(e);
       if (q) {
         this.error = t(q.key, q.params);
+        this.errorIsHtml = true;
       } else {
         this.error = e instanceof Error ? e.message : t("onboarding.saveFailed");
+        this.errorIsHtml = false;
       }
     } finally {
       this.saving = false;
@@ -687,7 +695,9 @@ export class OnboardingWizard extends LitElement {
         <p class="wizard-desc">${t("onboarding.channelDesc")}</p>
       </div>
 
-      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
+      ${this.error
+        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
+        : nothing}
 
       <div class="options-grid">
         ${CHANNEL_OPTIONS.map(ch => html`
@@ -785,7 +795,9 @@ export class OnboardingWizard extends LitElement {
         <p class="wizard-desc">${t("onboarding.modelDesc")}</p>
       </div>
 
-      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
+      ${this.error
+        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
+        : nothing}
 
       ${hasShared ? html`
         <div style="display:flex;gap:1.25rem;margin-bottom:1.25rem;justify-content:center">
@@ -889,7 +901,9 @@ export class OnboardingWizard extends LitElement {
         <p class="wizard-desc">${t("onboarding.agentDesc")}</p>
       </div>
 
-      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
+      ${this.error
+        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
+        : nothing}
       ${!(this.modelMode === "shared" ? this.selectedSharedModelId : this.selectedProvider) ? html`<div class="error-msg">${t("onboarding.modelRequiredForAgent")}</div>` : nothing}
 
       <div class="form-group">

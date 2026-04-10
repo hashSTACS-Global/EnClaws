@@ -12,7 +12,7 @@
  */
 
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape, getPlanUpgradeLink } from "../protocol/index.js";
 import { getTenantById, updateTenant, checkTenantQuota } from "../../db/models/tenant.js";
 import { createUser, listUsers, updateUser, deleteUser, getUserById, findUserByEmail } from "../../db/models/user.js";
 import { validatePasswordStrength } from "../../auth/password-policy.js";
@@ -232,7 +232,7 @@ export const tenantHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(
         ErrorCodes.QUOTA_EXCEEDED,
         `User quota reached (${quota.current}/${quota.max}). Upgrade your plan.`,
-        { details: { resource: "users", current: quota.current, max: quota.max } },
+        { details: { resource: "users", current: quota.current, max: quota.max, contactLink: getPlanUpgradeLink() } },
       ));
       return;
     }

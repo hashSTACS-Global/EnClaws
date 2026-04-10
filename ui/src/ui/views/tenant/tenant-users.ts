@@ -5,6 +5,7 @@
  */
 
 import { html, css, LitElement, nothing } from "lit";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, i18n, I18nController } from "../../../i18n/index.ts";
 import { loadAuth, hashPasswordForTransport } from "../../auth-store.ts";
@@ -104,6 +105,8 @@ export class TenantUsersView extends LitElement {
     .status-badge.suspended { background: #78350f; color: #fbbf24; }
     .status-badge.deleted { background: #7f1d1d; color: #fca5a5; }
     .actions { display: flex; gap: 0.4rem; }
+    .error-msg a { color: inherit; text-decoration: underline; font-weight: 600; }
+    .error-msg a:hover { opacity: 0.85; }
     .error-msg {
       background: var(--bg-destructive, #2d1215);
       border: 1px solid var(--border-destructive, #7f1d1d);
@@ -323,7 +326,13 @@ export class TenantUsersView extends LitElement {
         <h2>${t("tenantUsers.title")}</h2>
       </div>
 
-      ${this.errorKey ? html`<div class="error-msg">${this.tr(this.errorKey)}</div>` : nothing}
+      ${this.errorKey
+        ? html`<div class="error-msg">${
+            this.errorKey.startsWith("errors.quotaExceeded.")
+              ? unsafeHTML(this.tr(this.errorKey))
+              : this.tr(this.errorKey)
+          }</div>`
+        : nothing}
       ${this.successKey ? html`<div class="success-msg">${this.tr(this.successKey)}</div>` : nothing}
 
       ${this.loading ? html`<div class="loading">${t("tenantUsers.loading")}</div>` : this.users.length === 0 ? html`<div class="empty">${t("tenantUsers.empty")}</div>` : html`

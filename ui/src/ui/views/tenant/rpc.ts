@@ -119,18 +119,25 @@ export async function tenantRpc(
  * Detect a structured QUOTA_EXCEEDED error returned by the gateway and
  * map it to an i18n key + params suitable for `showError(key, params)`.
  *
+ * The optional `contactLink` from error.details is forwarded as a param
+ * so the i18n string can render a clickable upgrade link.
+ *
  * Returns null if the error is not a quota error, so callers can fall
  * back to their generic error handling.
  */
 export function quotaErrorKey(
   err: unknown,
 ): { key: string; params: Record<string, string> } | null {
-  const e = err as { code?: string; details?: { resource?: string; current?: number; max?: number } };
+  const e = err as {
+    code?: string;
+    details?: { resource?: string; current?: number; max?: number; contactLink?: string };
+  };
   if (e?.code !== "QUOTA_EXCEEDED") return null;
   const resource = String(e.details?.resource ?? "");
-  const params = {
+  const params: Record<string, string> = {
     current: String(e.details?.current ?? 0),
     max: String(e.details?.max ?? 0),
+    contactLink: e.details?.contactLink ?? "",
   };
   const known = ["agents", "channels", "users", "tokensPerMonth"];
   return {

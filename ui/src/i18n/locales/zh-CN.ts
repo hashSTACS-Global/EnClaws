@@ -1205,11 +1205,11 @@ export const zh_CN: TranslationMap = {
   },
   errors: {
     quotaExceeded: {
-      agents: "Agent 数量已达上限 ({current}/{max})，请联系管理员升级套餐。",
-      channels: "频道数量已达上限 ({current}/{max})，请联系管理员升级套餐。",
-      users: "用户数量已达上限 ({current}/{max})，请联系管理员升级套餐。",
-      tokensPerMonth: "本月 Token 用量已达上限 ({current}/{max})，请联系管理员升级套餐。",
-      generic: "已达套餐限额 ({current}/{max})，请联系管理员升级套餐。",
+      agents: "Agent 数量已达上限 ({current}/{max})，请<a href='{contactLink}' target='_blank' rel='noopener noreferrer'>联系管理员</a>升级套餐。",
+      channels: "频道数量已达上限 ({current}/{max})，请<a href='{contactLink}' target='_blank' rel='noopener noreferrer'>联系管理员</a>升级套餐。",
+      users: "用户数量已达上限 ({current}/{max})，请<a href='{contactLink}' target='_blank' rel='noopener noreferrer'>联系管理员</a>升级套餐。",
+      tokensPerMonth: "本月 Token 用量已达上限 ({current}/{max})，请<a href='{contactLink}' target='_blank' rel='noopener noreferrer'>联系管理员</a>升级套餐。",
+      generic: "已达套餐限额 ({current}/{max})，请<a href='{contactLink}' target='_blank' rel='noopener noreferrer'>联系管理员</a>升级套餐。",
     },
   },
   tenantSettings: {

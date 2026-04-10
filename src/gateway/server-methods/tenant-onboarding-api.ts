@@ -6,7 +6,7 @@
  */
 
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape, getPlanUpgradeLink } from "../protocol/index.js";
 import { isDbInitialized, withTransaction } from "../../db/index.js";
 import { assertPermission, RbacError } from "../../auth/rbac.js";
 import type { TenantContext } from "../../auth/middleware.js";
@@ -256,6 +256,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
               resource: quotaResource,
               current: (err as { quotaCurrent?: number }).quotaCurrent ?? 0,
               max: (err as { quotaMax?: number }).quotaMax ?? 0,
+              contactLink: getPlanUpgradeLink(),
             },
           },
         ));
