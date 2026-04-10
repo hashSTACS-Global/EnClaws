@@ -9,6 +9,7 @@ describe("isOptEnabled", () => {
     "ENCLAWS_TOKEN_OPT_WORKER",
     "ENCLAWS_TOKEN_OPT_COMPRESS",
     "ENCLAWS_TOKEN_OPT_DEDUP",
+    "ENCLAWS_TOKEN_OPT_PROMPT",
   ] as const;
 
   afterEach(() => {
@@ -24,6 +25,7 @@ describe("isOptEnabled", () => {
     expect(isOptEnabled("WORKER")).toBe(false);
     expect(isOptEnabled("COMPRESS")).toBe(false);
     expect(isOptEnabled("DEDUP")).toBe(false);
+    expect(isOptEnabled("PROMPT")).toBe(false);
   });
 
   it('returns true when env var is "true"', () => {
@@ -50,5 +52,11 @@ describe("isOptEnabled", () => {
     expect(isOptEnabled("CACHE")).toBe(false);
     expect(isOptEnabled("WORKER")).toBe(true);
     expect(isOptEnabled("COMPRESS")).toBe(false);
+  });
+
+  it("PROMPT toggle works independently", () => {
+    process.env.ENCLAWS_TOKEN_OPT_PROMPT = "true";
+    expect(isOptEnabled("PROMPT")).toBe(true);
+    expect(isOptEnabled("P1")).toBe(false);
   });
 });
