@@ -17,6 +17,7 @@ import { createTenantModel } from "../../db/models/tenant-model.js";
 import { createTenantAgent } from "../../db/models/tenant-agent.js";
 import { createAuditLog } from "../../db/models/audit-log.js";
 import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
+import { syncIdentityFile, removeIdentityFile } from "./tenant-agents-api.js";
 import type { ModelConfigEntry } from "../../db/types.js";
 
 function getTenantCtx(
@@ -93,6 +94,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    let identitySynced = false;
     try {
       const result = await withTransaction(async () => {
         let channelResult = null;
@@ -186,6 +188,11 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
           createdBy: ctx.userId,
         });
 
+        // Sync systemPrompt to IDENTITY.md on disk (parity with tenant.agents.create).
+        // Tracked so we can roll back the file write if the transaction later fails.
+        await syncIdentityFile(ctx.tenantId, agent.agentId, agent.config);
+        identitySynced = true;
+
         // Bind agent to channel app if both were created
         if (channelAppResult && agentResult) {
           await updateChannelApp(channelAppResult.id, ctx.tenantId, { agentId: agent.agentId });
@@ -224,6 +231,10 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
         agent: { id: result.agent.id, agentId: result.agent.agentId, name: result.agent.name },
       });
     } catch (err) {
+      // Roll back IDENTITY.md if it was written before the transaction failed.
+      if (identitySynced) {
+        await removeIdentityFile(ctx.tenantId, agent.agentId).catch(() => {});
+      }
       const msg = err instanceof Error ? err.message : "Onboarding setup failed";
       respond(false, undefined, errorShape(ErrorCodes.INTERNAL_ERROR, msg));
     }

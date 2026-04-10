@@ -3,7 +3,7 @@
  *
  * In multi-tenant mode, each tenant has their own agents, channels, and settings
  * stored in PostgreSQL. This module merges tenant-specific config with the global
- * OpenClawConfig to produce a tenant-scoped view.
+ * EnClawsConfig to produce a tenant-scoped view.
  *
  * Design principle: The global config provides system defaults and infrastructure
  * settings. Tenant config overlays agent definitions, channel configs, model

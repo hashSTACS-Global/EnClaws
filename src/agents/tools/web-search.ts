@@ -883,7 +883,7 @@ async function runPerplexitySearch(params: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${params.apiKey}`,
           "HTTP-Referer": "https://enclaws.ai",
-          "X-Title": "OpenClaw Web Search",
+          "X-Title": "EnClaws Web Search",
         },
         body: JSON.stringify(body),
       },

@@ -37,12 +37,18 @@ import path from "node:path";
 const DEFAULT_IDENTITY_FILENAME = "IDENTITY.md";
 
 /** Sync config.systemPrompt to the agent's IDENTITY.md file on disk. */
-async function syncIdentityFile(tenantId: string, agentId: string, config?: Record<string, unknown>): Promise<void> {
+export async function syncIdentityFile(tenantId: string, agentId: string, config?: Record<string, unknown>): Promise<void> {
   const systemPrompt = typeof config?.systemPrompt === "string" ? config.systemPrompt.trim() : "";
   if (!systemPrompt) return;
   const agentDir = resolveTenantAgentDir(tenantId, agentId);
   await fs.mkdir(agentDir, { recursive: true });
   await fs.writeFile(path.join(agentDir, DEFAULT_IDENTITY_FILENAME), systemPrompt, "utf-8");
+}
+
+/** Remove the agent's IDENTITY.md file. Used to roll back syncIdentityFile on transaction failure. */
+export async function removeIdentityFile(tenantId: string, agentId: string): Promise<void> {
+  const agentDir = resolveTenantAgentDir(tenantId, agentId);
+  await fs.rm(path.join(agentDir, DEFAULT_IDENTITY_FILENAME), { force: true });
 }
 
 function getTenantCtx(

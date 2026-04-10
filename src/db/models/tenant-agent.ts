@@ -140,7 +140,7 @@ export function buildTenantModelProviderKey(tm: import("../types.js").TenantMode
 }
 
 /**
- * Convert tenant agents to the OpenClawConfig agents.list format.
+ * Convert tenant agents to the EnClawsConfig agents.list format.
  *
  * model_config → model.primary + model.fallbacks:
  *   - isDefault=true entry → model.primary ("tm-{providerId}/{modelId}")
