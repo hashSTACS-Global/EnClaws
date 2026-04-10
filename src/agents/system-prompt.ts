@@ -1,8 +1,8 @@
 import { createHmac, createHash } from "node:crypto";
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
-import type { MemoryCitationsMode } from "../config/types.memory.js";
 import { isOptEnabled } from "../config/token-optimization.js";
+import type { MemoryCitationsMode } from "../config/types.memory.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
@@ -25,24 +25,30 @@ type OwnerIdDisplay = "raw" | "hash";
  *   .../tenants/{tenantId}/agents/{agentId}/AGENT.md
  * Returns the tenant dir path if detected (preserving original OS path format).
  */
-function detectTenantDirFromContextFiles(
-  files: Array<{ path: string }>,
-): string | undefined {
+function detectTenantDirFromContextFiles(files: Array<{ path: string }>): string | undefined {
   for (const file of files) {
     const filePath = file.path;
     // Use forward-slash normalization for detection only
     const normalized = filePath.replace(/\\/g, "/");
     const tenantsIdx = normalized.lastIndexOf("/tenants/");
-    if (tenantsIdx === -1) {continue;}
+    if (tenantsIdx === -1) {
+      continue;
+    }
     const afterTenants = normalized.slice(tenantsIdx + "/tenants/".length);
     const slashIdx = afterTenants.indexOf("/");
-    if (slashIdx === -1) {continue;}
+    if (slashIdx === -1) {
+      continue;
+    }
     const tenantId = afterTenants.slice(0, slashIdx);
-    if (!tenantId) {continue;}
+    if (!tenantId) {
+      continue;
+    }
     // Return using original path format (preserves Windows backslashes)
     const sep = filePath.includes("\\") ? "\\" : "/";
     const origTenantsIdx = filePath.lastIndexOf(`${sep}tenants${sep}`);
-    if (origTenantsIdx === -1) {continue;}
+    if (origTenantsIdx === -1) {
+      continue;
+    }
     return filePath.slice(0, origTenantsIdx + `${sep}tenants${sep}`.length + tenantId.length);
   }
   return undefined;
@@ -114,10 +120,7 @@ function buildMemorySection(params: {
   return lines;
 }
 
-function buildTenantMemorySection(params: {
-  isMinimal: boolean;
-  availableTools: Set<string>;
-}) {
+function buildTenantMemorySection(params: { isMinimal: boolean; availableTools: Set<string> }) {
   if (params.isMinimal) {
     return [];
   }
@@ -131,9 +134,7 @@ function buildTenantMemorySection(params: {
   if (!hasTenantMemory && !hasUserMemory) {
     return [];
   }
-  const lines: string[] = [
-    "## Memory Management",
-  ];
+  const lines: string[] = ["## Memory Management"];
   if (hasTenantMemory) {
     lines.push(
       "",
@@ -464,8 +465,16 @@ export function buildAgentSystemPrompt(params: {
   const runtimeInfo = params.runtimeInfo;
   const runtimeChannel = runtimeInfo?.channel?.trim().toLowerCase();
   const isImChannel = (ch?: string) => {
-    if (!ch) return false;
-    const imSet = new Set(["feishu", "telegram", "discord", "slack", "whatsapp", "signal", "imessage"]);
+    if (!ch) {return false;}
+    const imSet = new Set([
+      "feishu",
+      "telegram",
+      "discord",
+      "slack",
+      "whatsapp",
+      "signal",
+      "imessage",
+    ]);
     return imSet.has(ch);
   };
   const runtimeCapabilities = (runtimeInfo?.capabilities ?? [])
@@ -616,8 +625,16 @@ export function buildAgentSystemPrompt(params: {
     ...memorySection,
     ...tenantMemorySection,
     // Skip self-update for subagent/worker/none modes (and IM channels when PROMPT enabled)
-    hasGateway && !isMinimal && !isWorker && !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel)) ? "## EnClaws Self-Update" : "",
-    hasGateway && !isMinimal && !isWorker && !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel))
+    hasGateway &&
+    !isMinimal &&
+    !isWorker &&
+    !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel))
+      ? "## EnClaws Self-Update"
+      : "",
+    hasGateway &&
+    !isMinimal &&
+    !isWorker &&
+    !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel))
       ? [
           "Get Updates (self-update) is ONLY allowed when the user explicitly asks for it.",
           "Do not run config.apply or update.run unless the user explicitly requests an update or config change; if it's not explicit, ask first.",
@@ -626,7 +643,12 @@ export function buildAgentSystemPrompt(params: {
           "After restart, EnClaws pings the last active session automatically.",
         ].join("\n")
       : "",
-    hasGateway && !isMinimal && !isWorker && !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel)) ? "" : "",
+    hasGateway &&
+    !isMinimal &&
+    !isWorker &&
+    !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel))
+      ? ""
+      : "",
     "",
     // Skip model aliases for subagent/worker/none modes
     params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
@@ -638,7 +660,9 @@ export function buildAgentSystemPrompt(params: {
     params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
       ? params.modelAliasLines.join("\n")
       : "",
-    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker ? "" : "",
+    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
+      ? ""
+      : "",
     userTimezone
       ? "If you need the current date, time, or day of week, run session_status (📊 session_status)."
       : "",

@@ -11,8 +11,8 @@ import type { OpenClawConfig } from "../../config/config.js";
 import { isOptEnabled } from "../../config/token-optimization.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { CONFIG_DIR, resolveUserPath } from "../../utils.js";
-import { getTenantBootstrapContext } from "../workspace.js";
 import { resolveSandboxPath } from "../sandbox-paths.js";
+import { getTenantBootstrapContext } from "../workspace.js";
 import { resolveBundledSkillsDir } from "./bundled-dir.js";
 import { shouldIncludeSkill } from "./config.js";
 import { normalizeSkillFilter } from "./filter.js";
@@ -78,7 +78,9 @@ function filterSkillEntries(
 ): SkillEntry[] {
   let filtered = entries.filter((entry) => shouldIncludeSkill({ entry, config, eligibility }));
   // If skillFilter is provided, only include skills in the filter list.
-  skillsLogger.info(`[skills-chain] filterSkillEntries: total=${entries.length}, eligible=${filtered.length}, skillFilter=${skillFilter !== undefined ? JSON.stringify(skillFilter) : "undefined"}`);
+  skillsLogger.info(
+    `[skills-chain] filterSkillEntries: total=${entries.length}, eligible=${filtered.length}, skillFilter=${skillFilter !== undefined ? JSON.stringify(skillFilter) : "undefined"}`,
+  );
   if (skillFilter !== undefined) {
     const normalized = normalizeSkillFilter(skillFilter) ?? [];
     const label = normalized.length > 0 ? normalized.join(", ") : "(none)";
@@ -509,10 +511,7 @@ function applySkillsPromptLimits(params: { skills: Skill[]; config?: OpenClawCon
  * Format skills as compact markdown list instead of XML.
  * Uses summary (from frontmatter) when available, falling back to description.
  */
-function formatSkillsCompact(
-  skills: Skill[],
-  entries: SkillEntry[],
-): string {
+function formatSkillsCompact(skills: Skill[], entries: SkillEntry[]): string {
   const entryMap = new Map(entries.map((e) => [e.skill.name, e]));
   const lines = ["<available_skills>"];
   for (const skill of skills) {
@@ -529,14 +528,18 @@ export function buildWorkspaceSkillSnapshot(
   workspaceDir: string,
   opts?: WorkspaceSkillBuildOptions & { snapshotVersion?: number },
 ): SkillSnapshot {
-  const { allEntries, eligible, prompt, resolvedSkills } = resolveWorkspaceSkillPromptState(workspaceDir, opts);
+  const { allEntries, eligible, prompt, resolvedSkills } = resolveWorkspaceSkillPromptState(
+    workspaceDir,
+    opts,
+  );
   const skillFilter = normalizeSkillFilter(opts?.skillFilter);
   // Collect overrides from eligible skills (standard behavior) PLUS overrides
   // from skills excluded by skillFilter. When a skill is filtered out, its
   // associated plugin tools should also be disabled — not resurrected.
-  const overrideSources = skillFilter !== undefined
-    ? allEntries.filter((e) => e.overrides && e.overrides.length > 0)
-    : eligible.filter((e) => e.overrides && e.overrides.length > 0);
+  const overrideSources =
+    skillFilter !== undefined
+      ? allEntries.filter((e) => e.overrides && e.overrides.length > 0)
+      : eligible.filter((e) => e.overrides && e.overrides.length > 0);
   const skillOverrides = overrideSources.flatMap((e) => e.overrides!);
   return {
     prompt,
@@ -630,13 +633,7 @@ function resolveWorkspaceSkillPromptState(
   const skillsListBlock = isOptEnabled("PROMPT")
     ? formatSkillsCompact(compactSkillPaths(skillsForPrompt), promptEntries)
     : formatSkillsForPrompt(compactSkillPaths(skillsForPrompt));
-  const prompt = [
-    remoteNote,
-    truncationNote,
-    skillsListBlock,
-    ...inlineBlocks,
-    disabledBlock,
-  ]
+  const prompt = [remoteNote, truncationNote, skillsListBlock, ...inlineBlocks, disabledBlock]
     .filter(Boolean)
     .join("\n");
   return { allEntries: skillEntries, eligible, prompt, resolvedSkills };
