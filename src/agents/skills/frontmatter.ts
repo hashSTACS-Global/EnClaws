@@ -232,6 +232,19 @@ export function resolveSkillInline(frontmatter: ParsedSkillFrontmatter): boolean
   return parseFrontmatterBool(getFrontmatterString(frontmatter, "inline"), false);
 }
 
+/**
+ * Resolve the enhanced summary for a skill.
+ * Falls back to description if no summary is defined in frontmatter.
+ * Used by PROMPT optimization to replace inline_skill blocks with compact summaries.
+ */
+export function resolveSkillSummary(frontmatter: ParsedSkillFrontmatter): string | undefined {
+  const summary = getFrontmatterString(frontmatter, "summary")?.trim();
+  if (summary) {
+    return summary;
+  }
+  return getFrontmatterString(frontmatter, "description")?.trim();
+}
+
 export function resolveSkillKey(skill: Skill, entry?: SkillEntry): string {
   return entry?.metadata?.skillKey ?? skill.name;
 }
