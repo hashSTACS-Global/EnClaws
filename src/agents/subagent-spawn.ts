@@ -81,6 +81,10 @@ export type SpawnSubagentContext = {
   requesterAgentIdOverride?: string;
   /** Multi-agent Cognitive Loop Fusion: current recursive iteration depth */
   iterationDepth?: number;
+  /** Tenant ID for multi-tenant scoped subagent sessions. */
+  tenantId?: string;
+  /** Tenant user ID for multi-tenant scoped subagent sessions. */
+  tenantUserId?: string;
 };
 
 export const SUBAGENT_SPAWN_ACCEPTED_NOTE =
@@ -495,6 +499,8 @@ export async function spawnSubagentDirect(
         groupSpace: ctx.agentGroupSpace ?? undefined,
         tools: resolveSubagentTools(params.tools),
         skills: params.skills,
+        ...(ctx.tenantId ? { _tenantId: ctx.tenantId } : {}),
+        ...(ctx.tenantUserId ? { _tenantUserId: ctx.tenantUserId } : {}),
       },
       timeoutMs: 10_000,
     });
@@ -567,6 +573,8 @@ export async function spawnSubagentDirect(
     runTimeoutSeconds,
     expectsCompletionMessage,
     spawnMode,
+    tenantId: ctx.tenantId,
+    tenantUserId: ctx.tenantUserId,
   });
 
   if (hookRunner?.hasHooks("subagent_spawned")) {
@@ -622,7 +630,12 @@ export async function spawnSubagentDirect(
 
       // Attempt to read the final message from the session
       try {
-        const text = await readLatestSubagentOutput(childSessionKey);
+        const text = await readLatestSubagentOutput(
+          childSessionKey,
+          ctx.tenantId && ctx.tenantUserId
+            ? { tenantId: ctx.tenantId, tenantUserId: ctx.tenantUserId }
+            : undefined,
+        );
         if (text) {
           completionText = compressSubagentResult(text);
         }

@@ -175,6 +175,8 @@ export function createOpenClawTools(options?: {
       sandboxed: options?.sandboxed,
       requesterAgentIdOverride: options?.requesterAgentIdOverride,
       iterationDepth: options?.iterationDepth,
+      tenantId: options?.tenantId,
+      tenantUserId: options?.tenantUserId,
     }),
     createSessionsEvaluateTool({
       agentSessionKey: options?.agentSessionKey,
