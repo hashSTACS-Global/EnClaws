@@ -26,7 +26,10 @@ describe("system-prompt PROMPT optimization", () => {
     const prompt = buildAgentSystemPrompt({
       workspaceDir: "/test",
       contextFiles: [
-        { path: "SOUL.md", content: "# Soul\n\nBe helpful and concise. Have strong opinions about everything." },
+        {
+          path: "SOUL.md",
+          content: "# Soul\n\nBe helpful and concise. Have strong opinions about everything.",
+        },
         { path: "USER.md", content: "# USER.md\n\n_(empty)_\n" },
         { path: "HEARTBEAT.md", content: "# HEARTBEAT.md\n\n# Keep this file empty\n" },
       ],
@@ -76,9 +79,7 @@ describe("system-prompt PROMPT optimization", () => {
       workspaceDir: "/test",
       toolNames: ["tenant_memory", "user_memory"],
       runtimeInfo: { channel: "feishu" },
-      contextFiles: [
-        { path: "HEARTBEAT.md", content: "# Keep empty\n" },
-      ],
+      contextFiles: [{ path: "HEARTBEAT.md", content: "# Keep empty\n" }],
     });
     expect(prompt).toContain("## Reply Tags");
     expect(prompt).toContain("## Memory Management");
