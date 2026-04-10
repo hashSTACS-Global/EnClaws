@@ -8,7 +8,7 @@ import { html, css, LitElement, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../i18n/index.ts";
-import { tenantRpc } from "./tenant/rpc.ts";
+import { tenantRpc, quotaErrorKey } from "./tenant/rpc.ts";
 import { PROVIDER_TYPES } from "../../constants/providers.ts";
 import { CHANNEL_TYPES, CHANNEL_ICON_MAP } from "../../constants/channels.ts";
 import { caretFix } from "../shared-styles.ts";
@@ -615,7 +615,14 @@ export class OnboardingWizard extends LitElement {
       this.agentCreated = true;
       this.goNext();
     } catch (e) {
-      this.error = e instanceof Error ? e.message : t("onboarding.saveFailed");
+      // Show a localized quota-exceeded message when the backend rejects
+      // the setup because the tenant's plan limits are reached.
+      const q = quotaErrorKey(e);
+      if (q) {
+        this.error = t(q.key, q.params);
+      } else {
+        this.error = e instanceof Error ? e.message : t("onboarding.saveFailed");
+      }
     } finally {
       this.saving = false;
     }

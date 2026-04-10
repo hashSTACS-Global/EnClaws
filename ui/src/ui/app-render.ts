@@ -269,7 +269,7 @@ export function renderApp(state: AppViewState) {
     : state.connected
       ? null
       : t("chat.disconnected");
-  const COMING_SOON_TABS = new Set(["sandbox", "nodes", "usage", "tenant-usage", "instances", "cron", "config", "debug"]);
+  const COMING_SOON_TABS = new Set(["sandbox", "nodes", "usage", "instances", "cron", "config", "debug"]);
   const isComingSoon = COMING_SOON_TABS.has(state.tab);
   const isChat = state.tab === "chat";
   const chatFocus = isChat && (state.settings.chatFocusMode || state.onboarding);

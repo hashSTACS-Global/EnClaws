@@ -36,7 +36,7 @@ export async function createTenantAgent(params: {
   if (getDbType() === DB_SQLITE) return sqliteAgent.createTenantAgent(params);
   const result = await query(
     `INSERT INTO tenant_agents (tenant_id, agent_id, name, config, model_config, tools, skills, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8)
      RETURNING *`,
     [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? []), params.createdBy ?? null],
   );
@@ -91,19 +91,19 @@ export async function updateTenantAgent(
     values.push(updates.name);
   }
   if (updates.config !== undefined) {
-    sets.push(`config = $${idx++}`);
+    sets.push(`config = $${idx++}::jsonb`);
     values.push(JSON.stringify(updates.config));
   }
   if (updates.modelConfig !== undefined) {
-    sets.push(`model_config = $${idx++}`);
+    sets.push(`model_config = $${idx++}::jsonb`);
     values.push(JSON.stringify(updates.modelConfig));
   }
   if (updates.tools !== undefined) {
-    sets.push(`tools = $${idx++}`);
+    sets.push(`tools = $${idx++}::jsonb`);
     values.push(JSON.stringify(updates.tools));
   }
   if (updates.skills !== undefined) {
-    sets.push(`skills = $${idx++}`);
+    sets.push(`skills = $${idx++}::jsonb`);
     values.push(JSON.stringify(updates.skills));
   }
   if (updates.isActive !== undefined) {

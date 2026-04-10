@@ -15,12 +15,17 @@ import type {
   UserStatus,
 } from "../types.js";
 import { hashPassword } from "../../auth/password.js";
+import { checkTenantQuota } from "./tenant.js";
+import { UserQuotaExceededError } from "./user-quota-error.js";
 import {
   resolveTenantDevicesDir,
   resolveTenantCredentialsDir,
   resolveTenantCronDir,
   resolveTenantAgentWorkspaceDir,
 } from "../../config/sessions/tenant-paths.js";
+
+// Re-export for convenience so callers can `import { UserQuotaExceededError } from "../../db/models/user.js"`.
+export { UserQuotaExceededError } from "./user-quota-error.js";
 
 function rowToUser(row: Record<string, unknown>): User {
   return {
@@ -88,7 +93,7 @@ export async function createUser(
   const result = await query(
     `INSERT INTO users (tenant_id, channel_id, email, password_hash, display_name, role,
                         force_change_password, password_changed_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $4 IS NULL THEN NULL ELSE NOW() END)
+     VALUES ($1, $2, $3, $4::text, $5, $6, $7, CASE WHEN $4::text IS NULL THEN NULL ELSE NOW() END)
      RETURNING *`,
     [
       input.tenantId,
@@ -221,7 +226,7 @@ export async function updateUser(
     values.push(updates.status);
   }
   if (updates.settings !== undefined) {
-    sets.push(`settings = $${idx++}`);
+    sets.push(`settings = $${idx++}::jsonb`);
     values.push(JSON.stringify(updates.settings));
   }
   if (updates.avatarUrl !== undefined) {
@@ -388,6 +393,15 @@ export async function findOrCreateUserByOpenId(
   }
 
   // 3. Create new user with open_ids array, union_id, and channel_id
+  // Check user quota before insert — IM-channel users were previously
+  // auto-provisioned without any quota enforcement, so a tenant could
+  // exceed maxUsers freely. Existing users (steps 1 and 2 above) are
+  // never blocked even after the limit is reached.
+  const userQuota = await checkTenantQuota(tenantId, "users");
+  if (!userQuota.allowed) {
+    throw new UserQuotaExceededError(userQuota.current, userQuota.max);
+  }
+
   try {
     const result = await query(
       `INSERT INTO users (tenant_id, channel_id, open_ids, union_id, display_name, role)

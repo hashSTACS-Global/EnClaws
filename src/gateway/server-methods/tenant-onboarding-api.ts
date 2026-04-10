@@ -104,7 +104,11 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
         if (channel?.channelType) {
           const channelQuota = await checkTenantQuota(ctx.tenantId, "channels");
           if (!channelQuota.allowed) {
-            throw new Error(`Channel quota reached (${channelQuota.current}/${channelQuota.max})`);
+            const err = new Error(`Channel quota reached (${channelQuota.current}/${channelQuota.max})`);
+            (err as { quotaResource?: string; quotaCurrent?: number; quotaMax?: number }).quotaResource = "channels";
+            (err as { quotaCurrent?: number }).quotaCurrent = channelQuota.current;
+            (err as { quotaMax?: number }).quotaMax = channelQuota.max;
+            throw err;
           }
           const userConfig = (channel.config ?? {}) as Record<string, unknown>;
           const appId = (userConfig.appId as string) ?? "";
@@ -170,7 +174,11 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
         // 3. Create agent (bind model + channel app)
         const agentQuota = await checkTenantQuota(ctx.tenantId, "agents");
         if (!agentQuota.allowed) {
-          throw new Error(`Agent quota reached (${agentQuota.current}/${agentQuota.max})`);
+          const err = new Error(`Agent quota reached (${agentQuota.current}/${agentQuota.max})`);
+          (err as { quotaResource?: string }).quotaResource = "agents";
+          (err as { quotaCurrent?: number }).quotaCurrent = agentQuota.current;
+          (err as { quotaMax?: number }).quotaMax = agentQuota.max;
+          throw err;
         }
 
         const modelConfig: ModelConfigEntry[] = [{
@@ -236,6 +244,23 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
         await removeIdentityFile(ctx.tenantId, agent.agentId).catch(() => {});
       }
       const msg = err instanceof Error ? err.message : "Onboarding setup failed";
+      // Surface quota-exceeded errors with structured details so the UI can
+      // render a localized "upgrade plan" message instead of a raw 500.
+      const quotaResource = (err as { quotaResource?: string })?.quotaResource;
+      if (quotaResource) {
+        respond(false, undefined, errorShape(
+          ErrorCodes.QUOTA_EXCEEDED,
+          msg,
+          {
+            details: {
+              resource: quotaResource,
+              current: (err as { quotaCurrent?: number }).quotaCurrent ?? 0,
+              max: (err as { quotaMax?: number }).quotaMax ?? 0,
+            },
+          },
+        ));
+        return;
+      }
       respond(false, undefined, errorShape(ErrorCodes.INTERNAL_ERROR, msg));
     }
   },

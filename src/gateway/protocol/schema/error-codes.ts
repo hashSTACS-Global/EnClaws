@@ -11,6 +11,13 @@ export const ErrorCodes = {
   UNAVAILABLE: "UNAVAILABLE",
   /** Auth Phase 1: returned by auth.login when rate-limited / in backoff. */
   RATE_LIMITED: "RATE_LIMITED",
+  /**
+   * Tenant quota exceeded — returned by createAgent / createChannel /
+   * inviteUser / onboarding setup when the tenant's plan limit is hit.
+   * `details` carries `{ resource: "agents"|"channels"|"users"|"tokensPerMonth", current: number, max: number }`
+   * so the frontend can render a localized message.
+   */
+  QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

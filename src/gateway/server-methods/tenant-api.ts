@@ -230,8 +230,9 @@ export const tenantHandlers: GatewayRequestHandlers = {
     const quota = await checkTenantQuota(ctx.tenantId, "users");
     if (!quota.allowed) {
       respond(false, undefined, errorShape(
-        ErrorCodes.INVALID_REQUEST,
+        ErrorCodes.QUOTA_EXCEEDED,
         `User quota reached (${quota.current}/${quota.max}). Upgrade your plan.`,
+        { details: { resource: "users", current: quota.current, max: quota.max } },
       ));
       return;
     }

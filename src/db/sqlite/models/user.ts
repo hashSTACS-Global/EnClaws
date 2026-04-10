@@ -13,6 +13,8 @@ import type {
   UserStatus,
 } from "../../types.js";
 import { hashPassword } from "../../../auth/password.js";
+import { checkTenantQuota } from "./tenant.js";
+import { UserQuotaExceededError } from "../../models/user-quota-error.js";
 import {
   resolveTenantDevicesDir,
   resolveTenantCredentialsDir,
@@ -334,7 +336,14 @@ export async function findOrCreateUserByOpenId(
     return { user, created: false };
   }
 
-  // 3. Create new user with channel_id
+  // 3. Create new user with channel_id — enforce maxUsers quota first.
+  // Existing users (steps 1 and 2 above) are never blocked even after the
+  // limit is reached; only NEW IM users get rejected.
+  const userQuota = await checkTenantQuota(tenantId, "users");
+  if (!userQuota.allowed) {
+    throw new UserQuotaExceededError(userQuota.current, userQuota.max);
+  }
+
   const id = generateUUID();
   try {
     sqliteQuery(

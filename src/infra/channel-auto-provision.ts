@@ -32,6 +32,18 @@ export type AutoProvisionResult = {
 };
 
 /**
+ * Sentinel returned by `autoProvisionTenantUser` when the tenant has hit
+ * its `maxUsers` quota and a new IM sender cannot be provisioned. The
+ * upstream tenant-enrich layer turns this into a flag on the message
+ * context so the reply pipeline can send a localized "upgrade plan" reply.
+ */
+export type AutoProvisionQuotaExceeded = {
+  quotaExceeded: true;
+  current: number;
+  max: number;
+};
+
+/**
  * Auto-provision a user for a channel message sender.
  *
  * @param tenantId - The tenant from the channel app
@@ -46,7 +58,7 @@ export async function autoProvisionTenantUser(params: {
   unionId?: string;
   displayName?: string;
   channelId?: string;
-}): Promise<AutoProvisionResult | null> {
+}): Promise<AutoProvisionResult | AutoProvisionQuotaExceeded | null> {
   if (!isDbInitialized()) return null;
 
   const { tenantId, openId, unionId, displayName, channelId } = params;
@@ -60,14 +72,29 @@ export async function autoProvisionTenantUser(params: {
   }
 
   const { findOrCreateUserByOpenId } = await import("../db/models/user.js");
+  const { UserQuotaExceededError } = await import("../db/models/user-quota-error.js");
 
-  const { user, created: userCreated } = await findOrCreateUserByOpenId(
-    tenantId,
-    openId,
-    displayName,
-    unionId,
-    channelId,
-  );
+  let user;
+  let userCreated;
+  try {
+    const result = await findOrCreateUserByOpenId(
+      tenantId,
+      openId,
+      displayName,
+      unionId,
+      channelId,
+    );
+    user = result.user;
+    userCreated = result.created;
+  } catch (err) {
+    if (err instanceof UserQuotaExceededError) {
+      // Surface as a sentinel so tenant-enrich can flag the message context.
+      // Intentionally NOT cached — once quota frees up, the next message
+      // should immediately re-evaluate.
+      return { quotaExceeded: true, current: err.current, max: err.max };
+    }
+    throw err;
+  }
 
   // Use union_id as directory key; fall back to open_id if union_id is unavailable
   const effectiveUnionId = user.unionId ?? openId;

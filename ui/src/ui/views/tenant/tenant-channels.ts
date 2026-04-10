@@ -8,7 +8,7 @@
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../../i18n/index.ts";
-import { tenantRpc } from "./rpc.ts";
+import { tenantRpc, quotaErrorKey } from "./rpc.ts";
 import { pathForTab, inferBasePathFromPathname } from "../../navigation.ts";
 import { CHANNEL_TYPES } from "../../../constants/channels.ts";
 import feishuScopes from "./feishu-scopes.json";
@@ -662,7 +662,12 @@ export class TenantChannelsView extends LitElement {
         this.feishuAuthGuideAppId = scannedAppId;
       }
     } catch (err) {
-      this.showError(err instanceof Error ? err.message : "tenantChannels.saveFailed");
+      const q = quotaErrorKey(err);
+      if (q) {
+        this.showError(q.key, q.params);
+      } else {
+        this.showError(err instanceof Error ? err.message : "tenantChannels.saveFailed");
+      }
     } finally {
       this.saving = false;
     }

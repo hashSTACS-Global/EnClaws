@@ -20,7 +20,7 @@ export const TAB_GROUPS = [
     },
     {
         label: "enterprise",
-        tabs: ["tenant-settings", "tenant-users", "tenant-traces"],
+        tabs: ["tenant-settings", "tenant-users", "tenant-traces", "tenant-usage"],
     },
     {
         label: "system",

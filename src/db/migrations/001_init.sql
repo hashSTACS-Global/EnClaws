@@ -40,11 +40,11 @@ CREATE TABLE tenants (
   status      VARCHAR(32)  NOT NULL DEFAULT 'active', -- active | suspended | deleted
   settings    JSONB        NOT NULL DEFAULT '{}',  -- tenant-level settings overrides
   quotas      JSONB        NOT NULL DEFAULT '{
-    "maxUsers": 5,
-    "maxAgents": 3,
+    "maxUsers": 10,
+    "maxAgents": 5,
     "maxChannels": 5,
-    "maxTokensPerMonth": 1000000
-  }',   -- resource quotas
+    "maxTokensPerMonth": 20000000
+  }',   -- resource quotas (mirrors plans.free; createTenant overrides via getPlanQuotas)
   trace_enabled    BOOLEAN      NOT NULL DEFAULT true,  -- LLM交互追踪开关
   identity_prompt  TEXT         NOT NULL DEFAULT '',   -- 企业身份特征描述
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -53,6 +53,29 @@ CREATE TABLE tenants (
 
 CREATE INDEX idx_tenants_slug ON tenants (slug);
 CREATE INDEX idx_tenants_status ON tenants (status);
+
+-- ============================================================
+-- 1b. Plans (订阅套餐字典)
+--     Tenants reference a plan by id; on createTenant the plan's
+--     quotas are copied into the tenant's own quotas JSONB so the
+--     existing checkTenantQuota path keeps working. -1 = 无限制.
+-- ============================================================
+CREATE TABLE plans (
+  id                     VARCHAR(64) PRIMARY KEY,
+  name                   VARCHAR(255) NOT NULL,
+  max_users              INTEGER NOT NULL,
+  max_agents             INTEGER NOT NULL,
+  max_channels           INTEGER NOT NULL,
+  max_tokens_per_month   BIGINT  NOT NULL,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month) VALUES
+  ('free',       '免费版', 10, 5,  5,  20000000),
+  ('pro',        '专业版', 20, 20, 20, 200000000),
+  ('enterprise', '企业版', -1, -1, -1, -1)
+ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
 -- 2. Users (用户)
@@ -479,7 +502,7 @@ VALUES (
   '_platform',
   'enterprise',
   'active',
-  '{"maxUsers":10,"maxAgents":0,"maxChannels":0,"maxTokensPerMonth":0}'
+  '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1}'
 )
 ON CONFLICT (slug) DO NOTHING;
 
