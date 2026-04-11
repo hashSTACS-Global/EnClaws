@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile, rm, readdir, mkdir, access } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, readdir, mkdir, access, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, it, expect, beforeEach } from "vitest";
+import { resolveTenantSkillsDir } from "../../config/sessions/tenant-paths.js";
 import { AppInstaller } from "./installer.js";
 import { readAppsManifest } from "./store.js";
 
@@ -32,7 +33,22 @@ async function makeFakeAppRepo(): Promise<string> {
     api_version: "1.0",
   };
   await writeFile(path.join(seed, "app.json"), JSON.stringify(appJson, null, 2));
-  await execFileP("git", ["-C", seed, "add", "app.json"]);
+
+  // Create SKILL.md
+  await writeFile(
+    path.join(seed, "SKILL.md"),
+    `---
+name: test-app
+description: Test app with skill
+---
+
+# Test App
+
+Use app_invoke with pipeline=echo to test.
+`,
+  );
+
+  await execFileP("git", ["-C", seed, "add", "-A"]);
   await execFileP("git", ["-C", seed, "commit", "-m", "initial"]);
   await execFileP("git", ["-C", seed, "push", "origin", "HEAD:main"]);
 
@@ -231,5 +247,72 @@ describe("AppInstaller", () => {
       // dir doesn't exist — that's fine, no leftover
     }
     expect(leftover).toHaveLength(0);
+  });
+
+  it("install copies SKILL.md to tenant skills directory", async () => {
+    const installer = new AppInstaller(mockEnv);
+    await installer.install({ tenantId: "tenant-a", gitUrl: fakeAppRepo });
+
+    const skillPath = path.join(
+      resolveTenantSkillsDir("tenant-a", mockEnv),
+      "test-app",
+      "SKILL.md",
+    );
+    const content = await readFile(skillPath, "utf8");
+    expect(content).toContain("Test App");
+    expect(content).toContain("app_invoke");
+  });
+
+  it("uninstall removes the skill directory for the app", async () => {
+    const installer = new AppInstaller(mockEnv);
+    await installer.install({ tenantId: "tenant-a", gitUrl: fakeAppRepo });
+    await installer.uninstall({ tenantId: "tenant-a", appName: "test-app" });
+
+    const skillDir = path.join(resolveTenantSkillsDir("tenant-a", mockEnv), "test-app");
+    await expect(access(skillDir)).rejects.toThrow();
+  });
+
+  it("install silently skips if APP has no SKILL.md", async () => {
+    const bare = await mkdtemp(path.join(os.tmpdir(), "app-nosk-bare-"));
+    await execFileP("git", ["init", "--bare", bare]);
+    await execFileP("git", ["-C", bare, "symbolic-ref", "HEAD", "refs/heads/main"]);
+
+    const seed = await mkdtemp(path.join(os.tmpdir(), "app-nosk-seed-"));
+    await rm(seed, { recursive: true, force: true });
+    await execFileP("git", ["clone", bare, seed]);
+    await execFileP("git", ["-C", seed, "config", "user.email", "t@test.com"]);
+    await execFileP("git", ["-C", seed, "config", "user.name", "t"]);
+    await execFileP("git", ["-C", seed, "checkout", "-b", "main"]);
+    await writeFile(
+      path.join(seed, "app.json"),
+      JSON.stringify({
+        id: "no-skill-app",
+        name: "No Skill",
+        version: "0.1.0",
+        api_version: "v0.3",
+      }),
+    );
+    await mkdir(path.join(seed, "pipelines", "echo"), { recursive: true });
+    await writeFile(
+      path.join(seed, "pipelines", "echo", "pipeline.yaml"),
+      `name: echo
+description: echo
+input: {}
+steps:
+  - name: p
+    type: code
+    command: python3 steps/p.py
+output: p
+`,
+    );
+    await execFileP("git", ["-C", seed, "add", "-A"]);
+    await execFileP("git", ["-C", seed, "commit", "-m", "initial"]);
+    await execFileP("git", ["-C", seed, "push", "origin", "HEAD:main"]);
+
+    const installer = new AppInstaller(mockEnv);
+    await expect(installer.install({ tenantId: "tenant-a", gitUrl: bare })).resolves.toBeDefined();
+
+    const skillDir = path.join(resolveTenantSkillsDir("tenant-a", mockEnv), "no-skill-app");
+    await expect(access(skillDir)).rejects.toThrow();
   });
 });

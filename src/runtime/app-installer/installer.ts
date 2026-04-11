@@ -1,5 +1,6 @@
-import { mkdtemp, rename, rm, stat, mkdir, readdir } from "node:fs/promises";
+import { copyFile, mkdtemp, rename, rm, stat, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
+import { resolveTenantSkillsDir } from "../../config/sessions/tenant-paths.js";
 import { GitOps } from "../../infra/git-ops/index.js";
 import { resolveAppDir, resolveAppWorkspaceDir, resolveTenantAppsRootDir } from "../app-paths.js";
 import { loadPipelineYaml } from "../pipeline-runner/yaml-loader.js";
@@ -114,6 +115,9 @@ export class AppInstaller {
         this.env,
       );
 
+      // 8. expose SKILL.md to tenant skills directory (for agent runtime to auto-discover)
+      await this.exposeAppSkill(opts.tenantId, manifest.id, targetDir);
+
       return {
         name: manifest.id,
         version: manifest.version,
@@ -134,9 +138,33 @@ export class AppInstaller {
     await removeInstalledApp(opts.tenantId, opts.appName, this.env);
     const appDir = resolveAppDir(opts.tenantId, opts.appName, this.env);
     await rm(appDir, { recursive: true, force: true });
+
+    // Clear skill exposure on uninstall
+    await this.unexposeAppSkill(opts.tenantId, opts.appName);
+
     if (opts.purgeWorkspace) {
       const wsDir = resolveAppWorkspaceDir(opts.tenantId, opts.appName, this.env);
       await rm(wsDir, { recursive: true, force: true });
     }
+  }
+
+  private async exposeAppSkill(tenantId: string, appId: string, appDir: string): Promise<void> {
+    const srcSkill = path.join(appDir, "SKILL.md");
+    try {
+      await stat(srcSkill);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+        return; // no SKILL.md → skip silently
+      }
+      throw e;
+    }
+    const dstDir = path.join(resolveTenantSkillsDir(tenantId, this.env), appId);
+    await mkdir(dstDir, { recursive: true });
+    await copyFile(srcSkill, path.join(dstDir, "SKILL.md"));
+  }
+
+  private async unexposeAppSkill(tenantId: string, appName: string): Promise<void> {
+    const dstDir = path.join(resolveTenantSkillsDir(tenantId, this.env), appName);
+    await rm(dstDir, { recursive: true, force: true });
   }
 }
