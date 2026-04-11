@@ -1,179 +1,97 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { mkdtemp } from "node:fs/promises";
-import * as fs from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { addInstalledApp } from "../app-installer/store.js";
+import { resolveAppDir } from "../app-paths.js";
 import { TenantAppRegistry } from "./registry.js";
 
-describe("TenantAppRegistry", () => {
-  let tmpDir: string;
-  let stateDir: string;
-  let registry: TenantAppRegistry;
-
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(path.join(os.tmpdir(), "tenant-registry-"));
-    stateDir = tmpDir;
-    registry = new TenantAppRegistry();
+async function seedApp(env: NodeJS.ProcessEnv, tenantId: string, appName: string): Promise<void> {
+  const appDir = resolveAppDir(tenantId, appName, env);
+  await mkdir(path.join(appDir, "pipelines", "echo-pipeline"), {
+    recursive: true,
   });
-
-  afterEach(async () => {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  });
-
-  const setupTestTenant = async (tenantId: string, apps: string[]) => {
-    const tenantAppsDir = path.join(stateDir, "tenants", tenantId, "apps");
-    await mkdir(tenantAppsDir, { recursive: true });
-
-    // Create apps.json manifest
-    const manifest = {
-      version: 1,
-      installed: apps.map((appName) => ({
-        name: appName,
-        gitUrl: `https://example.com/${appName}`,
-        commit: "abc123",
-        version: "1.0.0",
-        apiVersion: "v1",
-        installedAt: new Date().toISOString(),
-      })),
-    };
-    const manifestPath = path.join(stateDir, "tenants", tenantId, "apps.json");
-    await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-
-    // Create app directories with pipelines
-    for (const appName of apps) {
-      const appDir = path.join(tenantAppsDir, appName);
-      await mkdir(path.join(appDir, "pipelines", "test-pipeline"), {
-        recursive: true,
-      });
-
-      // Create app.json
-      await writeFile(
-        path.join(appDir, "app.json"),
-        JSON.stringify({
-          id: appName.toLowerCase().replace(/\s+/g, "-"),
-          name: appName,
-          version: "1.0.0",
-          api_version: "v1",
-        }),
-      );
-
-      // Create pipeline.yaml
-      const pipelineYaml = `name: test-pipeline
-description: test pipeline
+  await writeFile(
+    path.join(appDir, "app.json"),
+    JSON.stringify({
+      id: appName,
+      name: appName,
+      version: "0.1.0",
+      api_version: "v0.3",
+    }),
+  );
+  await writeFile(
+    path.join(appDir, "pipelines", "echo-pipeline", "pipeline.yaml"),
+    `name: echo
+description: echo pipeline
 input: {}
 steps:
-  - name: step1
+  - name: prepare
     type: code
-    command: echo test
-output: result
-`;
-      await writeFile(
-        path.join(appDir, "pipelines", "test-pipeline", "pipeline.yaml"),
-        pipelineYaml,
-      );
-    }
-  };
+    command: python3 steps/prepare.py
+output: prepare
+`,
+  );
+  await addInstalledApp(
+    tenantId,
+    {
+      name: appName,
+      gitUrl: "https://example.com/fake.git",
+      commit: "a".repeat(40),
+      version: "0.1.0",
+      apiVersion: "v0.3",
+      installedAt: "2026-04-11T00:00:00+08:00",
+    },
+    env,
+  );
+}
 
-  it("loadTenant loads all apps and their pipelines for a tenant", async () => {
-    // Mock the env for resolveAppDir and readAppsManifest
-    const originalEnv = process.env.ENCLAWS_STATE_DIR;
-    process.env.ENCLAWS_STATE_DIR = stateDir;
+describe("TenantAppRegistry", () => {
+  let stateDir: string;
+  let env: NodeJS.ProcessEnv;
 
-    try {
-      await setupTestTenant("tenant-1", ["app-a", "app-b"]);
-      await registry.loadTenant("tenant-1");
-
-      const appA = registry.loadOne("tenant-1", "app-a");
-      const appB = registry.loadOne("tenant-1", "app-b");
-
-      expect(appA).toBeDefined();
-      expect(appB).toBeDefined();
-      expect(appA?.get("test-pipeline")).toBeDefined();
-      expect(appB?.get("test-pipeline")).toBeDefined();
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env.ENCLAWS_STATE_DIR;
-      } else {
-        process.env.ENCLAWS_STATE_DIR = originalEnv;
-      }
-    }
+  beforeEach(async () => {
+    stateDir = await mkdtemp(path.join(os.tmpdir(), "tenant-app-reg-"));
+    env = { ...process.env, ENCLAWS_STATE_DIR: stateDir };
   });
 
-  it("loadAll loads multiple tenants", async () => {
-    const originalEnv = process.env.ENCLAWS_STATE_DIR;
-    process.env.ENCLAWS_STATE_DIR = stateDir;
-
-    try {
-      await setupTestTenant("tenant-1", ["app-a"]);
-      await setupTestTenant("tenant-2", ["app-b"]);
-
-      await registry.loadAll(["tenant-1", "tenant-2"]);
-
-      const tenant1AppA = registry.loadOne("tenant-1", "app-a");
-      const tenant2AppB = registry.loadOne("tenant-2", "app-b");
-
-      expect(tenant1AppA).toBeDefined();
-      expect(tenant2AppB).toBeDefined();
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env.ENCLAWS_STATE_DIR;
-      } else {
-        process.env.ENCLAWS_STATE_DIR = originalEnv;
-      }
-    }
+  it("loadTenant loads all apps listed in apps.json", async () => {
+    await seedApp(env, "tenant-a", "pivot");
+    await seedApp(env, "tenant-a", "monitor");
+    const reg = new TenantAppRegistry(env);
+    await reg.loadTenant("tenant-a");
+    expect(reg.listApps("tenant-a").toSorted()).toEqual(["monitor", "pivot"]);
+    expect(reg.getPipeline("tenant-a", "pivot", "echo")?.name).toBe("echo");
   });
 
-  it("loadOne returns a specific app registry", async () => {
-    const originalEnv = process.env.ENCLAWS_STATE_DIR;
-    process.env.ENCLAWS_STATE_DIR = stateDir;
-
-    try {
-      await setupTestTenant("tenant-1", ["app-a", "app-b"]);
-      await registry.loadTenant("tenant-1");
-
-      const appA = registry.loadOne("tenant-1", "app-a");
-      expect(appA).toBeDefined();
-      expect(appA?.get("test-pipeline")).toBeDefined();
-
-      const nonexistent = registry.loadOne("tenant-1", "nonexistent");
-      expect(nonexistent).toBeUndefined();
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env.ENCLAWS_STATE_DIR;
-      } else {
-        process.env.ENCLAWS_STATE_DIR = originalEnv;
-      }
-    }
+  it("loadAll scans all tenants under STATE/tenants/", async () => {
+    await seedApp(env, "tenant-a", "pivot");
+    await seedApp(env, "tenant-b", "pivot");
+    const reg = new TenantAppRegistry(env);
+    await reg.loadAll();
+    expect(reg.listApps("tenant-a")).toEqual(["pivot"]);
+    expect(reg.listApps("tenant-b")).toEqual(["pivot"]);
   });
 
-  it("remove deletes a tenant's app registry", async () => {
-    const originalEnv = process.env.ENCLAWS_STATE_DIR;
-    process.env.ENCLAWS_STATE_DIR = stateDir;
-
-    try {
-      await setupTestTenant("tenant-1", ["app-a"]);
-      await registry.loadTenant("tenant-1");
-
-      expect(registry.loadOne("tenant-1", "app-a")).toBeDefined();
-
-      registry.remove("tenant-1");
-      expect(registry.loadOne("tenant-1", "app-a")).toBeUndefined();
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env.ENCLAWS_STATE_DIR;
-      } else {
-        process.env.ENCLAWS_STATE_DIR = originalEnv;
-      }
-    }
+  it("loadOne adds a single APP incrementally", async () => {
+    const reg = new TenantAppRegistry(env);
+    await reg.loadTenant("tenant-a"); // empty — no apps.json yet
+    expect(reg.listApps("tenant-a")).toEqual([]);
+    await seedApp(env, "tenant-a", "pivot");
+    await reg.loadOne("tenant-a", "pivot");
+    expect(reg.getPipeline("tenant-a", "pivot", "echo")).toBeDefined();
   });
 
-  it("getPipeline returns undefined for unknown pipeline", async () => {
-    const result = registry.getPipeline(
-      "nonexistent-tenant",
-      "nonexistent-app",
-      "nonexistent-pipeline",
-    );
-    expect(result).toBeUndefined();
+  it("remove deletes a single APP from the registry", async () => {
+    await seedApp(env, "tenant-a", "pivot");
+    const reg = new TenantAppRegistry(env);
+    await reg.loadTenant("tenant-a");
+    reg.remove("tenant-a", "pivot");
+    expect(reg.getPipeline("tenant-a", "pivot", "echo")).toBeUndefined();
+  });
+
+  it("getPipeline returns undefined for unknown tenant/app/pipeline", () => {
+    const reg = new TenantAppRegistry(env);
+    expect(reg.getPipeline("nobody", "nothing", "nope")).toBeUndefined();
   });
 });
