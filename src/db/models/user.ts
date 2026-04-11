@@ -135,6 +135,55 @@ export async function getUserById(id: string): Promise<User | null> {
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
+/**
+ * Batch-fetch display names by user IDs. Returns a map of id → displayName.
+ */
+export async function getUserDisplayNamesByIds(
+  ids: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (ids.length === 0) return map;
+  const unique = [...new Set(ids)];
+  await Promise.all(
+    unique.map(async (id) => {
+      const user = await getUserById(id);
+      if (user?.displayName) map.set(id, user.displayName);
+    }),
+  );
+  return map;
+}
+
+/**
+ * Batch-fetch display names by Feishu open_ids. Returns a map of openId → displayName.
+ */
+export async function getUserDisplayNamesByOpenIds(
+  tenantId: string,
+  openIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (openIds.length === 0) return map;
+  const unique = [...new Set(openIds)];
+  const isSqlite = getDbType() === DB_SQLITE;
+  await Promise.all(
+    unique.map(async (oid) => {
+      let name: string | null = null;
+      if (isSqlite) {
+        const result = sqliteUser.findUserByOpenIdForDisplay(tenantId, oid);
+        const row = result.rows[0] as Record<string, unknown> | undefined;
+        name = (row?.display_name as string) ?? null;
+      } else {
+        const result = await query(
+          `SELECT display_name FROM users WHERE tenant_id = $1 AND open_ids @> ARRAY[$2]::varchar[] AND status = 'active' LIMIT 1`,
+          [tenantId, oid],
+        );
+        name = (result.rows[0]?.display_name as string) ?? null;
+      }
+      if (name) map.set(oid, name);
+    }),
+  );
+  return map;
+}
+
 export async function getUserByEmail(
   tenantId: string,
   email: string,

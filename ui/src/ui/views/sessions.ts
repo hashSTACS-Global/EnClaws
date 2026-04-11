@@ -265,15 +265,23 @@ function renderRow(
       ? row.displayName.trim()
       : null;
   const label = typeof row.label === "string" ? row.label.trim() : "";
-  const showDisplayName = Boolean(displayName && displayName !== row.key && displayName !== label);
   const EXTERNAL_CHANNELS = new Set(["feishu", "telegram", "whatsapp", "discord", "slack", "signal", "imessage", "irc", "googlechat"]);
   const keyChannel = row.key.split(":").find((seg) => EXTERNAL_CHANNELS.has(seg));
   const isExternalChannel = Boolean(keyChannel);
-  const canLink = row.kind !== "global" && !isExternalChannel;
+  // Show a clickable link only for webchat sessions where the user has
+  // owner/admin role — Feishu and other external channel sessions are
+  // read-only in the web UI.
+  const canLink =
+    row.kind !== "global" &&
+    !isExternalChannel &&
+    (!row.userRole || row.userRole === "owner");
   const chatUrl = canLink
     ? `${pathForTab("chat", basePath)}?session=${encodeURIComponent(row.key)}`
     : null;
-  const truncatedKey = row.key.length > 25 ? `${row.key.slice(0, 25)}…` : row.key;
+  // Show displayName as the primary title; fall back to truncated key.
+  // Append the raw key in parentheses when displayName is resolved so
+  // admins can still identify the underlying session.
+  const titleText = displayName ?? (row.key.length > 25 ? `${row.key.slice(0, 25)}…` : row.key);
   const channelBadge = isExternalChannel
     ? html`<span class="session-channel-badge session-channel-badge--${keyChannel}" title=${keyChannel!}>${keyChannel}</span>`
     : html`<span class="session-channel-badge session-channel-badge--web">WebUI</span>`;
@@ -288,14 +296,13 @@ function renderRow(
         <div class="session-card__left">
           <div class="session-card__title-line">
             ${channelBadge}
-            ${canLink ? html`<a href=${chatUrl} class="session-link" title=${row.key} @click=${(e: MouseEvent) => {
+            ${canLink ? html`<a href=${chatUrl} class="session-link" title=${displayName ? "" : row.key} @click=${(e: MouseEvent) => {
               if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
               e.preventDefault();
               window.history.pushState({}, "", chatUrl);
               window.dispatchEvent(new PopStateEvent("popstate"));
-            }}>${truncatedKey}</a>` : html`<span class="session-card__key" title=${row.key}>${truncatedKey}</span>`}
+            }}>${titleText}</a>` : html`<span class="session-card__key" title=${displayName ? "" : row.key}>${titleText}</span>`}
           </div>
-          ${showDisplayName ? html`<div class="session-card__display-name">${displayName}</div>` : nothing}
           <div class="session-card__meta">
             <span>${kindLabel}</span>
             ${tokens ? html`<span>${tokens}</span>` : nothing}

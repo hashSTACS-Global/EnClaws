@@ -385,3 +385,19 @@ export async function findOrCreateUserByOpenId(
     throw new Error(`Failed to find or create user for openId=${openId} unionId=${unionId}`);
   }
 }
+
+/**
+ * Lightweight lookup: find a user's display_name by open_id (for session list display).
+ */
+export function findUserByOpenIdForDisplay(
+  tenantId: string,
+  openId: string,
+): { rows: Array<Record<string, unknown>> } {
+  return sqliteQuery(
+    `SELECT display_name FROM users
+     WHERE tenant_id = ? AND status = 'active'
+       AND EXISTS (SELECT 1 FROM json_each(open_ids) WHERE json_each.value = ?)
+     LIMIT 1`,
+    [tenantId, openId],
+  );
+}

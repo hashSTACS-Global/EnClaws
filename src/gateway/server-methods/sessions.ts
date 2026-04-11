@@ -62,6 +62,93 @@ import { applySessionsPatchToStore } from "../sessions-patch.js";
 import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
 import type { GatewayClient, GatewayRequestHandlers, RespondFn } from "./types.js";
 import { assertValidParams } from "./validation.js";
+import { isDbInitialized } from "../../db/index.js";
+import {
+  getUserDisplayNamesByIds,
+  getUserDisplayNamesByOpenIds,
+  getUserById,
+} from "../../db/models/user.js";
+import type { SessionsListResult } from "../session-utils.types.js";
+
+// ── User display name resolution for session keys ───────────────────
+// Session keys embed user identifiers in two forms:
+//   - `t:{tenantId}:...:user:{userId}`  → UUID, look up in users table by id
+//   - `...:sender:{openId}`             → Feishu open_id (ou_xxx), look up via open_ids array
+// When a match is found, set displayName and userRole on the session row so
+// the UI shows a human-readable name and can decide link behavior.
+
+const USER_SUFFIX_RE = /:user:([0-9a-f-]{36})$/i;
+const SENDER_SUFFIX_RE = /:sender:(ou_[a-zA-Z0-9_]+)$/;
+
+type UserInfo = { displayName: string | null; role: string | null };
+
+async function enrichSessionDisplayNames(
+  result: SessionsListResult,
+  tenantId: string,
+): Promise<void> {
+  if (!isDbInitialized() || !result.sessions?.length) return;
+
+  // Collect unique user identifiers from session keys
+  const userIdSet = new Set<string>();
+  const openIdSet = new Set<string>();
+
+  for (const session of result.sessions) {
+    const key = session.key;
+    const userMatch = USER_SUFFIX_RE.exec(key);
+    if (userMatch) {
+      userIdSet.add(userMatch[1]);
+      continue;
+    }
+    const senderMatch = SENDER_SUFFIX_RE.exec(key);
+    if (senderMatch) {
+      openIdSet.add(senderMatch[1]);
+    }
+  }
+
+  if (userIdSet.size === 0 && openIdSet.size === 0) return;
+
+  // Batch-fetch user info (displayName + role) by UUID
+  const userInfoMap = new Map<string, UserInfo>();
+  await Promise.all(
+    [...userIdSet].map(async (id) => {
+      const user = await getUserById(id);
+      if (user) {
+        userInfoMap.set(id, { displayName: user.displayName, role: user.role });
+      }
+    }),
+  );
+
+  // Batch-fetch display names by Feishu open_id
+  const openIdNames = openIdSet.size > 0
+    ? await getUserDisplayNamesByOpenIds(tenantId, [...openIdSet])
+    : new Map<string, string>();
+
+  // Apply resolved names and roles to session rows.
+  // For `:user:` (webchat) keys, set displayName only if not already present.
+  // For `:sender:` (Feishu) keys, always override displayName with the
+  // sender's name so the person's name shows instead of the group name.
+  for (const session of result.sessions) {
+    const key = session.key;
+    const userMatch = USER_SUFFIX_RE.exec(key);
+    if (userMatch) {
+      const info = userInfoMap.get(userMatch[1]);
+      if (info?.displayName) {
+        session.displayName = info.displayName;
+      }
+      if (info?.role) {
+        session.userRole = info.role;
+      }
+      continue;
+    }
+    const senderMatch = SENDER_SUFFIX_RE.exec(key);
+    if (senderMatch) {
+      const name = openIdNames.get(senderMatch[1]);
+      if (name) {
+        session.displayName = name;
+      }
+    }
+  }
+}
 
 function requireSessionKey(key: unknown, respond: RespondFn): string | null {
   const raw =
@@ -313,6 +400,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         store,
         opts: p,
       });
+      await enrichSessionDisplayNames(result, tenant.tenantId);
       respond(true, result, undefined);
       return;
     }
