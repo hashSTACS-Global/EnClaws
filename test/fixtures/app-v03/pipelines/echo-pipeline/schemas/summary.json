@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "required": ["summary"],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 200
+    }
+  },
+  "additionalProperties": false
+}
