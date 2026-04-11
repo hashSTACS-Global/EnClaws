@@ -1,0 +1,7 @@
+{
+  "id": "fixture-app",
+  "name": "Fixture APP v0.3",
+  "version": "0.1.0",
+  "api_version": "v0.3",
+  "description": "Minimal fixture used for EC runtime tests"
+}
