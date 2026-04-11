@@ -1,6 +1,25 @@
 import { spawn } from "node:child_process";
 import type { CodeStep, ExecutionContext, StepOutput } from "./types.js";
 
+/**
+ * Phase 1 limitations (to be addressed in Phase 2):
+ *
+ * - No timeout: a step with an infinite loop will hang the runner. Phase 2
+ *   should either adopt `runCommandWithTimeout` from `src/process/exec.ts`
+ *   or add a per-step timeout field to the pipeline schema.
+ * - stderr on successful exit is discarded. For debugging, APP authors
+ *   should use stdout JSON's `output` field or file logging. Phase 2 may
+ *   surface stderr via the project logger at debug level.
+ * - Command parsing is whitespace-split and does NOT handle quoted args or
+ *   paths with spaces. APP authors should use relative `python3 steps/x.py`
+ *   style commands, not absolute paths like `C:/Program Files/...`.
+ * - Process env is fully inherited via `...process.env`, which leaks host
+ *   secrets (API keys, DB URLs) to user-authored step scripts. Phase 2 must
+ *   add an env allowlist (PATH, HOME, LANG, TMP, PIVOT_*).
+ * - `python3` must be on PATH. On Windows, APP authors who only have
+ *   `python.exe` installed should customize their `command:` field.
+ */
+
 export async function runCodeStep(step: CodeStep, ctx: ExecutionContext): Promise<StepOutput> {
   const [cmd, ...args] = step.command.split(/\s+/);
   if (!cmd) {
@@ -24,6 +43,15 @@ export async function runCodeStep(step: CodeStep, ctx: ExecutionContext): Promis
       stdio: ["pipe", "pipe", "pipe"],
     });
 
+    let settled = false;
+    const settleOnce = (fn: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      fn();
+    };
+
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (d: Buffer) => {
@@ -34,29 +62,37 @@ export async function runCodeStep(step: CodeStep, ctx: ExecutionContext): Promis
     });
 
     child.on("error", (err) => {
-      reject(new Error(`code step "${step.name}" failed to spawn: ${err.message}`));
+      settleOnce(() =>
+        reject(new Error(`code step "${step.name}" failed to spawn: ${err.message}`)),
+      );
     });
     child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`code step "${step.name}" exited with code ${code}\nstderr: ${stderr}`));
-        return;
-      }
-      let parsed: { output?: unknown };
-      try {
-        parsed = JSON.parse(stdout);
-      } catch {
-        reject(
-          new Error(
-            `code step "${step.name}" produced invalid JSON on stdout: ${stdout.slice(0, 200)}`,
-          ),
-        );
-        return;
-      }
-      if (parsed.output === undefined) {
-        reject(new Error(`code step "${step.name}" output JSON missing "output" field`));
-        return;
-      }
-      resolve({ output: parsed.output });
+      settleOnce(() => {
+        if (code !== 0) {
+          reject(
+            new Error(
+              `code step "${step.name}" exited with code ${code}\nstderr: ${stderr.trim()}`,
+            ),
+          );
+          return;
+        }
+        let parsed: { output?: unknown };
+        try {
+          parsed = JSON.parse(stdout);
+        } catch {
+          reject(
+            new Error(
+              `code step "${step.name}" produced invalid JSON on stdout: ${stdout.slice(0, 200)}`,
+            ),
+          );
+          return;
+        }
+        if (parsed.output === undefined) {
+          reject(new Error(`code step "${step.name}" output JSON missing "output" field`));
+          return;
+        }
+        resolve({ output: parsed.output });
+      });
     });
 
     child.stdin.write(stdinPayload);
