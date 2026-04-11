@@ -1,0 +1,19 @@
+name: echo
+description: "简单 echo 测试 pipeline"
+triggers:
+  - "echo"
+  - "test echo"
+input:
+  message: string
+steps:
+  - name: prepare
+    type: code
+    command: "python3 steps/prepare.py"
+  - name: summarize
+    type: llm
+    model: standard
+    prompt: |
+      Summarize in one sentence: {{prepare.output.message}}
+    schema: schemas/summary.json
+    retry: 2
+output: summarize
