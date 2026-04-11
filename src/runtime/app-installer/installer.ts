@@ -1,8 +1,7 @@
 import { mkdtemp, rename, rm, stat, mkdir, readdir } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { GitOps } from "../../infra/git-ops/index.js";
-import { resolveAppDir, resolveAppWorkspaceDir } from "../app-paths.js";
+import { resolveAppDir, resolveAppWorkspaceDir, resolveTenantAppsRootDir } from "../app-paths.js";
 import { loadPipelineYaml } from "../pipeline-runner/yaml-loader.js";
 import { readAppManifest } from "./manifest.js";
 import { addInstalledApp, removeInstalledApp, readAppsManifest } from "./store.js";
@@ -36,8 +35,11 @@ export class AppInstaller {
   }
 
   async install(opts: InstallOptions): Promise<InstallResult> {
-    // mkdtemp creates the dir; git clone needs the target NOT to exist
-    const tmpDir = await mkdtemp(path.join(os.tmpdir(), "enclaws-app-install-"));
+    // Stage tmpDir under tenant's apps root to avoid EXDEV on Linux
+    // (where /tmp is tmpfs and ~/.enclaws is on disk)
+    const appsRoot = resolveTenantAppsRootDir(opts.tenantId, this.env);
+    await mkdir(appsRoot, { recursive: true });
+    const tmpDir = await mkdtemp(path.join(appsRoot, ".install-"));
     await rm(tmpDir, { recursive: true, force: true });
 
     let movedTarget: string | undefined;
@@ -97,27 +99,20 @@ export class AppInstaller {
       // 6. HEAD commit
       const commit = await this.git.headCommit(targetDir);
 
-      // 7. record in apps.json
-      try {
-        await addInstalledApp(
-          opts.tenantId,
-          {
-            name: manifest.id,
-            gitUrl: opts.gitUrl,
-            commit,
-            version: manifest.version,
-            apiVersion: manifest.api_version,
-            installedAt: new Date().toISOString(),
-            workspaceRepo: manifest.workspace_repo,
-          },
-          this.env,
-        );
-      } catch (e) {
-        // rollback: remove the app dir
-        await rm(targetDir, { recursive: true, force: true });
-        movedTarget = undefined;
-        throw e;
-      }
+      // 7. record in apps.json (outer catch handles rollback via movedTarget)
+      await addInstalledApp(
+        opts.tenantId,
+        {
+          name: manifest.id,
+          gitUrl: opts.gitUrl,
+          commit,
+          version: manifest.version,
+          apiVersion: manifest.api_version,
+          installedAt: new Date().toISOString(),
+          workspaceRepo: manifest.workspace_repo,
+        },
+        this.env,
+      );
 
       return {
         name: manifest.id,

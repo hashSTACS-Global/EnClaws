@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile, rm, readdir, mkdir } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, readdir, mkdir, access } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -167,5 +167,69 @@ describe("AppInstaller", () => {
 
     // Workspace should be gone
     await expect(readdir(wsDir)).rejects.toThrow();
+  });
+
+  it("cleans up when app.json is invalid (rollback path)", async () => {
+    // Create a fake repo with invalid app.json
+    const bare = await mkdtemp(path.join(os.tmpdir(), "bad-app-bare-"));
+    await execFileP("git", ["init", "--bare", bare]);
+    await execFileP("git", ["-C", bare, "symbolic-ref", "HEAD", "refs/heads/main"]);
+
+    const seed = await mkdtemp(path.join(os.tmpdir(), "bad-app-seed-"));
+    await rm(seed, { recursive: true, force: true });
+    await execFileP("git", ["clone", bare, seed]);
+    await execFileP("git", ["-C", seed, "config", "user.email", "t@t.com"]);
+    await execFileP("git", ["-C", seed, "config", "user.name", "t"]);
+
+    // Write app.json with MISSING api_version (will fail zod validation)
+    await writeFile(
+      path.join(seed, "app.json"),
+      JSON.stringify({ id: "bad-app", name: "Bad", version: "0.1.0" }),
+    );
+    await execFileP("git", ["-C", seed, "add", "-A"]);
+    await execFileP("git", ["-C", seed, "commit", "-m", "initial"]);
+    await execFileP("git", ["-C", seed, "push", "origin", "HEAD:main"]);
+
+    const installer = new AppInstaller(mockEnv);
+    await expect(installer.install({ tenantId: "tenant-a", gitUrl: bare })).rejects.toThrow(
+      /api_version|Invalid app.json/,
+    );
+
+    // Verify no residue: no app dir, no .install-* leftover
+    const { resolveAppDir } = await import("../app-paths.js").then((m) => m);
+    const appDir = resolveAppDir("tenant-a", "bad-app", mockEnv);
+    await expect(access(appDir)).rejects.toThrow();
+
+    // Verify no tmp install dirs left behind in the apps root
+    const stateDir = mockEnv.ENCLAWS_STATE_DIR || "";
+    const appsRoot = path.join(stateDir, "tenants", "tenant-a", "apps");
+    let leftover: string[] = [];
+    try {
+      leftover = (await readdir(appsRoot)).filter((n) => n.startsWith(".install-"));
+    } catch {
+      // apps root may not exist — fine
+    }
+    expect(leftover).toHaveLength(0);
+  });
+
+  it("cleans up when git clone fails (rollback path)", async () => {
+    const installer = new AppInstaller(mockEnv);
+    await expect(
+      installer.install({
+        tenantId: "tenant-a",
+        gitUrl: "/nonexistent/path/definitely-not-a-repo.git",
+      }),
+    ).rejects.toThrow();
+
+    // Verify no residue — apps root may or may not exist; if it does, no .install-* dirs
+    const stateDir = mockEnv.ENCLAWS_STATE_DIR || "";
+    const appsRoot = path.join(stateDir, "tenants", "tenant-a", "apps");
+    let leftover: string[] = [];
+    try {
+      leftover = (await readdir(appsRoot)).filter((n) => n.startsWith(".install-"));
+    } catch {
+      // dir doesn't exist — that's fine, no leftover
+    }
+    expect(leftover).toHaveLength(0);
   });
 });
