@@ -73,12 +73,22 @@ export interface User {
   avatarUrl: string | null;
   lastLoginAt: Date | null;
   settings: UserSettings;
+  /** When 1, user must change password on next login (set on invite/admin-reset). */
+  forceChangePassword: boolean;
+  /** Timestamp of the last password change; used by Phase 2 expiry policy. */
+  passwordChangedAt: Date | null;
+  /** Phase 3: encrypted TOTP secret (AES-256-GCM, same key as temp-password payload). */
+  mfaSecret: string | null;
+  /** Phase 3: whether MFA is enabled for this user. */
+  mfaEnabled: boolean;
+  /** Phase 3: JSON array of SHA-256 hashed backup codes. */
+  mfaBackupCodes: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
-/** User object without password hash, safe to return from API. */
-export type SafeUser = Omit<User, "passwordHash">;
+/** User object without sensitive secrets, safe to return from API. */
+export type SafeUser = Omit<User, "passwordHash" | "mfaSecret" | "mfaBackupCodes">;
 
 export interface CreateUserInput {
   tenantId: string;
@@ -107,6 +117,10 @@ export interface JwtPayload {
   email: string | null;
   role: UserRole;
   tslug: string;     // tenant slug
+  /** Force-change-password flag — when true, the client must redirect to change-password. */
+  fcp?: boolean;
+  /** Phase 2: password expiry timestamp (epoch ms). Absent when policy is disabled. */
+  pwExp?: number;
 }
 
 export interface JwtTokenPair {
@@ -167,6 +181,8 @@ export interface TenantModelDefinition {
   compat?: Record<string, unknown>;
 }
 
+export type ModelVisibility = "private" | "shared";
+
 export interface TenantModel {
   id: string;
   tenantId: string;
@@ -179,6 +195,7 @@ export interface TenantModel {
   extraHeaders: Record<string, string>;
   extraConfig: Record<string, unknown>;
   models: TenantModelDefinition[];
+  visibility: ModelVisibility;
   isActive: boolean;
   createdBy: string | null;
   createdAt: Date;
@@ -202,6 +219,8 @@ export interface TenantAgent {
   name: string | null;
   config: Record<string, unknown>;
   modelConfig: ModelConfigEntry[];
+  tools: { deny: string[] };
+  skills: string[];
   isActive: boolean;
   createdBy: string | null;
   createdAt: Date;
@@ -427,6 +446,10 @@ export const PERMISSIONS = {
   // Platform management
   "platform.overview": ["platform-admin"],
   "platform.tenants": ["platform-admin"],
+  "platform.models.list": ["platform-admin"],
+  "platform.models.create": ["platform-admin"],
+  "platform.models.update": ["platform-admin"],
+  "platform.models.delete": ["platform-admin"],
 
   // Tenant management
   "tenant.read": ["owner", "admin"],

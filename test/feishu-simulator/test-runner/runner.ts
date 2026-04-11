@@ -65,6 +65,52 @@ export async function runTestFiles(opts: RunnerOptions & { llmJudge?: LlmJudgeCo
 // Re-export for convenience so callers don't need a separate import
 export type { LlmJudgeConfig };
 
+/**
+ * Layer 3 wrapper — delegates to runTestFiles with LLM judge enabled.
+ * Accepts flat llm* options (layer3 test entry style) and converts to llmJudge config.
+ */
+export async function runLayer3TestFiles(opts: RunnerOptions & {
+  llmApiKey: string;
+  llmProvider?: string;
+  llmModel?: string;
+  llmBaseUrl?: string;
+}): Promise<{ results: ResultRow[]; errors: string[] }> {
+  const { llmApiKey, llmProvider, llmModel, llmBaseUrl, ...runnerOpts } = opts;
+  return runTestFiles({
+    ...runnerOpts,
+    llmJudge: {
+      provider: (llmProvider as "anthropic" | "openai") ?? "anthropic",
+      model: llmModel ?? "claude-haiku-4-5-20251001",
+      apiKey: llmApiKey,
+      baseUrl: llmBaseUrl,
+    },
+  });
+}
+
+/**
+ * Resolve a credential field, preferring env var over the JSON value.
+ * Detects common placeholder values (cli_xxx, xxx, ou_xxx, empty) as "missing".
+ */
+function resolveCredential(jsonValue: string | undefined, envVar: string): string | undefined {
+  const isPlaceholder = (v?: string): boolean => {
+    if (!v) return true;
+    const trimmed = v.trim();
+    if (!trimmed) return true;
+    return trimmed === "xxx"
+      || trimmed === "cli_xxx"
+      || trimmed === "ou_xxx"
+      || trimmed === "oc_xxx"
+      || trimmed.startsWith("oc_xxxxxxxx")
+      || /^x+$/i.test(trimmed);
+  };
+  // Env var always wins if it's set
+  const envValue = process.env[envVar];
+  if (envValue && !isPlaceholder(envValue)) return envValue;
+  // Otherwise, fall back to JSON value if it's not a placeholder
+  if (!isPlaceholder(jsonValue)) return jsonValue;
+  return undefined;
+}
+
 async function runSingleFile(
   fileName: string,
   data: TestFile,
@@ -82,13 +128,44 @@ async function runSingleFile(
     if (error) errors.push(error);
   }
 
+  // Resolve credentials: env vars take precedence, JSON values are fallback.
+  // Placeholder values (cli_xxx, xxx, ou_xxx) are treated as missing.
+  const appId = resolveCredential(data.appId, "TEST_FEISHU_APP_ID");
+  const appSecret = resolveCredential(data.appSecret, "TEST_FEISHU_APP_SECRET");
+  const userOpenId = resolveCredential(data.userOpenId, "TEST_FEISHU_USER_OPEN_ID");
+  const chatId = resolveCredential(data.chatId, "TEST_FEISHU_GROUP_CHAT_ID");
+
+  if (!appId || !appSecret || !userOpenId) {
+    const missing = [
+      !appId && "appId (TEST_FEISHU_APP_ID)",
+      !appSecret && "appSecret (TEST_FEISHU_APP_SECRET)",
+      !userOpenId && "userOpenId (TEST_FEISHU_USER_OPEN_ID)",
+    ].filter(Boolean).join(", ");
+    const errMsg = `Missing credentials: ${missing}. Set in JSON file or via env vars.`;
+    console.log(`  ${errMsg}`);
+    for (const tc of data.cases) {
+      const label = tc.name ?? tc.message.slice(0, 30);
+      record({
+        file: fileName, name: label, message: tc.message,
+        expected: formatAssert(tc.assert), actual: "", failures: `ERROR: ${errMsg}`,
+        passed: false, duration: "-",
+      }, `[${fileName}] "${label}": ${errMsg}`);
+    }
+    return { results, errors };
+  }
+
   const client = new FeishuTestClient({
-    appId: data.appId,
-    appSecret: data.appSecret,
-    userOpenId: data.userOpenId,
+    appId,
+    appSecret,
+    userOpenId,
     replyTimeoutMs: opts.replyTimeoutMs,
     pollIntervalMs: opts.pollIntervalMs,
+    chatId,
   });
+
+  if (data.chatName) {
+    console.log(`  Group: ${data.chatName} (${chatId})`);
+  }
 
   try {
     await client.init();
@@ -99,7 +176,7 @@ async function runSingleFile(
       const label = tc.name ?? tc.message.slice(0, 30);
       record({
         file: fileName, name: label, message: tc.message,
-        expected: formatAssert(tc.assert), actual: `ERROR: ${errMsg}`,
+        expected: formatAssert(tc.assert), actual: "", failures: `ERROR: ${errMsg}`,
         passed: false, duration: "-",
       }, `[${fileName}] "${label}": ${errMsg}`);
     }
@@ -112,14 +189,14 @@ async function runSingleFile(
 
     let reply: Awaited<ReturnType<typeof client.send>>;
     try {
-      reply = await client.send(tc.message);
+      reply = await client.send(tc.message, { mentionBot: tc.mentionBot });
     } catch (e) {
       console.log(`  [${i + 1}/${data.cases.length}] FAIL ❌ ${label}`);
       console.log(`    Message: ${tc.message}`);
       console.log(`    Error: ${(e as Error).message}`);
       record({
         file: fileName, name: label, message: tc.message,
-        expected: formatAssert(tc.assert), actual: `ERROR: ${(e as Error).message}`,
+        expected: formatAssert(tc.assert), actual: "", failures: `ERROR: ${(e as Error).message}`,
         passed: false, duration: "-",
       }, `[${fileName}] "${label}": ${(e as Error).message}`);
       if (!opts.continueOnFailure) break;
@@ -162,7 +239,8 @@ async function runSingleFile(
     record({
       file: fileName, name: label, message: tc.message,
       expected: formatAssert(tc.assert),
-      actual: failures.length > 0 ? failures.join("; ") : reply.text,
+      actual: reply.text,
+      failures: failures.length > 0 ? failures.join("; ") : "",
       passed: failures.length === 0,
       duration: `${reply.durationMs}ms`,
     }, failures.length > 0 ? `[${fileName}] "${label}": ${failures.join("; ")}` : undefined);

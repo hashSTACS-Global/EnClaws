@@ -78,7 +78,15 @@ async function loadTenantAwareSessionEntry(
   // Try canonical key first, then prefixed storage key, then the original
   // unprefixed key (channel bots like Feishu store without tenant prefix since
   // the store path is already tenant-scoped).
-  const entry = store[canonicalKey] ?? store[storageKey.trim()] ?? store[sessionKey.trim()];
+  // Also try with `:user:{userId}` suffix because resolveSessionKey() in the
+  // reply engine appends it for multi-tenant direct chats (see session-key.ts).
+  const userSuffix = userId ? `:user:${userId.trim().toLowerCase()}` : "";
+  const canonicalWithUser = userSuffix ? `${canonicalKey}${userSuffix}` : "";
+  const entry =
+    store[canonicalKey] ??
+    (canonicalWithUser ? store[canonicalWithUser] : undefined) ??
+    store[storageKey.trim()] ??
+    store[sessionKey.trim()];
   return { cfg, storePath, store, entry, canonicalKey };
 }
 

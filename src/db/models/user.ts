@@ -15,12 +15,17 @@ import type {
   UserStatus,
 } from "../types.js";
 import { hashPassword } from "../../auth/password.js";
+import { checkTenantQuota } from "./tenant.js";
+import { UserQuotaExceededError } from "./user-quota-error.js";
 import {
   resolveTenantDevicesDir,
   resolveTenantCredentialsDir,
   resolveTenantCronDir,
   resolveTenantAgentWorkspaceDir,
 } from "../../config/sessions/tenant-paths.js";
+
+// Re-export for convenience so callers can `import { UserQuotaExceededError } from "../../db/models/user.js"`.
+export { UserQuotaExceededError } from "./user-quota-error.js";
 
 function rowToUser(row: Record<string, unknown>): User {
   return {
@@ -37,13 +42,18 @@ function rowToUser(row: Record<string, unknown>): User {
     avatarUrl: (row.avatar_url as string) ?? null,
     lastLoginAt: (row.last_login_at as Date) ?? null,
     settings: (row.settings ?? {}) as User["settings"],
+    forceChangePassword: Number(row.force_change_password ?? 0) === 1,
+    passwordChangedAt: (row.password_changed_at as Date) ?? null,
+    mfaSecret: (row.mfa_secret as string) ?? null,
+    mfaEnabled: Number(row.mfa_enabled ?? 0) === 1,
+    mfaBackupCodes: (row.mfa_backup_codes as string) ?? null,
     createdAt: row.created_at as Date,
     updatedAt: row.updated_at as Date,
   };
 }
 
 export function toSafeUser(user: User): SafeUser {
-  const { passwordHash: _, ...safe } = user;
+  const { passwordHash: _, mfaSecret: _s, mfaBackupCodes: _b, ...safe } = user;
   return safe;
 }
 
@@ -73,12 +83,17 @@ export function seedUserDirFiles(tenantId: string, dirKey: string): void {
   }
 }
 
-export async function createUser(input: CreateUserInput, opts?: { skipDirInit?: boolean }): Promise<SafeUser> {
+export async function createUser(
+  input: CreateUserInput & { forceChangePassword?: boolean },
+  opts?: { skipDirInit?: boolean },
+): Promise<SafeUser> {
   if (getDbType() === DB_SQLITE) return sqliteUser.createUser(input, opts);
   const passwordHash = input.password ? await hashPassword(input.password) : null;
+  const fcp = input.forceChangePassword ? 1 : 0;
   const result = await query(
-    `INSERT INTO users (tenant_id, channel_id, email, password_hash, display_name, role)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO users (tenant_id, channel_id, email, password_hash, display_name, role,
+                        force_change_password, password_changed_at)
+     VALUES ($1, $2, $3, $4::text, $5, $6, $7, CASE WHEN $4::text IS NULL THEN NULL ELSE NOW() END)
      RETURNING *`,
     [
       input.tenantId,
@@ -87,6 +102,7 @@ export async function createUser(input: CreateUserInput, opts?: { skipDirInit?: 
       passwordHash,
       input.displayName ?? null,
       input.role ?? "member",
+      fcp,
     ],
   );
   const user = rowToUser(result.rows[0]);
@@ -117,6 +133,55 @@ export async function getUserById(id: string): Promise<User | null> {
   if (getDbType() === DB_SQLITE) return sqliteUser.getUserById(id);
   const result = await query("SELECT * FROM users WHERE id = $1", [id]);
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
+/**
+ * Batch-fetch display names by user IDs. Returns a map of id → displayName.
+ */
+export async function getUserDisplayNamesByIds(
+  ids: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (ids.length === 0) return map;
+  const unique = [...new Set(ids)];
+  await Promise.all(
+    unique.map(async (id) => {
+      const user = await getUserById(id);
+      if (user?.displayName) map.set(id, user.displayName);
+    }),
+  );
+  return map;
+}
+
+/**
+ * Batch-fetch display names by Feishu open_ids. Returns a map of openId → displayName.
+ */
+export async function getUserDisplayNamesByOpenIds(
+  tenantId: string,
+  openIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (openIds.length === 0) return map;
+  const unique = [...new Set(openIds)];
+  const isSqlite = getDbType() === DB_SQLITE;
+  await Promise.all(
+    unique.map(async (oid) => {
+      let name: string | null = null;
+      if (isSqlite) {
+        const result = sqliteUser.findUserByOpenIdForDisplay(tenantId, oid);
+        const row = result.rows[0] as Record<string, unknown> | undefined;
+        name = (row?.display_name as string) ?? null;
+      } else {
+        const result = await query(
+          `SELECT display_name FROM users WHERE tenant_id = $1 AND open_ids @> ARRAY[$2]::varchar[] AND status = 'active' LIMIT 1`,
+          [tenantId, oid],
+        );
+        name = (result.rows[0]?.display_name as string) ?? null;
+      }
+      if (name) map.set(oid, name);
+    }),
+  );
+  return map;
 }
 
 export async function getUserByEmail(
@@ -210,7 +275,7 @@ export async function updateUser(
     values.push(updates.status);
   }
   if (updates.settings !== undefined) {
-    sets.push(`settings = $${idx++}`);
+    sets.push(`settings = $${idx++}::jsonb`);
     values.push(JSON.stringify(updates.settings));
   }
   if (updates.avatarUrl !== undefined) {
@@ -234,6 +299,39 @@ export async function updateUser(
 export async function updateLastLogin(userId: string): Promise<void> {
   if (getDbType() === DB_SQLITE) return sqliteUser.updateLastLogin(userId);
   await query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [userId]);
+}
+
+/**
+ * Update the user's password hash and clear the force-change-password flag.
+ * Also stamps password_changed_at = now (for Phase 2 expiry policy).
+ */
+export async function updateUserPassword(
+  userId: string,
+  newPassword: string,
+  opts?: { keepForceFlag?: boolean },
+): Promise<void> {
+  if (getDbType() === DB_SQLITE) {
+    return sqliteUser.updateUserPassword(userId, newPassword, opts);
+  }
+  const hash = await hashPassword(newPassword);
+  const fcpClause = opts?.keepForceFlag ? "" : ", force_change_password = 0";
+  await query(
+    `UPDATE users SET password_hash = $1, password_changed_at = NOW()${fcpClause}, updated_at = NOW() WHERE id = $2`,
+    [hash, userId],
+  );
+}
+
+/**
+ * Set or clear the force-change-password flag (used by admin reset / invite flows).
+ */
+export async function setForceChangePassword(userId: string, force: boolean): Promise<void> {
+  if (getDbType() === DB_SQLITE) {
+    return sqliteUser.setForceChangePassword(userId, force);
+  }
+  await query(
+    "UPDATE users SET force_change_password = $1 WHERE id = $2",
+    [force ? 1 : 0, userId],
+  );
 }
 
 export async function deleteUser(id: string): Promise<boolean> {
@@ -344,6 +442,15 @@ export async function findOrCreateUserByOpenId(
   }
 
   // 3. Create new user with open_ids array, union_id, and channel_id
+  // Check user quota before insert — IM-channel users were previously
+  // auto-provisioned without any quota enforcement, so a tenant could
+  // exceed maxUsers freely. Existing users (steps 1 and 2 above) are
+  // never blocked even after the limit is reached.
+  const userQuota = await checkTenantQuota(tenantId, "users");
+  if (!userQuota.allowed) {
+    throw new UserQuotaExceededError(userQuota.current, userQuota.max);
+  }
+
   try {
     const result = await query(
       `INSERT INTO users (tenant_id, channel_id, open_ids, union_id, display_name, role)

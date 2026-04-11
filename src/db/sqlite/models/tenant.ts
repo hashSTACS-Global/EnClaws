@@ -28,16 +28,48 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
   };
 }
 
-const DEFAULT_QUOTAS: TenantQuotas = {
-  maxUsers: 5,
-  maxAgents: 3,
+/**
+ * Hard-coded fallback used only when the `plans` table is unavailable.
+ * Real defaults live in the `plans` table.
+ */
+const FALLBACK_FREE_QUOTAS: TenantQuotas = {
+  maxUsers: 10,
+  maxAgents: 5,
   maxChannels: 5,
-  maxTokensPerMonth: 1_000_000,
+  maxTokensPerMonth: 20_000_000,
 };
+
+/**
+ * Look up the quotas for a given plan id from the `plans` table.
+ * Falls back to FALLBACK_FREE_QUOTAS on any error.
+ */
+export async function getPlanQuotas(planId: string): Promise<TenantQuotas> {
+  try {
+    const result = sqliteQuery(
+      `SELECT max_users, max_agents, max_channels, max_tokens_per_month
+       FROM plans WHERE id = ?`,
+      [planId],
+    );
+    const row = result.rows[0];
+    if (!row) return FALLBACK_FREE_QUOTAS;
+    return {
+      maxUsers: Number(row.max_users),
+      maxAgents: Number(row.max_agents),
+      maxChannels: Number(row.max_channels),
+      maxTokensPerMonth: Number(row.max_tokens_per_month),
+    };
+  } catch (err) {
+    console.warn(`[tenant] getPlanQuotas(${planId}) failed, using fallback: ${String(err)}`);
+    return FALLBACK_FREE_QUOTAS;
+  }
+}
 
 export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
   const id = generateUUID();
-  const quotas = { ...DEFAULT_QUOTAS, ...input.quotas };
+  // Quotas come from the plans table snapshot for this plan, with optional
+  // per-tenant overrides supplied by the caller.
+  const planQuotas = await getPlanQuotas(input.plan ?? "free");
+  const quotas = { ...planQuotas, ...input.quotas };
 
   sqliteQuery(
     `INSERT INTO tenants (id, name, slug, plan, settings, quotas)
@@ -182,5 +214,7 @@ export async function checkTenantQuota(
   const current = Number(countResult.rows[0].count);
   const max = tenant.quotas[quotaKeyMap[resource]];
 
+  // -1 means unlimited (enterprise plan).
+  if (max < 0) return { allowed: true, current, max };
   return { allowed: current < max, current, max };
 }

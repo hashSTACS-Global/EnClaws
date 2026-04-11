@@ -1,4 +1,4 @@
-export { runTestFiles } from "./runner.js";
+export { runTestFiles, runLayer3TestFiles } from "./runner.js";
 export { loadTestFiles } from "./file-loader.js";
 export { CsvWriter } from "./csv-writer.js";
 export { formatAssert, checkAssertions, formatScriptAssert, checkScriptAssertions } from "./asserter.js";

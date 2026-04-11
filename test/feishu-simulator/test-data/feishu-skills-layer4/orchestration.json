@@ -1,0 +1,157 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊编排-查人建会",
+      "message": "帮我查一下许帅，然后创建一个明天下午2点到3点的会议邀请他，主题是需求评审",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "群聊编排-搜索文档后读取",
+      "message": "帮我找一下关于「测试」的文档，然后读取第一篇的内容",
+      "assert": {
+        "notContains": "error",
+        "minLength": 10
+      },
+      "tags": [
+        "P1",
+        "group",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "群聊编排-创建文档到文件夹",
+      "message": "帮我在「群聊测试」文件夹里创建一个文档叫《群讨论纪要》，随便写点内容",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "群聊编排-创建任务指派",
+      "message": "帮我创建一个任务「整理群讨论结论」，指派给许帅，截止到周五",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "群聊编排-读文档写摘要",
+      "message": "帮我读取《自动化测试文档》的内容，总结成摘要放到新文档《群聊测试摘要》里",
+      "assert": {
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "group",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "群聊编排-文档写入知识库",
+      "message": "帮我创建一个文档叫《技术方案》，写一些关于微服务架构的内容，然后放到知识库里",
+      "assert": {
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "群聊编排-创建日程并建任务",
+      "message": "帮我创建一个明天下午3点到4点的评审会议，然后建个任务提醒我提前准备材料",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "group",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "群聊编排-搜人查日程",
+      "message": "帮我查一下许帅的信息，然后看看他明天有没有空，我想约他开个会",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "group",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "群聊编排-创建表格填数据",
+      "message": "帮我创建一个表格叫《缺陷统计》，列名是模块、缺陷数、修复数，然后添加三行：登录模块5个3个、支付模块3个2个、首页1个1个",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "group",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "群聊编排-查群看消息",
+      "message": "帮我搜索「测试」相关的群聊，然后看看群里最近都聊了些什么",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "group",
+        "orchestration"
+      ]
+    },
+    {
+      "name": "群聊编排-搜索文档更新",
+      "message": "帮我找到《群聊测试文档》，在末尾追加一段：## 更新记录\\n- 群聊测试通过",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "group",
+        "orchestration"
+      ]
+    }
+  ]
+}

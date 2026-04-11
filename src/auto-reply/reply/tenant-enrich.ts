@@ -56,7 +56,11 @@ export async function enrichTenantContext(
           displayName: ctx.SenderName ?? undefined,
           channelId: tenantCtx?.channelId,
         });
-        if (provisioned) {
+        // This branch is taken when TenantUserId is already set, meaning the
+        // user already exists in DB — we only need to resolve their role.
+        // The quota-exceeded sentinel cannot occur here, but we narrow the
+        // type defensively to keep the AutoProvisionResult fields accessible.
+        if (provisioned && !("quotaExceeded" in provisioned)) {
           ctx.TenantUserRole = provisioned.role;
           // Backfill sender name from DB if plugin didn't resolve it
           if (isMissingSenderName(ctx) && provisioned.displayName && !isPlaceholderName(provisioned.displayName)) {
@@ -117,7 +121,17 @@ export async function enrichTenantContext(
       channelId: tenantCtx?.channelId,
     });
 
-    if (provisioned) {
+    if (provisioned && "quotaExceeded" in provisioned) {
+      // User quota hit — set TenantId so the reply pipeline runs (and the
+      // user gets a reply via the same channel), and mark the context so
+      // get-reply.ts can short-circuit with a friendly upgrade message.
+      ctx.TenantId = tenantId;
+      ctx.TenantUserQuotaExceeded = true;
+      logVerbose(
+        `[tenant-enrich] user quota exceeded for ${provider}/${senderId} ` +
+        `(${provisioned.current}/${provisioned.max}) — sender will receive upgrade message`,
+      );
+    } else if (provisioned) {
       ctx.TenantId = tenantId;
       ctx.TenantUserId = provisioned.unionId;
       ctx.TenantUserRole = provisioned.role;

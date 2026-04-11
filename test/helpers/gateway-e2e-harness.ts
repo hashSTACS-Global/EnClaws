@@ -98,7 +98,19 @@ async function waitForPortOpen(
   );
 }
 
-export async function spawnGatewayInstance(name: string): Promise<GatewayInstance> {
+export interface SpawnGatewayOptions {
+  /** "token" (default) or "none". Use "none" for multi-tenant flows where
+   *  clients authenticate by JWT carried in the connect handshake. */
+  authMode?: "token" | "none";
+  /** Extra environment variables to inject into the child process.
+   *  Useful for ENCLAWS_DB_URL, ENCLAWS_JWT_SECRET, etc. */
+  extraEnv?: Record<string, string | undefined>;
+}
+
+export async function spawnGatewayInstance(
+  name: string,
+  opts?: SpawnGatewayOptions,
+): Promise<GatewayInstance> {
   const port = await getFreePort();
   const hookToken = `token-${name}-${randomUUID()}`;
   const gatewayToken = `gateway-${name}-${randomUUID()}`;
@@ -107,11 +119,14 @@ export async function spawnGatewayInstance(name: string): Promise<GatewayInstanc
   await fs.mkdir(configDir, { recursive: true });
   const configPath = path.join(configDir, "openclaw.json");
   const stateDir = path.join(configDir, "state");
+  const authMode = opts?.authMode ?? "token";
   const config = {
     gateway: {
       port,
-      auth: { mode: "token", token: gatewayToken },
-      controlUi: { enabled: false },
+      auth: authMode === "none" ? { mode: "none" } : { mode: "token", token: gatewayToken },
+      // Allow wildcard origins in tests so vitest (no browser Origin header)
+      // can connect via webchat mode without tripping the origin allowlist.
+      controlUi: { enabled: false, allowedOrigins: ["*"] },
     },
     hooks: { enabled: true, token: hookToken, path: "/hooks" },
   };
@@ -122,6 +137,29 @@ export async function spawnGatewayInstance(name: string): Promise<GatewayInstanc
   let child: ChildProcessWithoutNullStreams | null = null;
 
   try {
+    const mergedEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: homeDir,
+      ENCLAWS_CONFIG_PATH: configPath,
+      ENCLAWS_STATE_DIR: stateDir,
+      ENCLAWS_GATEWAY_TOKEN: "",
+      ENCLAWS_GATEWAY_PASSWORD: "",
+      ENCLAWS_SKIP_CHANNELS: "1",
+      ENCLAWS_SKIP_PROVIDERS: "1",
+      ENCLAWS_SKIP_GMAIL_WATCHER: "1",
+      ENCLAWS_SKIP_CRON: "1",
+      ENCLAWS_SKIP_BROWSER_CONTROL_SERVER: "1",
+      ENCLAWS_SKIP_CANVAS_HOST: "1",
+      ENCLAWS_TEST_MINIMAL_GATEWAY: "1",
+      VITEST: "1",
+    };
+    if (opts?.extraEnv) {
+      for (const [k, v] of Object.entries(opts.extraEnv)) {
+        if (v === undefined) delete mergedEnv[k];
+        else mergedEnv[k] = v;
+      }
+    }
+
     child = spawn(
       "node",
       [
@@ -135,22 +173,7 @@ export async function spawnGatewayInstance(name: string): Promise<GatewayInstanc
       ],
       {
         cwd: process.cwd(),
-        env: {
-          ...process.env,
-          HOME: homeDir,
-          ENCLAWS_CONFIG_PATH: configPath,
-          ENCLAWS_STATE_DIR: stateDir,
-          ENCLAWS_GATEWAY_TOKEN: "",
-          ENCLAWS_GATEWAY_PASSWORD: "",
-          ENCLAWS_SKIP_CHANNELS: "1",
-          ENCLAWS_SKIP_PROVIDERS: "1",
-          ENCLAWS_SKIP_GMAIL_WATCHER: "1",
-          ENCLAWS_SKIP_CRON: "1",
-          ENCLAWS_SKIP_BROWSER_CONTROL_SERVER: "1",
-          ENCLAWS_SKIP_CANVAS_HOST: "1",
-          ENCLAWS_TEST_MINIMAL_GATEWAY: "1",
-          VITEST: "1",
-        },
+        env: mergedEnv,
         stdio: ["ignore", "pipe", "pipe"],
       },
     );

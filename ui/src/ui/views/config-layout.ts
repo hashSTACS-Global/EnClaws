@@ -1,5 +1,6 @@
 import { LitElement, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { t } from "../../i18n/index.ts";
 import "../components/config-sidebar.ts";
 
 export type ConfigLayoutProps = {
@@ -111,7 +112,7 @@ export class ConfigLayout extends LitElement {
                 ?disabled=${!this.props.canUpdate}
                 @click=${this.props.onUpdate}
               >
-                ${this.props.updating ? "Updating…" : "Update"}
+                ${this.props.updating ? t("update.updating") : t("update.updateNow")}
               </button>
             </div>
           </div>

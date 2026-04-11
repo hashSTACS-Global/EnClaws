@@ -1,19 +1,49 @@
 {
-  "appId": "cli_xxx",
-  "appSecret": "xxx",
-  "userOpenId": "ou_xxx",
   "cases": [
     {
       "name": "下载文档并提取文本",
       "message": "帮我下载云空间里的那个Word文档，并提取里面的文字",
-      "assert": { "notContains": "exception", "minLength": 2 },
-      "tags": ["P2"]
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2"
+      ]
     },
     {
       "name": "提取PDF内容",
       "message": "帮我提取一下云空间里那个PDF报告的文字内容",
-      "assert": { "notContains": "exception", "minLength": 2 },
-      "tags": ["P2"]
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2"
+      ]
+    },
+    {
+      "name": "下载并总结",
+      "message": "帮我下载那个Word文档然后简单总结一下里面的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2"
+      ]
+    },
+    {
+      "name": "口语化-拿文件",
+      "message": "云盘里那个报告帮我下载下来看看",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "intent"
+      ]
     }
   ]
 }

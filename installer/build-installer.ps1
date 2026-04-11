@@ -70,8 +70,11 @@ $NodeExtractDir = Join-Path $InstallerDir "node-v${NodeVersion}-win-x64"
 if (Test-Path $NodePortableDir) {
     # Check if the bundled version matches
     $existingVersion = $null
+    # Check enclaws.exe first (renamed), then fall back to node.exe (fresh download)
+    $checkExe = Join-Path $NodePortableDir "enclaws.exe"
+    if (-not (Test-Path $checkExe)) { $checkExe = Join-Path $NodePortableDir "node.exe" }
     try {
-        $existingVersion = (& (Join-Path $NodePortableDir "node.exe") -v 2>$null).Trim()
+        $existingVersion = (& $checkExe -v 2>$null).Trim()
     } catch {}
 
     if ($existingVersion -eq "v${NodeVersion}") {
@@ -98,10 +101,36 @@ if (-not (Test-Path $NodePortableDir)) {
     Write-Host "[OK] Node.js extracted to node-portable/" -ForegroundColor Green
 }
 
-# Verify node works
+# Verify node works (enclaws.exe if already renamed, node.exe if fresh)
+$enclawsExe = Join-Path $NodePortableDir "enclaws.exe"
 $nodeExe = Join-Path $NodePortableDir "node.exe"
+if (Test-Path $enclawsExe) { $nodeExe = $enclawsExe }
 $nodeVer = (& $nodeExe -v).Trim()
 Write-Host "[OK] Bundled Node.js: $nodeVer" -ForegroundColor Green
+
+# ---------------------------------------------------------------------------
+# Step 1b: Rename node.exe to enclaws.exe and rebrand PE version info
+# ---------------------------------------------------------------------------
+
+if (-not (Test-Path $enclawsExe)) {
+    # Download rcedit to modify PE version info (FileDescription shown in Task Manager)
+    $rceditPath = Join-Path $InstallerDir "rcedit-x64.exe"
+    if (-not (Test-Path $rceditPath)) {
+        $rceditUrl = "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe"
+        Write-Host "[*] Downloading rcedit..." -ForegroundColor Yellow
+        Invoke-WebRequest -Uri $rceditUrl -OutFile $rceditPath -UseBasicParsing
+    }
+
+    Write-Host "[*] Rebranding node.exe -> enclaws.exe..." -ForegroundColor Yellow
+    Rename-Item $nodeExe $enclawsExe
+    & $rceditPath $enclawsExe --set-version-string "FileDescription" "EnClaws"
+    & $rceditPath $enclawsExe --set-version-string "ProductName" "EnClaws"
+    & $rceditPath $enclawsExe --set-icon (Join-Path $InstallerDir "assets\enclaws-icon.ico")
+    Write-Host "[OK] enclaws.exe created with EnClaws branding" -ForegroundColor Green
+} else {
+    Write-Host "[OK] enclaws.exe already exists" -ForegroundColor Green
+}
+$nodeExe = $enclawsExe
 
 # ---------------------------------------------------------------------------
 # Step 2: Build EnClaws (optional)
@@ -164,13 +193,14 @@ if (Test-Path $AppBundleDir) {
     New-Item -ItemType Directory -Force -Path $emptyDir | Out-Null
     robocopy $emptyDir $AppBundleDir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
     Remove-Item -Force $emptyDir
-    Remove-Item -Force $AppBundleDir
+    Remove-Item -Force $AppBundleDir -ErrorAction SilentlyContinue
 }
 New-Item -ItemType Directory -Force -Path $AppBundleDir | Out-Null
 
 # Copy application files
 $filesToCopy = @(
     @{ Src = "enclaws.mjs"; Dest = "enclaws.mjs" }
+    @{ Src = ".env.example"; Dest = ".env.example" }
 )
 foreach ($f in $filesToCopy) {
     $src = Join-Path $ProjectRoot $f.Src
@@ -188,8 +218,10 @@ foreach ($d in $dirsToCopy) {
     $src = Join-Path $ProjectRoot $d
     $dest = Join-Path $AppBundleDir $d
     if (Test-Path $src) {
-        # Use robocopy to handle long paths that exceed Windows MAX_PATH (260 chars)
-        robocopy $src $dest /E /NFL /NDL /NJH /NJS /NP | Out-Null
+        # Use robocopy to handle long paths that exceed Windows MAX_PATH (260 chars).
+        # Exclude node_modules — extension deps are pnpm symlinks pointing back to the
+        # project root, which would cause robocopy to recursively copy the entire repo.
+        robocopy $src $dest /E /NFL /NDL /NJH /NJS /NP /XD node_modules | Out-Null
         Write-Host "    Copied $d/" -ForegroundColor Gray
     } else {
         Write-Host "[!] Missing directory: $d/" -ForegroundColor Yellow

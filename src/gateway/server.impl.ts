@@ -844,10 +844,13 @@ export async function startGatewayServer(
     log,
     isNixMode,
   });
+  if (!minimalTestGateway) {
+    const { ensureUpdateSettings } = await import("../infra/update-settings.js");
+    await ensureUpdateSettings();
+  }
   const stopGatewayUpdateCheck = minimalTestGateway
     ? () => {}
     : scheduleGatewayUpdateCheck({
-        cfg: cfgAtStart,
         log,
         isNixMode,
         onUpdateAvailableChange: (updateAvailable) => {

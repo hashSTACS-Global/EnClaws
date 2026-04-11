@@ -13,6 +13,8 @@ import type {
   UserStatus,
 } from "../../types.js";
 import { hashPassword } from "../../../auth/password.js";
+import { checkTenantQuota } from "./tenant.js";
+import { UserQuotaExceededError } from "../../models/user-quota-error.js";
 import {
   resolveTenantDevicesDir,
   resolveTenantCredentialsDir,
@@ -41,23 +43,34 @@ function rowToUser(row: Record<string, unknown>): User {
     avatarUrl: (row.avatar_url as string) ?? null,
     lastLoginAt: row.last_login_at ? new Date(row.last_login_at as string) : null,
     settings: (typeof row.settings === "string" ? JSON.parse(row.settings) : row.settings ?? {}) as User["settings"],
+    forceChangePassword: Number(row.force_change_password ?? 0) === 1,
+    passwordChangedAt: row.password_changed_at ? new Date(row.password_changed_at as string) : null,
+    mfaSecret: (row.mfa_secret as string) ?? null,
+    mfaEnabled: Number(row.mfa_enabled ?? 0) === 1,
+    mfaBackupCodes: (row.mfa_backup_codes as string) ?? null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };
 }
 
 export function toSafeUser(user: User): SafeUser {
-  const { passwordHash: _, ...safe } = user;
+  const { passwordHash: _, mfaSecret: _s, mfaBackupCodes: _b, ...safe } = user;
   return safe;
 }
 
-export async function createUser(input: CreateUserInput, opts?: { skipDirInit?: boolean }): Promise<SafeUser> {
+export async function createUser(
+  input: CreateUserInput & { forceChangePassword?: boolean },
+  opts?: { skipDirInit?: boolean },
+): Promise<SafeUser> {
   const id = generateUUID();
   const passwordHash = input.password ? await hashPassword(input.password) : null;
+  const fcp = input.forceChangePassword ? 1 : 0;
+  const passwordChangedAt = passwordHash ? new Date().toISOString() : null;
 
   sqliteQuery(
-    `INSERT INTO users (id, tenant_id, channel_id, email, password_hash, display_name, role)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (id, tenant_id, channel_id, email, password_hash, display_name, role,
+                        force_change_password, password_changed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.tenantId,
@@ -66,6 +79,8 @@ export async function createUser(input: CreateUserInput, opts?: { skipDirInit?: 
       passwordHash,
       input.displayName ?? null,
       input.role ?? "member",
+      fcp,
+      passwordChangedAt,
     ],
   );
 
@@ -206,6 +221,29 @@ export async function updateLastLogin(userId: string): Promise<void> {
   sqliteQuery("UPDATE users SET last_login_at = datetime('now') WHERE id = ?", [userId]);
 }
 
+export async function updateUserPassword(
+  userId: string,
+  newPassword: string,
+  opts?: { keepForceFlag?: boolean },
+): Promise<void> {
+  const hash = await hashPassword(newPassword);
+  if (opts?.keepForceFlag) {
+    sqliteQuery(
+      "UPDATE users SET password_hash = ?, password_changed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+      [hash, userId],
+    );
+  } else {
+    sqliteQuery(
+      "UPDATE users SET password_hash = ?, password_changed_at = datetime('now'), force_change_password = 0, updated_at = datetime('now') WHERE id = ?",
+      [hash, userId],
+    );
+  }
+}
+
+export async function setForceChangePassword(userId: string, force: boolean): Promise<void> {
+  sqliteQuery("UPDATE users SET force_change_password = ? WHERE id = ?", [force ? 1 : 0, userId]);
+}
+
 export async function deleteUser(id: string): Promise<boolean> {
   const result = sqliteQuery(
     "UPDATE users SET status = 'deleted' WHERE id = ? AND status != 'deleted'",
@@ -298,7 +336,14 @@ export async function findOrCreateUserByOpenId(
     return { user, created: false };
   }
 
-  // 3. Create new user with channel_id
+  // 3. Create new user with channel_id — enforce maxUsers quota first.
+  // Existing users (steps 1 and 2 above) are never blocked even after the
+  // limit is reached; only NEW IM users get rejected.
+  const userQuota = await checkTenantQuota(tenantId, "users");
+  if (!userQuota.allowed) {
+    throw new UserQuotaExceededError(userQuota.current, userQuota.max);
+  }
+
   const id = generateUUID();
   try {
     sqliteQuery(
@@ -339,4 +384,20 @@ export async function findOrCreateUserByOpenId(
     }
     throw new Error(`Failed to find or create user for openId=${openId} unionId=${unionId}`);
   }
+}
+
+/**
+ * Lightweight lookup: find a user's display_name by open_id (for session list display).
+ */
+export function findUserByOpenIdForDisplay(
+  tenantId: string,
+  openId: string,
+): { rows: Array<Record<string, unknown>> } {
+  return sqliteQuery(
+    `SELECT display_name FROM users
+     WHERE tenant_id = ? AND status = 'active'
+       AND EXISTS (SELECT 1 FROM json_each(open_ids) WHERE json_each.value = ?)
+     LIMIT 1`,
+    [tenantId, openId],
+  );
 }

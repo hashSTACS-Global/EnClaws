@@ -123,6 +123,10 @@ export class EnClawsApp extends LitElement {
   }
   @state() password = "";
   @state() tab: Tab = "chat";
+  /** Auth Phase 1 — bumped on every window `hashchange` so that the unauth
+   *  hash router (#/auth/forgot-password, #/auth/reset-password,
+   *  #/auth/temp-password) picks up the new URL without a full page reload. */
+  @state() hashRouteTick = 0;
   @state() onboarding = resolveOnboardingMode();
   @state() showOnboarding = false;
   @state() connected = false;
@@ -191,6 +195,7 @@ export class EnClawsApp extends LitElement {
   @state() configSaving = false;
   @state() configApplying = false;
   @state() updateRunning = false;
+  @state() updateMessage: string | null = null;
   @state() applySessionKey = this.settings.lastActiveSessionKey;
   @state() configSnapshot: ConfigSnapshot | null = null;
   @state() configSchema: unknown = null;
@@ -228,7 +233,7 @@ export class EnClawsApp extends LitElement {
   @state() toolsCatalogLoading = false;
   @state() toolsCatalogError: string | null = null;
   @state() toolsCatalogResult: ToolsCatalogResult | null = null;
-  @state() agentsPanel: "overview" | "files" | "tools" | "skills" | "channels" | "cron" =
+  @state() agentsPanel: "overview" | "persona" | "files" | "tools" | "skills" | "channels" | "cron" =
     "overview";
   @state() agentFilesLoading = false;
   @state() agentFilesError: string | null = null;

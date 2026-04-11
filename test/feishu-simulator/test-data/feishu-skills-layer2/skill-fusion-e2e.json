@@ -1,0 +1,674 @@
+{
+  "cases": [
+    {
+      "name": "闭环-Phase1-Setup-创建主文件夹",
+      "message": "帮我在云空间创建一个文件夹叫「闭环测试」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文件夹",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase1",
+        "drive"
+      ]
+    },
+    {
+      "name": "闭环-Phase1-Setup-创建资料子文件夹",
+      "message": "帮我在「闭环测试」文件夹下再创建一个子文件夹叫「资料」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文件夹",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase1",
+        "drive"
+      ]
+    },
+    {
+      "name": "闭环-Phase1-Setup-创建项目说明文档",
+      "message": "帮我在「闭环测试」文件夹下创建一个文档，标题叫《闭环-项目说明》，内容写：本项目用于端到端验证所有飞书skill的可用性。包含模块：文档、表格、多维表格、日程、任务、知识库、通讯录。",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase1",
+        "create-doc"
+      ]
+    },
+    {
+      "name": "闭环-Phase1-Setup-创建需求列表文档",
+      "message": "帮我在「闭环测试」文件夹下创建一个文档，标题叫《闭环-需求列表》，内容写：## 待实现需求\n1. 用户登录\n2. 数据导出\n3. 权限管理",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase1",
+        "create-doc"
+      ]
+    },
+    {
+      "name": "闭环-Phase1-Setup-创建数据表",
+      "message": "帮我在「闭环测试」文件夹下创建一个表格，标题叫《闭环-数据表》，列名分别是：编号、模块、负责人、状态",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "表格"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase1",
+        "sheet"
+      ]
+    },
+    {
+      "name": "闭环-Phase1-Setup-创建Bug追踪多维表格",
+      "message": "帮我在「闭环测试」文件夹下创建一个多维表格《闭环-Bug追踪》，字段是：标题、严重度、状态、负责人",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase1",
+        "bitable"
+      ]
+    },
+    {
+      "name": "闭环-Phase2-数据填充-追加项目说明",
+      "message": "帮我在《闭环-项目说明》末尾追加一段：## 测试目标\n验证所有 skill 在端到端场景下的协同能力。",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加",
+          "完成",
+          "已为",
+          "已在"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase2",
+        "update-doc"
+      ]
+    },
+    {
+      "name": "闭环-Phase2-数据填充-追加需求",
+      "message": "帮我在《闭环-需求列表》末尾追加一段：4. 消息通知\n5. 数据可视化",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加",
+          "完成",
+          "已为",
+          "已在"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase2",
+        "update-doc"
+      ]
+    },
+    {
+      "name": "闭环-Phase2-数据填充-表格写入第一行",
+      "message": "帮我在《闭环-数据表》里添加一行：001、用户登录、许帅、进行中",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase2",
+        "sheet"
+      ]
+    },
+    {
+      "name": "闭环-Phase2-数据填充-表格写入第二行",
+      "message": "帮我在《闭环-数据表》里再添加一行：002、数据导出、李帅、待开始",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase2",
+        "sheet"
+      ]
+    },
+    {
+      "name": "闭环-Phase2-数据填充-多维表格录Bug1",
+      "message": "帮我在《闭环-Bug追踪》里新增一条记录：标题是登录页面崩溃，严重度P0，状态待修复，负责人许帅",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase2",
+        "bitable"
+      ]
+    },
+    {
+      "name": "闭环-Phase2-数据填充-多维表格录Bug2",
+      "message": "帮我在《闭环-Bug追踪》里新增一条：标题是支付回调超时，严重度P1，状态修复中，负责人李帅",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase2",
+        "bitable"
+      ]
+    },
+    {
+      "name": "闭环-Phase2-doc-comment-添加文档评论",
+      "message": "帮我在《闭环-项目说明》文档上添加一条评论：「整体方向OK，建议补充验收标准」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "e2e",
+        "phase2",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "闭环-Phase2-doc-media-插入媒体",
+      "message": "帮我在《闭环-项目说明》文档里插入一张架构图说明的占位图片",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "e2e",
+        "phase2",
+        "doc-media"
+      ]
+    },
+    {
+      "name": "闭环-Phase3-验证-读项目说明",
+      "message": "帮我读取《闭环-项目说明》的完整内容",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase3",
+        "fetch-doc"
+      ]
+    },
+    {
+      "name": "闭环-Phase3-验证-读需求列表",
+      "message": "帮我读取《闭环-需求列表》的内容",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase3",
+        "fetch-doc"
+      ]
+    },
+    {
+      "name": "闭环-Phase3-验证-读数据表",
+      "message": "帮我读取《闭环-数据表》的所有内容",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase3",
+        "sheet"
+      ]
+    },
+    {
+      "name": "闭环-Phase3-验证-查Bug追踪P0",
+      "message": "帮我查一下《闭环-Bug追踪》里严重度是P0的记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase3",
+        "bitable"
+      ]
+    },
+    {
+      "name": "闭环-Phase3-验证-读评论",
+      "message": "帮我看看《闭环-项目说明》文档上有哪些评论",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "e2e",
+        "phase3",
+        "doc-comment"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-需求拆任务",
+      "message": "帮我读取《闭环-需求列表》的内容，把每个需求创建成一个飞书任务",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "e2e",
+        "phase4",
+        "fetch-doc+task"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-查任务列表",
+      "message": "帮我看看我现在有哪些待办任务",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase4",
+        "task"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-查人后约会",
+      "message": "帮我查一下许帅的飞书信息，然后创建一个明天上午10点到11点的会议，主题是「闭环-需求评审」邀请他",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议",
+          "完成",
+          "已为",
+          "成功"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "e2e",
+        "phase4",
+        "search-user+calendar"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-创建会前任务",
+      "message": "帮我创建一个任务「准备闭环评审材料」，截止日期明天上午",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "任务"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase4",
+        "task"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-查询自己信息",
+      "message": "帮我查一下我自己的飞书账号信息",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase4",
+        "search-user"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-查群组",
+      "message": "帮我搜索一下飞书里叫「测试」的群",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase4",
+        "chat"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-读群消息",
+      "message": "帮我看看当前群里最近的聊天记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "e2e",
+        "phase4",
+        "im-read"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-发消息通知自己",
+      "message": "帮我给我自己发一条飞书消息：闭环测试-Phase4阶段已完成",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "e2e",
+        "phase4",
+        "im-message"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-创建知识库",
+      "message": "帮我创建一个新的飞书知识库，名字叫「闭环-知识空间」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "e2e",
+        "phase4",
+        "wiki"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-查询知识库列表",
+      "message": "帮我看看我现在有哪些飞书知识库",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase4",
+        "wiki"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-搜索闭环文档",
+      "message": "帮我搜索一下飞书上标题包含「闭环」的文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase4",
+        "search-doc"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-列闭环测试文件夹",
+      "message": "帮我看看「闭环测试」文件夹下都有什么内容",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase4",
+        "drive"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-下载Word附件",
+      "message": "帮我下载云空间里的Word文档并提取文字",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "e2e",
+        "phase4",
+        "docx-download"
+      ]
+    },
+    {
+      "name": "闭环-Phase4-融合-OCR识别",
+      "message": "帮我识别一张图片上的文字",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "e2e",
+        "phase4",
+        "image-ocr"
+      ]
+    },
+    {
+      "name": "闭环-Phase5-汇总-读取数据表汇总",
+      "message": "帮我读取《闭环-数据表》的内容，并告诉我有几行数据",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase5",
+        "sheet"
+      ]
+    },
+    {
+      "name": "闭环-Phase5-汇总-生成测试报告",
+      "message": "帮我在「闭环测试」文件夹下创建一个文档《闭环-测试报告》，内容写：本次端到端测试创建了《闭环-项目说明》《闭环-需求列表》《闭环-数据表》《闭环-Bug追踪》四个资源，覆盖了文档、表格、多维表格、任务、日程、知识库等多个skill，所有阶段执行完成。",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成",
+          "已为",
+          "已在",
+          "成功"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase5",
+        "create-doc"
+      ]
+    },
+    {
+      "name": "闭环-Phase5-汇总-查询所有任务",
+      "message": "帮我看看我现在所有的待办任务",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase5",
+        "task"
+      ]
+    },
+    {
+      "name": "闭环-Phase5-汇总-查询明日日程",
+      "message": "帮我看看明天有哪些会议安排",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "e2e",
+        "phase5",
+        "calendar"
+      ]
+    },
+    {
+      "name": "闭环-Phase5-汇总-发完成消息",
+      "message": "帮我给我自己发一条飞书消息：闭环测试-全部阶段完成，请查看《闭环-测试报告》",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "e2e",
+        "phase5",
+        "im-message"
+      ]
+    },
+    {
+      "name": "闭环-Phase6-清理-完成准备任务",
+      "message": "帮我把「准备闭环评审材料」这个任务标记为已完成",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "e2e",
+        "phase6",
+        "task"
+      ]
+    },
+    {
+      "name": "闭环-Phase6-清理-取消评审会议",
+      "message": "帮我取消明天上午10点的「闭环-需求评审」会议",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "e2e",
+        "phase6",
+        "calendar"
+      ]
+    }
+  ]
+}

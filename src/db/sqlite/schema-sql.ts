@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   plan        TEXT NOT NULL DEFAULT 'free',
   status      TEXT NOT NULL DEFAULT 'active',
   settings    TEXT NOT NULL DEFAULT '{}',
-  quotas      TEXT NOT NULL DEFAULT '{"maxUsers":5,"maxAgents":3,"maxChannels":5,"maxTokensPerMonth":1000000}',
+  quotas      TEXT NOT NULL DEFAULT '{"maxUsers":10,"maxAgents":5,"maxChannels":5,"maxTokensPerMonth":20000000}',
   trace_enabled    INTEGER NOT NULL DEFAULT 1,
   identity_prompt  TEXT NOT NULL DEFAULT '',
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -26,23 +26,44 @@ CREATE TABLE IF NOT EXISTS tenants (
 CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants (slug);
 CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants (status);
 
+-- Plans (subscription plan dictionary). -1 = unlimited.
+CREATE TABLE IF NOT EXISTS plans (
+  id                   TEXT PRIMARY KEY,
+  name                 TEXT NOT NULL,
+  max_users            INTEGER NOT NULL,
+  max_agents           INTEGER NOT NULL,
+  max_channels         INTEGER NOT NULL,
+  max_tokens_per_month INTEGER NOT NULL,
+  created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month) VALUES
+  ('free',       '免费版', 10, 5,  5,  20000000),
+  ('pro',        '专业版', 20, 20, 20, 200000000),
+  ('enterprise', '企业版', -1, -1, -1, -1);
+
 -- 2. Users
 CREATE TABLE IF NOT EXISTS users (
-  id            TEXT PRIMARY KEY,
-  tenant_id     TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  open_ids      TEXT DEFAULT '[]',
-  union_id      TEXT,
-  email         TEXT,
-  password_hash TEXT,
-  display_name  TEXT,
-  role          TEXT NOT NULL DEFAULT 'member',
-  status        TEXT NOT NULL DEFAULT 'active',
-  avatar_url    TEXT,
-  last_login_at TEXT,
-  channel_id    TEXT REFERENCES tenant_channels(id) ON DELETE SET NULL,
-  settings      TEXT NOT NULL DEFAULT '{}',
-  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  id                     TEXT PRIMARY KEY,
+  tenant_id              TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  open_ids               TEXT DEFAULT '[]',
+  union_id               TEXT,
+  email                  TEXT,
+  password_hash          TEXT,
+  display_name           TEXT,
+  role                   TEXT NOT NULL DEFAULT 'member',
+  status                 TEXT NOT NULL DEFAULT 'active',
+  avatar_url             TEXT,
+  last_login_at          TEXT,
+  channel_id             TEXT REFERENCES tenant_channels(id) ON DELETE SET NULL,
+  settings               TEXT NOT NULL DEFAULT '{}',
+  force_change_password  INTEGER NOT NULL DEFAULT 0,
+  password_changed_at    TEXT,
+  mfa_secret             TEXT,
+  mfa_enabled            INTEGER NOT NULL DEFAULT 0,
+  mfa_backup_codes       TEXT,
+  created_at             TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_users_tenant ON users (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
@@ -114,6 +135,7 @@ CREATE TABLE IF NOT EXISTS tenant_models (
   extra_headers     TEXT NOT NULL DEFAULT '{}',
   extra_config      TEXT NOT NULL DEFAULT '{}',
   models            TEXT NOT NULL DEFAULT '[]',
+  visibility        TEXT NOT NULL DEFAULT 'private',
   is_active         INTEGER NOT NULL DEFAULT 1,
   created_by        TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -129,6 +151,8 @@ CREATE TABLE IF NOT EXISTS tenant_agents (
   name           TEXT NOT NULL,
   config         TEXT NOT NULL DEFAULT '{}',
   model_config   TEXT NOT NULL DEFAULT '[]',
+  tools          TEXT NOT NULL DEFAULT '{"deny":[]}',
+  skills         TEXT NOT NULL DEFAULT '[]',
   is_active      INTEGER NOT NULL DEFAULT 1,
   created_by     TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
@@ -139,16 +163,54 @@ CREATE INDEX IF NOT EXISTS idx_agents_tenant ON tenant_agents (tenant_id);
 
 -- 8. Refresh Tokens
 CREATE TABLE IF NOT EXISTS refresh_tokens (
-  id          TEXT PRIMARY KEY,
-  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash  TEXT NOT NULL UNIQUE,
-  device_info TEXT,
-  expires_at  TEXT NOT NULL,
-  revoked     INTEGER NOT NULL DEFAULT 0,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash   TEXT NOT NULL UNIQUE,
+  device_info  TEXT,
+  ip_address   TEXT,
+  expires_at   TEXT NOT NULL,
+  revoked      INTEGER NOT NULL DEFAULT 0,
+  last_used_at TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens (user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens (token_hash);
+
+-- 8b. Password Reset Tokens (forgot-password + admin one-time view links)
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  purpose     TEXT NOT NULL DEFAULT 'reset',
+  payload     TEXT,
+  expires_at  TEXT NOT NULL,
+  used_at     TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires ON password_reset_tokens (expires_at);
+
+-- 8c. Password History (Phase 2) — prevents reuse of recent passwords.
+CREATE TABLE IF NOT EXISTS password_history (
+  id            TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  password_hash TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pw_history_user ON password_history (user_id, created_at DESC);
+
+-- 8d. Login Attempts (Phase 2) — persistent audit + hybrid rate limit state.
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id         TEXT PRIMARY KEY,
+  ip         TEXT NOT NULL,
+  email      TEXT,
+  success    INTEGER NOT NULL DEFAULT 0,
+  user_agent TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_time ON login_attempts (ip, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_email_time ON login_attempts (email, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_created_at ON login_attempts (created_at);
 
 -- 9. Audit Logs
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -284,10 +346,10 @@ INSERT OR IGNORE INTO sys_plugins_config (id) VALUES (1);
 CREATE TABLE IF NOT EXISTS sys_tools_config (
   id                             INTEGER PRIMARY KEY CHECK (id = 1),
   allow_dangerous_tools_override INTEGER NOT NULL DEFAULT 0,
-  profile                        TEXT,
+  profile                        TEXT DEFAULT 'full',
   allow                          TEXT NOT NULL DEFAULT '[]',
   also_allow                     TEXT NOT NULL DEFAULT '[]',
-  deny                           TEXT NOT NULL DEFAULT '["browser"]',
+  deny                           TEXT NOT NULL DEFAULT '[]',
   by_provider                    TEXT NOT NULL DEFAULT '{}',
   web                            TEXT NOT NULL DEFAULT '{"search":{"enabled":false}}',
   media                          TEXT NOT NULL DEFAULT '{}',
@@ -341,7 +403,7 @@ CREATE TRIGGER IF NOT EXISTS trg_channel_apps_updated_at AFTER UPDATE ON tenant_
     UPDATE tenant_channel_apps SET updated_at = datetime('now') WHERE id = NEW.id;
   END;
 
--- Seed: Platform admin tenant + user (password: Aa123456!)
+-- Seed: Platform admin tenant + user (password: Aa123456!, stored as bcrypt(sha256(password)))
 INSERT OR IGNORE INTO tenants (id, name, slug, plan, status, quotas)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
@@ -349,7 +411,7 @@ VALUES (
   '_platform',
   'enterprise',
   'active',
-  '{"maxUsers":10,"maxAgents":0,"maxChannels":0,"maxTokensPerMonth":0}'
+  '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1}'
 );
 
 INSERT OR IGNORE INTO users (id, tenant_id, email, password_hash, display_name, role, status)
@@ -357,7 +419,7 @@ VALUES (
   '00000000-0000-0000-0000-000000000002',
   '00000000-0000-0000-0000-000000000001',
   'admin@enclaws.local',
-  '$2b$12$KIBNGrqC9DmrXbPeutbl5.IebhcHmsWEld9jeS3XvSQk07NV3EPB.',
+  '$2b$12$YAVi.E167RF.45y49zl69uRpr8NRQQQQdMEZcP.PEERR922d5tWHC',
   'Platform Admin',
   'platform-admin',
   'active'

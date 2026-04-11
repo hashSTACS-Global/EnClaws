@@ -191,6 +191,33 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
   if (isDbInitialized()) {
     const { loadAndActivateSysConfig } = await import("../../config/sys-config.js");
     await loadAndActivateSysConfig();
+    // Phase 1 emergency rescue: ENCLAWS_ADMIN_RESET=1 → regenerate platform-admin
+    // password and print to stdout once. Skip silently when the flag is unset.
+    try {
+      const { maybeRunAdminResetTrigger } = await import("../../auth/admin-reset-trigger.js");
+      await maybeRunAdminResetTrigger();
+    } catch (err) {
+      console.error(`gateway: admin-reset trigger failed: ${String(err)}`);
+    }
+    // Phase 2: warm the in-memory login rate limiter from persisted
+    // login_attempts so exponential backoff survives gateway restarts,
+    // then start the daily cleanup task (90-day default retention).
+    try {
+      const { warmLoginRateLimiterFromDb } = await import("../../auth/login-rate-limit.js");
+      await warmLoginRateLimiterFromDb();
+      const { startLoginAttemptsCleanup } = await import("../../auth/login-attempts-cleanup.js");
+      startLoginAttemptsCleanup();
+    } catch (err) {
+      console.error(`gateway: login-attempts warmup failed: ${String(err)}`);
+    }
+    // Phase 1 hygiene: warn if SMTP is enabled but the public base URL
+    // isn't set — reset-link emails would otherwise be unclickable.
+    try {
+      const { warnOnMissingPublicBaseUrl } = await import("../../auth/smtp-capability.js");
+      warnOnMissingPublicBaseUrl();
+    } catch {
+      /* non-fatal */
+    }
   }
 
   const cfg = loadConfig();

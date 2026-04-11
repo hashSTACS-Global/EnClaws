@@ -1,0 +1,136 @@
+{
+  "cases": [
+    {
+      "name": "Setup-创建基础文件夹",
+      "message": "帮我在云空间创建一个文件夹叫「指代测试」",
+      "assert": { "containsAny": ["已创建", "创建成功", "文件夹", "完成"], "notContains": "error" },
+      "tags": ["P0", "anaphora", "setup"]
+    },
+    {
+      "name": "Setup-创建基础文档1",
+      "message": "帮我在「指代测试」文件夹下创建一个文档，标题叫《指代-需求文档》，内容写：本文档描述了用户登录、数据导出、权限管理三个需求",
+      "assert": { "containsAny": ["已创建", "创建成功", "完成"], "notContains": "error" },
+      "tags": ["P0", "anaphora", "setup"]
+    },
+    {
+      "name": "Setup-创建基础文档2",
+      "message": "帮我在「指代测试」文件夹下创建一个文档，标题叫《指代-技术方案》，内容写：采用微服务架构，前端React后端Go",
+      "assert": { "containsAny": ["已创建", "创建成功", "完成"], "notContains": "error" },
+      "tags": ["P0", "anaphora", "setup"]
+    },
+    {
+      "name": "指代-那个文档（歧义）",
+      "message": "帮我读取那个文档的内容",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "anaphora", "intent"]
+    },
+    {
+      "name": "指代-刚才的文档",
+      "message": "帮我读取刚才创建的那个文档",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "anaphora", "intent"]
+    },
+    {
+      "name": "指代-最新的文档",
+      "message": "帮我读取最新创建的那个文档",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "anaphora", "intent"]
+    },
+    {
+      "name": "指代-之前的那个",
+      "message": "帮我看看之前创建的那个需求文档",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "anaphora", "intent"]
+    },
+    {
+      "name": "指代-它",
+      "message": "把《指代-需求文档》的标题改一下，让它显得更正式",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "anaphora", "intent"]
+    },
+    {
+      "name": "指代-这个文件夹",
+      "message": "「指代测试」这个文件夹里有几个文档？帮我数一下",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "anaphora", "intent"]
+    },
+    {
+      "name": "指代-上次创建的任务",
+      "message": "帮我看看上次创建的任务完成了没",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "anaphora", "intent"]
+    },
+    {
+      "name": "指代-最近几天的日程",
+      "message": "帮我列一下最近几天的日程",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "anaphora", "intent"]
+    },
+    {
+      "name": "指代-刚才提到的人",
+      "message": "帮我看看许帅的信息，然后约这个人下周一开会",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "anaphora"]
+    },
+    {
+      "name": "指代-上面那个",
+      "message": "帮我看看「指代测试」文件夹，然后在上面那个文件夹下创建一个新文档叫《指代-补充》",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "anaphora"]
+    },
+    {
+      "name": "指代-第一个",
+      "message": "帮我搜索关于「指代」的文档，读取第一个的内容",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "anaphora"]
+    },
+    {
+      "name": "指代-最后一个",
+      "message": "帮我搜索关于「指代」的文档，读取最后一个的内容",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "anaphora"]
+    },
+    {
+      "name": "指代-其中一个",
+      "message": "帮我搜索关于「指代」的文档，挑其中一个读一下",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "anaphora", "intent"]
+    },
+    {
+      "name": "指代-另一个",
+      "message": "帮我读取《指代-需求文档》，然后再读一下另一个技术相关的文档",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P2", "anaphora"]
+    },
+    {
+      "name": "指代-这类文档",
+      "message": "帮我搜一下「指代」这类文档都有哪些",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "anaphora", "intent"]
+    },
+    {
+      "name": "指代-同样的",
+      "message": "帮我用和《指代-需求文档》同样的格式，创建一个新的文档叫《指代-新需求》",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "anaphora"]
+    },
+    {
+      "name": "指代-类似的",
+      "message": "帮我创建一个类似《指代-技术方案》那样的文档，叫《指代-新方案》",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P2", "anaphora"]
+    },
+    {
+      "name": "指代-同名歧义",
+      "message": "帮我再创建一个文档叫《指代-需求文档》",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "anaphora", "error"]
+    },
+    {
+      "name": "指代-解决同名歧义后",
+      "message": "帮我读取《指代-需求文档》的内容，如果有多个同名的，告诉我选哪个",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "anaphora", "intent"]
+    }
+  ]
+}

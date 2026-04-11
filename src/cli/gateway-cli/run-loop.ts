@@ -93,7 +93,8 @@ export async function runGatewayLoop(params: {
 
   const request = (action: GatewayRunSignalAction, signal: string) => {
     if (shuttingDown) {
-      gatewayLog.info(`received ${signal} during shutdown; ignoring`);
+      gatewayLog.info(`received ${signal} during shutdown; forcing exit`);
+      exitProcess(0);
       return;
     }
     shuttingDown = true;

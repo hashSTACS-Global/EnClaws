@@ -18,7 +18,7 @@
  *   const reply = await env.sendAsUser({ agentId: "bot", message: "hello" });
  */
 
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { RpcClient } from "./rpc-client.js";
 import type {
   SimulatorConnectionOptions,
@@ -92,11 +92,12 @@ export class TestEnv {
    */
   async register(opts: RegisterOptions): Promise<RegisterResult> {
     const client = await this.ensureClient();
+    const hashedPassword = createHash("sha256").update(opts.password).digest("hex");
     const res = await client.request<RegisterResult>("auth.register", {
       tenantName: opts.tenantName,
       tenantSlug: opts.tenantSlug,
       email: opts.email,
-      password: opts.password,
+      password: hashedPassword,
       displayName: opts.displayName,
     });
     this.email = opts.email;
@@ -110,9 +111,10 @@ export class TestEnv {
    */
   async login(opts: LoginOptions): Promise<LoginResult> {
     const client = await this.ensureClient();
+    const hashedPassword = createHash("sha256").update(opts.password).digest("hex");
     const res = await client.request<LoginResult>("auth.login", {
       email: opts.email,
-      password: opts.password,
+      password: hashedPassword,
       tenantSlug: opts.tenantSlug,
     });
     this.email = opts.email;

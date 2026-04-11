@@ -142,6 +142,7 @@ import {
   type EventFrame,
   EventFrameSchema,
   errorShape,
+  getPlanUpgradeLink,
   type GatewayFrame,
   GatewayFrameSchema,
   type HelloOk,
@@ -559,6 +560,7 @@ export {
   PROTOCOL_VERSION,
   ErrorCodes,
   errorShape,
+  getPlanUpgradeLink,
 };
 
 export type {

@@ -2,11 +2,13 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { icons } from "../icons.ts";
+import { t, I18nController } from "../../i18n/index.ts";
 import type { ChatProps } from "./chat.ts";
 
 import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
 import "../components/chat-input-area.ts";
 import "../components/resizable-divider.ts";
+import { caretFix } from "../shared-styles.ts";
 
 export type ChatLayoutProps = ChatProps & {
   // Pass through props from the functional renderChat function
@@ -14,9 +16,10 @@ export type ChatLayoutProps = ChatProps & {
 
 @customElement("chat-layout")
 export class ChatLayout extends LitElement {
+  private _i18n = new I18nController(this);
   @property({ type: Object }) props!: ChatLayoutProps;
 
-  static styles = css`
+  static styles = [caretFix, css`
     :host {
       display: flex;
       flex-direction: column;
@@ -158,7 +161,7 @@ export class ChatLayout extends LitElement {
       width: 10px;
       height: 10px;
       border-radius: 50%;
-      background: #3b82f6;
+      background: var(--accent);
       display: block;
     }
 
@@ -172,7 +175,7 @@ export class ChatLayout extends LitElement {
       width: 40px;
       height: 40px;
       border-radius: 50%;
-      border: 3px solid #3b82f6;
+      border: 3px solid var(--accent);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -227,12 +230,12 @@ export class ChatLayout extends LitElement {
 
     .chat-empty-action:hover {
       background: var(--surface-2, #f8fafc);
-      border-color: #3b82f6;
+      border-color: var(--accent);
     }
 
     .chat-empty-action-icon {
       font-size: 13px;
-      color: #3b82f6;
+      color: var(--accent);
       flex-shrink: 0;
     }
 
@@ -248,7 +251,7 @@ export class ChatLayout extends LitElement {
 
     .chat-empty-action:hover .chat-empty-action-arrow {
       transform: translateX(3px);
-      color: #3b82f6;
+      color: var(--accent);
     }
 
     /* ---- Sticky Task Plan Bar ---- */
@@ -301,11 +304,11 @@ export class ChatLayout extends LitElement {
     .chat-plan-sticky__fill {
       height: 100%;
       border-radius: 3px;
-      background: linear-gradient(90deg, #818cf8, #6366f1);
+      background: linear-gradient(90deg, var(--accent-3, #22d3ee), var(--accent));
       transition: width 0.5s ease;
     }
     .chat-plan-sticky__fill--done {
-      background: linear-gradient(90deg, #10b981, #34d399);
+      background: linear-gradient(90deg, var(--ok), var(--ok-muted, #6ee7b7));
     }
 
     /* ---- Phase Indicators ---- */
@@ -327,11 +330,11 @@ export class ChatLayout extends LitElement {
       letter-spacing: 0.02em;
     }
     .chat-plan-phase--active {
-      background: linear-gradient(135deg, #6366f1, #4f46e5);
-      color: #ffffff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-hover, #0e7490));
+      color: var(--accent-foreground, #ffffff);
       font-weight: 600;
       border-color: rgba(255, 255, 255, 0.2);
-      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+      box-shadow: 0 2px 8px var(--accent-glow);
       transform: translateY(-1px);
     }
 
@@ -378,24 +381,24 @@ export class ChatLayout extends LitElement {
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     }
     .plan-sidebar-phase--planning {
-      background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.05));
-      color: #d97706;
-      border: 1px solid rgba(245, 158, 11, 0.3);
+      background: var(--warn-subtle);
+      color: var(--warn);
+      border: 1px solid var(--warn-muted);
     }
     .plan-sidebar-phase--execution {
-      background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(99, 102, 241, 0.05));
-      color: #6366f1;
-      border: 1px solid rgba(99, 102, 241, 0.3);
+      background: var(--accent-light);
+      color: var(--accent);
+      border: 1px solid var(--accent-light-border);
     }
     .plan-sidebar-phase--verification {
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05));
-      color: #059669;
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      background: var(--ok-subtle);
+      color: var(--ok);
+      border: 1px solid var(--ok-muted);
     }
     .plan-sidebar-phase--complete {
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(16, 185, 129, 0.1));
-      color: #047857;
-      border: 1px solid rgba(16, 185, 129, 0.5);
+      background: var(--ok-subtle);
+      color: var(--ok);
+      border: 1px solid var(--ok-muted);
     }
     .plan-sidebar-desc {
       font-size: 13.5px;
@@ -404,7 +407,7 @@ export class ChatLayout extends LitElement {
       padding: 12px 16px;
       background: var(--surface-2, rgba(248, 250, 252, 0.7));
       border-radius: 8px;
-      border-left: 4px solid #6366f1;
+      border-left: 4px solid var(--accent);
       box-shadow: inset 0 0 0 1px rgba(0,0,0,0.02);
     }
     :host-context([data-theme="dark"]) .plan-sidebar-desc {
@@ -485,7 +488,7 @@ export class ChatLayout extends LitElement {
       padding: 6px 8px;
       background: rgba(0, 0, 0, 0.03);
       border-radius: 6px;
-      border-left: 2px solid #10b981;
+      border-left: 2px solid var(--ok);
       font-size: 11px;
       color: var(--muted-color, #64748b);
       overflow-wrap: break-word;
@@ -528,7 +531,7 @@ export class ChatLayout extends LitElement {
       padding: 14px 20px;
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 10px;
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      background: linear-gradient(135deg, var(--ok) 0%, var(--ok-muted) 100%);
       color: #ffffff;
       font-size: 15px;
       font-weight: 700;
@@ -736,7 +739,7 @@ export class ChatLayout extends LitElement {
     .agent-selector-bar select:focus {
       border-color: var(--accent, #3b82f6);
     }
-  `;
+  `];
 
   private _renderAgentSelector() {
     const agents = this.props?.tenantAgents;
@@ -848,7 +851,7 @@ export class ChatLayout extends LitElement {
             <span>${done}/${total} (${pct}%)</span>
           </div>
           <div class="plan-sidebar-bar">
-            <div class="plan-sidebar-fill" style="width: ${pct}%; background: ${done === total && total > 0 ? "linear-gradient(90deg, #10b981, #34d399)" : "linear-gradient(90deg, #6366f1, #818cf8)"};"></div>
+            <div class="plan-sidebar-fill" style="width: ${pct}%; background: ${done === total && total > 0 ? "linear-gradient(90deg, var(--ok), var(--ok-muted, #6ee7b7))" : "linear-gradient(90deg, var(--accent), var(--accent-3, #22d3ee))"};"></div>
           </div>
         </div>
 
@@ -1016,26 +1019,8 @@ export class ChatLayout extends LitElement {
                         </div>
                         <div class="chat-empty-logo-circle">O</div>
                       </div>
-                      <h2 class="chat-empty-title">龙虾帝国控制台已就绪</h2>
-                      <p class="chat-empty-subtitle">我是大龙虾长老，你的首席人工智能架构师。你有什么伟大的蓝图需要我们构建吗？</p>
-                      
-                      <div class="chat-empty-actions">
-                        <button class="chat-empty-action" @click=${() => this.props.onDraftChange?.("请帮我编写一个Python的贪吃蛇游戏。")}>
-                          <span class="chat-empty-action-icon">✦</span>
-                          <span class="chat-empty-action-text">帮我用Python写个贪吃蛇</span>
-                          <span class="chat-empty-action-arrow">→</span>
-                        </button>
-                        <button class="chat-empty-action" @click=${() => this.props.onDraftChange?.("我想构建一个支持多语言的React组件。")}>
-                          <span class="chat-empty-action-icon">✦</span>
-                          <span class="chat-empty-action-text">构建多语言React组件</span>
-                          <span class="chat-empty-action-arrow">→</span>
-                        </button>
-                        <button class="chat-empty-action" @click=${() => this.props.onDraftChange?.("什么是沙盒环境？")}>
-                          <span class="chat-empty-action-icon">✦</span>
-                          <span class="chat-empty-action-text">了解沙盒环境机制</span>
-                          <span class="chat-empty-action-arrow">→</span>
-                        </button>
-                      </div>
+                      <h2 class="chat-empty-title">${t("chat.emptyTitle")}</h2>
+                      <p class="chat-empty-subtitle">${t("chat.emptySubtitle")}</p>
                     </div>
                   `
               }
@@ -1055,7 +1040,6 @@ export class ChatLayout extends LitElement {
                 @abort=${() => this.props.onAbort?.()}
                 @new-session=${() => this.props.onNewSession()}
               ></chat-input-area>
-              <div class="chat-tagline">Works for you, grows with you</div>
             </div>
           </div>
 

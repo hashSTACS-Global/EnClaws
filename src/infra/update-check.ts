@@ -39,9 +39,11 @@ export type NpmTagStatus = {
   error?: string;
 };
 
+export type InstallKind = "git" | "package" | "installer" | "unknown";
+
 export type UpdateCheckResult = {
   root: string | null;
-  installKind: "git" | "package" | "unknown";
+  installKind: InstallKind;
   packageManager: PackageManager;
   git?: GitUpdateStatus;
   deps?: DepsStatus;
@@ -472,7 +474,21 @@ export async function checkUpdateStatus(params: {
   const gitRoot = await detectGitRoot(root);
   const isGit = gitRoot && path.resolve(gitRoot) === root;
 
-  const installKind: UpdateCheckResult["installKind"] = isGit ? "git" : "package";
+  // Detect bundled installer:
+  // - Windows: node\node.exe lives next to the app\ directory
+  // - macOS:   node/bin/node lives inside Contents/Resources/
+  const isInstaller =
+    !isGit &&
+    ((process.platform === "win32" &&
+      (await exists(path.join(root, "..", "node", "node.exe")))) ||
+     (process.platform === "darwin" &&
+      (await exists(path.join(root, "node", "bin", "node")))));
+
+  const installKind: UpdateCheckResult["installKind"] = isGit
+    ? "git"
+    : isInstaller
+      ? "installer"
+      : "package";
   const git = isGit
     ? await checkGitUpdateStatus({
         root,

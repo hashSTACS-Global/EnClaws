@@ -6,7 +6,7 @@
  */
 
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape, getPlanUpgradeLink } from "../protocol/index.js";
 import { isDbInitialized, withTransaction } from "../../db/index.js";
 import { assertPermission, RbacError } from "../../auth/rbac.js";
 import type { TenantContext } from "../../auth/middleware.js";
@@ -17,6 +17,7 @@ import { createTenantModel } from "../../db/models/tenant-model.js";
 import { createTenantAgent } from "../../db/models/tenant-agent.js";
 import { createAuditLog } from "../../db/models/audit-log.js";
 import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
+import { syncIdentityFile, removeIdentityFile } from "./tenant-agents-api.js";
 import type { ModelConfigEntry } from "../../db/types.js";
 
 function getTenantCtx(
@@ -58,19 +59,23 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { channel, model, agent } = params as {
+    const { channel, model, sharedModel, agent } = params as {
       channel?: {
         channelType: string;
         channelName?: string;
         config?: Record<string, unknown>;
       };
-      model: {
+      model?: {
         providerType: string;
         providerName: string;
         apiProtocol: string;
         apiKeyEncrypted: string;
         baseUrl?: string;
         models?: Array<{ id: string; name: string }>;
+      };
+      sharedModel?: {
+        providerId: string;
+        modelId: string;
       };
       agent: {
         agentId: string;
@@ -79,8 +84,8 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
       };
     };
 
-    // Validate required fields
-    if (!model || !model.providerType || !model.apiKeyEncrypted) {
+    // Validate: either model or sharedModel must be provided
+    if (!sharedModel && (!model || !model.providerType || !model.apiKeyEncrypted)) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Model configuration is required"));
       return;
     }
@@ -89,6 +94,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    let identitySynced = false;
     try {
       const result = await withTransaction(async () => {
         let channelResult = null;
@@ -98,7 +104,11 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
         if (channel?.channelType) {
           const channelQuota = await checkTenantQuota(ctx.tenantId, "channels");
           if (!channelQuota.allowed) {
-            throw new Error(`Channel quota reached (${channelQuota.current}/${channelQuota.max})`);
+            const err = new Error(`Channel quota reached (${channelQuota.current}/${channelQuota.max})`);
+            (err as { quotaResource?: string; quotaCurrent?: number; quotaMax?: number }).quotaResource = "channels";
+            (err as { quotaCurrent?: number }).quotaCurrent = channelQuota.current;
+            (err as { quotaMax?: number }).quotaMax = channelQuota.max;
+            throw err;
           }
           const userConfig = (channel.config ?? {}) as Record<string, unknown>;
           const appId = (userConfig.appId as string) ?? "";
@@ -137,27 +147,43 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
           }
         }
 
-        // 2. Create model
-        const modelResult = await createTenantModel({
-          tenantId: ctx.tenantId,
-          providerType: model.providerType,
-          providerName: model.providerName,
-          apiProtocol: model.apiProtocol as any,
-          apiKeyEncrypted: model.apiKeyEncrypted,
-          baseUrl: model.baseUrl,
-          models: model.models ?? [],
-          createdBy: ctx.userId,
-        });
+        // 2. Create model or use shared model
+        let modelProviderId: string;
+        let modelModelId: string;
+        let modelResult: Awaited<ReturnType<typeof createTenantModel>> | null = null;
+
+        if (sharedModel) {
+          // Use existing shared model directly
+          modelProviderId = sharedModel.providerId;
+          modelModelId = sharedModel.modelId;
+        } else {
+          modelResult = await createTenantModel({
+            tenantId: ctx.tenantId,
+            providerType: model!.providerType,
+            providerName: model!.providerName,
+            apiProtocol: model!.apiProtocol as any,
+            apiKeyEncrypted: model!.apiKeyEncrypted,
+            baseUrl: model!.baseUrl,
+            models: model!.models ?? [],
+            createdBy: ctx.userId,
+          });
+          modelProviderId = modelResult.id;
+          modelModelId = (model!.models && model!.models.length > 0) ? model!.models[0].id : "default";
+        }
 
         // 3. Create agent (bind model + channel app)
         const agentQuota = await checkTenantQuota(ctx.tenantId, "agents");
         if (!agentQuota.allowed) {
-          throw new Error(`Agent quota reached (${agentQuota.current}/${agentQuota.max})`);
+          const err = new Error(`Agent quota reached (${agentQuota.current}/${agentQuota.max})`);
+          (err as { quotaResource?: string }).quotaResource = "agents";
+          (err as { quotaCurrent?: number }).quotaCurrent = agentQuota.current;
+          (err as { quotaMax?: number }).quotaMax = agentQuota.max;
+          throw err;
         }
 
         const modelConfig: ModelConfigEntry[] = [{
-          providerId: modelResult.id,
-          modelId: (model.models && model.models.length > 0) ? model.models[0].id : "default",
+          providerId: modelProviderId,
+          modelId: modelModelId,
           isDefault: true,
         }];
 
@@ -170,12 +196,17 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
           createdBy: ctx.userId,
         });
 
+        // Sync systemPrompt to IDENTITY.md on disk (parity with tenant.agents.create).
+        // Tracked so we can roll back the file write if the transaction later fails.
+        await syncIdentityFile(ctx.tenantId, agent.agentId, agent.config);
+        identitySynced = true;
+
         // Bind agent to channel app if both were created
         if (channelAppResult && agentResult) {
           await updateChannelApp(channelAppResult.id, ctx.tenantId, { agentId: agent.agentId });
         }
 
-        return { channel: channelResult, channelApp: channelAppResult, model: modelResult, agent: agentResult };
+        return { channel: channelResult, channelApp: channelAppResult, model: modelResult, modelProviderId, modelModelId, agent: agentResult };
       });
 
       // Audit log
@@ -185,7 +216,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
         action: "tenant.onboarding.setup",
         detail: {
           channel: result.channel?.id ?? null,
-          model: result.model.id,
+          model: result.model?.id ?? result.modelProviderId,
           agent: result.agent.id,
         },
       });
@@ -202,11 +233,35 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
 
       respond(true, {
         channel: result.channel ? { id: result.channel.id, channelType: result.channel.channelType } : null,
-        model: { id: result.model.id, providerName: result.model.providerName },
+        model: result.model
+          ? { id: result.model.id, providerName: result.model.providerName }
+          : { id: result.modelProviderId, shared: true },
         agent: { id: result.agent.id, agentId: result.agent.agentId, name: result.agent.name },
       });
     } catch (err) {
+      // Roll back IDENTITY.md if it was written before the transaction failed.
+      if (identitySynced) {
+        await removeIdentityFile(ctx.tenantId, agent.agentId).catch(() => {});
+      }
       const msg = err instanceof Error ? err.message : "Onboarding setup failed";
+      // Surface quota-exceeded errors with structured details so the UI can
+      // render a localized "upgrade plan" message instead of a raw 500.
+      const quotaResource = (err as { quotaResource?: string })?.quotaResource;
+      if (quotaResource) {
+        respond(false, undefined, errorShape(
+          ErrorCodes.QUOTA_EXCEEDED,
+          msg,
+          {
+            details: {
+              resource: quotaResource,
+              current: (err as { quotaCurrent?: number }).quotaCurrent ?? 0,
+              max: (err as { quotaMax?: number }).quotaMax ?? 0,
+              contactLink: getPlanUpgradeLink(),
+            },
+          },
+        ));
+        return;
+      }
       respond(false, undefined, errorShape(ErrorCodes.INTERNAL_ERROR, msg));
     }
   },

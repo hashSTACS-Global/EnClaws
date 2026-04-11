@@ -7,7 +7,7 @@ import { log } from "./logger.js";
 
 const OPENROUTER_APP_HEADERS: Record<string, string> = {
   "HTTP-Referer": "https://enclaws.ai",
-  "X-Title": "OpenClaw",
+  "X-Title": "EnClaws",
 };
 const ANTHROPIC_CONTEXT_1M_BETA = "context-1m-2025-08-07";
 const ANTHROPIC_1M_MODEL_PREFIXES = ["claude-opus-4", "claude-sonnet-4"] as const;

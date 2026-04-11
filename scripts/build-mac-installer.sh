@@ -50,7 +50,11 @@ if [[ "$SKIP_BUILD" != "1" ]]; then
   (cd "$ROOT_DIR" && pnpm build)
 
   echo "[*] Building UI..."
-  (cd "$ROOT_DIR" && node scripts/ui.js build) || echo "[!] UI build failed; continuing (Web UI may be incomplete)"
+  (cd "$ROOT_DIR" && node scripts/ui.js build)
+  if [ ! -f "$ROOT_DIR/dist/control-ui/index.html" ]; then
+    echo "ERROR: Control UI build failed — dist/control-ui/index.html not found" >&2
+    exit 1
+  fi
 
   echo "[OK] Build complete"
 else
@@ -134,22 +138,13 @@ DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
 NODE="$DIR/node/bin/node"
 ENTRY="$DIR/enclaws.mjs"
 PORT="${ENCLAWS_GATEWAY_PORT:-18888}"
-PID_FILE="$HOME/.enclaws/gateway.pid"
-
+PLIST_LABEL="ai.enclaws.gateway"
+PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_LABEL}.plist"
 LOADING="$DIR/loading.html"
+LOG_FILE="$HOME/.enclaws/gateway.log"
 
-# If gateway is already running, just open dashboard and exit
-if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-  open "http://localhost:$PORT"
-  exit 0
-fi
-if curl -s -o /dev/null "http://localhost:$PORT" 2>/dev/null; then
-  open "http://localhost:$PORT"
-  exit 0
-fi
-
-# Show loading page immediately (gateway not ready yet)
-open "file://${LOADING}?port=${PORT}"
+mkdir -p "$HOME/.enclaws"
+mkdir -p "$HOME/Library/LaunchAgents"
 
 # Create symlink to /usr/local/bin so "enclaws" works in terminal
 CLI="$DIR/enclaws"
@@ -157,7 +152,6 @@ if [ ! -L /usr/local/bin/enclaws ] || [ "$(readlink /usr/local/bin/enclaws)" != 
   if ln -sf "$CLI" /usr/local/bin/enclaws 2>/dev/null; then
     true
   else
-    # No permission — ask user to authorize via macOS password dialog
     ESCAPED_CLI=$(printf '%s' "$CLI" | sed "s/'/'\\\\''/g")
     osascript -e "do shell script \"mkdir -p /usr/local/bin && ln -sf '${ESCAPED_CLI}' /usr/local/bin/enclaws\" with administrator privileges" 2>/dev/null || true
   fi
@@ -168,12 +162,71 @@ if [ ! -f "$HOME/.enclaws/.env" ]; then
   "$NODE" "$DIR/scripts/postinstall.js" 2>/dev/null || true
 fi
 
-# Start gateway as detached background process
-# Launcher exits immediately so clicking the icon again works
-mkdir -p "$HOME/.enclaws"
-nohup "$NODE" "$ENTRY" gateway --port "$PORT" --no-open </dev/null >"$HOME/.enclaws/gateway.log" 2>&1 &
-GATEWAY_PID=$!
-echo "$GATEWAY_PID" > "$PID_FILE"
+# Write launchd plist — launchd will manage the gateway process:
+#   - RunAtLoad:    start on login
+#   - KeepAlive:    restart if it crashes
+#   - WatchPaths:   restart when .app is replaced (package.json changes)
+cat > "$PLIST_PATH" << PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${PLIST_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${NODE}</string>
+        <string>${ENTRY}</string>
+        <string>gateway</string>
+        <string>--port</string>
+        <string>${PORT}</string>
+        <string>--no-open</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>${HOME}</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>${LOG_FILE}</string>
+    <key>StandardErrorPath</key>
+    <string>${LOG_FILE}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>PathState</key>
+        <dict>
+            <key>${ENTRY}</key>
+            <true/>
+        </dict>
+    </dict>
+    <key>WatchPaths</key>
+    <array>
+        <string>${DIR}/package.json</string>
+    </array>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+</dict>
+</plist>
+PLIST
+
+# Reload the service: unload old, load new
+# This also handles upgrade: old gateway gets killed, new one starts
+launchctl unload "$PLIST_PATH" 2>/dev/null
+launchctl load "$PLIST_PATH"
+
+# If gateway is already up, just open dashboard
+if curl -s -o /dev/null "http://localhost:$PORT" 2>/dev/null; then
+  open "http://localhost:$PORT"
+  exit 0
+fi
+
+# Otherwise show loading page (gateway is starting via launchd)
+open "file://${LOADING}?port=${PORT}"
 LAUNCHER
 
 chmod +x "$APP_MACOS/enclaws-launcher"
@@ -318,6 +371,10 @@ if [ -d "$ROOT_DIR/scripts" ]; then
   echo "    Copied scripts/"
 fi
 
+# .env template (needed by postinstall.js to create ~/.enclaws/.env)
+cp "$ROOT_DIR/.env.example" "$APP_RESOURCES/.env.example"
+echo "    Copied .env.example"
+
 # Workspace templates
 TEMPLATES_SRC="$ROOT_DIR/docs/reference/templates"
 if [ -d "$TEMPLATES_SRC" ]; then
@@ -413,6 +470,9 @@ echo "[OK] Bundle cleaned (${BUNDLE_SIZE} MB)"
 
 echo "[*] Signing app bundle (ad-hoc)..."
 codesign --force --deep --sign - "$APP_ROOT" 2>/dev/null || echo "[!] Signing skipped"
+# Wait for codesign to fully release file handles before creating DMG
+sync
+sleep 2
 
 # ---------------------------------------------------------------------------
 # Step 10: Create DMG
@@ -422,21 +482,20 @@ if [[ "${SKIP_DMG:-0}" != "1" ]]; then
   DMG_PATH="$OUTPUT_DIR/EnClaws-${PKG_VERSION}-${BUILD_ARCH}.dmg"
   echo "[*] Creating DMG: $DMG_PATH"
 
+  # Detach any leftover mounts from previous runs
+  hdiutil detach "/Volumes/EnClaws" 2>/dev/null || true
+  # Remove stale DMG files that may hold locks
+  rm -f "$OUTPUT_DIR"/EnClaws-*-*.dmg
+
+  # Use a temp directory outside of dist/ to avoid any file contention
   DMG_TEMP="$(mktemp -d /tmp/enclaws-dmg.XXXXXX)"
-  cp -R "$APP_ROOT" "$DMG_TEMP/"
+  # Use ditto instead of cp -R (preserves extended attrs, more reliable on macOS)
+  ditto "$APP_ROOT" "$DMG_TEMP/EnClaws.app"
   ln -s /Applications "$DMG_TEMP/Applications"
 
-  # Create read-write DMG first
-  DMG_RW="${DMG_PATH%.dmg}-rw.dmg"
-  rm -f "$DMG_RW" "$DMG_PATH"
-  APP_SIZE_MB=$(du -sm "$APP_ROOT" | awk '{print $1}')
-  DMG_SIZE_MB=$((APP_SIZE_MB + 80))
+  # Create lzma-compressed read-only DMG directly (ULMO = smaller than UDZO/zlib)
+  hdiutil create -volname "EnClaws" -srcfolder "$DMG_TEMP" -ov -format ULMO "$DMG_PATH"
 
-  hdiutil create -volname "EnClaws" -srcfolder "$DMG_TEMP" -ov -format UDRW -size "${DMG_SIZE_MB}m" "$DMG_RW"
-
-  # Convert to compressed read-only DMG
-  hdiutil convert "$DMG_RW" -format ULMO -o "$DMG_PATH" -ov
-  rm -f "$DMG_RW"
   rm -rf "$DMG_TEMP"
 
   DMG_SIZE=$(du -sm "$DMG_PATH" | awk '{print $1}')

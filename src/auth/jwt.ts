@@ -71,8 +71,16 @@ function parseExpiresIn(expr: string): number {
 
 /**
  * Generate an access + refresh token pair.
+ *
+ * @param deviceInfo  Phase 3: serializable summary of the device issuing
+ *                    this session (user-agent label, IP).  Stored on the
+ *                    refresh_tokens row so the sessions UI can list active
+ *                    devices and let users revoke them individually.
  */
-export async function generateTokenPair(payload: JwtPayload): Promise<JwtTokenPair> {
+export async function generateTokenPair(
+  payload: JwtPayload,
+  deviceInfo?: { ip?: string | null; userAgent?: string | null; label?: string | null },
+): Promise<JwtTokenPair> {
   const secret = getSecret();
   const accessExpiresExpr = getAccessExpires();
   const refreshExpiresExpr = getRefreshExpires();
@@ -93,10 +101,22 @@ export async function generateTokenPair(payload: JwtPayload): Promise<JwtTokenPa
   const refreshExpiresInSeconds = parseExpiresIn(refreshExpiresExpr);
   const expiresAt = new Date(Date.now() + refreshExpiresInSeconds * 1000);
 
+  // Serialize device_info as JSON so the UA string, label, and any
+  // future fields can live in one column without another schema change.
+  const deviceInfoJson = deviceInfo
+    ? JSON.stringify({
+        ip: deviceInfo.ip ?? null,
+        ua: deviceInfo.userAgent ?? null,
+        label: deviceInfo.label ?? null,
+      })
+    : null;
+
+  const isSqlite = getDbType() === DB_SQLITE;
+  const nowExpr = isSqlite ? "datetime('now')" : "NOW()";
   await query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-     VALUES ($1, $2, $3)`,
-    [payload.sub, refreshTokenHash, expiresAt],
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, device_info, ip_address, last_used_at)
+     VALUES ($1, $2, $3, $4, $5, ${nowExpr})`,
+    [payload.sub, refreshTokenHash, expiresAt, deviceInfoJson, deviceInfo?.ip ?? null],
   );
 
   return {

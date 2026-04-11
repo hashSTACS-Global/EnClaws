@@ -10,6 +10,7 @@ import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../i18n/index.ts";
 import { tenantRpc } from "./tenant/rpc.ts";
 import * as echarts from "echarts";
+import { caretFix } from "../shared-styles.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -48,11 +49,11 @@ interface ChannelItem { type: string; count: number }
 export class PlatformOverviewView extends LitElement {
   private i18nCtrl = new I18nController(this);
 
-  static styles = css`
+  static styles = [caretFix, css`
     :host {
       display: block;
       padding: 1.5rem;
-      color: var(--text, #e5e5e5);
+      color: var(--text);
       font-family: var(--font-sans, system-ui, sans-serif);
     }
 
@@ -71,17 +72,13 @@ export class PlatformOverviewView extends LitElement {
     .btn {
       padding: 0.45rem 0.9rem;
       border: none;
-      border-radius: var(--radius-md, 6px);
+      border-radius: var(--radius-md);
       font-size: 0.85rem;
       cursor: pointer;
       transition: opacity 0.15s;
     }
     .btn:hover { opacity: 0.85; }
-    .btn-outline {
-      background: transparent;
-      border: 1px solid var(--border, #262626);
-      color: var(--text, #e5e5e5);
-    }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
 
     /* ── Summary cards row ── */
     .summary-row {
@@ -91,14 +88,14 @@ export class PlatformOverviewView extends LitElement {
       margin-bottom: 1.5rem;
     }
     .summary-card {
-      background: var(--card, #141414);
-      border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
       padding: 1.25rem;
     }
     .summary-label {
       font-size: 0.8rem;
-      color: var(--text-secondary, #a3a3a3);
+      color: var(--text-2);
       margin-bottom: 0.35rem;
     }
     .summary-value {
@@ -107,7 +104,7 @@ export class PlatformOverviewView extends LitElement {
     }
     .summary-sub {
       font-size: 0.75rem;
-      color: var(--text-muted, #525252);
+      color: var(--muted);
       margin-top: 0.25rem;
     }
     .status-dot {
@@ -118,15 +115,15 @@ export class PlatformOverviewView extends LitElement {
       margin-right: 6px;
       vertical-align: middle;
     }
-    .status-dot.ok { background: #22c55e; }
-    .status-dot.warn { background: #eab308; }
-    .status-dot.error { background: #ef4444; }
+    .status-dot.ok { background: var(--ok); }
+    .status-dot.warn { background: var(--warn); }
+    .status-dot.error { background: var(--danger); }
 
     /* ── Section card ── */
     .section {
-      background: var(--card, #141414);
-      border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
       padding: 1.25rem;
       margin-bottom: 1rem;
     }
@@ -137,7 +134,7 @@ export class PlatformOverviewView extends LitElement {
     }
     .section-subtitle {
       font-size: 0.75rem;
-      color: var(--text-muted, #525252);
+      color: var(--muted);
       margin-left: 0.5rem;
       font-weight: 400;
     }
@@ -164,20 +161,16 @@ export class PlatformOverviewView extends LitElement {
     }
     .period-tab {
       padding: 0.3rem 0.7rem;
-      border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-md, 6px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
       background: transparent;
-      color: var(--text-secondary, #a3a3a3);
+      color: var(--text-2);
       font-size: 0.8rem;
       cursor: pointer;
       transition: all 0.15s;
     }
-    .period-tab:hover { border-color: var(--accent, #3b82f6); color: var(--text, #e5e5e5); }
-    .period-tab.active {
-      background: var(--accent, #3b82f6);
-      border-color: var(--accent, #3b82f6);
-      color: white;
-    }
+    .period-tab:hover { border-color: var(--accent); color: var(--text); }
+    .period-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-foreground); }
 
     /* ── ECharts chart ── */
     .chart-container {
@@ -188,21 +181,20 @@ export class PlatformOverviewView extends LitElement {
 
     /* ── Rank block (inside section card) ── */
     .rank-block {
-      background: var(--bg, #0a0a0a);
-      border-radius: var(--radius-md, 6px);
+      background: var(--surface-2);
+      border-radius: var(--radius-md);
       padding: 1rem;
     }
     .rank-block-title {
       font-size: 0.85rem;
       font-weight: 600;
       margin: 0 0 0.5rem;
-      color: var(--text, #e5e5e5);
     }
 
     .rank-empty {
       text-align: center;
       padding: 2rem 0;
-      color: var(--text-muted, #525252);
+      color: var(--muted);
       font-size: 0.85rem;
     }
 
@@ -216,7 +208,7 @@ export class PlatformOverviewView extends LitElement {
       display: flex;
       align-items: center;
       padding: 0.55rem 0;
-      border-bottom: 1px solid var(--border, #262626);
+      border-bottom: 1px solid var(--border);
       font-size: 0.85rem;
     }
     .rank-item:last-child { border-bottom: none; }
@@ -232,11 +224,11 @@ export class PlatformOverviewView extends LitElement {
       flex-shrink: 0;
     }
     .rank-index img { width: 22px; height: 22px; }
-    .rank-index.other { border-radius: 50%; background: var(--border, #262626); color: var(--text-muted, #525252); }
+    .rank-index.other { border-radius: 50%; background: var(--border); color: var(--muted); }
     .rank-name { flex: 1; }
     .rank-sub {
       font-size: 0.75rem;
-      color: var(--text-muted, #525252);
+      color: var(--muted);
       margin-left: 0.25rem;
     }
     .rank-value {
@@ -247,7 +239,7 @@ export class PlatformOverviewView extends LitElement {
       display: block;
       width: 80px;
       height: 4px;
-      background: rgba(255,255,255,0.06);
+      background: var(--border);
       border-radius: 2px;
       margin-left: 0.75rem;
       overflow: hidden;
@@ -257,7 +249,7 @@ export class PlatformOverviewView extends LitElement {
       display: block;
       height: 100%;
       border-radius: 2px;
-      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
       transition: width 0.4s ease;
     }
 
@@ -270,8 +262,8 @@ export class PlatformOverviewView extends LitElement {
     .llm-stat-card {
       text-align: center;
       padding: 1rem;
-      background: var(--bg, #0a0a0a);
-      border-radius: var(--radius-md, 6px);
+      background: var(--surface-2);
+      border-radius: var(--radius-md);
     }
     .llm-stat-value {
       font-size: 1.35rem;
@@ -279,10 +271,10 @@ export class PlatformOverviewView extends LitElement {
     }
     .llm-stat-label {
       font-size: 0.75rem;
-      color: var(--text-secondary, #a3a3a3);
+      color: var(--text-2);
       margin-top: 0.25rem;
     }
-    .llm-stat-value.error-color { color: #ef4444; }
+    .llm-stat-value.error-color { color: var(--danger); }
 
     /* ── LLM layout: left stats + right pie ── */
     .llm-layout {
@@ -305,9 +297,9 @@ export class PlatformOverviewView extends LitElement {
       font-weight: 500;
       margin-left: 0.4rem;
     }
-    .plan-badge.free { background: #525252; color: #a3a3a3; }
-    .plan-badge.pro { background: #2563eb33; color: #60a5fa; }
-    .plan-badge.enterprise { background: #7c3aed33; color: #a78bfa; }
+    .plan-badge.free { background: var(--border); color: var(--muted); }
+    .plan-badge.pro { background: var(--accent-light); color: var(--accent); }
+    .plan-badge.enterprise { background: var(--accent-light); color: var(--accent-2); }
 
     /* ── User activity ── */
     .user-stats-row {
@@ -319,8 +311,8 @@ export class PlatformOverviewView extends LitElement {
     .user-stat {
       text-align: center;
       padding: 0.75rem;
-      background: var(--bg, #0a0a0a);
-      border-radius: var(--radius-md, 6px);
+      background: var(--surface-2);
+      border-radius: var(--radius-md);
     }
     .user-stat-value {
       font-size: 1.2rem;
@@ -328,10 +320,10 @@ export class PlatformOverviewView extends LitElement {
     }
     .user-stat-label {
       font-size: 0.72rem;
-      color: var(--text-secondary, #a3a3a3);
+      color: var(--text-2);
       margin-top: 0.2rem;
     }
-  `;
+  `];
 
   @property({ type: String }) gatewayUrl = "";
   @state() private period: "7d" | "30d" = "7d";
@@ -466,10 +458,15 @@ export class PlatformOverviewView extends LitElement {
     this.updateLlmPieChart();
   }
 
+  /** Read a CSS custom property from the component's computed style. */
+  private cssVar(v: string): string {
+    return getComputedStyle(this).getPropertyValue(v).trim();
+  }
+
   private initTrendChart() {
     const el = this.shadowRoot?.querySelector(".chart-container") as HTMLElement | null;
     if (!el) return;
-    this.trendChart = echarts.init(el, "dark");
+    this.trendChart = echarts.init(el);
     this.updateTrendChart();
     // Auto resize
     this.resizeObserver = new ResizeObserver(() => this.trendChart?.resize());
@@ -485,9 +482,9 @@ export class PlatformOverviewView extends LitElement {
       tooltip: {
         trigger: "axis",
         axisPointer: { type: "none" },
-        backgroundColor: "#141414",
-        borderColor: "#262626",
-        textStyle: { color: "#e5e5e5", fontSize: 12 },
+        backgroundColor: this.cssVar("--card"),
+        borderColor: this.cssVar("--border"),
+        textStyle: { color: this.cssVar("--text"), fontSize: 12 },
         formatter: (params: unknown) => {
           const p = params as Array<{ seriesName: string; value: number; color: string; dataIndex: number }>;
           const date = data[p[0]?.dataIndex ?? 0]?.date ?? "";
@@ -501,7 +498,7 @@ export class PlatformOverviewView extends LitElement {
             </div>`;
           }
           rows += `<div style="display:flex;align-items:center;gap:6px;margin-top:2px">
-              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e5e5e5"></span>
+              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${this.cssVar("--muted")}"></span>
               ${t("platformOverview.total")}: ${total >= 1000 ? (total / 1000).toFixed(1) + "K" : total}
             </div>`;
           return rows;
@@ -510,7 +507,7 @@ export class PlatformOverviewView extends LitElement {
       legend: {
         data: [t("platformOverview.inputToken"), t("platformOverview.outputToken")],
         top: 0,
-        textStyle: { color: "#a3a3a3", fontSize: 12 },
+        textStyle: { color: this.cssVar("--text-2"), fontSize: 12 },
         icon: "circle",
         itemWidth: 10,
         itemHeight: 10,
@@ -527,8 +524,8 @@ export class PlatformOverviewView extends LitElement {
         type: "category",
         data: data.map(d => d.date),
         boundaryGap: false,
-        axisLine: { lineStyle: { color: "#262626" } },
-        axisLabel: { color: "#a3a3a3", fontSize: 12 },
+        axisLine: { lineStyle: { color: this.cssVar("--border") } },
+        axisLabel: { color: this.cssVar("--text-2"), fontSize: 12 },
         axisTick: { show: false },
       },
       yAxis: {
@@ -536,7 +533,7 @@ export class PlatformOverviewView extends LitElement {
         splitLine: { show: false },
         axisLine: { show: false },
         axisLabel: {
-          color: "#a3a3a3",
+          color: this.cssVar("--text-2"),
           fontSize: 12,
           formatter: (v: number) => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v),
         },
@@ -549,11 +546,11 @@ export class PlatformOverviewView extends LitElement {
           smooth: true,
           symbol: "circle",
           symbolSize: 6,
-          itemStyle: { color: "#3b82f6" },
+          itemStyle: { color: this.cssVar("--accent") },
           lineStyle: { width: 2 },
           areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(59,130,246,0.25)" },
-            { offset: 1, color: "rgba(59,130,246,0.02)" },
+            { offset: 0, color: this.cssVar("--accent-light") },
+            { offset: 1, color: "transparent" },
           ])},
         },
         {
@@ -563,11 +560,11 @@ export class PlatformOverviewView extends LitElement {
           smooth: true,
           symbol: "circle",
           symbolSize: 6,
-          itemStyle: { color: "#22c55e" },
+          itemStyle: { color: this.cssVar("--ok") },
           lineStyle: { width: 2 },
           areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(34,197,94,0.25)" },
-            { offset: 1, color: "rgba(34,197,94,0.02)" },
+            { offset: 0, color: this.cssVar("--ok-subtle") },
+            { offset: 1, color: "transparent" },
           ])},
         },
       ],
@@ -576,7 +573,7 @@ export class PlatformOverviewView extends LitElement {
 
   private renderTrendChart() {
     if (this.trend.length === 0) {
-      return html`<div class="chart-container" style="display:grid;place-items:center;color:var(--text-muted,#525252);font-size:0.8rem">${t("platformOverview.noData")}</div>`;
+      return html`<div class="chart-container" style="display:grid;place-items:center;color:var(--muted);font-size:0.8rem">${t("platformOverview.noData")}</div>`;
     }
     return html`<div class="chart-container"></div>`;
   }
@@ -584,7 +581,7 @@ export class PlatformOverviewView extends LitElement {
   private initLlmPieChart() {
     const el = this.shadowRoot?.querySelector(".llm-pie-container") as HTMLElement | null;
     if (!el) return;
-    this.llmPieChart = echarts.init(el, "dark");
+    this.llmPieChart = echarts.init(el);
     this.updateLlmPieChart();
     this.resizeObserver?.observe(el);
   }
@@ -598,9 +595,9 @@ export class PlatformOverviewView extends LitElement {
       backgroundColor: "transparent",
       tooltip: {
         trigger: "item",
-        backgroundColor: "#141414",
-        borderColor: "#262626",
-        textStyle: { color: "#e5e5e5", fontSize: 12 },
+        backgroundColor: this.cssVar("--card"),
+        borderColor: this.cssVar("--border"),
+        textStyle: { color: this.cssVar("--text"), fontSize: 12 },
         formatter: (params: unknown) => {
           const p = params as { name: string; value: number; percent: number };
           return `${p.name}<br/>${t("platformOverview.callCount")}: ${p.value}<br/>${t("platformOverview.proportion")}: ${p.percent}%`;
@@ -610,7 +607,7 @@ export class PlatformOverviewView extends LitElement {
         orient: "vertical",
         right: 10,
         top: "center",
-        textStyle: { color: "#a3a3a3", fontSize: 12 },
+        textStyle: { color: this.cssVar("--text-2"), fontSize: 12 },
         icon: "circle",
         itemWidth: 10,
         itemHeight: 10,
@@ -638,15 +635,15 @@ export class PlatformOverviewView extends LitElement {
   private initChannelPieChart() {
     const el = this.shadowRoot?.querySelector(".channel-pie-container") as HTMLElement | null;
     if (!el) return;
-    this.channelPieChart = echarts.init(el, "dark");
+    this.channelPieChart = echarts.init(el);
     const pieColors = ["#60a5fa", "#4ade80", "#facc15", "#a78bfa", "#fb923c"];
     this.channelPieChart.setOption({
       backgroundColor: "transparent",
       tooltip: {
         trigger: "item",
-        backgroundColor: "#141414",
-        borderColor: "#262626",
-        textStyle: { color: "#e5e5e5", fontSize: 12 },
+        backgroundColor: this.cssVar("--card"),
+        borderColor: this.cssVar("--border"),
+        textStyle: { color: this.cssVar("--text"), fontSize: 12 },
         formatter: (params: unknown) => {
           const p = params as { name: string; value: number; percent: number };
           return `${p.name}<br/>${t("platformOverview.count")}: ${p.value}<br/>${t("platformOverview.proportion")}: ${p.percent}%`;
@@ -656,7 +653,7 @@ export class PlatformOverviewView extends LitElement {
         orient: "vertical",
         right: 10,
         top: "center",
-        textStyle: { color: "#a3a3a3", fontSize: 12 },
+        textStyle: { color: this.cssVar("--text-2"), fontSize: 12 },
         icon: "circle",
         itemWidth: 10,
         itemHeight: 10,
@@ -710,7 +707,7 @@ export class PlatformOverviewView extends LitElement {
   }
 
   render() {
-    if (this.loading) return html`<div style="text-align:center;padding:3rem;color:var(--text-muted,#525252)">${t("platformOverview.refresh")}...</div>`;
+    if (this.loading) return html`<div style="text-align:center;padding:3rem;color:var(--muted)">${t("platformOverview.refresh")}...</div>`;
     const s = this.summary;
     const ua = this.userActivity;
     return html`
@@ -725,7 +722,7 @@ export class PlatformOverviewView extends LitElement {
         const last = s?.monthTokens?.lastMonth ?? 0;
         const diff = last > 0 ? (cur - last) / last * 100 : 0;
         const diffText = last > 0 ? `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%` : "-";
-        const diffColor = diff < 0 ? "#ef4444" : "#22c55e";
+        const diffColor = diff < 0 ? "var(--danger)" : "var(--ok)";
         return html`
       <div class="summary-row">
         <div class="summary-card">
@@ -857,7 +854,7 @@ export class PlatformOverviewView extends LitElement {
           <div>
             ${(llm?.modelDistribution?.length ?? 0) > 0
               ? html`<div class="llm-pie-container"></div>`
-              : html`<div class="llm-pie-container" style="display:grid;place-items:center;color:var(--text-muted,#525252);font-size:0.8rem">${t("platformOverview.noData")}</div>`}
+              : html`<div class="llm-pie-container" style="display:grid;place-items:center;color:var(--muted);font-size:0.8rem">${t("platformOverview.noData")}</div>`}
           </div>
         </div>
       </div>
@@ -869,7 +866,7 @@ export class PlatformOverviewView extends LitElement {
           <h3 class="section-title">${t("platformOverview.channelDistribution")}</h3>
           ${this.channels.length > 0
             ? html`<div class="channel-pie-container"></div>`
-            : html`<div class="channel-pie-container" style="display:grid;place-items:center;color:var(--text-muted,#525252);font-size:0.8rem">${t("platformOverview.noData")}</div>`}
+            : html`<div class="channel-pie-container" style="display:grid;place-items:center;color:var(--muted);font-size:0.8rem">${t("platformOverview.noData")}</div>`}
         </div>
         <div class="section">
           <h3 class="section-title">${t("platformOverview.userActivity")}</h3>
@@ -879,15 +876,15 @@ export class PlatformOverviewView extends LitElement {
               <div class="user-stat-label">${t("platformOverview.totalUsers")}</div>
             </div>
             <div class="user-stat">
-              <div class="user-stat-value" style="color:#22c55e">${ua?.active30d ?? "-"}</div>
+              <div class="user-stat-value" style="color:var(--ok)">${ua?.active30d ?? "-"}</div>
               <div class="user-stat-label">${t("platformOverview.active30d")}</div>
             </div>
             <div class="user-stat">
-              <div class="user-stat-value" style="color:#3b82f6">${ua?.newToday ?? "-"}</div>
+              <div class="user-stat-value" style="color:var(--accent)">${ua?.newToday ?? "-"}</div>
               <div class="user-stat-label">${t("platformOverview.newToday")}</div>
             </div>
             <div class="user-stat">
-              <div class="user-stat-value" style="color:#3b82f6">${ua?.newThisWeek ?? "-"}</div>
+              <div class="user-stat-value" style="color:var(--accent)">${ua?.newThisWeek ?? "-"}</div>
               <div class="user-stat-label">${t("platformOverview.newThisWeek")}</div>
             </div>
           </div>

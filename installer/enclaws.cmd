@@ -1,2 +1,2 @@
 @echo off
-"%~dp0node\node.exe" "%~dp0app\enclaws.mjs" %*
+"%~dp0node\enclaws.exe" "%~dp0app\enclaws.mjs" %*

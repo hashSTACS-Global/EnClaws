@@ -6,7 +6,8 @@ import { info } from "../globals.js";
 import { formatTimeAgo } from "../infra/format-time/format-relative.ts";
 import type { HeartbeatEventPayload } from "../infra/heartbeat-events.js";
 import { formatUsageReportLines, loadProviderUsageSummary } from "../infra/provider-usage.js";
-import { normalizeUpdateChannel, resolveUpdateChannelDisplay } from "../infra/update-channels.js";
+import { resolveUpdateTrackDisplay } from "../infra/update-channels.js";
+import { getStoredUpdateTrack } from "../infra/update-settings.js";
 import { formatGitInstallLabel } from "../infra/update-check.js";
 import {
   resolveMemoryCacheSummary,
@@ -162,9 +163,9 @@ export async function statusCommand(
         }).catch(() => null)
       : null;
 
-  const configChannel = normalizeUpdateChannel(cfg.update?.channel);
-  const channelInfo = resolveUpdateChannelDisplay({
-    configChannel,
+  const storedTrack = await getStoredUpdateTrack();
+  const channelInfo = resolveUpdateTrackDisplay({
+    storedTrack,
     installKind: update.installKind,
     gitTag: update.git?.tag ?? null,
     gitBranch: update.git?.branch ?? null,
@@ -181,8 +182,8 @@ export async function statusCommand(
           ...summary,
           os: osSummary,
           update,
-          updateChannel: channelInfo.channel,
-          updateChannelSource: channelInfo.source,
+          updateTrack: channelInfo.track,
+          updateTrackSource: channelInfo.source,
           memory,
           memoryPlugin,
           gateway: {

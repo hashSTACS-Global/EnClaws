@@ -1,9 +1,9 @@
 /**
- * Build OpenClawConfig from DB sys_config tables and inject into runtime.
+ * Build EnClawsConfig from DB sys_config tables and inject into runtime.
  */
 
 import { loadAllSysConfig } from "../db/models/sys-config.js";
-import { setRuntimeConfigSnapshot } from "./io.js";
+import { getRuntimeConfigSnapshot, setRuntimeConfigSnapshot } from "./io.js";
 import type { OpenClawConfig } from "./types.openclaw.js";
 import type { GatewayConfig } from "./types.gateway.js";
 import type { LoggingConfig } from "./types.base.js";
@@ -17,7 +17,7 @@ import type {
 } from "../db/types.js";
 
 /**
- * Build an OpenClawConfig from the 3 sys_config DB tables.
+ * Build an EnClawsConfig from the 3 sys_config DB tables.
  * Gateway auth is forced to `{ mode: "none" }` — JWT handles auth now.
  */
 export async function buildSysConfig(): Promise<OpenClawConfig> {
@@ -176,10 +176,16 @@ function buildToolsConfig(row: SysToolsConfigRow): ToolsConfig {
 }
 
 /**
- * Load sys config from DB, build OpenClawConfig, and inject it as the runtime snapshot.
- * After this call, all `loadConfig()` consumers see the DB-backed config.
+ * Load sys config from DB, build EnClawsConfig, and merge it into the runtime snapshot.
+ * Only updates gateway/logging/plugins/tools fields — preserves existing channels, agents,
+ * bindings, and other runtime state that was populated by loadDbChannels.
  */
 export async function loadAndActivateSysConfig(): Promise<void> {
-  const config = await buildSysConfig();
-  setRuntimeConfigSnapshot(config);
+  const sysConfig = await buildSysConfig();
+  const existing = getRuntimeConfigSnapshot();
+  const merged: OpenClawConfig = {
+    ...existing,
+    ...sysConfig,
+  };
+  setRuntimeConfigSnapshot(merged);
 }

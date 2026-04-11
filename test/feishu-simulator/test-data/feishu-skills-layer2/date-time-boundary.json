@@ -1,0 +1,160 @@
+{
+  "cases": [
+    {
+      "name": "时间-今天",
+      "message": "帮我看看今天有哪些会议",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P0", "datetime"]
+    },
+    {
+      "name": "时间-明天下午三点半",
+      "message": "帮我约个明天下午三点半到四点半的会议，主题是「时间解析测试」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "会议", "完成"], "notContains": "error" },
+      "tags": ["P0", "datetime"]
+    },
+    {
+      "name": "时间-后天上午",
+      "message": "帮我创建一个后天上午9点到10点的会议，主题是「后天会议」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "会议", "完成"], "notContains": "error" },
+      "tags": ["P1", "datetime"]
+    },
+    {
+      "name": "时间-昨天（查过去）",
+      "message": "帮我看看昨天我都有什么会议",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "datetime"]
+    },
+    {
+      "name": "时间-下周三",
+      "message": "帮我约一个下周三上午10点到11点的会议，主题是「下周三同步」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "会议", "完成"], "notContains": "error" },
+      "tags": ["P1", "datetime"]
+    },
+    {
+      "name": "时间-下下周三",
+      "message": "帮我约一个下下周三下午2点的会议，主题是「两周后评审」",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "datetime"]
+    },
+    {
+      "name": "时间-本周五",
+      "message": "帮我创建一个任务「提交周报」，截止时间本周五下班前",
+      "assert": { "containsAny": ["已创建", "创建成功", "任务", "完成"], "notContains": "error" },
+      "tags": ["P1", "datetime"]
+    },
+    {
+      "name": "时间-月底",
+      "message": "帮我创建一个任务「月度复盘」，截止日期月底前完成",
+      "assert": { "containsAny": ["已创建", "创建成功", "任务", "完成"], "notContains": "error" },
+      "tags": ["P1", "datetime"]
+    },
+    {
+      "name": "时间-月初",
+      "message": "帮我创建一个任务「月初汇报」，下个月月初完成",
+      "assert": { "containsAny": ["已创建", "创建成功", "任务", "完成"], "notContains": "error" },
+      "tags": ["P1", "datetime"]
+    },
+    {
+      "name": "时间-季度末",
+      "message": "帮我建个任务「季度总结」，本季度末之前完成",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "datetime"]
+    },
+    {
+      "name": "时间-跨天会议",
+      "message": "帮我约一个从下周一早上9点到下周三下午6点的封闭开发会议",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "完成"], "notContains": "error" },
+      "tags": ["P2", "datetime"]
+    },
+    {
+      "name": "时间-模糊-最近",
+      "message": "帮我看看最近有什么会议",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "datetime", "intent"]
+    },
+    {
+      "name": "时间-模糊-这几天",
+      "message": "帮我查一下这几天的日程安排",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "datetime", "intent"]
+    },
+    {
+      "name": "时间-模糊-近期",
+      "message": "近期我有什么待办任务",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "datetime", "intent"]
+    },
+    {
+      "name": "时间-口语化-早上",
+      "message": "帮我约个明天早上的会议，跟许帅聊聊项目进度",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "datetime", "intent"]
+    },
+    {
+      "name": "时间-口语化-晚上",
+      "message": "帮我创建一个任务「晚上8点前回复邮件」，截止今天晚上",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "datetime", "intent"]
+    },
+    {
+      "name": "时间-口语化-半小时",
+      "message": "帮我在半小时后约个15分钟的会议",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "datetime", "intent"]
+    },
+    {
+      "name": "时间-口语化-中午",
+      "message": "帮我约个明天中午12点的午餐会议",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P2", "datetime"]
+    },
+    {
+      "name": "时间-时区敏感-美东时间",
+      "message": "帮我约一个明天美东时间上午10点的会议，主题是「跨时区同步」",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "datetime", "timezone"]
+    },
+    {
+      "name": "时间-周末",
+      "message": "帮我看看这个周末有什么安排",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P2", "datetime"]
+    },
+    {
+      "name": "时间-工作日每天",
+      "message": "帮我约一个工作日每天早上9点到9点15的每日站会",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "完成"], "notContains": "error" },
+      "tags": ["P1", "datetime"]
+    },
+    {
+      "name": "时间-每周四",
+      "message": "帮我约一个每周四下午3点到4点的固定周会",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "完成"], "notContains": "error" },
+      "tags": ["P1", "datetime"]
+    },
+    {
+      "name": "时间-节假日敏感",
+      "message": "帮我查一下下个节假日之后的第一个工作日有什么安排",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "datetime", "intent"]
+    },
+    {
+      "name": "时间-异常-过去时间创建",
+      "message": "帮我创建一个昨天下午3点的会议，主题是「追溯记录」",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "datetime", "error"]
+    },
+    {
+      "name": "时间-异常-无效日期",
+      "message": "帮我创建一个13月32号下午3点的会议",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "datetime", "error"]
+    },
+    {
+      "name": "时间-异常-结束早于开始",
+      "message": "帮我创建一个明天下午3点到明天下午2点的会议",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "datetime", "error"]
+    }
+  ]
+}

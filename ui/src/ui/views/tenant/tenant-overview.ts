@@ -16,6 +16,7 @@ import { t, I18nController } from "../../../i18n/index.ts";
 import { tenantRpc } from "./rpc.ts";
 import { CHANNEL_ICON_MAP } from "../../../constants/channels.ts";
 import * as echarts from "echarts";
+import { caretFix } from "../../shared-styles.ts";
 
 // ── Types ──
 
@@ -43,42 +44,42 @@ interface RecentTrace { agentName: string; userName: string; model: string; toke
 export class TenantOverviewView extends LitElement {
   private i18nCtrl = new I18nController(this);
 
-  static styles = css`
+  static styles = [caretFix, css`
     :host {
       display: block; padding: 1.5rem;
-      color: var(--text, #e5e5e5);
+      color: var(--text);
       font-family: var(--font-sans, system-ui, sans-serif);
     }
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     .page-header h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
-    .btn { padding: 0.45rem 0.9rem; border: none; border-radius: var(--radius-md, 6px); font-size: 0.85rem; cursor: pointer; transition: opacity 0.15s; }
+    .btn { padding: 0.45rem 0.9rem; border: none; border-radius: var(--radius-md); font-size: 0.85rem; cursor: pointer; transition: opacity 0.15s; }
     .btn:hover { opacity: 0.85; }
-    .btn-outline { background: transparent; border: 1px solid var(--border, #262626); color: var(--text, #e5e5e5); }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
 
     /* ── Tenant bar ── */
     .tenant-bar {
-      background: var(--card, #141414); border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px); padding: 0.85rem 1.25rem; margin-bottom: 1rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 0.85rem 1.25rem; margin-bottom: 1rem;
       display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; align-items: center; font-size: 0.82rem;
     }
     .tenant-name { font-size: 1rem; font-weight: 700; }
-    .plan-badge { font-size: 0.7rem; padding: 0.1rem 0.45rem; border-radius: 9999px; background: rgba(59,130,246,0.15); color: var(--accent, #3b82f6); font-weight: 600; text-transform: uppercase; }
-    .status-active { color: #22c55e; font-size: 0.75rem; }
-    .bar-label { color: var(--text-muted, #525252); font-size: 0.75rem; }
+    .plan-badge { font-size: 0.7rem; padding: 0.1rem 0.45rem; border-radius: 9999px; background: var(--accent-light); color: var(--accent); font-weight: 600; text-transform: uppercase; }
+    .status-active { color: var(--ok); font-size: 0.75rem; }
+    .bar-label { color: var(--muted); font-size: 0.75rem; }
 
     /* ── Summary cards ── */
     .summary-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
-    .summary-card { background: var(--card, #141414); border: 1px solid var(--border, #262626); border-radius: var(--radius-lg, 8px); padding: 1.25rem; }
-    .summary-label { font-size: 0.8rem; color: var(--text-secondary, #a3a3a3); margin-bottom: 0.35rem; }
+    .summary-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; }
+    .summary-label { font-size: 0.8rem; color: var(--text-2); margin-bottom: 0.35rem; }
     .summary-value { font-size: 1.6rem; font-weight: 700; }
-    .summary-sub { font-size: 0.75rem; color: var(--text-muted, #525252); margin-top: 0.25rem; }
+    .summary-sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
     .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-    .status-dot.ok { background: #22c55e; }
+    .status-dot.ok { background: var(--ok); }
 
     /* ── Section card ── */
-    .section { background: var(--card, #141414); border: 1px solid var(--border, #262626); border-radius: var(--radius-lg, 8px); padding: 1.25rem; margin-bottom: 1rem; }
+    .section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
     .section-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 1rem; }
-    .section-subtitle { font-size: 0.75rem; color: var(--text-muted, #525252); margin-left: 0.5rem; font-weight: 400; }
+    .section-subtitle { font-size: 0.75rem; color: var(--muted); margin-left: 0.5rem; font-weight: 400; }
 
     /* ── Chart ── */
     .chart-container { width: 100%; height: 280px; }
@@ -89,13 +90,13 @@ export class TenantOverviewView extends LitElement {
 
     /* ── Period tabs ── */
     .period-tabs { display: flex; gap: 0.25rem; }
-    .period-tab { padding: 0.25rem 0.65rem; border: 1px solid var(--border, #262626); border-radius: 9999px; background: transparent; color: var(--text-muted, #525252); font-size: 0.72rem; cursor: pointer; }
-    .period-tab.active { background: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); color: white; }
+    .period-tab { padding: 0.25rem 0.65rem; border: 1px solid var(--border); border-radius: 9999px; background: transparent; color: var(--muted); font-size: 0.72rem; cursor: pointer; }
+    .period-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-foreground); }
 
     /* ── Rank list (matches platform overview) ── */
     .rank-block-title { font-size: 0.82rem; font-weight: 600; margin: 0 0 0.5rem; }
     .rank-list { list-style: none; margin: 0; padding: 0; }
-    .rank-item { display: flex; align-items: center; padding: 0.55rem 0; border-bottom: 1px solid var(--border, #1a1a1a); font-size: 0.85rem; }
+    .rank-item { display: flex; align-items: center; padding: 0.55rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
     .rank-item:last-child { border-bottom: none; }
     .rank-index {
       width: 22px; height: 22px;
@@ -103,52 +104,52 @@ export class TenantOverviewView extends LitElement {
       font-size: 0.7rem; font-weight: 600; margin-right: 0.75rem; flex-shrink: 0;
     }
     .rank-index img { width: 22px; height: 22px; }
-    .rank-index.other { border-radius: 50%; background: var(--border, #262626); color: var(--text-muted, #525252); }
+    .rank-index.other { border-radius: 50%; background: var(--border); color: var(--muted); }
     .rank-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rank-sub { font-size: 0.75rem; color: var(--text-muted, #525252); margin-left: 0.25rem; }
+    .rank-sub { font-size: 0.75rem; color: var(--muted); margin-left: 0.25rem; }
     .rank-value { font-weight: 600; font-variant-numeric: tabular-nums; }
-    .rank-bar-bg { display: block; width: 80px; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; margin-left: 0.75rem; overflow: hidden; flex-shrink: 0; }
-    .rank-bar-fill { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #3b82f6, #60a5fa); transition: width 0.4s ease; }
-    .rank-empty { text-align: center; padding: 2rem 0; color: var(--text-muted, #525252); font-size: 0.8rem; }
+    .rank-bar-bg { display: block; width: 80px; height: 4px; background: var(--border); border-radius: 2px; margin-left: 0.75rem; overflow: hidden; flex-shrink: 0; }
+    .rank-bar-fill { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.4s ease; }
+    .rank-empty { text-align: center; padding: 2rem 0; color: var(--muted); font-size: 0.8rem; }
     .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
-    .rank-block { background: var(--bg, #0a0a0a); border-radius: var(--radius-md, 6px); padding: 1rem; }
+    .rank-block { background: var(--surface-2); border-radius: var(--radius-md); padding: 1rem; }
 
     /* ── LLM stats ── */
     .llm-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .llm-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
-    .llm-stat-card { background: var(--bg, #0a0a0a); border-radius: var(--radius-md, 6px); padding: 0.85rem; text-align: center; }
+    .llm-stat-card { background: var(--surface-2); border-radius: var(--radius-md); padding: 0.85rem; text-align: center; }
     .llm-stat-value { font-size: 1.3rem; font-weight: 700; }
-    .llm-stat-value.error { color: #ef4444; }
-    .llm-stat-label { font-size: 0.72rem; color: var(--text-muted, #525252); margin-top: 0.2rem; }
+    .llm-stat-value.error { color: var(--danger); }
+    .llm-stat-label { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; }
 
     /* ── Channel list ── */
     .channel-list { display: grid; gap: 0.5rem; }
-    .channel-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.75rem; background: var(--bg, #0a0a0a); border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px); font-size: 0.82rem; }
+    .channel-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.75rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 0.82rem; }
     .channel-icon { width: 18px; height: 18px; flex-shrink: 0; }
     .channel-icon img { width: 100%; height: 100%; object-fit: contain; }
-    .channel-letter { width: 18px; height: 18px; border-radius: 50%; background: var(--border, #262626); display: grid; place-items: center; font-size: 0.55rem; font-weight: 600; color: var(--text-secondary, #a3a3a3); }
+    .channel-letter { width: 18px; height: 18px; border-radius: 50%; background: var(--border); display: grid; place-items: center; font-size: 0.55rem; font-weight: 600; color: var(--text-2); }
     .channel-info { flex: 1; }
-    .channel-meta { font-size: 0.72rem; color: var(--text-muted, #525252); }
+    .channel-meta { font-size: 0.72rem; color: var(--muted); }
     .conn-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-    .conn-dot.ok { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
-    .conn-dot.partial { background: #eab308; }
-    .conn-dot.off { background: #525252; }
+    .conn-dot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok-subtle); }
+    .conn-dot.partial { background: var(--warn); }
+    .conn-dot.off { background: var(--border); }
 
     /* ── Recent activity ── */
     .activity-list { display: grid; gap: 0; max-height: 220px; overflow-y: auto; overflow-x: hidden; padding-right: 0.5rem; }
     .activity-item {
       display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
-      padding: 0.5rem 0; border-bottom: 1px solid var(--border, #1a1a1a);
+      padding: 0.5rem 0; border-bottom: 1px solid var(--border);
       font-size: 0.8rem;
     }
     .activity-item:last-child { border-bottom: none; }
     .activity-info { flex: 1; min-width: 0; }
-    .activity-main { color: var(--text-secondary, #a3a3a3); word-break: break-all; }
-    .activity-time { font-size: 0.72rem; color: var(--text-muted, #525252); flex-shrink: 0; white-space: nowrap; }
+    .activity-main { color: var(--text-2); word-break: break-all; }
+    .activity-time { font-size: 0.72rem; color: var(--muted); flex-shrink: 0; white-space: nowrap; }
 
-    .empty { text-align: center; padding: 2rem; color: var(--text-muted, #525252); font-size: 0.8rem; }
-    .loading { text-align: center; padding: 3rem; color: var(--text-muted, #525252); }
-  `;
+    .empty { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.8rem; }
+    .loading { text-align: center; padding: 3rem; color: var(--muted); }
+  `];
 
   @property({ type: String }) gatewayUrl = "";
 
@@ -264,11 +265,16 @@ export class TenantOverviewView extends LitElement {
     } catch { this.llmStats = null; }
   }
 
+  /** Read a CSS custom property from the component's computed style. */
+  private cssVar(v: string): string {
+    return getComputedStyle(this).getPropertyValue(v).trim();
+  }
+
   // ── Trend line chart ──
   private initTrendChart() {
     const el = this.shadowRoot?.querySelector(".trend-chart") as HTMLElement | null;
     if (!el) return;
-    this.trendChart = echarts.init(el, "dark");
+    this.trendChart = echarts.init(el);
     this.updateTrendChart();
     this.resizeObserver = new ResizeObserver(() => {
       this.trendChart?.resize();
@@ -285,39 +291,39 @@ export class TenantOverviewView extends LitElement {
       backgroundColor: "transparent",
       tooltip: {
         trigger: "axis", axisPointer: { type: "none" },
-        backgroundColor: "#141414", borderColor: "#262626",
-        textStyle: { color: "#e5e5e5", fontSize: 12 },
+        backgroundColor: this.cssVar("--card"), borderColor: this.cssVar("--border"),
+        textStyle: { color: this.cssVar("--text"), fontSize: 12 },
       },
       legend: {
         data: [t("tenantOverview.inputToken"), t("tenantOverview.outputToken")],
-        top: 0, textStyle: { color: "#a3a3a3", fontSize: 12 },
+        top: 0, textStyle: { color: this.cssVar("--text-2"), fontSize: 12 },
         icon: "circle", itemWidth: 10, itemHeight: 10, itemStyle: { borderWidth: 0 },
       },
       grid: { left: 12, right: 12, top: 36, bottom: 8, containLabel: true },
       xAxis: {
         type: "category", data: data.map(d => d.date), boundaryGap: false,
-        axisLine: { lineStyle: { color: "#262626" } },
-        axisLabel: { color: "#a3a3a3", fontSize: 12 }, axisTick: { show: false },
+        axisLine: { lineStyle: { color: this.cssVar("--border") } },
+        axisLabel: { color: this.cssVar("--text-2"), fontSize: 12 }, axisTick: { show: false },
       },
       yAxis: {
         type: "value", splitLine: { show: false }, axisLine: { show: false },
-        axisLabel: { color: "#a3a3a3", fontSize: 12, formatter: (v: number) => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v) },
+        axisLabel: { color: this.cssVar("--text-2"), fontSize: 12, formatter: (v: number) => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v) },
       },
       series: [
         {
           name: t("tenantOverview.inputToken"), type: "line", data: data.map(d => d.inputTokens),
           smooth: true, symbol: "circle", symbolSize: 6,
-          itemStyle: { color: "#3b82f6" }, lineStyle: { width: 2 },
+          itemStyle: { color: this.cssVar("--accent") }, lineStyle: { width: 2 },
           areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(59,130,246,0.25)" }, { offset: 1, color: "rgba(59,130,246,0.02)" },
+            { offset: 0, color: this.cssVar("--accent-light") }, { offset: 1, color: "transparent" },
           ])},
         },
         {
           name: t("tenantOverview.outputToken"), type: "line", data: data.map(d => d.outputTokens),
           smooth: true, symbol: "circle", symbolSize: 6,
-          itemStyle: { color: "#22c55e" }, lineStyle: { width: 2 },
+          itemStyle: { color: this.cssVar("--ok") }, lineStyle: { width: 2 },
           areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(34,197,94,0.25)" }, { offset: 1, color: "rgba(34,197,94,0.02)" },
+            { offset: 0, color: this.cssVar("--ok-subtle") }, { offset: 1, color: "transparent" },
           ])},
         },
       ],
@@ -328,7 +334,7 @@ export class TenantOverviewView extends LitElement {
   private initLlmPieChart() {
     const el = this.shadowRoot?.querySelector(".llm-pie-chart") as HTMLElement | null;
     if (!el) return;
-    this.llmPieChart = echarts.init(el, "dark");
+    this.llmPieChart = echarts.init(el);
     this.updateLlmPieChart();
     this.resizeObserver?.observe(el);
   }
@@ -340,13 +346,13 @@ export class TenantOverviewView extends LitElement {
     this.llmPieChart.setOption({
       backgroundColor: "transparent",
       tooltip: {
-        trigger: "item", backgroundColor: "#141414", borderColor: "#262626",
-        textStyle: { color: "#e5e5e5", fontSize: 12 },
+        trigger: "item", backgroundColor: this.cssVar("--card"), borderColor: this.cssVar("--border"),
+        textStyle: { color: this.cssVar("--text"), fontSize: 12 },
         formatter: (p: any) => `${p.name}<br/>${t("tenantOverview.calls")}: ${p.value}<br/>${p.percent}%`,
       },
       legend: {
         orient: "vertical", right: 10, top: "center",
-        textStyle: { color: "#a3a3a3", fontSize: 12 },
+        textStyle: { color: this.cssVar("--text-2"), fontSize: 12 },
         icon: "circle", itemWidth: 10, itemHeight: 10, itemGap: 12, itemStyle: { borderWidth: 0 },
       },
       color: colors,
@@ -365,7 +371,7 @@ export class TenantOverviewView extends LitElement {
   private initChannelPieChart() {
     const el = this.shadowRoot?.querySelector(".channel-pie-chart") as HTMLElement | null;
     if (!el) return;
-    this.channelPieChart = echarts.init(el, "dark");
+    this.channelPieChart = echarts.init(el);
     this.updateChannelPieChart();
     this.resizeObserver?.observe(el);
   }
@@ -377,13 +383,13 @@ export class TenantOverviewView extends LitElement {
     this.channelPieChart.setOption({
       backgroundColor: "transparent",
       tooltip: {
-        trigger: "item", backgroundColor: "#141414", borderColor: "#262626",
-        textStyle: { color: "#e5e5e5", fontSize: 12 },
+        trigger: "item", backgroundColor: this.cssVar("--card"), borderColor: this.cssVar("--border"),
+        textStyle: { color: this.cssVar("--text"), fontSize: 12 },
         formatter: (p: any) => `${p.name}<br/>${t("tenantOverview.count")}: ${p.value}<br/>${p.percent}%`,
       },
       legend: {
         orient: "vertical", right: 10, top: "center",
-        textStyle: { color: "#a3a3a3", fontSize: 12 },
+        textStyle: { color: this.cssVar("--text-2"), fontSize: 12 },
         icon: "circle", itemWidth: 10, itemHeight: 10, itemGap: 12, itemStyle: { borderWidth: 0 },
       },
       color: colors,
@@ -442,7 +448,7 @@ export class TenantOverviewView extends LitElement {
       ${(() => {
         const monthDiff = s.tokens.lastMonth > 0 ? (s.tokens.month - s.tokens.lastMonth) / s.tokens.lastMonth * 100 : 0;
         const monthDiffText = s.tokens.lastMonth > 0 ? `${monthDiff >= 0 ? "+" : ""}${monthDiff.toFixed(1)}%` : "-";
-        const monthDiffColor = monthDiff < 0 ? "#ef4444" : "#22c55e";
+        const monthDiffColor = monthDiff < 0 ? "var(--danger)" : "var(--ok)";
         return html`
       <div class="summary-row">
         <div class="summary-card">
@@ -484,7 +490,7 @@ export class TenantOverviewView extends LitElement {
         </div>
         ${this.trend.length > 0
           ? html`<div class="trend-chart chart-container"></div>`
-          : html`<div class="chart-container" style="display:grid;place-items:center;color:var(--text-muted,#525252);font-size:0.8rem">${t("tenantOverview.noData")}</div>`}
+          : html`<div class="chart-container" style="display:grid;place-items:center;color:var(--muted);font-size:0.8rem">${t("tenantOverview.noData")}</div>`}
       </div>
 
       <!-- Token ranking (3 columns) -->
@@ -547,7 +553,7 @@ export class TenantOverviewView extends LitElement {
           <div>
             ${(this.llmStats?.modelDistribution?.length ?? 0) > 0
               ? html`<div class="llm-pie-chart chart-sm"></div>`
-              : html`<div class="chart-sm" style="display:grid;place-items:center;color:var(--text-muted,#525252);font-size:0.8rem">${t("tenantOverview.noData")}</div>`}
+              : html`<div class="chart-sm" style="display:grid;place-items:center;color:var(--muted);font-size:0.8rem">${t("tenantOverview.noData")}</div>`}
           </div>
         </div>
       </div>
@@ -558,7 +564,7 @@ export class TenantOverviewView extends LitElement {
           <h3 class="section-title">${t("tenantOverview.channelDist")}</h3>
           ${this.channelDist.length > 0
             ? html`<div class="channel-pie-chart chart-sm"></div>`
-            : html`<div class="chart-sm" style="display:grid;place-items:center;color:var(--text-muted,#525252);font-size:0.8rem">${t("tenantOverview.noData")}</div>`}
+            : html`<div class="chart-sm" style="display:grid;place-items:center;color:var(--muted);font-size:0.8rem">${t("tenantOverview.noData")}</div>`}
         </div>
         <div class="section">
           <h3 class="section-title">${t("tenantOverview.recentActivity")}</h3>

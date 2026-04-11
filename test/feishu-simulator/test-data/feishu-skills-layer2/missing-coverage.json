@@ -1,0 +1,1333 @@
+{
+  "cases": [
+    {
+      "name": "L5-极清晰-完整参数",
+      "message": "帮我在「自动化测试」文件夹下创建一个飞书文档，标题叫《意图L5测试》，内容写：第一段，第二段，第三段。三个段落分别介绍背景、方案、结论。",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "intent-ladder",
+        "L5-clear"
+      ]
+    },
+    {
+      "name": "L5-极清晰-日程全参数",
+      "message": "帮我创建一个明天下午2点到3点的会议，主题是「意图L5评审」，地点是3楼会议室A，邀请许帅",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "intent-ladder",
+        "L5-clear"
+      ]
+    },
+    {
+      "name": "L4-清晰-缺少次要参数",
+      "message": "帮我创建一个文档，标题叫《意图L4测试》",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "matches": "feishu\\.cn",
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "intent-ladder",
+        "L4-mostly-clear"
+      ]
+    },
+    {
+      "name": "L4-清晰-隐含时间",
+      "message": "帮我创建一个明天的会议，主题是项目同步",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "intent-ladder",
+        "L4-mostly-clear"
+      ]
+    },
+    {
+      "name": "L3-模糊-缺少关键参数",
+      "message": "帮我创建一个飞书文档",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "intent-ladder",
+        "L3-ambiguous"
+      ]
+    },
+    {
+      "name": "L3-模糊-未指明时间",
+      "message": "帮我创建一个会议，主题是需求评审",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "intent-ladder",
+        "L3-ambiguous"
+      ]
+    },
+    {
+      "name": "L3-模糊-未指明修改方向",
+      "message": "帮我修改《意图L5测试》这个文档",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "intent-ladder",
+        "L3-ambiguous"
+      ]
+    },
+    {
+      "name": "L2-很模糊-只给行为动词",
+      "message": "帮我建个文档",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "intent-ladder",
+        "L2-vague"
+      ]
+    },
+    {
+      "name": "L2-很模糊-只给资源名",
+      "message": "周报",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "intent-ladder",
+        "L2-vague"
+      ]
+    },
+    {
+      "name": "L2-很模糊-口语化请求",
+      "message": "帮我弄一下那个",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "intent-ladder",
+        "L2-vague"
+      ]
+    },
+    {
+      "name": "L1-极模糊-单词",
+      "message": "文档",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "intent-ladder",
+        "L1-extreme-vague"
+      ]
+    },
+    {
+      "name": "L1-极模糊-疑问词",
+      "message": "怎么办",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "intent-ladder",
+        "L1-extreme-vague"
+      ]
+    },
+    {
+      "name": "L1-极模糊-表达情绪",
+      "message": "好烦啊",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "intent-ladder",
+        "L1-extreme-vague"
+      ]
+    },
+    {
+      "name": "L0-无意图-问候",
+      "message": "你好",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "intent-ladder",
+        "L0-no-intent"
+      ]
+    },
+    {
+      "name": "L0-无意图-自我介绍要求",
+      "message": "你是谁",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "intent-ladder",
+        "L0-no-intent"
+      ]
+    },
+    {
+      "name": "L0-无意图-能力询问",
+      "message": "你能做什么",
+      "assert": {
+        "notContains": "error",
+        "minLength": 10
+      },
+      "tags": [
+        "P1",
+        "intent-ladder",
+        "L0-no-intent"
+      ]
+    },
+    {
+      "name": "L0-无意图-闲聊",
+      "message": "今天天气怎么样",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "intent-ladder",
+        "L0-no-intent"
+      ]
+    },
+    {
+      "name": "跨级-L5+L1混合",
+      "message": "帮我创建一个明天下午2点到3点的会议主题是「意图混合」，然后怎么办",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "intent-ladder",
+        "mixed"
+      ]
+    },
+    {
+      "name": "跨级-L4+L2混合",
+      "message": "帮我创建一个文档叫《混合测试》，然后再弄一下那个",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "intent-ladder",
+        "mixed"
+      ]
+    },
+    {
+      "name": "连续模糊-递进",
+      "message": "那个东西帮我搞一下",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "intent-ladder",
+        "L1-extreme-vague"
+      ]
+    },
+    {
+      "name": "讽刺性模糊",
+      "message": "你懂我意思吧",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "intent-ladder",
+        "L1-extreme-vague"
+      ]
+    },
+    {
+      "name": "复杂长句但意图清晰",
+      "message": "根据我们昨天开会讨论的结果，我觉得应该把之前那个需求文档的内容重新整理一下，具体的做法是在「自动化测试」文件夹下新建一个文档叫《重整理-需求》，把整理后的内容放进去",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "intent-ladder",
+        "L4-mostly-clear"
+      ]
+    },
+    {
+      "name": "Setup-创建基础资源A",
+      "message": "帮我在云空间创建一个文件夹叫「命名歧义测试」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "文件夹",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "naming",
+        "setup"
+      ]
+    },
+    {
+      "name": "Setup-同名文档第1份",
+      "message": "帮我在「命名歧义测试」文件夹下创建一个文档，标题叫《命名-规范》，内容写：第一份命名规范文档",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "naming",
+        "setup"
+      ]
+    },
+    {
+      "name": "Setup-同名文档第2份",
+      "message": "帮我在「命名歧义测试」文件夹下再创建一个文档，标题也叫《命名-规范》，内容写：第二份命名规范文档",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "naming",
+        "setup"
+      ]
+    },
+    {
+      "name": "歧义-读同名文档",
+      "message": "帮我读取《命名-规范》的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "naming",
+        "ambiguity"
+      ]
+    },
+    {
+      "name": "歧义-修改同名文档",
+      "message": "帮我在《命名-规范》末尾追加一段：已更新",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "ambiguity"
+      ]
+    },
+    {
+      "name": "消歧-读第一个",
+      "message": "帮我读取《命名-规范》，如果有多个同名的，读最早创建的那一个",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "disambiguation"
+      ]
+    },
+    {
+      "name": "消歧-读最新",
+      "message": "帮我读取最新的那个《命名-规范》",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "disambiguation"
+      ]
+    },
+    {
+      "name": "大小写-全小写",
+      "message": "帮我搜索一下飞书上叫《命名-规范》相关的文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "case"
+      ]
+    },
+    {
+      "name": "大小写-英文名大写",
+      "message": "帮我创建一个文档叫《API-SPEC》",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "naming"
+      ]
+    },
+    {
+      "name": "大小写-英文名小写查同名",
+      "message": "帮我搜索一下飞书上叫《api-spec》的文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "case"
+      ]
+    },
+    {
+      "name": "标点-全角括号",
+      "message": "帮我创建一个文档叫《命名（全角括号）测试》",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "punctuation"
+      ]
+    },
+    {
+      "name": "标点-半角括号",
+      "message": "帮我创建一个文档叫《命名(半角括号)测试》",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "punctuation"
+      ]
+    },
+    {
+      "name": "标点-混用查询",
+      "message": "帮我搜索《命名（全角括号）测试》这个文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "punctuation"
+      ]
+    },
+    {
+      "name": "空格-中间带空格",
+      "message": "帮我创建一个文档叫《命名 带空格 测试》",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "whitespace"
+      ]
+    },
+    {
+      "name": "空格-无空格查询",
+      "message": "帮我搜索《命名带空格测试》这个文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "whitespace"
+      ]
+    },
+    {
+      "name": "连字符-横线",
+      "message": "帮我创建一个文档叫《命名-横线-测试》",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "punctuation"
+      ]
+    },
+    {
+      "name": "连字符-下划线查同名",
+      "message": "帮我搜索《命名_横线_测试》这个文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "punctuation"
+      ]
+    },
+    {
+      "name": "书名号-有无",
+      "message": "帮我读取命名-规范的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "naming",
+        "punctuation"
+      ]
+    },
+    {
+      "name": "中文字符-繁简",
+      "message": "帮我创建一个文档叫《繁體命名測試》，内容写繁体中文",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "naming"
+      ]
+    },
+    {
+      "name": "中文字符-繁体简体查询",
+      "message": "帮我搜索《繁体命名测试》的文档",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "naming"
+      ]
+    },
+    {
+      "name": "前后缀-带序号",
+      "message": "帮我创建三个文档：《方案-v1》《方案-v2》《方案-v3》，内容分别写第一版、第二版、第三版方案",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "naming"
+      ]
+    },
+    {
+      "name": "前后缀-读最新版本",
+      "message": "帮我读取最新版本的《方案》文档内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "naming",
+        "disambiguation"
+      ]
+    },
+    {
+      "name": "Setup-创建基础文档",
+      "message": "帮我创建一个文档叫《否定测试-基础文档》，内容写：原始内容",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "negation",
+        "setup"
+      ]
+    },
+    {
+      "name": "Setup-创建基础任务",
+      "message": "帮我创建一个任务「否定测试-待完成」，截止日期本周五",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "任务",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "negation",
+        "setup"
+      ]
+    },
+    {
+      "name": "Setup-创建基础日程",
+      "message": "帮我创建一个明天下午4点到5点的会议，主题是「否定测试-会议」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "negation",
+        "setup"
+      ]
+    },
+    {
+      "name": "否定-不要",
+      "message": "不要创建文档",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "negation"
+      ]
+    },
+    {
+      "name": "否定-不是",
+      "message": "不是创建文档，是创建任务叫《否定-新任务》",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "negation",
+        "correction"
+      ]
+    },
+    {
+      "name": "否定-别",
+      "message": "别创建日程了，帮我查一下明天有什么安排就行",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "negation",
+        "correction"
+      ]
+    },
+    {
+      "name": "否定-先不",
+      "message": "先不要发消息，我再想想",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "negation"
+      ]
+    },
+    {
+      "name": "修正-改一下",
+      "message": "把《否定测试-基础文档》的标题改一下，叫《否定测试-已修正》",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "correction"
+      ]
+    },
+    {
+      "name": "修正-等等",
+      "message": "等等，帮我在《否定测试-已修正》末尾追加一段：「这是修正后补充的内容」",
+      "assert": {
+        "containsAny": [
+          "已更新",
+          "已追加",
+          "成功",
+          "追加",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "correction"
+      ]
+    },
+    {
+      "name": "修正-不对应该",
+      "message": "不对，应该把《否定测试-已修正》里的内容改成「修正后的全新内容」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "correction"
+      ]
+    },
+    {
+      "name": "修正-换一个",
+      "message": "把那个任务「否定测试-待完成」的名字换一个，叫「否定测试-进行中」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "correction"
+      ]
+    },
+    {
+      "name": "修正-时间改一下",
+      "message": "把明天的「否定测试-会议」时间改一下，推迟到后天下午3点",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "correction"
+      ]
+    },
+    {
+      "name": "取消-任务",
+      "message": "帮我把「否定测试-进行中」这个任务标记为已完成",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "cancel"
+      ]
+    },
+    {
+      "name": "取消-日程",
+      "message": "帮我取消后天下午3点的「否定测试-会议」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "cancel"
+      ]
+    },
+    {
+      "name": "撤销-刚才的操作",
+      "message": "刚才创建的那个文档不要了，帮我删掉",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "cancel"
+      ]
+    },
+    {
+      "name": "拒绝-用户改主意",
+      "message": "算了，先不创建了",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "negation"
+      ]
+    },
+    {
+      "name": "双重否定",
+      "message": "不是不要创建，是要创建一个叫《双重否定》的文档",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "negation"
+      ]
+    },
+    {
+      "name": "混合-先这样再不",
+      "message": "帮我创建一个文档叫《混合测试》，但是先不要加内容",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "negation",
+        "correction"
+      ]
+    },
+    {
+      "name": "混合-做A但不做B",
+      "message": "帮我创建一个文档叫《只要标题》，只要标题，不要加任何内容",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "negation",
+        "correction"
+      ]
+    },
+    {
+      "name": "修正-详细纠正",
+      "message": "刚才我说的那个任务截止时间不对，应该是下周一而不是本周五，帮我改一下",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "correction"
+      ]
+    },
+    {
+      "name": "地点-会议室",
+      "message": "帮我创建一个明天下午2点到3点的会议，主题是「日历深度-会议室测试」，地点是3楼会议室A",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "calendar",
+        "location"
+      ]
+    },
+    {
+      "name": "地点-线上会议",
+      "message": "帮我创建一个明天上午10点到11点的线上会议，主题是「日历深度-远程协作」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "location"
+      ]
+    },
+    {
+      "name": "地点-飞书会议",
+      "message": "帮我创建一个明天下午4点到5点的飞书视频会议，主题是「日历深度-飞书会议」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "会议",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "location"
+      ]
+    },
+    {
+      "name": "提醒-提前15分钟",
+      "message": "帮我创建一个明天下午3点的会议，主题是「日历深度-提醒测试」，提前15分钟提醒我",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "reminder"
+      ]
+    },
+    {
+      "name": "提醒-提前1小时",
+      "message": "帮我创建一个后天上午9点的会议，主题是「日历深度-早会」，提前1小时提醒",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "calendar",
+        "reminder"
+      ]
+    },
+    {
+      "name": "提醒-提前1天",
+      "message": "帮我创建一个下周一上午10点的重要评审，提前1天提醒我",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P2",
+        "calendar",
+        "reminder"
+      ]
+    },
+    {
+      "name": "循环-每周三",
+      "message": "帮我创建一个每周三下午2点到3点的固定会议，主题是「日历深度-周会」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "calendar",
+        "recurrence"
+      ]
+    },
+    {
+      "name": "循环-工作日每天",
+      "message": "帮我创建一个工作日每天早上9点半到9点45的每日站会",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "calendar",
+        "recurrence"
+      ]
+    },
+    {
+      "name": "循环-每月第一个周一",
+      "message": "帮我创建一个每月第一个周一下午3点的月度复盘会议",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "recurrence"
+      ]
+    },
+    {
+      "name": "循环-两周一次",
+      "message": "帮我创建一个每两周一次的周三下午2点的双周会",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "calendar",
+        "recurrence"
+      ]
+    },
+    {
+      "name": "循环-每天上午",
+      "message": "帮我创建一个每天上午10点到10点半的每日同步会",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "recurrence"
+      ]
+    },
+    {
+      "name": "循环-结束条件-N次",
+      "message": "帮我创建一个从明天开始每天下午3点的短会，总共开5次",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "calendar",
+        "recurrence"
+      ]
+    },
+    {
+      "name": "循环-结束日期",
+      "message": "帮我创建一个每周三下午2点的会议，从下周三开始，持续到月底",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "calendar",
+        "recurrence"
+      ]
+    },
+    {
+      "name": "全天-单日",
+      "message": "帮我创建一个明天的全天日程，标题是「日历深度-团建」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P0",
+        "calendar",
+        "all-day"
+      ]
+    },
+    {
+      "name": "全天-多日",
+      "message": "帮我创建一个从下周一到下周三的全天日程，标题是「日历深度-封闭开发」",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "all-day"
+      ]
+    },
+    {
+      "name": "参会人-单人",
+      "message": "帮我创建一个明天下午3点的会议，主题是「一对一沟通」，邀请许帅",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P0",
+        "calendar",
+        "attendees"
+      ]
+    },
+    {
+      "name": "参会人-多人",
+      "message": "帮我创建一个明天下午4点的会议，主题是「日历深度-多人评审」，邀请许帅、李帅、王帅",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "attendees"
+      ]
+    },
+    {
+      "name": "参会人-外部邮箱",
+      "message": "帮我创建一个明天上午10点的会议，主题是「客户沟通」，邀请 client@example.com",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "calendar",
+        "attendees"
+      ]
+    },
+    {
+      "name": "描述-详细描述",
+      "message": "帮我创建一个明天下午2点到3点的会议，主题是「日历深度-描述测试」，备注写：请各位提前阅读方案文档，会议中讨论以下3个问题：1.架构选型 2.时间安排 3.风险评估",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "日程",
+          "完成"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "description"
+      ]
+    },
+    {
+      "name": "查询-按关键词",
+      "message": "帮我搜索一下日程里关于「日历深度」的会议",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "calendar",
+        "search"
+      ]
+    },
+    {
+      "name": "查询-按时间范围",
+      "message": "帮我看看接下来一周有哪些会议",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "calendar",
+        "search"
+      ]
+    },
+    {
+      "name": "查询-冲突检测",
+      "message": "帮我看看明天下午2点到3点我有没有日程冲突",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "conflict"
+      ]
+    },
+    {
+      "name": "查询-空闲时段",
+      "message": "帮我看看明天下午有哪些时段是空闲的",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "free-busy"
+      ]
+    },
+    {
+      "name": "修改-推迟时间",
+      "message": "帮我把明天下午2点的「日历深度-会议室测试」推迟一小时",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "update"
+      ]
+    },
+    {
+      "name": "修改-更改时长",
+      "message": "帮我把明天下午3点的「日历深度-提醒测试」从1小时改成30分钟",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "calendar",
+        "update"
+      ]
+    },
+    {
+      "name": "修改-添加参会人",
+      "message": "帮我给明天下午3点的「日历深度-提醒测试」会议再加一个参会人许帅",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "calendar",
+        "update"
+      ]
+    },
+    {
+      "name": "取消-单次",
+      "message": "帮我取消明天下午3点的「日历深度-提醒测试」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "calendar",
+        "cancel"
+      ]
+    },
+    {
+      "name": "错误-结束早于开始",
+      "message": "帮我创建一个明天下午5点到下午2点的会议，主题是「倒序时间」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "calendar",
+        "error"
+      ]
+    },
+    {
+      "name": "错误-过去时间",
+      "message": "帮我创建一个昨天下午2点的会议，主题是「历史会议」",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "calendar",
+        "error"
+      ]
+    }
+  ]
+}

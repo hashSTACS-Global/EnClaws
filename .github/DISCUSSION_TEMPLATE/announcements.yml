@@ -1,0 +1,8 @@
+title: "[Announcement]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Official announcements from the EnClaws maintainers.
+        Only maintainers can post in this category.

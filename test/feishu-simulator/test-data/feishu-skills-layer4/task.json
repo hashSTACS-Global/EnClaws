@@ -1,0 +1,140 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-创建任务",
+      "message": "帮我创建一个任务：完成群聊功能测试，截止日期后天",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "任务"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查看待办",
+      "message": "看看我有什么待办",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-指派任务给群友",
+      "message": "帮我建个任务「写测试报告」，指派给许帅，本周五前完成",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化待办",
+      "message": "我还有啥事没做完来着？",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-创建任务-模糊意图",
+      "message": "帮我建个任务",
+      "assert": {
+        "minLength": 5,
+        "notContains": "exception"
+      },
+      "tags": [
+        "P1",
+        "group",
+        "intent"
+      ]
+    },
+    {
+      "name": "群聊-完成任务",
+      "message": "帮我把「完成群聊功能测试」这个任务标记为已完成",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建紧急任务",
+      "message": "帮我创建一个紧急任务：修复线上bug，优先级最高，今天下班前完成",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "任务"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-创建任务带描述",
+      "message": "帮我创建一个任务叫「编写接口文档」，描述是：整理所有API接口并编写文档，下周三前完成",
+      "assert": {
+        "containsAny": [
+          "已创建",
+          "创建成功",
+          "任务"
+        ],
+        "notContains": "error"
+      },
+      "tags": [
+        "P1",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-查询已完成任务",
+      "message": "帮我看看我已经完成的任务有哪些",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化提醒",
+      "message": "提醒我明天下午交周报",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    }
+  ]
+}

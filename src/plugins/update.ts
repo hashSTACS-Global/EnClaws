@@ -2,7 +2,7 @@ import fsSync from "node:fs";
 import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
-import type { UpdateChannel } from "../infra/update-channels.js";
+import type { UpdateTrack as UpdateChannel } from "../infra/update-channels.js";
 import { resolveUserPath } from "../utils.js";
 import { resolveBundledPluginSources } from "./bundled-sources.js";
 import { installPluginFromNpmSpec, resolvePluginInstallDir } from "./install.js";

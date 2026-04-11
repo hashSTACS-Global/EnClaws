@@ -36,6 +36,8 @@ const BASE_METHODS = [
   "talk.mode",
   "models.list",
   "tools.catalog",
+  "sys.tools.get",
+  "sys.tools.update",
   "agents.list",
   "agents.create",
   "agents.update",

@@ -465,12 +465,22 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
     const pluginSdkAlias = resolvePluginSdkAlias();
     const pluginSdkAccountIdAlias = resolvePluginSdkAccountIdAlias();
     const subpathAliases = resolvePluginSdkSubpathAliases();
+    const subpathAliasesOcw: Record<string, string> = {};
+    for (const [key, value] of Object.entries(subpathAliases)) {
+      subpathAliasesOcw[key.replace(/^enclaws\//, "openclaw/")] = value;
+    }
     const allAliases: Record<string, string> = {
       ...(pluginSdkAccountIdAlias
-        ? { "enclaws/plugin-sdk/account-id": pluginSdkAccountIdAlias }
+        ? {
+            "enclaws/plugin-sdk/account-id": pluginSdkAccountIdAlias,
+            "openclaw/plugin-sdk/account-id": pluginSdkAccountIdAlias,
+          }
         : {}),
       ...subpathAliases,
-      ...(pluginSdkAlias ? { "enclaws/plugin-sdk": pluginSdkAlias } : {}),
+      ...subpathAliasesOcw,
+      ...(pluginSdkAlias
+        ? { "enclaws/plugin-sdk": pluginSdkAlias, "openclaw/plugin-sdk": pluginSdkAlias }
+        : {}),
     };
     jitiLoader = createJiti(import.meta.url, {
       interopDefault: true,

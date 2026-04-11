@@ -10,6 +10,7 @@
 
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { caretFix } from "../shared-styles.ts";
 
 const WEEK_LABELS: Record<string, string[]> = {
   "en-US": ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"],
@@ -38,7 +39,7 @@ function todayStr(): string { const d = new Date(); return toDateStr(d.getFullYe
 
 @customElement("date-picker")
 export class DatePicker extends LitElement {
-  static styles = css`
+  static styles = [caretFix, css`
     :host { display: inline-block; position: relative; }
     .trigger {
       display: flex; align-items: center; gap: 0.4rem;
@@ -122,7 +123,7 @@ export class DatePicker extends LitElement {
     }
     .footer-btn:hover { color: var(--text, #e5e5e5); }
     .footer-btn.accent { background: var(--accent, #3b82f6); color: #fff; }
-  `;
+  `];
 
   @property() value = "";
   @property() placeholder = "";

@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { icons } from "../icons.ts";
 import { toSanitizedMarkdownHtml } from "../markdown.ts";
+import { caretFix } from "../shared-styles.ts";
 
 @customElement("chat-thinking")
 export class ChatThinking extends LitElement {
@@ -30,7 +31,7 @@ export class ChatThinking extends LitElement {
     }
   }
 
-  static styles = css`
+  static styles = [caretFix, css`
     :host {
       display: block;
       margin-bottom: 8px;
@@ -190,7 +191,7 @@ export class ChatThinking extends LitElement {
     .thinking-content :last-child {
       margin-bottom: 0;
     }
-  `;
+  `];
 
   private toggle() {
     this.isExpanded = !this.isExpanded;

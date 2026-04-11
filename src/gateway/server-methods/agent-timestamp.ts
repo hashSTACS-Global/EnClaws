@@ -71,7 +71,7 @@ export function injectTimestamp(message: string, opts?: TimestampInjectionOption
 }
 
 /**
- * Build TimestampInjectionOptions from an OpenClawConfig.
+ * Build TimestampInjectionOptions from an EnClawsConfig.
  */
 export function timestampOptsFromConfig(cfg: OpenClawConfig): TimestampInjectionOptions {
   return {

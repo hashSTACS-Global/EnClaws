@@ -32,6 +32,8 @@ export type AgentConfig = {
   /** Optional per-agent stream params (e.g. cacheRetention, temperature). */
   params?: Record<string, unknown>;
   tools?: AgentToolsConfig;
+  /** Optional per-agent run timeout in seconds (overrides agents.defaults.timeoutSeconds). */
+  timeoutSeconds?: number;
 };
 
 export type AgentsConfig = {

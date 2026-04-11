@@ -1,0 +1,356 @@
+{
+  "cases": [
+    {
+      "name": "附件-Setup-列云盘附件",
+      "message": "帮我看看云空间根目录下都有哪些Word、PDF或者Excel文件",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "attachment",
+        "setup"
+      ]
+    },
+    {
+      "name": "附件-意图识别-读Word文件",
+      "message": "帮我读取云空间里那个编码规范Word文档的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "attachment",
+        "intent"
+      ]
+    },
+    {
+      "name": "附件-意图识别-读PDF文件",
+      "message": "帮我读取云空间里那个PDF的文字",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "attachment",
+        "intent"
+      ]
+    },
+    {
+      "name": "附件-意图识别-提取附件文字",
+      "message": "帮我提取一下附件编码规范里的文字内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "intent"
+      ]
+    },
+    {
+      "name": "附件-意图识别-按扩展名指定",
+      "message": "帮我读一下我云盘里那个编码规范 .docx 文件的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "intent"
+      ]
+    },
+    {
+      "name": "附件-意图识别-PDF扩展名",
+      "message": "帮我看一下我云盘里那个 自动测试.pdf 报告里写了什么",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "intent"
+      ]
+    },
+    {
+      "name": "附件-意图识别-口语化拿文件",
+      "message": "云盘里那个Word帮我下下来，我想看看里面写的啥",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "intent"
+      ]
+    },
+    {
+      "name": "附件-意图识别-报告类文件",
+      "message": "帮我看看我云盘里那份报需求告文档的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "intent"
+      ]
+    },
+    {
+      "name": "附件-工作空间-下载到本地",
+      "message": "帮我把云空间里的编码规范Word文档下载到本地，然后告诉我里面的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "workspace"
+      ]
+    },
+    {
+      "name": "附件-工作空间-下载并解析",
+      "message": "帮我下载云空间里的自动测试PDF到工作空间，然后解析文字",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "workspace"
+      ]
+    },
+    {
+      "name": "附件-search+download-按名字找",
+      "message": "帮我在云空间搜索叫「需求」的Word文件，找到后读取内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "search+download"
+      ]
+    },
+    {
+      "name": "附件-search+download-按类型搜",
+      "message": "帮我搜索一下飞书云盘里所有的PDF文件，然后下载第一个并提取文字",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "search+download"
+      ]
+    },
+    {
+      "name": "附件-download+doc-提取后存档",
+      "message": "帮我下载云空间里的Word文档提取文字，把内容整理到一个新的飞书文档《附件-内容存档》里",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "download+doc"
+      ]
+    },
+    {
+      "name": "附件-download+doc-PDF提取后写摘要",
+      "message": "帮我下载云空间里的PDF报告，提取文字内容，然后写一份摘要文档《附件-PDF摘要》",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "download+doc"
+      ]
+    },
+    {
+      "name": "附件-download+task-提取后建任务",
+      "message": "帮我下载云空间里的Word需求文档，提取里面的待办事项创建成飞书任务",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "attachment",
+        "download+task"
+      ]
+    },
+    {
+      "name": "附件-download+wiki-提取后存知识库",
+      "message": "帮我下载云空间里的Word文档提取内容，整理后存到工程知识库里",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "attachment",
+        "download+wiki"
+      ]
+    },
+    {
+      "name": "附件-多文件-下载所有Word",
+      "message": "帮我下载云空间里所有的Word文件，逐个提取里面的文字内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "attachment",
+        "batch"
+      ]
+    },
+    {
+      "name": "附件-区分原生文档-不应误判",
+      "message": "帮我读取飞书原生文档《自动化测试文档》的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P0",
+        "fusion",
+        "attachment",
+        "intent",
+        "negative"
+      ]
+    },
+    {
+      "name": "附件-区分原生文档-表格不走附件下载",
+      "message": "帮我读取飞书表格《员工花名册》的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "intent",
+        "negative"
+      ]
+    },
+    {
+      "name": "附件-错误恢复-不存在的Word",
+      "message": "帮我下载云空间里的《xyzzy_不存在的Word_99999.docx》并提取文字",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "attachment",
+        "error"
+      ]
+    },
+    {
+      "name": "附件-错误恢复-不存在的PDF",
+      "message": "帮我提取《xyzzy_不存在的PDF_99999.pdf》的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "attachment",
+        "error"
+      ]
+    },
+    {
+      "name": "附件-混合-Word+PDF同时处理",
+      "message": "帮我看看云盘里有没有Word和PDF文件，分别下载后告诉我各自的主要内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "attachment",
+        "batch"
+      ]
+    },
+    {
+      "name": "附件-工作空间路径-明确指定",
+      "message": "帮我把云盘里的Word文档下载到工作空间，下载完后读取内容给我",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P1",
+        "fusion",
+        "attachment",
+        "workspace"
+      ]
+    },
+    {
+      "name": "附件-Excel文件-读取数据",
+      "message": "帮我读取云空间里那个 .xlsx Excel 文件的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "attachment",
+        "intent"
+      ]
+    },
+    {
+      "name": "附件-口语化-那个文件",
+      "message": "我前几天传到云盘的那个文件，帮我看看里面写了啥",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "fusion",
+        "attachment",
+        "intent"
+      ]
+    }
+  ]
+}

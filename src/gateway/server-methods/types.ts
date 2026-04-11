@@ -19,7 +19,10 @@ type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 export type GatewayClient = {
   connect: ConnectParams;
   connId?: string;
+  /** Privacy-filtered IP: undefined for loopback connections. Use for external-facing display. */
   clientIp?: string;
+  /** Raw resolved IP before loopback filtering. Use for audit logging and rate limiting. */
+  rawClientIp?: string;
   canvasHostUrl?: string;
   canvasCapability?: string;
   canvasCapabilityExpiresAtMs?: number;

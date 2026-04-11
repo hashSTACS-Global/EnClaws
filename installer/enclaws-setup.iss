@@ -34,7 +34,11 @@ LicenseFile=..\LICENSE
 SetupIconFile=assets\enclaws-icon.ico
 UninstallDisplayIcon={app}\enclaws-icon.ico
 ; Uninstall support
+UninstallFilesDir={app}
 UninstallDisplayName=EnClaws {#AppVersion}
+; We handle process killing ourselves in PrepareToInstall, so disable
+; Inno Setup's built-in Restart Manager (which often fails and shows an error dialog).
+CloseApplications=no
 ; Minimum Windows 10
 MinVersion=10.0
 ; Broadcast WM_SETTINGCHANGE after install so new terminals pick up PATH
@@ -68,9 +72,13 @@ Name: "{userprograms}\EnClaws\Uninstall EnClaws"; Filename: "{uninstallexe}"
 
 [Run]
 ; Run postinstall to create ~/.enclaws/.env (if not exists)
-Filename: "{app}\node\node.exe"; Parameters: """{app}\app\scripts\postinstall.js"""; StatusMsg: "正在配置 EnClaws（解压依赖中，请稍候）..."; Flags: runhidden waituntilterminated
+Filename: "{app}\node\enclaws.exe"; Parameters: """{app}\app\scripts\postinstall.js"""; StatusMsg: "正在配置 EnClaws（解压依赖中，请稍候）..."; Flags: runhidden waituntilterminated
 ; Option to launch EnClaws after install
 Filename: "{app}\enclaws-gateway.vbs"; Description: "立即启动 EnClaws"; Flags: nowait postinstall shellexec skipifsilent
+
+[InstallDelete]
+; Remove old node.exe left over from pre-rebrand installs (replaced by enclaws.exe)
+Type: files; Name: "{app}\node\node.exe"
 
 [UninstallDelete]
 ; Clean up generated files in install dir (node_modules cache, etc.)
@@ -174,20 +182,86 @@ begin
   Log('Removed from user PATH: ' + Dir);
 end;
 
-// Called after installation completes — add to PATH.
+// Rename the uninstaller from unins000.exe/dat to uninstall.exe/dat
+// and update the registry so "Programs & Features" still works.
+procedure RenameUninstaller;
+var
+  UninstDir, OldExe, OldDat, NewExe, NewDat: string;
+  UninstKey: string;
+  ResultCode: Integer;
+  LnkPath: string;
+begin
+  UninstDir := ExpandConstant('{app}');
+  OldExe := UninstDir + '\unins000.exe';
+  OldDat := UninstDir + '\unins000.dat';
+  NewExe := UninstDir + '\uninstall.exe';
+  NewDat := UninstDir + '\uninstall.dat';
+
+  // Delete existing target first (upgrade scenario: uninstall.exe already exists)
+  if FileExists(OldExe) then
+  begin
+    DeleteFile(NewExe);
+    RenameFile(OldExe, NewExe);
+  end;
+  if FileExists(OldDat) then
+  begin
+    DeleteFile(NewDat);
+    RenameFile(OldDat, NewDat);
+  end;
+
+  // Update registry uninstall strings to point to the new name
+  UninstKey := ExpandConstant('Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1');
+  RegWriteStringValue(HKCU, UninstKey, 'UninstallString', '"' + NewExe + '"');
+  RegWriteStringValue(HKCU, UninstKey, 'QuietUninstallString', '"' + NewExe + '" /SILENT');
+
+  // Recreate start menu uninstall shortcut pointing to renamed exe
+  LnkPath := ExpandConstant('{userprograms}\EnClaws\Uninstall EnClaws.lnk');
+  DeleteFile(LnkPath);
+  Exec('powershell.exe',
+    '-NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut(''' +
+    LnkPath + '''); $s.TargetPath = ''' + NewExe + '''; $s.Save()"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+// Kill EnClaws processes in {app} by executable path.
+// Tries both enclaws.exe (new) and node.exe (old installs) for upgrade compat.
+procedure KillEnClawsProcesses;
+var
+  ResultCode: Integer;
+  PsCmd: string;
+begin
+  PsCmd := '-NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq ''' +
+    ExpandConstant('{app}\node\enclaws.exe') +
+    ''' -or $_.ExecutablePath -eq ''' +
+    ExpandConstant('{app}\node\node.exe') +
+    ''' } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }"';
+  Exec('powershell.exe', PsCmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+// Called before installation begins — earliest opportunity to kill processes
+// so that file locks are released before Inno Setup tries to overwrite files.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  KillEnClawsProcesses;
+  // Give the OS a moment to release file handles
+  Sleep(500);
+  Result := '';
+end;
+
+// Called at each installation step.
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
     AddToUserPath(ExpandConstant('{app}'));
     BroadcastEnvironmentChange;
+    RenameUninstaller;
   end;
 end;
 
 // Called during uninstall — remove from PATH.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  ResultCode: Integer;
   UserDataDir: string;
 begin
   if CurUninstallStep = usUninstall then
@@ -206,12 +280,7 @@ begin
     end;
 
     // Best effort: stop the bundled gateway process so {app} files are not locked.
-    // Target by executable path to avoid killing unrelated Node.js processes.
-    Exec('powershell.exe',
-      '-NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq ''' +
-      ExpandConstant('{app}\node\node.exe') +
-      ''' } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }"',
-      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    KillEnClawsProcesses;
   end;
 
   if CurUninstallStep = usPostUninstall then

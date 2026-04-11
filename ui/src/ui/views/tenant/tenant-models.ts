@@ -12,6 +12,7 @@ import { PROVIDER_TYPES as SHARED_PROVIDERS, API_PROTOCOLS as SHARED_PROTOCOLS }
 import { t } from "../../../i18n/index.ts";
 import { I18nController } from "../../../i18n/lib/lit-controller.ts";
 import { showConfirm } from "../../components/confirm-dialog.ts";
+import { caretFix } from "../../shared-styles.ts";
 
 interface ModelDefinition {
   id: string;
@@ -34,6 +35,7 @@ interface TenantModelConfig {
   extraHeaders: Record<string, string>;
   extraConfig: Record<string, unknown>;
   models: ModelDefinition[];
+  visibility?: string;
   isActive: boolean;
   createdAt: string;
 }
@@ -43,91 +45,95 @@ const API_PROTOCOLS = SHARED_PROTOCOLS;
 
 @customElement("tenant-models-view")
 export class TenantModelsView extends LitElement {
-  static styles = css`
+  static styles = [caretFix, css`
     :host {
       display: block;
       padding: 1.5rem;
-      color: var(--text, #e5e5e5);
+      color: var(--text);
       font-family: var(--font-sans, system-ui, sans-serif);
     }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
     h3 { margin: 0 0 1rem; font-size: 0.95rem; font-weight: 600; }
-    h4 { margin: 0.75rem 0 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary, #a3a3a3); }
+    h4 { margin: 0.75rem 0 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--text-2); }
     .btn {
-      padding: 0.45rem 0.9rem; border: none; border-radius: var(--radius-md, 6px);
+      padding: 0.45rem 0.9rem; border: none; border-radius: var(--radius-md);
       font-size: 0.85rem; cursor: pointer; transition: opacity 0.15s;
     }
     .btn:hover { opacity: 0.85; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-primary { background: var(--accent, #3b82f6); color: white; }
-    .btn-danger { background: var(--bg-destructive, #7f1d1d); color: var(--text-destructive, #fca5a5); }
+    .btn-primary { background: var(--accent); color: var(--accent-foreground); }
+    .btn-danger { background: var(--danger-subtle); color: var(--danger); }
     .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
-    .btn-outline { background: transparent; border: 1px solid var(--border, #262626); color: var(--text, #e5e5e5); }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
     .card-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
       gap: 1rem;
     }
     .model-card {
-      background: var(--card, #141414);
-      border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
       padding: 1.25rem;
     }
     .model-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; }
     .model-name { font-size: 0.95rem; font-weight: 600; }
-    .model-provider { font-size: 0.75rem; color: var(--text-muted, #525252); margin-top: 0.15rem; }
-    .model-meta { font-size: 0.8rem; color: var(--text-secondary, #a3a3a3); margin-bottom: 0.5rem; }
+    .model-provider { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
+    .model-meta { font-size: 0.8rem; color: var(--text-2); margin-bottom: 0.5rem; }
     .model-meta span { margin-right: 1rem; }
     .model-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
     .model-tag {
       font-size: 0.72rem; padding: 0.15rem 0.5rem;
-      background: var(--bg, #0a0a0a); border: 1px solid var(--border, #262626);
-      border-radius: 999px; color: var(--text-secondary, #a3a3a3);
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 999px; color: var(--text-2);
     }
-    .model-tag.reasoning { border-color: #854d0e; color: #fbbf24; }
+    .model-tag.reasoning { border-color: var(--warn); color: var(--warn); }
+    .shared-badge {
+      font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 4px;
+      background: var(--accent-light); color: var(--accent); margin-left: 0.4rem;
+    }
     .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.3rem; }
-    .status-dot.active { background: #22c55e; }
-    .status-dot.inactive { background: #525252; }
+    .status-dot.active { background: var(--ok); }
+    .status-dot.inactive { background: var(--border); }
     .model-actions { display: flex; gap: 0.4rem; margin-top: 0.75rem; }
     .error-msg {
-      background: var(--bg-destructive, #2d1215); border: 1px solid var(--border-destructive, #7f1d1d);
-      border-radius: var(--radius-md, 6px); color: var(--text-destructive, #fca5a5);
+      background: var(--danger-subtle); border: 1px solid var(--danger);
+      border-radius: var(--radius-md); color: var(--danger);
       padding: 0.5rem 0.75rem; font-size: 0.8rem; margin-bottom: 1rem;
     }
     .success-msg {
-      background: #052e16; border: 1px solid #166534; border-radius: var(--radius-md, 6px);
-      color: #86efac; padding: 0.5rem 0.75rem; font-size: 0.8rem; margin-bottom: 1rem;
+      background: var(--ok-subtle); border: 1px solid var(--ok); border-radius: var(--radius-md);
+      color: var(--ok); padding: 0.5rem 0.75rem; font-size: 0.8rem; margin-bottom: 1rem;
     }
     .form-card {
-      background: var(--card, #141414); border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px); padding: 1.25rem; margin-bottom: 1.5rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1.5rem;
     }
     .form-row { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; }
     .form-field { flex: 1; }
-    .form-field label { display: block; font-size: 0.8rem; margin-bottom: 0.3rem; color: var(--text-secondary, #a3a3a3); }
+    .form-field label { display: block; font-size: 0.8rem; margin-bottom: 0.3rem; color: var(--text-2); }
     .form-field input, .form-field textarea, .form-field select {
-      width: 100%; padding: 0.45rem 0.65rem; background: var(--bg, #0a0a0a);
-      border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px);
-      color: var(--text, #e5e5e5); font-size: 0.85rem; outline: none; box-sizing: border-box;
+      width: 100%; padding: 0.45rem 0.65rem; background: var(--input-bg);
+      border: 1px solid var(--input-border); border-radius: var(--radius-md);
+      color: var(--text); font-size: 0.85rem; outline: none; box-sizing: border-box;
     }
-    .form-field input:focus, .form-field select:focus { border-color: var(--accent, #3b82f6); }
-    .form-hint { font-size: 0.72rem; color: var(--text-muted, #525252); margin-top: 0.25rem; }
-    .empty { text-align: center; padding: 2rem; color: var(--text-muted, #525252); font-size: 0.85rem; }
-    .loading { text-align: center; padding: 2rem; color: var(--text-muted, #525252); }
+    .form-field input:focus, .form-field select:focus { border-color: var(--accent); }
+    .form-hint { font-size: 0.72rem; color: var(--muted); margin-top: 0.25rem; }
+    .empty { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.85rem; }
+    .loading { text-align: center; padding: 2rem; color: var(--muted); }
     .sub-models-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 0.5rem; }
     .sub-models-table th, .sub-models-table td {
       text-align: left; padding: 0.4rem 0.5rem;
-      border-bottom: 1px solid var(--border, #262626);
+      border-bottom: 1px solid var(--border);
     }
-    .sub-models-table th { color: var(--text-secondary, #a3a3a3); font-weight: 500; }
-    .sub-model-form { background: var(--bg, #0a0a0a); border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px); padding: 0.75rem; margin-top: 0.5rem; }
+    .sub-models-table th { color: var(--text-2); font-weight: 500; }
+    .sub-model-form { background: var(--input-bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.75rem; margin-top: 0.5rem; }
     .sub-model-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: flex-end; }
     .sub-model-row .form-field { flex: 1; }
     .sub-model-row .form-field label { font-size: 0.72rem; }
     .sub-model-row .form-field input { font-size: 0.8rem; padding: 0.35rem 0.5rem; }
-  `;
+  `];
 
   private i18nController = new I18nController(this);
 
@@ -414,6 +420,7 @@ export class TenantModelsView extends LitElement {
 
   private renderCard(config: TenantModelConfig) {
     const providerLabel = PROVIDER_TYPES.find((p) => p.value === config.providerType)?.label ?? config.providerType;
+    const isShared = config.visibility === "shared";
     return html`
       <div class="model-card">
         <div class="model-card-header">
@@ -421,7 +428,8 @@ export class TenantModelsView extends LitElement {
             <div class="model-name">
               <span class="status-dot ${config.isActive ? "active" : "inactive"}"></span>
               ${config.providerName}
-              ${!config.isActive ? html`<span style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:#2d1215;color:#fca5a5;margin-left:0.4rem">${t("models.disable")}</span>` : nothing}
+              ${isShared ? html`<span class="shared-badge">${t("platformModels.shared", {}, "Shared")}</span>` : nothing}
+              ${!config.isActive ? html`<span style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:var(--danger-subtle);color:var(--danger);margin-left:0.4rem">${t("models.disable")}</span>` : nothing}
             </div>
             <div class="model-provider">${providerLabel} | ${config.apiProtocol}</div>
           </div>
@@ -435,10 +443,12 @@ export class TenantModelsView extends LitElement {
             <span class="model-tag ${m.reasoning ? "reasoning" : ""}">${m.name} (${m.id})</span>
           `)}
         </div>
-        <div class="model-actions">
-          <button class="btn btn-outline btn-sm" @click=${() => this.startEdit(config)}>${t("models.edit")}</button>
-          <button class="btn btn-danger btn-sm" @click=${() => this.handleDelete(config)}>${t("models.delete")}</button>
-        </div>
+        ${isShared ? nothing : html`
+          <div class="model-actions">
+            <button class="btn btn-outline btn-sm" @click=${() => this.startEdit(config)}>${t("models.edit")}</button>
+            <button class="btn btn-danger btn-sm" @click=${() => this.handleDelete(config)}>${t("models.delete")}</button>
+          </div>
+        `}
       </div>
     `;
   }
@@ -496,7 +506,6 @@ export class TenantModelsView extends LitElement {
               <label>${t("models.authMode")}</label>
               <select @change=${(e: Event) => (this.formAuthMode = (e.target as HTMLSelectElement).value)}>
                 <option value="api-key" ?selected=${this.formAuthMode === "api-key"}>API Key</option>
-                <option value="oauth" ?selected=${this.formAuthMode === "oauth"}>OAuth</option>
                 <option value="token" ?selected=${this.formAuthMode === "token"}>Token</option>
                 <option value="none" ?selected=${this.formAuthMode === "none"}>${t("models.authNone")}</option>
               </select>

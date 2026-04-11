@@ -1,0 +1,21 @@
+{
+  "appId": "cli_xxx",
+  "appSecret": "xxx",
+  "userOpenId": "ou_xxx",
+  "cases": [
+    {
+      "name": "按标题读取 01 创建的文档",
+      "message": "帮我读取「AutoTest_Layer3文档」这个文档的内容",
+      "assert": {
+        "llmEvaluate": "回复是否成功获取了文档内容？是否展示了文档标题和正文内容（第一章、第二章）？内容格式是否清晰？"
+      }
+    },
+    {
+      "name": "读取 01 创建的第二个文档",
+      "message": "帮我看看「AutoTest_搜索目标文档」写了什么",
+      "assert": {
+        "llmEvaluate": "回复是否返回了文档内容？是否包含「搜索测试的目标文档」这类内容？"
+      }
+    }
+  ]
+}

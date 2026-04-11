@@ -1,5 +1,6 @@
 import { LitElement, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { caretFix } from "../shared-styles.ts";
 
 /**
  * A draggable divider for resizable split views.
@@ -15,7 +16,7 @@ export class ResizableDivider extends LitElement {
   private startX = 0;
   private startRatio = 0;
 
-  static styles = css`
+  static styles = [caretFix, css`
     :host {
       width: 4px;
       cursor: col-resize;
@@ -38,7 +39,7 @@ export class ResizableDivider extends LitElement {
     :host(.dragging) {
       background: var(--accent, #007bff);
     }
-  `;
+  `];
 
   render() {
     return nothing;

@@ -20,17 +20,22 @@ export const TAB_GROUPS = [
     },
     {
         label: "enterprise",
-        tabs: ["tenant-settings", "tenant-users", "tenant-traces"],
+        tabs: ["tenant-settings", "tenant-users", "tenant-traces", "tenant-usage"],
     },
     {
         label: "system",
         tabs: ["instances", "cron", "logs", "debug"],
+    },
+    {
+        label: "platform",
+        tabs: ["platform-tools","platform-models"],
     },
 ] as const;
 
 export type Tab =
     | "agents"
     | "overview"
+    | "platform-models"
     | "channels"
     | "instances"
     | "sessions"
@@ -51,11 +56,13 @@ export type Tab =
     | "tenant-skills"
     | "tenant-overview"
     | "tenant-traces"
-    | "tenant-usage";
+    | "tenant-usage"
+    | "platform-tools";
 
 const TAB_PATHS: Record<Tab, string> = {
     agents: "/agents",
     overview: "/overview",
+    "platform-models": "/platform-models",
     channels: "/channels",
     instances: "/instances",
     sessions: "/sessions",
@@ -77,6 +84,7 @@ const TAB_PATHS: Record<Tab, string> = {
     "tenant-skills": "/tenant-skills",
     "tenant-traces": "/tenant-traces",
     "tenant-usage": "/tenant-usage",
+    "platform-tools": "/platform-tools",
 };
 
 const PATH_TO_TAB = new Map(Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab]));
@@ -168,6 +176,8 @@ export function iconForTab(tab: Tab): IconName {
             return "messageSquare";
         case "overview":
             return "barChart";
+        case "platform-models":
+            return "settings";
         case "channels":
             return "link";
         case "instances":
@@ -208,6 +218,8 @@ export function iconForTab(tab: Tab): IconName {
             return "scrollText";
         case "tenant-usage":
             return "barChart";
+        case "platform-tools":
+            return "zap";
         default:
             return "folder";
     }

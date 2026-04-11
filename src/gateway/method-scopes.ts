@@ -38,6 +38,23 @@ export const SCOPE_BYPASS_METHODS = new Set([
   "auth.refresh",
   "auth.logout",
   "auth.me",
+  // Auth Phase 1
+  "auth.changePassword",
+  "auth.capabilities",
+  "auth.forgotPassword",
+  "auth.forgotPassword.verify",
+  "auth.adminResetPassword",
+  "auth.viewTempPassword",
+  // Auth Phase 3
+  "auth.sessions",
+  "auth.revokeSession",
+  "auth.revokeAllOtherSessions",
+  "auth.verifyEmail",
+  "auth.resendVerifyEmail",
+  "auth.mfa.setup.begin",
+  "auth.mfa.setup.verify",
+  "auth.mfa.disable",
+  "auth.mfa.verify",
   // Tenant management (handled by multi-tenant RBAC)
   "tenant.get",
   "tenant.update",
@@ -109,6 +126,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "tts.providers",
     "models.list",
     "tools.catalog",
+    "sys.tools.get",
     "agents.list",
     "agent.identity.get",
     "skills.status",
@@ -178,6 +196,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "agents.files.set",
     "agents.memory.set",
     "agents.memory.delete",
+    "sys.tools.update",
   ],
 };
 

@@ -35,7 +35,7 @@ export async function getTenantSummary(tenantId: string) {
     query("SELECT COUNT(*) as c FROM tenant_channel_apps WHERE tenant_id = $1", [tenantId]),
     query("SELECT COALESCE(SUM(jsonb_array_length(models)), 0) as c FROM tenant_models WHERE tenant_id = $1 AND is_active = true", [tenantId]),
     query("SELECT COUNT(*) as c FROM tenant_models WHERE tenant_id = $1 AND is_active = true", [tenantId]),
-    query("SELECT COUNT(*) as c FROM users WHERE tenant_id = $1 AND status != 'deleted'", [tenantId]),
+    query("SELECT COUNT(DISTINCT COALESCE(union_id, id::text)) as c FROM users WHERE tenant_id = $1 AND status = 'active'", [tenantId]),
     query("SELECT COUNT(DISTINCT user_id) as c FROM llm_interaction_traces WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '30 days'", [tenantId]),
     query("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = $1", [tenantId]),
     query("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = $1 AND recorded_at >= DATE_TRUNC('month', NOW())", [tenantId]),
@@ -182,7 +182,11 @@ export async function getTenantRecentTraces(tenantId: string, limit = 10) {
             t.created_at
      FROM llm_interaction_traces t
      LEFT JOIN tenant_agents ta ON ta.agent_id = t.agent_id AND ta.tenant_id = t.tenant_id
-     LEFT JOIN users u ON u.tenant_id = t.tenant_id AND (t.user_id = u.id::text OR t.user_id = u.union_id)
+     LEFT JOIN LATERAL (
+       SELECT display_name FROM users
+       WHERE tenant_id = t.tenant_id AND (id::text = t.user_id OR union_id = t.user_id)
+       LIMIT 1
+     ) u ON true
      WHERE t.tenant_id = $1 AND t.turn_index = 0
      ORDER BY t.created_at DESC LIMIT $2`,
     [tenantId, limit],

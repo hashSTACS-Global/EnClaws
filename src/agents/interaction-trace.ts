@@ -220,7 +220,13 @@ export function createInteractionTraceRecorder(
           requestParams: payload.requestParams,
           response,
           stopReason,
-          errorMessage: isLastRound && error ? (error instanceof Error ? error.message : String(error)) : undefined,
+          errorMessage: isLastRound
+            ? error
+              ? formatTraceError(error)
+              : stopReason === "error"
+                ? extractErrorFromResponse(response)
+                : undefined
+            : undefined,
           inputTokens,
           outputTokens,
           cacheReadTokens,
@@ -235,6 +241,34 @@ export function createInteractionTraceRecorder(
 
   return { wrapStreamFn, setSystemPrompt, recordRound };
 }
+
+/** Extract error text from an assistant message response when stopReason is "error". */
+export function extractErrorFromResponse(response: unknown): string | undefined {
+  if (response == null) return "LLM request failed (no response)";
+  // response is typically content array: [{type: "text", text: "..."}]
+  if (Array.isArray(response)) {
+    const texts = response
+      .filter((c: Record<string, unknown>) => c?.type === "text" && c?.text)
+      .map((c: Record<string, unknown>) => c.text as string);
+    if (texts.length > 0) return texts.join("\n");
+  }
+  if (typeof response === "string" && response) return response;
+  return "LLM request failed";
+}
+
+/** Build a non-empty error string for the trace, including HTTP status when available. */
+export function formatTraceError(error: unknown): string {
+  if (error instanceof Error) {
+    const msg = error.message;
+    if (msg) return msg;
+    // message is empty — use status or toString() as fallback
+    const status = (error as { status?: number }).status;
+    if (status) return `${error.name || "Error"}: ${status} status code (no body)`;
+    return error.name || String(error) || "Unknown error";
+  }
+  return String(error) || "Unknown error";
+}
+
 
 function toInt(val: unknown): number {
   if (typeof val === "number") return Math.floor(val);

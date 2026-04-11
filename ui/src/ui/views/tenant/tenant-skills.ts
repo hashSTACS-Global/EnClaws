@@ -8,6 +8,7 @@
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../../i18n/index.ts";
+import { caretFix } from "../../shared-styles.ts";
 import { tenantRpc } from "./rpc.ts";
 
 interface SkillInstallSpec {
@@ -95,75 +96,73 @@ function sourceLabel(source: string): string {
 export class TenantSkillsView extends LitElement {
   private i18nCtrl = new I18nController(this);
 
-  static styles = css`
+  static styles = [caretFix, css`
     :host {
-      display: block; padding: 1.5rem; color: var(--text, #e5e5e5);
+      display: block; padding: 1.5rem; color: var(--text);
       font-family: var(--font-sans, system-ui, sans-serif);
     }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
-    .subtitle { font-size: 0.8rem; color: var(--text-secondary, #a3a3a3); margin-top: 0.25rem; }
+    .subtitle { font-size: 0.8rem; color: var(--text-2); margin-top: 0.25rem; }
     .btn {
-      padding: 0.45rem 0.9rem; border: none; border-radius: var(--radius-md, 6px);
+      padding: 0.45rem 0.9rem; border: none; border-radius: var(--radius-md);
       font-size: 0.85rem; cursor: pointer; transition: opacity 0.15s;
     }
     .btn:hover { opacity: 0.85; }
-    .btn-outline { background: transparent; border: 1px solid var(--border, #262626); color: var(--text, #e5e5e5); }
-    .btn-primary { background: var(--accent, #3b82f6); color: #fff; border: none; }
-    .btn-warn { background: #78350f; color: #fbbf24; border: none; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-primary { background: var(--accent); color: var(--accent-foreground); border: none; }
+    .btn-warn { background: var(--warn-subtle); color: var(--warn); border: none; }
     .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.78rem; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .error-msg {
-      background: var(--bg-destructive, #2d1215); border: 1px solid var(--border-destructive, #7f1d1d);
-      border-radius: var(--radius-md, 6px); color: var(--text-destructive, #fca5a5);
+      background: var(--danger-subtle); border: 1px solid var(--danger);
+      border-radius: var(--radius-md); color: var(--danger);
       padding: 0.5rem 0.75rem; font-size: 0.8rem; margin-bottom: 1rem;
     }
     .filters {
       display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;
     }
     .filters input {
-      padding: 0.35rem 0.5rem; background: var(--bg, #0a0a0a);
-      border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px);
-      color: var(--text, #e5e5e5); font-size: 0.8rem; outline: none; flex: 1; min-width: 160px;
+      padding: 0.35rem 0.5rem; background: var(--input-bg);
+      border: 1px solid var(--input-border); border-radius: var(--radius-md);
+      color: var(--text); font-size: 0.8rem; outline: none; flex: 1; min-width: 160px;
     }
-    .filters label { font-size: 0.8rem; color: var(--text-secondary, #a3a3a3); }
-    .filters input:focus { border-color: var(--accent, #3b82f6); }
-    .muted { font-size: 0.78rem; color: var(--text-secondary, #a3a3a3); }
+    .filters label { font-size: 0.8rem; color: var(--text-2); }
+    .filters input:focus { border-color: var(--accent); }
+    .muted { font-size: 0.78rem; color: var(--text-2); }
     .group { margin-bottom: 1.5rem; }
     .group-header {
       font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;
       display: flex; align-items: center; gap: 0.5rem; cursor: pointer;
       user-select: none;
     }
-    .group-header .count {
-      font-weight: 400; color: var(--text-secondary, #a3a3a3); font-size: 0.78rem;
-    }
+    .group-header .count { font-weight: 400; color: var(--text-2); font-size: 0.78rem; }
     .skill-list {
       display: flex; flex-direction: column;
-      border-top: 1px solid var(--border, #262626);
+      border-top: 1px solid var(--border);
     }
     .skill-card {
       padding: 0.75rem;
-      border-bottom: 1px solid var(--border, #262626);
+      border-bottom: 1px solid var(--border);
       display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
     }
-    .skill-card:hover { background: rgba(255, 255, 255, 0.02); }
+    .skill-card:hover { background: var(--bg-hover); }
     .skill-info { flex: 1; min-width: 0; }
     .skill-name { font-size: 0.85rem; font-weight: 600; }
-    .skill-desc { font-size: 0.78rem; color: var(--text-secondary, #a3a3a3); margin-top: 0.2rem; }
+    .skill-desc { font-size: 0.78rem; color: var(--text-2); margin-top: 0.2rem; }
     .skill-meta { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.4rem; }
     .chip {
       display: inline-block; font-size: 0.75rem; padding: 0.15rem 0.45rem;
       border-radius: 4px; font-weight: 500;
-      background: #525252; color: #a3a3a3;
+      background: var(--border); color: var(--muted);
     }
-    .chip-success { background: #059669; color: #6ee7b7; }
-    .chip-warning { background: #78350f; color: #fbbf24; }
-    .chip-danger { background: #7f1d1d; color: #fca5a5; }
+    .chip-success { background: var(--ok-subtle); color: var(--ok); }
+    .chip-warning { background: var(--warn-subtle); color: var(--warn); }
+    .chip-danger { background: var(--danger-subtle); color: var(--danger); }
     .skill-actions { display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center; }
-    .empty { text-align: center; padding: 3rem 1rem; color: var(--text-secondary, #a3a3a3); }
-    .loading { text-align: center; padding: 2rem; color: var(--text-secondary, #a3a3a3); }
-  `;
+    .empty { text-align: center; padding: 3rem 1rem; color: var(--text-2); }
+    .loading { text-align: center; padding: 2rem; color: var(--text-2); }
+  `];
 
   @property({ type: String }) gatewayUrl = "";
 

@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { SUPPORTED_LOCALES } from "../../i18n/index.ts";
+import { caretFix } from "../shared-styles.ts";
 import type { Locale } from "../../i18n/index.ts";
 
 const LOCALE_LABELS: Record<Locale, string> = {
@@ -16,7 +17,7 @@ export class LanguageSwitcher extends LitElement {
   @property({ type: String }) locale: string = "en";
   @state() private menuOpen = false;
 
-  static styles = css`
+  static styles = [caretFix, css`
     :host {
       display: inline-block;
       position: relative;
@@ -94,7 +95,7 @@ export class LanguageSwitcher extends LitElement {
       background: var(--surface-2, rgba(128, 128, 128, 0.15));
       color: var(--primary-color, var(--accent, #3b82f6));
     }
-  `;
+  `];
 
   private handleToggle() {
     this.menuOpen = !this.menuOpen;

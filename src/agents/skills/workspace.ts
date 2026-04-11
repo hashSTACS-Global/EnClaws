@@ -76,16 +76,17 @@ function filterSkillEntries(
 ): SkillEntry[] {
   let filtered = entries.filter((entry) => shouldIncludeSkill({ entry, config, eligibility }));
   // If skillFilter is provided, only include skills in the filter list.
+  skillsLogger.info(`[skills-chain] filterSkillEntries: total=${entries.length}, eligible=${filtered.length}, skillFilter=${skillFilter !== undefined ? JSON.stringify(skillFilter) : "undefined"}`);
   if (skillFilter !== undefined) {
     const normalized = normalizeSkillFilter(skillFilter) ?? [];
     const label = normalized.length > 0 ? normalized.join(", ") : "(none)";
-    skillsLogger.debug(`Applying skill filter: ${label}`);
+    skillsLogger.info(`[skills-chain] Applying skill filter: ${label}`);
     filtered =
       normalized.length > 0
         ? filtered.filter((entry) => normalized.includes(entry.skill.name))
         : [];
-    skillsLogger.debug(
-      `After skill filter: ${filtered.map((entry) => entry.skill.name).join(", ") || "(none)"}`,
+    skillsLogger.info(
+      `[skills-chain] After skill filter: ${filtered.length} skills — ${filtered.map((entry) => entry.skill.name).join(", ") || "(none)"}`,
     );
   }
   return filtered;
@@ -506,11 +507,15 @@ export function buildWorkspaceSkillSnapshot(
   workspaceDir: string,
   opts?: WorkspaceSkillBuildOptions & { snapshotVersion?: number },
 ): SkillSnapshot {
-  const { eligible, prompt, resolvedSkills } = resolveWorkspaceSkillPromptState(workspaceDir, opts);
+  const { allEntries, eligible, prompt, resolvedSkills } = resolveWorkspaceSkillPromptState(workspaceDir, opts);
   const skillFilter = normalizeSkillFilter(opts?.skillFilter);
-  const skillOverrides = eligible
-    .filter((e) => e.overrides && e.overrides.length > 0)
-    .flatMap((e) => e.overrides!);
+  // Collect overrides from eligible skills (standard behavior) PLUS overrides
+  // from skills excluded by skillFilter. When a skill is filtered out, its
+  // associated plugin tools should also be disabled — not resurrected.
+  const overrideSources = skillFilter !== undefined
+    ? allEntries.filter((e) => e.overrides && e.overrides.length > 0)
+    : eligible.filter((e) => e.overrides && e.overrides.length > 0);
+  const skillOverrides = overrideSources.flatMap((e) => e.overrides!);
   return {
     prompt,
     skills: eligible.map((entry) => ({
@@ -546,6 +551,7 @@ function resolveWorkspaceSkillPromptState(
   workspaceDir: string,
   opts?: WorkspaceSkillBuildOptions,
 ): {
+  allEntries: SkillEntry[];
   eligible: SkillEntry[];
   prompt: string;
   resolvedSkills: Skill[];
@@ -578,15 +584,37 @@ function resolveWorkspaceSkillPromptState(
       );
     }
   }
+  // When skillFilter is active, compute skills excluded by the filter and
+  // inject a <disabled_skills> block so the model knows not to invoke them
+  // via exec even if conversation history contains prior usage.
+  let disabledBlock = "";
+  if (opts?.skillFilter !== undefined) {
+    const eligibleNames = new Set(eligible.map((e) => e.skill.name));
+    const configEligible = skillEntries.filter((entry) =>
+      shouldIncludeSkill({ entry, config: opts?.config, eligibility: opts?.eligibility }),
+    );
+    const excludedNames = configEligible
+      .filter((e) => !eligibleNames.has(e.skill.name))
+      .map((e) => e.skill.name);
+    if (excludedNames.length > 0) {
+      disabledBlock = [
+        "<disabled_skills>",
+        excludedNames.join(", "),
+        "</disabled_skills>",
+        "You MUST NOT invoke disabled skills via exec or any other tool, even if conversation history shows prior usage.",
+      ].join("\n");
+    }
+  }
   const prompt = [
     remoteNote,
     truncationNote,
     formatSkillsForPrompt(compactSkillPaths(skillsForPrompt)),
     ...inlineBlocks,
+    disabledBlock,
   ]
     .filter(Boolean)
     .join("\n");
-  return { eligible, prompt, resolvedSkills };
+  return { allEntries: skillEntries, eligible, prompt, resolvedSkills };
 }
 
 export function resolveSkillsPromptForRun(params: {

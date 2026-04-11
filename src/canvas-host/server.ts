@@ -102,14 +102,14 @@ function defaultIndexHTML() {
     !!(
       window.webkit &&
       window.webkit.messageHandlers &&
-      window.webkit.messageHandlers.openclawCanvasA2UIAction
+      window.webkit.messageHandlers.enclawsCanvasA2UIAction
     );
   const hasAndroid = () =>
     !!(
-      (window.openclawCanvasA2UIAction &&
-        typeof window.openclawCanvasA2UIAction.postMessage === "function")
+      (window.enclawsCanvasA2UIAction &&
+        typeof window.enclawsCanvasA2UIAction.postMessage === "function")
     );
-  const hasHelper = () => typeof window.openclawSendUserAction === "function";
+  const hasHelper = () => typeof window.enclawsSendUserAction === "function";
   statusEl.innerHTML =
     "Bridge: " +
     (hasHelper() ? "<span class='ok'>ready</span>" : "<span class='bad'>missing</span>") +
@@ -128,8 +128,8 @@ function defaultIndexHTML() {
       return;
     }
     const sendUserAction =
-      typeof window.openclawSendUserAction === "function"
-        ? window.openclawSendUserAction
+      typeof window.enclawsSendUserAction === "function"
+        ? window.enclawsSendUserAction
         : undefined;
     const ok = sendUserAction({
       name,

@@ -12,6 +12,8 @@ import {
 } from "../../infra/format-time/format-datetime.ts";
 import { getRemoteSkillEligibility } from "../../infra/skills-remote.js";
 import { drainSystemEventEntries } from "../../infra/system-events.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
+const skillsLog = createSubsystemLogger("skills");
 
 export async function prependSystemEvents(params: {
   cfg: OpenClawConfig;
@@ -154,8 +156,12 @@ export async function ensureSkillSnapshot(params: {
   const remoteEligibility = getRemoteSkillEligibility();
   const snapshotVersion = getSkillsSnapshotVersion(workspaceDir);
   ensureSkillsWatcher({ workspaceDir, config: cfg });
-  const shouldRefreshSnapshot =
+  const versionStale =
     snapshotVersion > 0 && (nextEntry?.skillsSnapshot?.version ?? 0) < snapshotVersion;
+  const cachedSkillFilter = nextEntry?.skillsSnapshot?.skillFilter;
+  const skillFilterChanged = skillFilter !== undefined && JSON.stringify(cachedSkillFilter ?? null) !== JSON.stringify(skillFilter);
+  const shouldRefreshSnapshot = versionStale || skillFilterChanged;
+  skillsLog.info(`[skills-chain] ensureSkillSnapshot: isFirstTurn=${isFirstTurnInSession}, versionStale=${versionStale}, skillFilterChanged=${skillFilterChanged}, shouldRefresh=${shouldRefreshSnapshot}, skillFilter=${JSON.stringify(skillFilter ?? null)}, cachedFilter=${JSON.stringify(cachedSkillFilter ?? null)}, cachedSkillsCount=${nextEntry?.skillsSnapshot?.skills?.length ?? 0}`);
 
   if (isFirstTurnInSession && sessionStore && sessionKey) {
     const current = nextEntry ??

@@ -7,6 +7,7 @@ import { resolveRequiredHomeDir } from "../infra/home-dir.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../routing/session-key.js";
 import { resolveUserPath } from "../utils.js";
+import { getEnterpriseDefault } from "./enterprise-defaults.js";
 import { resolveWorkspaceTemplateDir } from "./workspace-templates.js";
 
 export function resolveDefaultAgentWorkspaceDir(
@@ -472,8 +473,8 @@ export async function ensureTenantBootstrapFiles(ctx: TenantBootstrapContext): P
     fs.mkdir(ctx.tenantDir, { recursive: true }),
     fs.mkdir(ctx.agentDir, { recursive: true }),
   ];
-  if (ctx.userDir) mkdirs.push(fs.mkdir(ctx.userDir, { recursive: true }));
-  if (ctx.workspaceDir) mkdirs.push(fs.mkdir(ctx.workspaceDir, { recursive: true }));
+  if (ctx.userDir) {mkdirs.push(fs.mkdir(ctx.userDir, { recursive: true }));}
+  if (ctx.workspaceDir) {mkdirs.push(fs.mkdir(ctx.workspaceDir, { recursive: true }));}
   await Promise.all(mkdirs);
 
   // Tenant-level files
@@ -506,14 +507,43 @@ export async function ensureTenantBootstrapFiles(ctx: TenantBootstrapContext): P
   const agentIdentityPath = path.join(ctx.agentDir, DEFAULT_IDENTITY_FILENAME);
   const agentHeartbeatPath = path.join(ctx.agentDir, DEFAULT_HEARTBEAT_FILENAME);
   const agentBootstrapPath = path.join(ctx.agentDir, DEFAULT_BOOTSTRAP_FILENAME);
-  const agentsTemplate = await loadTemplate(DEFAULT_AGENTS_FILENAME);
-  const soulTemplate = await loadTemplate(DEFAULT_SOUL_FILENAME);
-  const identityTemplate = await loadTemplate(DEFAULT_IDENTITY_FILENAME);
+  // Multi-tenant: seed enterprise defaults instead of generic templates for
+  // agent-level persona files (AGENTS.md, SOUL.md, IDENTITY.md).
+  const {
+    ENTERPRISE_DEFAULT_AGENTS: agentsDefault,
+    ENTERPRISE_DEFAULT_SOUL: soulDefault,
+    ENTERPRISE_DEFAULT_IDENTITY: identityDefault,
+  } = await import("./enterprise-defaults.js");
   const heartbeatTemplate = await loadTemplate(DEFAULT_HEARTBEAT_FILENAME);
-  await writeFileIfMissing(agentAgentsPath, agentsTemplate);
-  await writeFileIfMissing(agentSoulPath, soulTemplate);
-  await writeFileIfMissing(agentIdentityPath, identityTemplate);
+  await writeFileIfMissing(agentAgentsPath, agentsDefault);
+  await writeFileIfMissing(agentSoulPath, soulDefault);
+  await writeFileIfMissing(agentIdentityPath, identityDefault);
   await writeFileIfMissing(agentHeartbeatPath, heartbeatTemplate);
+
+  // Migrate existing agents: if files still have the old generic template content,
+  // overwrite them with enterprise defaults so the system prompt gets proper guidance.
+  const migrateTargets: Array<{ filePath: string; enterpriseContent: string }> = [
+    { filePath: agentAgentsPath, enterpriseContent: agentsDefault },
+    { filePath: agentSoulPath, enterpriseContent: soulDefault },
+    { filePath: agentIdentityPath, enterpriseContent: identityDefault },
+  ];
+  for (const target of migrateTargets) {
+    try {
+      const current = await fs.readFile(target.filePath, "utf-8");
+      // Overwrite if content matches the generic English template OR a previous
+      // version of the enterprise defaults (e.g. Chinese → English migration).
+      // User-customized content is left untouched.
+      if (current === target.enterpriseContent) { continue; }
+      const template = await loadTemplate(path.basename(target.filePath));
+      const isTemplate = current === template;
+      const { PREVIOUS_ENTERPRISE_DEFAULT_PREFIXES } = await import("./enterprise-defaults.js");
+      const isOldDefault = !isTemplate
+        && PREVIOUS_ENTERPRISE_DEFAULT_PREFIXES.some((prefix: string) => current.startsWith(prefix));
+      if (isTemplate || isOldDefault) {
+        await fs.writeFile(target.filePath, target.enterpriseContent, "utf-8");
+      }
+    } catch { /* file doesn't exist yet — writeFileIfMissing handled it above */ }
+  }
 
   // Seed BOOTSTRAP.md only if agent dir looks brand new
   const agentIndicators = [agentAgentsPath, agentSoulPath, agentIdentityPath];
@@ -521,8 +551,10 @@ export async function ensureTenantBootstrapFiles(ctx: TenantBootstrapContext): P
     agentIndicators.map(async (p) => {
       try {
         const content = await fs.readFile(p, "utf-8");
+        // Check against both enterprise defaults and templates
+        const enterpriseDefault = getEnterpriseDefault(path.basename(p));
         const template = await loadTemplate(path.basename(p));
-        return content !== template;
+        return content !== template && content !== enterpriseDefault;
       } catch {
         return false;
       }
@@ -782,8 +814,8 @@ async function loadTenantBootstrapFiles(
       const tenant = await getTenantById(ctx.tenantId);
       if (tenant) {
         const lines: string[] = ["# 企业身份", ""];
-        if (tenant.name) lines.push(`- 企业名称：${tenant.name}`);
-        if (tenant.slug) lines.push(`- 企业标识：${tenant.slug}`);
+        if (tenant.name) {lines.push(`- 企业名称：${tenant.name}`);}
+        if (tenant.slug) {lines.push(`- 企业标识：${tenant.slug}`);}
         lines.push("");
         lines.push("当用户询问你的身份时，应主动说明你服务于该企业。");
         lines.push("当对话中出现重要的企业级信息时，主动使用 tenant_memory 工具保存。");
@@ -809,7 +841,7 @@ async function loadTenantBootstrapFiles(
     }
   }
 
-  // 2. Remaining files
+  // 2. Remaining files — use enterprise defaults for missing agent-level files
   for (const entry of entries) {
     const loaded = await readWorkspaceFileGuardless(entry.filePath);
     if (loaded.ok) {
@@ -820,7 +852,20 @@ async function loadTenantBootstrapFiles(
         missing: false,
       });
     } else {
-      result.push({ name: entry.name, path: entry.filePath, missing: true });
+      // For agent-level files (AGENTS.md, SOUL.md, IDENTITY.md) in multi-tenant mode,
+      // inject enterprise defaults so the system prompt always has baseline guidance
+      // even before the user explicitly saves custom content.
+      const enterpriseDefault = getEnterpriseDefault(entry.name);
+      if (enterpriseDefault) {
+        result.push({
+          name: entry.name,
+          path: entry.filePath,
+          content: enterpriseDefault,
+          missing: true,
+        });
+      } else {
+        result.push({ name: entry.name, path: entry.filePath, missing: true });
+      }
     }
   }
   return result;

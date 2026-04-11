@@ -9,6 +9,7 @@
 
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { caretFix } from "../shared-styles.ts";
 
 export interface ConfirmDialogOptions {
   title: string;
@@ -16,11 +17,12 @@ export interface ConfirmDialogOptions {
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  hideCancel?: boolean;
 }
 
 @customElement("confirm-dialog")
 export class ConfirmDialog extends LitElement {
-  static styles = css`
+  static styles = [caretFix, css`
     .overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.6);
       display: flex; align-items: center; justify-content: center;
@@ -62,13 +64,14 @@ export class ConfirmDialog extends LitElement {
     }
     @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
     @keyframes slideUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
-  `;
+  `];
 
   @property() title = "";
   @property() message = "";
   @property() confirmText = "OK";
   @property() cancelText = "Cancel";
   @property({ type: Boolean }) danger = false;
+  @property({ type: Boolean }) hideCancel = false;
 
   private _resolve?: (value: boolean) => void;
 
@@ -97,7 +100,7 @@ export class ConfirmDialog extends LitElement {
           ${this.title ? html`<div class="title">${this.title}</div>` : nothing}
           <div class="message">${this.message}</div>
           <div class="footer">
-            <button class="btn btn-cancel" @click=${this._cancel}>${this.cancelText}</button>
+            ${this.hideCancel ? nothing : html`<button class="btn btn-cancel" @click=${this._cancel}>${this.cancelText}</button>`}
             <button class="btn btn-confirm ${this.danger ? "danger" : ""}" @click=${this._confirm}>${this.confirmText}</button>
           </div>
         </div>
@@ -114,6 +117,7 @@ export function showConfirm(opts: ConfirmDialogOptions): Promise<boolean> {
     if (opts.confirmText) el.confirmText = opts.confirmText;
     if (opts.cancelText) el.cancelText = opts.cancelText;
     if (opts.danger) el.danger = true;
+    if (opts.hideCancel) el.hideCancel = true;
     el.show(resolve);
     document.body.appendChild(el);
   });

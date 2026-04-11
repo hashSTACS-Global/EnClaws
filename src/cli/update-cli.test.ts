@@ -111,6 +111,13 @@ vi.mock("./daemon-cli.js", () => ({
   runDaemonRestart: vi.fn(),
 }));
 
+vi.mock("../infra/update-settings.js", () => ({
+  getStoredUpdateTrack: vi.fn().mockResolvedValue(null),
+  patchUpdateSettings: vi.fn().mockResolvedValue(undefined),
+  readUpdateSettings: vi.fn().mockResolvedValue({}),
+  writeUpdateSettings: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock the runtime
 vi.mock("../runtime.js", () => ({
   defaultRuntime: {
@@ -123,6 +130,7 @@ vi.mock("../runtime.js", () => ({
 const { runGatewayUpdate } = await import("../infra/update-runner.js");
 const { resolveOpenClawPackageRoot } = await import("../infra/openclaw-root.js");
 const { readConfigFileSnapshot, writeConfigFile } = await import("../config/config.js");
+const { patchUpdateSettings } = await import("../infra/update-settings.js");
 const { checkUpdateStatus, fetchNpmTagVersion, resolveNpmChannelTag } =
   await import("../infra/update-check.js");
 const { runCommandWithTimeout } = await import("../process/exec.js");
@@ -185,9 +193,9 @@ describe("update-cli", () => {
     });
   };
 
-  const expectUpdateCallChannel = (channel: string) => {
+  const expectUpdateCallTrack = (track: string) => {
     const call = vi.mocked(runGatewayUpdate).mock.calls[0]?.[0];
-    expect(call?.channel).toBe(channel);
+    expect(call?.track).toBe(track);
     return call;
   };
 
@@ -404,49 +412,47 @@ describe("update-cli", () => {
     const last = vi.mocked(defaultRuntime.log).mock.calls.at(-1)?.[0];
     expect(typeof last).toBe("string");
     const parsed = JSON.parse(String(last));
-    expect(parsed.channel.value).toBe("stable");
+    expect(parsed.track.value).toBe("stable");
   });
 
   it.each([
     {
-      name: "defaults to dev channel for git installs when unset",
+      name: "defaults to dev track for git installs when unset",
       mode: "git" as const,
       options: {},
       prepare: async () => {},
-      expectedChannel: "dev" as const,
+      expectedTrack: "dev" as const,
       expectedTag: undefined as string | undefined,
     },
     {
-      name: "defaults to stable channel for package installs when unset",
+      name: "defaults to stable track for package installs when unset",
       mode: "npm" as const,
       options: { yes: true },
       prepare: async () => {
         const tempDir = createCaseDir("enclaws-update");
         mockPackageInstallStatus(tempDir);
       },
-      expectedChannel: "stable" as const,
+      expectedTrack: "stable" as const,
       expectedTag: "latest",
     },
     {
-      name: "uses stored beta channel when configured",
+      name: "uses stored beta track when configured",
       mode: "git" as const,
       options: {},
       prepare: async () => {
-        vi.mocked(readConfigFileSnapshot).mockResolvedValue({
-          ...baseSnapshot,
-          config: { update: { channel: "beta" } } as OpenClawConfig,
-        });
+        const { getStoredUpdateTrack } = await import("../infra/update-settings.js");
+        vi.mocked(getStoredUpdateTrack).mockResolvedValueOnce("beta");
       },
-      expectedChannel: "beta" as const,
+      expectedTrack: "beta" as const,
       expectedTag: undefined as string | undefined,
     },
-  ])("$name", async ({ mode, options, prepare, expectedChannel, expectedTag }) => {
+  ])("$name", async ({ mode, options, prepare, expectedTrack, expectedTag }) => {
     await prepare();
     vi.mocked(runGatewayUpdate).mockResolvedValue(makeOkUpdateResult({ mode }));
 
     await updateCommand(options);
 
-    const call = expectUpdateCallChannel(expectedChannel);
+    const call = expectUpdateCallTrack(expectedTrack);
     if (expectedTag !== undefined) {
       expect(call?.tag).toBe(expectedTag);
     }
@@ -456,10 +462,8 @@ describe("update-cli", () => {
     const tempDir = createCaseDir("enclaws-update");
 
     mockPackageInstallStatus(tempDir);
-    vi.mocked(readConfigFileSnapshot).mockResolvedValue({
-      ...baseSnapshot,
-      config: { update: { channel: "beta" } } as OpenClawConfig,
-    });
+    const { getStoredUpdateTrack } = await import("../infra/update-settings.js");
+    vi.mocked(getStoredUpdateTrack).mockResolvedValueOnce("beta");
     vi.mocked(resolveNpmChannelTag).mockResolvedValue({
       tag: "latest",
       version: "1.2.3-1",
@@ -472,7 +476,7 @@ describe("update-cli", () => {
 
     await updateCommand({});
 
-    const call = expectUpdateCallChannel("beta");
+    const call = expectUpdateCallTrack("beta");
     expect(call?.tag).toBe("latest");
   });
 
@@ -674,16 +678,12 @@ describe("update-cli", () => {
     expect(defaultRuntime.exit).toHaveBeenCalledWith(1);
   });
 
-  it("persists update channel when --channel is set", async () => {
+  it("persists update track when --track is set", async () => {
     vi.mocked(runGatewayUpdate).mockResolvedValue(makeOkUpdateResult());
 
-    await updateCommand({ channel: "beta" });
+    await updateCommand({ track: "beta" });
 
-    expect(writeConfigFile).toHaveBeenCalled();
-    const call = vi.mocked(writeConfigFile).mock.calls[0]?.[0] as {
-      update?: { channel?: string };
-    };
-    expect(call?.update?.channel).toBe("beta");
+    expect(patchUpdateSettings).toHaveBeenCalledWith({ track: "beta" });
   });
 
   it.each([

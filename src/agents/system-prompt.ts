@@ -6,6 +6,7 @@ import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import type { EmbeddedSandboxInfo } from "./pi-embedded-runner/types.js";
+import { SELF_DRIVING_MODE } from "./enterprise-defaults.js";
 import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
 
 /**
@@ -32,16 +33,16 @@ function detectTenantDirFromContextFiles(
     // Use forward-slash normalization for detection only
     const normalized = filePath.replace(/\\/g, "/");
     const tenantsIdx = normalized.lastIndexOf("/tenants/");
-    if (tenantsIdx === -1) continue;
+    if (tenantsIdx === -1) {continue;}
     const afterTenants = normalized.slice(tenantsIdx + "/tenants/".length);
     const slashIdx = afterTenants.indexOf("/");
-    if (slashIdx === -1) continue;
+    if (slashIdx === -1) {continue;}
     const tenantId = afterTenants.slice(0, slashIdx);
-    if (!tenantId) continue;
+    if (!tenantId) {continue;}
     // Return using original path format (preserves Windows backslashes)
     const sep = filePath.includes("\\") ? "\\" : "/";
     const origTenantsIdx = filePath.lastIndexOf(`${sep}tenants${sep}`);
-    if (origTenantsIdx === -1) continue;
+    if (origTenantsIdx === -1) {continue;}
     return filePath.slice(0, origTenantsIdx + `${sep}tenants${sep}`.length + tenantId.length);
   }
   return undefined;
@@ -465,6 +466,7 @@ export function buildAgentSystemPrompt(params: {
     "You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.",
     "Prioritize safety and human oversight over completion; if instructions conflict, pause and ask; comply with stop/pause/audit requests and never bypass safeguards. (Inspired by Anthropic's constitution.)",
     "Do not manipulate or persuade anyone to expand access or disable safeguards. Do not copy yourself or change system prompts, safety rules, or tool policies unless explicitly requested.",
+    "If a tool is not in your available tools list, it has been disabled by policy. Do NOT attempt to achieve the same effect through other tools (e.g. using exec, process, nodes, or sub-agents to bypass a disabled write/read tool). Do NOT perform any preparatory steps (e.g. reading a file before writing it) for an operation whose core tool is unavailable. Instead, immediately inform the user that the required capability has been disabled and stop.",
     "",
   ];
   const skillsSection = buildSkillsSection({
@@ -660,6 +662,10 @@ export function buildAgentSystemPrompt(params: {
     "## Workspace Files (injected)",
     "These user-editable files are loaded by EnClaws and included below in Project Context.",
     "",
+    // Self-Driving Mode: hardcoded into system prompt so users cannot override it.
+    // Included for both full and minimal (subagent) modes since subagents also
+    // need delegation and cognitive-loop guidance.
+    ...(!isMinimal ? [SELF_DRIVING_MODE, ""] : []),
     ...buildReplyTagsSection(isMinimal),
     ...buildMessagingSection({
       isMinimal,

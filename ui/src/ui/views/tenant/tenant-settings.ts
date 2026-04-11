@@ -6,23 +6,24 @@ import { html, css, LitElement, nothing } from "lit";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../../i18n/index.ts";
 import { tenantRpc } from "./rpc.ts";
+import { caretFix } from "../../shared-styles.ts";
 
 @customElement("tenant-settings-view")
 export class TenantSettingsView extends LitElement {
   private i18nCtrl = new I18nController(this);
 
-  static styles = css`
+  static styles = [caretFix, css`
     :host {
       display: block;
       padding: 1.5rem;
-      color: var(--text, #e5e5e5);
+      color: var(--text);
       font-family: var(--font-sans, system-ui, sans-serif);
     }
     h2 { margin: 0 0 1.5rem; font-size: 1.1rem; font-weight: 600; }
     .card {
-      background: var(--card, #141414);
-      border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
       padding: 1.25rem;
       margin-bottom: 1.5rem;
     }
@@ -33,67 +34,62 @@ export class TenantSettingsView extends LitElement {
       display: block;
       font-size: 0.8rem;
       margin-bottom: 0.3rem;
-      color: var(--text-secondary, #a3a3a3);
+      color: var(--text-2);
     }
     .form-field input, .form-field textarea {
       width: 100%;
       padding: 0.45rem 0.65rem;
-      background: var(--bg, #0a0a0a);
-      border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-md, 6px);
-      color: var(--text, #e5e5e5);
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: var(--radius-md);
+      color: var(--text);
       font-size: 0.85rem;
       outline: none;
       box-sizing: border-box;
       font-family: inherit;
     }
-    .form-field input:focus, .form-field textarea:focus {
-      border-color: var(--accent, #3b82f6);
-    }
+    .form-field input:focus, .form-field textarea:focus { border-color: var(--accent); }
     .form-field textarea {
       min-height: 120px;
       resize: vertical;
     }
     .form-field .hint {
       font-size: 0.75rem;
-      color: var(--text-hint, #8a8a8a);
+      color: var(--text-3);
       margin-top: 0.25rem;
     }
     .btn {
       padding: 0.45rem 0.9rem;
       border: none;
-      border-radius: var(--radius-md, 6px);
+      border-radius: var(--radius-md);
       font-size: 0.85rem;
       cursor: pointer;
       transition: opacity 0.15s;
     }
     .btn:hover { opacity: 0.85; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-primary {
-      background: var(--accent, #3b82f6);
-      color: white;
-    }
+    .btn-primary { background: var(--accent); color: var(--accent-foreground); }
     .error-msg {
-      background: var(--bg-destructive, #2d1215);
-      border: 1px solid var(--border-destructive, #7f1d1d);
-      border-radius: var(--radius-md, 6px);
-      color: var(--text-destructive, #fca5a5);
+      background: var(--danger-subtle);
+      border: 1px solid var(--danger);
+      border-radius: var(--radius-md);
+      color: var(--danger);
       padding: 0.5rem 0.75rem;
       font-size: 0.8rem;
       margin-bottom: 1rem;
     }
     .success-msg {
-      background: #052e16;
-      border: 1px solid #166534;
-      border-radius: var(--radius-md, 6px);
-      color: #86efac;
+      background: var(--ok-subtle);
+      border: 1px solid var(--ok);
+      border-radius: var(--radius-md);
+      color: var(--ok);
       padding: 0.5rem 0.75rem;
       font-size: 0.8rem;
       margin-bottom: 1rem;
     }
-    .loading { text-align: center; padding: 2rem; color: var(--text-muted, #525252); }
+    .loading { text-align: center; padding: 2rem; color: var(--muted); }
     .actions { margin-top: 1rem; }
-  `;
+  `];
 
   @property({ type: String }) gatewayUrl = "";
   @state() private loading = false;

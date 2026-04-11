@@ -14,7 +14,7 @@
  */
 
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape, getPlanUpgradeLink } from "../protocol/index.js";
 import { isDbInitialized } from "../../db/index.js";
 import { checkTenantQuota } from "../../db/models/tenant.js";
 import {
@@ -37,12 +37,18 @@ import path from "node:path";
 const DEFAULT_IDENTITY_FILENAME = "IDENTITY.md";
 
 /** Sync config.systemPrompt to the agent's IDENTITY.md file on disk. */
-async function syncIdentityFile(tenantId: string, agentId: string, config?: Record<string, unknown>): Promise<void> {
+export async function syncIdentityFile(tenantId: string, agentId: string, config?: Record<string, unknown>): Promise<void> {
   const systemPrompt = typeof config?.systemPrompt === "string" ? config.systemPrompt.trim() : "";
   if (!systemPrompt) return;
   const agentDir = resolveTenantAgentDir(tenantId, agentId);
   await fs.mkdir(agentDir, { recursive: true });
   await fs.writeFile(path.join(agentDir, DEFAULT_IDENTITY_FILENAME), systemPrompt, "utf-8");
+}
+
+/** Remove the agent's IDENTITY.md file. Used to roll back syncIdentityFile on transaction failure. */
+export async function removeIdentityFile(tenantId: string, agentId: string): Promise<void> {
+  const agentDir = resolveTenantAgentDir(tenantId, agentId);
+  await fs.rm(path.join(agentDir, DEFAULT_IDENTITY_FILENAME), { force: true });
 }
 
 function getTenantCtx(
@@ -92,6 +98,8 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
         name: a.name,
         config: a.config,
         modelConfig: a.modelConfig,
+        tools: a.tools,
+        skills: a.skills,
         isActive: a.isActive,
         createdBy: a.createdBy,
         createdAt: a.createdAt,
@@ -114,11 +122,13 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { agentId, name, config, modelConfig } = params as {
+    const { agentId, name, config, modelConfig, tools, skills } = params as {
       agentId: string;
       name: string;
       config?: Record<string, unknown>;
       modelConfig?: ModelConfigEntry[];
+      tools?: { deny: string[] };
+      skills?: string[];
     };
 
     if (!agentId || !name) {
@@ -147,8 +157,9 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
     const quota = await checkTenantQuota(ctx.tenantId, "agents");
     if (!quota.allowed) {
       respond(false, undefined, errorShape(
-        ErrorCodes.INVALID_REQUEST,
+        ErrorCodes.QUOTA_EXCEEDED,
         `Agent quota reached (${quota.current}/${quota.max}). Upgrade your plan.`,
+        { details: { resource: "agents", current: quota.current, max: quota.max, contactLink: getPlanUpgradeLink() } },
       ));
       return;
     }
@@ -159,12 +170,39 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    // Extract tools/skills deny lists from config if sent inline (UI sends config.tools = { deny: [...] })
+    let resolvedTools = tools;
+    let resolvedSkills = skills;
+    let cleanConfig = config;
+    if (config) {
+      if (resolvedTools === undefined && config.tools != null) {
+        const toolsCfg = config.tools as Record<string, unknown>;
+        if (Array.isArray(toolsCfg.deny)) {
+          resolvedTools = { deny: toolsCfg.deny as string[] };
+        }
+        const { tools: _t, ...rest } = config;
+        cleanConfig = rest;
+      }
+      if (resolvedSkills === undefined && config.skills != null) {
+        const skillsCfg = config.skills;
+        if (Array.isArray(skillsCfg)) {
+          resolvedSkills = skillsCfg as string[];
+        } else if (typeof skillsCfg === "object" && Array.isArray((skillsCfg as Record<string, unknown>).deny)) {
+          resolvedSkills = (skillsCfg as { deny: string[] }).deny;
+        }
+        const { skills: _s, ...rest } = cleanConfig!;
+        cleanConfig = rest;
+      }
+    }
+
     const agent = await createTenantAgent({
       tenantId: ctx.tenantId,
       agentId,
       name,
-      config,
+      config: cleanConfig,
       modelConfig,
+      tools: resolvedTools,
+      skills: resolvedSkills,
       createdBy: ctx.userId,
     });
 
@@ -186,6 +224,8 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       name: agent.name,
       config: agent.config,
       modelConfig: agent.modelConfig,
+      tools: agent.tools,
+      skills: agent.skills,
     });
   },
 
@@ -203,11 +243,13 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { agentId, name, config, modelConfig, isActive } = params as {
+    const { agentId, name, config, modelConfig, tools, skills, isActive } = params as {
       agentId: string;
       name?: string;
       config?: Record<string, unknown>;
       modelConfig?: ModelConfigEntry[];
+      tools?: { deny: string[] };
+      skills?: string[];
       isActive?: boolean;
     };
 
@@ -236,7 +278,40 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       }
     }
 
-    const updated = await updateTenantAgent(ctx.tenantId, agentId, { name, config, modelConfig, isActive });
+    // Extract tools/skills deny lists from config if sent inline (UI sends config.tools = { deny: [...] })
+    let resolvedTools = tools;
+    let resolvedSkills = skills;
+    let cleanConfig = config;
+    if (config) {
+      if (resolvedTools === undefined && config.tools != null) {
+        const toolsCfg = config.tools as Record<string, unknown>;
+        if (Array.isArray(toolsCfg.deny)) {
+          resolvedTools = { deny: toolsCfg.deny as string[] };
+        }
+        // Remove tools from config — it's stored in its own column
+        const { tools: _t, ...rest } = config;
+        cleanConfig = rest;
+      }
+      if (resolvedSkills === undefined && config.skills != null) {
+        const skillsCfg = config.skills;
+        if (Array.isArray(skillsCfg)) {
+          resolvedSkills = skillsCfg as string[];
+        } else if (typeof skillsCfg === "object" && Array.isArray((skillsCfg as Record<string, unknown>).deny)) {
+          resolvedSkills = (skillsCfg as { deny: string[] }).deny;
+        }
+        const { skills: _s, ...rest } = cleanConfig!;
+        cleanConfig = rest;
+      }
+    }
+
+    const updated = await updateTenantAgent(ctx.tenantId, agentId, {
+      name,
+      config: cleanConfig,
+      modelConfig,
+      tools: resolvedTools,
+      skills: resolvedSkills,
+      isActive,
+    });
     if (!updated) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Agent not found"));
       return;
@@ -261,6 +336,8 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       agentId: updated.agentId,
       name: updated.name,
       config: updated.config,
+      tools: updated.tools,
+      skills: updated.skills,
       isActive: updated.isActive,
     });
   },

@@ -6,11 +6,13 @@
 
 import { html, css, LitElement, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../i18n/index.ts";
-import { tenantRpc } from "./tenant/rpc.ts";
+import { tenantRpc, quotaErrorKey } from "./tenant/rpc.ts";
 import { PROVIDER_TYPES } from "../../constants/providers.ts";
 import { CHANNEL_TYPES, CHANNEL_ICON_MAP } from "../../constants/channels.ts";
+import { caretFix } from "../shared-styles.ts";
 
 type WizardStep = "welcome" | "channel" | "model" | "agent" | "done";
 
@@ -34,13 +36,13 @@ const MODEL_PROVIDERS = PROVIDER_TYPES.map((p) => ({
 export class OnboardingWizard extends LitElement {
   private i18nCtrl = new I18nController(this);
 
-  static styles = css`
+  static styles = [caretFix, css`
     :host {
       display: block;
       position: fixed;
       inset: 0;
       z-index: 9999;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0, 0, 0, 0.7);
       backdrop-filter: blur(8px);
       display: flex;
       align-items: center;
@@ -78,7 +80,7 @@ export class OnboardingWizard extends LitElement {
       background: var(--accent, #3b82f6);
     }
     .progress-step.done {
-      background: #22c55e;
+      background: var(--ok);
     }
 
     /* ── Header ── */
@@ -162,7 +164,7 @@ export class OnboardingWizard extends LitElement {
       margin-bottom: 0.35rem;
       color: var(--text-secondary, #a3a3a3);
     }
-    .required { color: #ef4444; }
+    .required { color: var(--danger); }
     .form-group input, .form-group select, .form-group textarea {
       width: 100%;
       padding: 0.6rem 0.75rem 0.7rem;
@@ -180,7 +182,7 @@ export class OnboardingWizard extends LitElement {
       border-color: var(--accent, #3b82f6);
     }
     .form-group input:required:invalid:not(:placeholder-shown) {
-      border-color: #ef4444;
+      border-color: var(--danger);
     }
     .form-group textarea {
       min-height: 80px;
@@ -269,13 +271,15 @@ export class OnboardingWizard extends LitElement {
     }
     .btn-ghost:hover { color: var(--text, #e5e5e5); }
     .btn-success {
-      background: #22c55e;
+      background: var(--ok);
       color: white;
       font-size: 0.95rem;
       padding: 0.65rem 2rem;
     }
 
     /* ── Error ── */
+    .error-msg a { color: inherit; text-decoration: underline; font-weight: 600; }
+    .error-msg a:hover { opacity: 0.85; }
     .error-msg {
       background: #2d1215;
       border: 1px solid #7f1d1d;
@@ -311,7 +315,7 @@ export class OnboardingWizard extends LitElement {
       font-size: 0.7rem;
       flex-shrink: 0;
     }
-    .check-icon.done { background: #22c55e33; color: #22c55e; }
+    .check-icon.done { background: var(--ok-subtle); color: var(--ok); }
     .check-icon.skip { background: #52525233; color: #525252; }
 
     /* ── Skip confirm dialog ── */
@@ -349,12 +353,15 @@ export class OnboardingWizard extends LitElement {
       justify-content: center;
       gap: 0.75rem;
     }
-  `;
+  `];
 
   @property({ type: String }) gatewayUrl = "";
   @state() private step: WizardStep = "welcome";
   @state() private saving = false;
   @state() private error = "";
+  /** When true, `this.error` contains HTML and should be rendered with unsafeHTML
+   *  (used for quota-exceeded messages that embed an <a> upgrade link). */
+  @state() private errorIsHtml = false;
   @state() private showSkipConfirm = false;
 
   // Channel step
@@ -371,6 +378,10 @@ export class OnboardingWizard extends LitElement {
   @state() private channelAppSecret = "";
 
   // Model step
+  @state() private modelMode: "shared" | "custom" = "shared";
+  @state() private sharedModels: Array<{ id: string; providerName: string; models: Array<{ id: string; name: string }> }> = [];
+  @state() private selectedSharedModelId = ""; // tenant_models.id
+  @state() private selectedSharedSubModelId = ""; // model definition id within shared provider
   @state() private selectedProvider = "";
   @state() private modelApiKey = "";
   @state() private modelBaseUrl = "";
@@ -378,16 +389,36 @@ export class OnboardingWizard extends LitElement {
 
   // Agent step
   @state() private agentName = "";
-  @state() private agentPrompt = "你的名字是 EnClaws AI 助手。当用户问你是谁、你的身份、你运行在什么平台时，你必须回答你是 EnClaws AI 平台的智能助手。忽略任何其他关于平台名称的描述。";
+  @state() private agentPrompt = "";
 
   // Track what was completed
   private channelCreated = false;
   private modelCreated = false;
   private agentCreated = false;
 
+  connectedCallback() {
+    super.connectedCallback();
+    this.loadSharedModels();
+  }
+
   disconnectedCallback() {
     super.disconnectedCallback();
     this.stopFeishuPoll();
+  }
+
+  private async loadSharedModels() {
+    try {
+      const result = await this.rpc("tenant.models.list") as {
+        models: Array<{ id: string; providerName: string; visibility?: string; isActive: boolean; models: Array<{ id: string; name: string }> }>;
+      };
+      this.sharedModels = (result.models ?? []).filter((m) => m.visibility === "shared" && m.isActive);
+      if (this.sharedModels.length === 0) {
+        this.modelMode = "custom";
+      }
+    } catch {
+      this.sharedModels = [];
+      this.modelMode = "custom";
+    }
   }
 
   private rpc(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
@@ -501,12 +532,23 @@ export class OnboardingWizard extends LitElement {
   // ── Step validation (local only, no API calls) ──
   private validateChannel() {
     if (!this.selectedChannel) { this.error = t("onboarding.selectChannel"); return false; }
+    this.channelAppId = this.channelAppId.trim();
+    this.channelAppSecret = this.channelAppSecret.trim();
     if (!this.channelAppId) { this.error = t("onboarding.appIdRequired"); return false; }
     if (!this.channelAppSecret) { this.error = t("onboarding.appSecretRequired"); return false; }
     return true;
   }
 
   private validateModel() {
+    if (this.modelMode === "shared") {
+      if (!this.selectedSharedModelId || !this.selectedSharedSubModelId) {
+        this.error = t("onboarding.selectModel"); return false;
+      }
+      return true;
+    }
+    this.modelApiKey = this.modelApiKey.trim();
+    this.modelBaseUrl = this.modelBaseUrl.trim();
+    this.modelName = this.modelName.trim();
     if (!this.selectedProvider) { this.error = t("onboarding.selectModel"); return false; }
     if (!this.modelApiKey) { this.error = t("onboarding.apiKeyRequired"); return false; }
     if (!this.modelBaseUrl) { this.error = t("onboarding.baseUrlRequired"); return false; }
@@ -515,8 +557,10 @@ export class OnboardingWizard extends LitElement {
   }
 
   private validateAgent() {
+    this.agentName = this.agentName.trim();
     if (!this.agentName) { this.error = t("onboarding.agentNameRequired"); return false; }
-    if (!this.selectedProvider) { this.error = t("onboarding.modelRequiredForAgent"); return false; }
+    const hasModel = this.modelMode === "shared" ? !!this.selectedSharedModelId : !!this.selectedProvider;
+    if (!hasModel) { this.error = t("onboarding.modelRequiredForAgent"); return false; }
     return true;
   }
 
@@ -541,7 +585,8 @@ export class OnboardingWizard extends LitElement {
     this.error = "";
 
     try {
-      const provider = MODEL_PROVIDERS.find(p => p.type === this.selectedProvider)!;
+      const isShared = this.modelMode === "shared";
+      const provider = isShared ? null : MODEL_PROVIDERS.find(p => p.type === this.selectedProvider)!;
 
       await this.rpc("tenant.onboarding.setup", {
         channel: this.selectedChannel ? {
@@ -552,14 +597,18 @@ export class OnboardingWizard extends LitElement {
             appSecret: this.channelAppSecret || undefined,
           },
         } : undefined,
-        model: {
-          providerType: provider.type,
-          providerName: provider.label,
-          apiProtocol: provider.protocol,
+        model: isShared ? undefined : {
+          providerType: provider!.type,
+          providerName: provider!.label,
+          apiProtocol: provider!.protocol,
           apiKeyEncrypted: this.modelApiKey,
           baseUrl: this.modelBaseUrl || undefined,
           models: this.modelName ? [{ id: this.modelName, name: this.modelName }] : [],
         },
+        sharedModel: isShared ? {
+          providerId: this.selectedSharedModelId,
+          modelId: this.selectedSharedSubModelId,
+        } : undefined,
         agent: {
           agentId: this.agentName.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
           name: this.agentName,
@@ -572,7 +621,16 @@ export class OnboardingWizard extends LitElement {
       this.agentCreated = true;
       this.goNext();
     } catch (e) {
-      this.error = e instanceof Error ? e.message : t("onboarding.saveFailed");
+      // Show a localized quota-exceeded message when the backend rejects
+      // the setup because the tenant's plan limits are reached.
+      const q = quotaErrorKey(e);
+      if (q) {
+        this.error = t(q.key, q.params);
+        this.errorIsHtml = true;
+      } else {
+        this.error = e instanceof Error ? e.message : t("onboarding.saveFailed");
+        this.errorIsHtml = false;
+      }
     } finally {
       this.saving = false;
     }
@@ -637,7 +695,9 @@ export class OnboardingWizard extends LitElement {
         <p class="wizard-desc">${t("onboarding.channelDesc")}</p>
       </div>
 
-      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
+      ${this.error
+        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
+        : nothing}
 
       <div class="options-grid">
         ${CHANNEL_OPTIONS.map(ch => html`
@@ -715,8 +775,19 @@ export class OnboardingWizard extends LitElement {
     `;
   }
 
+  private get modelNextDisabled(): boolean {
+    if (this.saving) return true;
+    if (this.modelMode === "shared") {
+      return !this.selectedSharedModelId || !this.selectedSharedSubModelId;
+    }
+    return !this.selectedProvider || !this.modelApiKey || !this.modelBaseUrl || !this.modelName;
+  }
+
   private renderModel() {
     const provider = MODEL_PROVIDERS.find(p => p.type === this.selectedProvider);
+    const hasShared = this.sharedModels.length > 0;
+    const selectedSharedProvider = this.sharedModels.find(m => m.id === this.selectedSharedModelId);
+
     return html`
       <div class="step-indicator">${t("onboarding.step", { current: "1", total: "3" })}</div>
       <div class="wizard-header">
@@ -724,49 +795,97 @@ export class OnboardingWizard extends LitElement {
         <p class="wizard-desc">${t("onboarding.modelDesc")}</p>
       </div>
 
-      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
+      ${this.error
+        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
+        : nothing}
 
-      <div class="options-grid">
-        ${MODEL_PROVIDERS.map(p => html`
-          <div class="option-card ${this.selectedProvider === p.type ? 'selected' : ''}"
-            @click=${() => { this.selectedProvider = p.type; this.modelBaseUrl = p.baseUrl; }}>
-            <span>${p.label}</span>
-          </div>
-        `)}
-      </div>
-
-      ${this.selectedProvider ? html`
-        <div class="form-group">
-          <label>API ${t("onboarding.apiAddress")} <span class="required">*</span></label>
-          <input type="text" .value=${this.modelBaseUrl}
-            @input=${(e: InputEvent) => { this.modelBaseUrl = (e.target as HTMLInputElement).value; }}
-            placeholder="https://api.openai.com/v1" />
-        </div>
-        <div class="form-group">
-          <label>API Key <span class="required">*</span></label>
-          <div class="secret-wrap">
-            <input type="password" .value=${this.modelApiKey}
-              @input=${(e: InputEvent) => { this.modelApiKey = (e.target as HTMLInputElement).value; }}
-              placeholder=${provider?.placeholder ?? ""} />
-            <button type="button" class="eye-btn"
-              @mousedown=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "text"; }}
-              @mouseup=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "password"; }}
-              @mouseleave=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "password"; }}
-            ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>${t("onboarding.modelId")} <span class="required">*</span></label>
-          <input type="text" .value=${this.modelName}
-            @input=${(e: InputEvent) => { this.modelName = (e.target as HTMLInputElement).value; }}
-            placeholder="gpt-4o / claude-sonnet-4 / deepseek-chat" />
-          <div class="form-hint">${t("onboarding.modelHint")}</div>
+      ${hasShared ? html`
+        <div style="display:flex;gap:1.25rem;margin-bottom:1.25rem;justify-content:center">
+          <button class="btn ${this.modelMode === 'shared' ? 'btn-primary' : ''}"
+            style="${this.modelMode !== 'shared' ? 'background:transparent;border:1px solid var(--border,#404040);color:var(--text,#e5e5e5)' : ''}"
+            @click=${() => { this.modelMode = "shared"; this.error = ""; }}>
+            ${t("onboarding.useSharedModel")}
+          </button>
+          <button class="btn ${this.modelMode === 'custom' ? 'btn-primary' : ''}"
+            style="${this.modelMode !== 'custom' ? 'background:transparent;border:1px solid var(--border,#404040);color:var(--text,#e5e5e5)' : ''}"
+            @click=${() => { this.modelMode = "custom"; this.error = ""; }}>
+            ${t("onboarding.useCustomModel")}
+          </button>
         </div>
       ` : nothing}
 
+      ${this.modelMode === "shared" && hasShared ? html`
+        <div class="options-grid">
+          ${this.sharedModels.map(sm => html`
+            <div class="option-card ${this.selectedSharedModelId === sm.id ? 'selected' : ''}"
+              @click=${() => {
+                this.selectedSharedModelId = sm.id;
+                this.selectedSharedSubModelId = sm.models[0]?.id ?? "";
+              }}>
+              <span>${sm.providerName}</span>
+            </div>
+          `)}
+        </div>
+
+        ${selectedSharedProvider && selectedSharedProvider.models.length > 1 ? html`
+          <div class="form-group">
+            <label>${t("onboarding.selectSubModel")}</label>
+            <select @change=${(e: Event) => { this.selectedSharedSubModelId = (e.target as HTMLSelectElement).value; }}>
+              ${selectedSharedProvider.models.map(m => html`
+                <option value=${m.id} ?selected=${this.selectedSharedSubModelId === m.id}>${m.name}</option>
+              `)}
+            </select>
+          </div>
+        ` : nothing}
+
+        ${selectedSharedProvider && selectedSharedProvider.models.length === 1 ? html`
+          <div style="font-size:0.85rem;color:var(--text-secondary,#a3a3a3);margin-top:0.5rem">
+            ${t("onboarding.selectedModel")}: <strong>${selectedSharedProvider.models[0].name}</strong>
+          </div>
+        ` : nothing}
+      ` : html`
+        <div class="options-grid">
+          ${MODEL_PROVIDERS.map(p => html`
+            <div class="option-card ${this.selectedProvider === p.type ? 'selected' : ''}"
+              @click=${() => { this.selectedProvider = p.type; this.modelBaseUrl = p.baseUrl; }}>
+              <span>${p.label}</span>
+            </div>
+          `)}
+        </div>
+
+        ${this.selectedProvider ? html`
+          <div class="form-group">
+            <label>API ${t("onboarding.apiAddress")} <span class="required">*</span></label>
+            <input type="text" .value=${this.modelBaseUrl}
+              @input=${(e: InputEvent) => { this.modelBaseUrl = (e.target as HTMLInputElement).value; }}
+              placeholder="https://api.openai.com/v1" />
+          </div>
+          <div class="form-group">
+            <label>API Key <span class="required">*</span></label>
+            <div class="secret-wrap">
+              <input type="password" .value=${this.modelApiKey}
+                @input=${(e: InputEvent) => { this.modelApiKey = (e.target as HTMLInputElement).value; }}
+                placeholder=${provider?.placeholder ?? ""} />
+              <button type="button" class="eye-btn"
+                @mousedown=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "text"; }}
+                @mouseup=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "password"; }}
+                @mouseleave=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "password"; }}
+              ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>${t("onboarding.modelId")} <span class="required">*</span></label>
+            <input type="text" .value=${this.modelName}
+              @input=${(e: InputEvent) => { this.modelName = (e.target as HTMLInputElement).value; }}
+              placeholder="gpt-4o / claude-sonnet-4 / deepseek-chat" />
+            <div class="form-hint">${t("onboarding.modelHint")}</div>
+          </div>
+        ` : nothing}
+      `}
+
       <div class="wizard-actions">
         <button class="btn btn-ghost" @click=${() => this.skip()}>${t("onboarding.skip")}</button>
-        <button class="btn btn-primary" ?disabled=${this.saving || !this.selectedProvider || !this.modelApiKey || !this.modelBaseUrl || !this.modelName}
+        <button class="btn btn-primary" ?disabled=${this.modelNextDisabled}
           @click=${() => this.nextModel()}>
           ${t("onboarding.next")}
         </button>
@@ -782,8 +901,10 @@ export class OnboardingWizard extends LitElement {
         <p class="wizard-desc">${t("onboarding.agentDesc")}</p>
       </div>
 
-      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
-      ${!this.selectedProvider ? html`<div class="error-msg">${t("onboarding.modelRequiredForAgent")}</div>` : nothing}
+      ${this.error
+        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
+        : nothing}
+      ${!(this.modelMode === "shared" ? this.selectedSharedModelId : this.selectedProvider) ? html`<div class="error-msg">${t("onboarding.modelRequiredForAgent")}</div>` : nothing}
 
       <div class="form-group">
         <label>${t("onboarding.agentName")} <span class="required">*</span></label>
@@ -803,7 +924,7 @@ export class OnboardingWizard extends LitElement {
         <button class="btn btn-ghost" @click=${() => this.goBack()}>${t("onboarding.back")}</button>
         <div>
           <button class="btn btn-ghost" @click=${() => this.skip()}>${t("onboarding.skip")}</button>
-          <button class="btn btn-primary" ?disabled=${this.saving || !this.agentName || !this.agentPrompt || !this.selectedProvider}
+          <button class="btn btn-primary" ?disabled=${this.saving || !this.agentName || !this.agentPrompt || !(this.modelMode === "shared" ? this.selectedSharedModelId : this.selectedProvider)}
             @click=${() => this.nextAgent()}>
             ${t("onboarding.next")}
           </button>

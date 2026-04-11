@@ -142,7 +142,7 @@ export function registerFeishuImBotImageTool(api: OpenClawPluginApi): boolean {
         '\n\n适用场景：用户直接发送给机器人的消息、用户引用的消息、机器人收到的群聊消息中的图片/文件。' +
         '即当前对话上下文中出现的 message_id 和 image_key/file_key，应使用本工具下载。' +
         '\n引用消息的 message_id 可从上下文中的 [message_id=om_xxx] 提取，无需向用户询问。' +
-        '\n\n文件自动保存到 /tmp/openclaw/ 下，返回值中的 saved_path 为实际保存路径。',
+        '\n\n文件自动保存到 /tmp/enclaws/ 下，返回值中的 saved_path 为实际保存路径。',
       parameters: FeishuImBotImageSchema,
       async execute(_toolCallId: string, params: unknown) {
         const p = params as FeishuImBotImageParams;

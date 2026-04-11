@@ -1,0 +1,54 @@
+{
+  "chatName": "自动化测试群",
+  "cases": [
+    {
+      "name": "群聊-下载文档提取文本",
+      "message": "帮我下载云空间里的Word文档，提取文字内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-提取PDF内容",
+      "message": "帮我提取一下云空间里那个PDF报告的文字内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-下载并总结",
+      "message": "帮我下载那个Word文档然后简单总结一下里面的内容",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group"
+      ]
+    },
+    {
+      "name": "群聊-口语化拿文件",
+      "message": "云盘里那个报告帮我下载下来看看",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": [
+        "P2",
+        "group",
+        "intent"
+      ]
+    }
+  ]
+}

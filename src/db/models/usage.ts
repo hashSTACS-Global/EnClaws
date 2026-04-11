@@ -108,6 +108,10 @@ export async function checkTokenQuota(
   maxTokensPerMonth: number,
 ): Promise<{ allowed: boolean; used: number; max: number }> {
   if (getDbType() === DB_SQLITE) return sqliteUsage.checkTokenQuota(tenantId, maxTokensPerMonth);
+  // -1 (or any negative) means unlimited — skip the expensive aggregation.
+  if (maxTokensPerMonth < 0) {
+    return { allowed: true, used: 0, max: maxTokensPerMonth };
+  }
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 

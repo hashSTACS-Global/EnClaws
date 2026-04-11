@@ -140,9 +140,12 @@ installer/node-portable/
 installer/app-bundle/
 installer/Output/
 installer/*.zip
+installer/rcedit-x64.exe
 
 # Node.js download cache for macOS app bundling
 .node-cache
+
+.superpowers
 
 # docs/superpowers/
 docs/superpowers/

@@ -34,6 +34,7 @@ function createState(): ConfigState {
     connected: false,
     lastError: null,
     updateRunning: false,
+    updateMessage: null,
   };
 }
 

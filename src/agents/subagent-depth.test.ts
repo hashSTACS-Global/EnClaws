@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import type { OpenClawConfig } from "../config/config.js";
 import { getSubagentDepthFromSessionStore } from "./subagent-depth.js";
 import { resolveAgentTimeoutMs } from "./timeout.js";
 
@@ -96,5 +97,25 @@ describe("resolveAgentTimeoutMs", () => {
   it("clamps very large timeout overrides to timer-safe values", () => {
     expect(resolveAgentTimeoutMs({ overrideSeconds: 9_999_999 })).toBe(2_147_000_000);
     expect(resolveAgentTimeoutMs({ overrideMs: 9_999_999_999 })).toBe(2_147_000_000);
+  });
+
+  it("uses agentTimeoutSeconds when provided", () => {
+    expect(resolveAgentTimeoutMs({ agentTimeoutSeconds: 1200 })).toBe(1_200_000);
+  });
+
+  it("agentTimeoutSeconds overrides global config default", () => {
+    const cfg = { agents: { defaults: { timeoutSeconds: 600 } } } as OpenClawConfig;
+    expect(resolveAgentTimeoutMs({ cfg, agentTimeoutSeconds: 1800 })).toBe(1_800_000);
+  });
+
+  it("explicit overrideSeconds wins over agentTimeoutSeconds", () => {
+    expect(
+      resolveAgentTimeoutMs({ agentTimeoutSeconds: 1200, overrideSeconds: 300 }),
+    ).toBe(300_000);
+  });
+
+  it("falls back to global default when agentTimeoutSeconds is undefined", () => {
+    const cfg = { agents: { defaults: { timeoutSeconds: 900 } } } as OpenClawConfig;
+    expect(resolveAgentTimeoutMs({ cfg, agentTimeoutSeconds: undefined })).toBe(900_000);
   });
 });

@@ -1,3 +1,5 @@
+import { t } from "../../i18n/index.ts";
+import { showConfirm } from "../components/confirm-dialog.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
 import type { ConfigSchemaResponse, ConfigSnapshot, ConfigUiHints } from "../types.ts";
 import type { JsonSchema } from "../views/config-form.shared.ts";
@@ -21,6 +23,7 @@ export type ConfigState = {
   configSaving: boolean;
   configApplying: boolean;
   updateRunning: boolean;
+  updateMessage: string | null;
   configSnapshot: ConfigSnapshot | null;
   configSchema: unknown;
   configSchemaVersion: string | null;
@@ -177,20 +180,112 @@ export async function applyConfig(state: ConfigState) {
   }
 }
 
+/** Poll the gateway until it comes back online, then reload the page. */
+async function waitForGatewayAndReload(state: ConfigState, oldVersion: string | undefined) {
+  const baseUrl = (state as unknown as { settings?: { gatewayUrl?: string } }).settings?.gatewayUrl || window.location.origin;
+  const maxAttempts = 60; // ~2 minutes
+  const intervalMs = 2000;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, intervalMs));
+    try {
+      const res = await fetch(baseUrl, { method: "HEAD", cache: "no-store" });
+      if (res.ok) {
+        state.updateMessage = t("update.successDone");
+        state.updateRunning = false;
+        // Reload after a brief delay so user sees the success message
+        setTimeout(() => window.location.reload(), 1500);
+        return;
+      }
+    } catch {
+      // Gateway not ready yet, keep polling
+    }
+  }
+  // Timed out — let user manually refresh
+  state.updateMessage = t("update.connectionLost");
+  state.updateRunning = false;
+}
+
 export async function runUpdate(state: ConfigState) {
   if (!state.client || !state.connected) {
     return;
   }
   state.updateRunning = true;
+  state.updateMessage = t("update.updating");
   state.lastError = null;
+
+  const oldVersion = (state as unknown as { updateAvailable?: { currentVersion?: string } }).updateAvailable?.currentVersion;
+
+  // Yield to let Lit render the "updating" state before starting the long request
+  await new Promise((r) => setTimeout(r, 0));
+
   try {
-    await state.client.request("update.run", {
+    const res = await state.client.request("update.run", {
       sessionKey: state.applySessionKey,
     });
+    const body = res as { result?: { status?: string; reason?: string; mode?: string }; restart?: unknown };
+    const result = body?.result;
+    if (result?.status === "ok") {
+      if (body?.restart) {
+        state.updateMessage = t("update.successRestarting");
+        waitForGatewayAndReload(state, oldVersion);
+      } else {
+        // Git mode: no auto-restart, prompt user to restart manually
+        state.updateMessage = t("update.successRestart");
+        state.updateRunning = false;
+      }
+      return;
+    } else if (result?.reason === "dirty") {
+      state.updateMessage = null;
+      state.updateRunning = false;
+      await showConfirm({
+        title: t("update.available"),
+        message: t("update.dirtyWorkspace"),
+        confirmText: t("update.close"),
+        hideCancel: true,
+      });
+      return;
+    } else if (result?.reason === "installer") {
+      state.updateMessage = null;
+      state.updateRunning = false;
+      await showConfirm({
+        title: t("update.available"),
+        message: t("update.installerHint"),
+        confirmText: t("update.downloadInstall"),
+        hideCancel: true,
+      });
+      window.open("https://www.enclaws.ai/", "_blank");
+      return;
+    } else {
+      const reason = result?.reason ?? result?.status ?? "Update failed";
+      state.updateMessage = null;
+      state.updateRunning = false;
+      await showConfirm({
+        title: t("update.available"),
+        message: t("update.failed", { reason }),
+        confirmText: t("update.close"),
+        hideCancel: true,
+      });
+      return;
+    }
   } catch (err) {
-    state.lastError = String(err);
-  } finally {
-    state.updateRunning = false;
+    const msg = String(err);
+    if (msg.includes("rate limit")) {
+      state.updateMessage = null;
+      state.updateRunning = false;
+      await showConfirm({
+        title: t("update.available"),
+        message: t("update.dirtyWorkspace"),
+        confirmText: t("update.close"),
+        hideCancel: true,
+      });
+      return;
+    }
+    // Connection dropped — gateway is restarting
+    state.updateMessage = t("update.successRestarting");
+    // Poll for gateway to come back
+    waitForGatewayAndReload(state, oldVersion);
+    return;
   }
 }
 

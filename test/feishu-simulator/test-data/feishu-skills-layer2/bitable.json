@@ -1,25 +1,346 @@
 {
-  "appId": "cli_xxx",
-  "appSecret": "xxx",
-  "userOpenId": "ou_xxx",
   "cases": [
     {
-      "name": "新增记录",
-      "message": "帮我在多维表格里新增一条记录",
-      "assert": { "notContains": "exception", "minLength": 2 },
-      "tags": ["P2"]
+      "name": "Setup-创建测试文件夹",
+      "message": "帮我在云空间创建一个文件夹叫「多维表格测试」",
+      "assert": {
+        "containsAny": ["已创建", "创建成功", "文件夹", "完成"],
+        "notContains": "error"
+      },
+      "tags": ["P0", "bitable", "setup"]
     },
     {
-      "name": "查看多维表格列表",
+      "name": "Setup-创建基础多维表格",
+      "message": "帮我在「多维表格测试」文件夹下创建一个多维表格，标题叫《多维-Bug追踪》，字段是：标题、严重度、状态、负责人、发现日期",
+      "assert": {
+        "containsAny": ["已创建", "创建成功", "完成"],
+        "notContains": "error"
+      },
+      "tags": ["P0", "bitable", "setup"]
+    },
+    {
+      "name": "Setup-创建OKR表格",
+      "message": "帮我在「多维表格测试」文件夹下创建一个多维表格，标题叫《多维-OKR追踪》，字段有：目标、关键结果、进度百分比、负责人、截止日期",
+      "assert": {
+        "containsAny": ["已创建", "创建成功", "完成"],
+        "notContains": "error"
+      },
+      "tags": ["P0", "bitable", "setup"]
+    },
+    {
+      "name": "列表-查看所有多维表格",
       "message": "帮我看看我有哪些多维表格",
-      "assert": { "notContains": "error", "minLength": 2 },
-      "tags": ["P2"]
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P0", "bitable"]
     },
     {
-      "name": "创建多维表格",
-      "message": "帮我创建一个多维表格，用来记录bug追踪，需要字段：标题、状态、优先级、负责人",
-      "assert": { "notContains": "exception", "minLength": 5 },
-      "tags": ["P2"]
+      "name": "列表-查文件夹内表格",
+      "message": "帮我看看「多维表格测试」文件夹下有哪些多维表格",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "字段-列出表字段",
+      "message": "帮我看看《多维-Bug追踪》这个多维表格都有哪些字段",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P0", "bitable"]
+    },
+    {
+      "name": "记录-新增第一条Bug",
+      "message": "帮我在《多维-Bug追踪》里新增一条记录：标题是登录页面崩溃，严重度P0，状态待处理，负责人许帅，发现日期今天",
+      "assert": {
+        "containsAny": ["已添加", "已新增", "已创建", "成功", "完成"],
+        "notContains": "error"
+      },
+      "tags": ["P0", "bitable"]
+    },
+    {
+      "name": "记录-新增第二条Bug",
+      "message": "帮我在《多维-Bug追踪》里再新增一条：标题是支付回调超时，严重度P1，状态修复中，负责人李帅，发现日期今天",
+      "assert": {
+        "containsAny": ["已添加", "已新增", "已创建", "成功", "完成"],
+        "notContains": "error"
+      },
+      "tags": ["P0", "bitable"]
+    },
+    {
+      "name": "记录-新增第三条Bug",
+      "message": "帮我在《多维-Bug追踪》里再新增一条：标题是首页加载缓慢，严重度P2，状态已完成，负责人王帅，发现日期昨天",
+      "assert": {
+        "containsAny": ["已添加", "已新增", "已创建", "成功", "完成"],
+        "notContains": "error"
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "查询-列出所有记录",
+      "message": "帮我看看《多维-Bug追踪》里所有的记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 10
+      },
+      "tags": ["P0", "bitable"]
+    },
+    {
+      "name": "查询-按状态筛选",
+      "message": "帮我查一下《多维-Bug追踪》里状态是「待处理」的记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P0", "bitable"]
+    },
+    {
+      "name": "查询-按严重度筛选P0",
+      "message": "帮我查一下《多维-Bug追踪》里严重度是P0的记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P0", "bitable"]
+    },
+    {
+      "name": "查询-按负责人筛选",
+      "message": "帮我查一下《多维-Bug追踪》里负责人是许帅的所有记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "查询-组合条件",
+      "message": "帮我查一下《多维-Bug追踪》里负责人是许帅且状态不是已完成的记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "统计-记录总数",
+      "message": "帮我看看《多维-Bug追踪》里一共有多少条记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "统计-按状态分组",
+      "message": "帮我统计一下《多维-Bug追踪》里每个状态各有多少条记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "修改-单字段更新",
+      "message": "帮我把《多维-Bug追踪》里「登录页面崩溃」这条记录的状态改成「修复中」",
+      "assert": {
+        "containsAny": ["已更新", "成功", "完成", "修改"],
+        "notContains": "error"
+      },
+      "tags": ["P0", "bitable"]
+    },
+    {
+      "name": "修改-多字段更新",
+      "message": "帮我把《多维-Bug追踪》里「支付回调超时」这条记录的状态改成「已完成」，并把严重度改成P2",
+      "assert": {
+        "containsAny": ["已更新", "成功", "完成", "修改"],
+        "notContains": "error"
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "OKR-录入目标",
+      "message": "帮我在《多维-OKR追踪》里新增一条：目标是提升产品质量，关键结果是bug率降低50%，进度20，负责人许帅，截止日期本季度末",
+      "assert": {
+        "containsAny": ["已添加", "已新增", "已创建", "成功", "完成"],
+        "notContains": "error"
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "OKR-更新进度",
+      "message": "帮我把《多维-OKR追踪》里「提升产品质量」这条的进度改成50",
+      "assert": {
+        "containsAny": ["已更新", "成功", "完成", "修改"],
+        "notContains": "error"
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "查询-不存在的表",
+      "message": "帮我查一下《xyzzy_不存在的表_99999》里的记录",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": ["P1", "bitable", "error"]
+    },
+    {
+      "name": "查询-不存在的记录",
+      "message": "帮我查一下《多维-Bug追踪》里标题是「xyzzy_不存在的bug」的记录",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": ["P1", "bitable", "error"]
+    },
+    {
+      "name": "查询-空筛选条件",
+      "message": "帮我查一下《多维-Bug追踪》里符合条件的记录",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": ["P2", "bitable", "error", "intent"]
+    },
+    {
+      "name": "意图-模糊创建",
+      "message": "帮我建一个多维表格",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": ["P1", "bitable", "intent"]
+    },
+    {
+      "name": "意图-缺字段创建",
+      "message": "帮我创建一个多维表格叫《多维-客户管理》",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": ["P1", "bitable", "intent"]
+    },
+    {
+      "name": "意图-口语化记录",
+      "message": "帮我在bug追踪表里记一下：首页白屏，优先级P1，我负责",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": ["P1", "bitable", "intent"]
+    },
+    {
+      "name": "意图-口语化查询",
+      "message": "我负责的bug还有几个没修来着？",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": ["P2", "bitable", "intent"]
+    },
+    {
+      "name": "复杂字段-创建客户表",
+      "message": "帮我在「多维表格测试」文件夹下创建一个多维表格《多维-客户清单》，字段有：客户名、联系人、电话、邮箱、签约金额、签约日期、状态",
+      "assert": {
+        "containsAny": ["已创建", "创建成功", "完成"],
+        "notContains": "error"
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "复杂字段-录入客户",
+      "message": "帮我在《多维-客户清单》里新增一条：客户名是ABC公司，联系人张三，电话13800000000，邮箱test@abc.com，签约金额100000，签约日期今天，状态已签约",
+      "assert": {
+        "containsAny": ["已添加", "已新增", "已创建", "成功", "完成"],
+        "notContains": "error"
+      },
+      "tags": ["P1", "bitable"]
+    },
+    {
+      "name": "复杂字段-录入多条客户",
+      "message": "帮我在《多维-客户清单》里再加两条：XYZ公司 李四 13900000000 xyz@xyz.com 200000 今天 已签约；DEF公司 王五 13700000000 def@def.com 50000 昨天 谈判中",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": ["P2", "bitable"]
+    },
+    {
+      "name": "复杂字段-按金额排序",
+      "message": "帮我查一下《多维-客户清单》里签约金额从高到低的客户",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P2", "bitable"]
+    },
+    {
+      "name": "复杂字段-金额求和",
+      "message": "帮我统计一下《多维-客户清单》里所有已签约客户的总金额",
+      "assert": {
+        "notContains": "error",
+        "minLength": 2
+      },
+      "tags": ["P2", "bitable"]
+    },
+    {
+      "name": "融合-bitable+doc-查询写报告",
+      "message": "帮我读取《多维-Bug追踪》里所有状态是已完成的记录，整理成一份文档《多维-已完成Bug报告》",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P1", "bitable", "fusion"]
+    },
+    {
+      "name": "融合-bitable+task-从记录建任务",
+      "message": "帮我看看《多维-Bug追踪》里待处理和修复中的记录，为每条建一个飞书任务跟进",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P1", "bitable", "fusion"]
+    },
+    {
+      "name": "融合-bitable+im-通知负责人",
+      "message": "帮我看看《多维-Bug追踪》里P0的bug，然后给我自己发一条消息汇总",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 5
+      },
+      "tags": ["P2", "bitable", "fusion"]
+    },
+    {
+      "name": "融合-bitable+search-跨表查询",
+      "message": "帮我搜索一下飞书上所有标题包含「多维」的多维表格",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P2", "bitable", "fusion"]
+    },
+    {
+      "name": "删除-删除单条记录",
+      "message": "帮我在《多维-Bug追踪》里删除「首页加载缓慢」这条记录",
+      "assert": {
+        "notContains": "exception",
+        "minLength": 2
+      },
+      "tags": ["P2", "bitable"]
+    },
+    {
+      "name": "验证-删除后查询",
+      "message": "帮我再查一下《多维-Bug追踪》里还剩下哪些记录",
+      "assert": {
+        "notContains": "error",
+        "minLength": 5
+      },
+      "tags": ["P2", "bitable"]
     }
   ]
 }

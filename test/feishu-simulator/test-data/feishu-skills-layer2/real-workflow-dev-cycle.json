@@ -1,0 +1,154 @@
+{
+  "cases": [
+    {
+      "name": "迭代-Phase1-需求-创建迭代文件夹",
+      "message": "帮我在云空间创建一个文件夹叫「Sprint-迭代测试」",
+      "assert": { "containsAny": ["已创建", "创建成功", "文件夹", "完成"], "notContains": "error" },
+      "tags": ["P0", "workflow", "dev-cycle", "phase1"]
+    },
+    {
+      "name": "迭代-Phase1-需求-PRD文档",
+      "message": "帮我在「Sprint-迭代测试」文件夹下创建一个文档叫《迭代-PRD需求文档》，内容写：## 背景\n用户反馈登录流程繁琐。\n## 目标\n将登录步骤从5步减少到2步。\n## 需求列表\n1. 支持一键手机号登录\n2. 自动记住登录状态\n3. 异常登录提醒",
+      "assert": { "containsAny": ["已创建", "创建成功", "完成"], "matches": "feishu\\.cn", "notContains": "error" },
+      "tags": ["P0", "workflow", "dev-cycle", "phase1"]
+    },
+    {
+      "name": "迭代-Phase1-需求-评审会议",
+      "message": "帮我创建一个明天上午10点到11点的会议，主题是「迭代-PRD需求评审」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "会议", "完成"], "notContains": "error" },
+      "tags": ["P0", "workflow", "dev-cycle", "phase1"]
+    },
+    {
+      "name": "迭代-Phase2-设计-技术方案文档",
+      "message": "帮我在「Sprint-迭代测试」文件夹下创建文档《迭代-技术方案》，内容写：## 架构\n前端新增登录组件，后端提供一键登录API。\n## 数据库变更\n增加login_preference表。\n## API设计\nPOST /api/auth/quick-login",
+      "assert": { "containsAny": ["已创建", "创建成功", "完成"], "matches": "feishu\\.cn", "notContains": "error" },
+      "tags": ["P0", "workflow", "dev-cycle", "phase2"]
+    },
+    {
+      "name": "迭代-Phase2-设计-方案评审会",
+      "message": "帮我创建一个后天下午2点到3点的会议，主题是「迭代-技术方案评审」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "完成"], "notContains": "error" },
+      "tags": ["P1", "workflow", "dev-cycle", "phase2"]
+    },
+    {
+      "name": "迭代-Phase2-设计-添加评论",
+      "message": "帮我在《迭代-技术方案》文档上添加一条评论：「API命名建议改成 /api/auth/one-tap-login，更符合业界习惯」",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "workflow", "dev-cycle", "phase2"]
+    },
+    {
+      "name": "迭代-Phase3-拆任务-创建任务表",
+      "message": "帮我在「Sprint-迭代测试」文件夹下创建一个多维表格《迭代-任务看板》，字段是：任务名、负责人、状态、工时估算、截止日期",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P0", "workflow", "dev-cycle", "phase3"]
+    },
+    {
+      "name": "迭代-Phase3-拆任务-前端任务",
+      "message": "帮我在《迭代-任务看板》里新增一条记录：任务名「前端登录组件开发」，负责人许帅，状态待开始，工时估算3天，截止日期下周三",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P0", "workflow", "dev-cycle", "phase3"]
+    },
+    {
+      "name": "迭代-Phase3-拆任务-后端API",
+      "message": "帮我在《迭代-任务看板》里再新增一条：任务名「后端一键登录API」，负责人李帅，状态待开始，工时估算2天，截止日期下周二",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P0", "workflow", "dev-cycle", "phase3"]
+    },
+    {
+      "name": "迭代-Phase3-拆任务-DB变更",
+      "message": "帮我在《迭代-任务看板》里再新增一条：任务名「数据库表结构变更」，负责人李帅，状态待开始，工时估算1天，截止日期下周一",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "workflow", "dev-cycle", "phase3"]
+    },
+    {
+      "name": "迭代-Phase3-拆任务-同步个人任务",
+      "message": "帮我创建一个飞书任务「迭代-跟进迭代进展」，截止日期本周五",
+      "assert": { "containsAny": ["已创建", "创建成功", "任务", "完成"], "notContains": "error" },
+      "tags": ["P0", "workflow", "dev-cycle", "phase3"]
+    },
+    {
+      "name": "迭代-Phase4-开发-每日站会",
+      "message": "帮我创建一个工作日每天早上9点半到9点45的会议，主题是「迭代-每日站会」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "完成"], "notContains": "error" },
+      "tags": ["P1", "workflow", "dev-cycle", "phase4"]
+    },
+    {
+      "name": "迭代-Phase4-开发-Bug追踪表",
+      "message": "帮我在「Sprint-迭代测试」文件夹下创建一个多维表格《迭代-Bug追踪》，字段是：标题、严重度、状态、负责人、发现时间",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P1", "workflow", "dev-cycle", "phase4"]
+    },
+    {
+      "name": "迭代-Phase5-测试-录入Bug1",
+      "message": "帮我在《迭代-Bug追踪》里新增一条：标题是「手机号格式校验缺失」，严重度P1，状态待修复，负责人许帅，发现时间今天",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "workflow", "dev-cycle", "phase5"]
+    },
+    {
+      "name": "迭代-Phase5-测试-录入Bug2",
+      "message": "帮我在《迭代-Bug追踪》里再新增一条：标题是「登录成功后未正确跳转」，严重度P0，状态待修复，负责人许帅，发现时间今天",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "workflow", "dev-cycle", "phase5"]
+    },
+    {
+      "name": "迭代-Phase5-测试-查P0Bug",
+      "message": "帮我查一下《迭代-Bug追踪》里严重度P0的Bug有哪些",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "workflow", "dev-cycle", "phase5"]
+    },
+    {
+      "name": "迭代-Phase5-测试-测试报告",
+      "message": "帮我在「Sprint-迭代测试」文件夹下创建一个文档《迭代-测试报告》，内容写：## 测试范围\n一键登录全流程\n## 测试结果\n发现2个bug已录入追踪表\n## 结论\n核心功能可用，需要修复bug后再上线",
+      "assert": { "containsAny": ["已创建", "创建成功", "完成"], "matches": "feishu\\.cn", "notContains": "error" },
+      "tags": ["P1", "workflow", "dev-cycle", "phase5"]
+    },
+    {
+      "name": "迭代-Phase6-发布-发布计划",
+      "message": "帮我在「Sprint-迭代测试」文件夹下创建一个文档《迭代-发布计划》，内容写：## 发布时间\n下周四晚上10点灰度发布\n## 回滚方案\n保留上一版本镜像2周\n## 通知范围\n全体开发+产品团队",
+      "assert": { "containsAny": ["已创建", "创建成功", "完成"], "matches": "feishu\\.cn", "notContains": "error" },
+      "tags": ["P1", "workflow", "dev-cycle", "phase6"]
+    },
+    {
+      "name": "迭代-Phase6-发布-检查清单任务",
+      "message": "帮我创建一个任务「迭代-执行发布前检查清单」，截止日期下周四",
+      "assert": { "containsAny": ["已创建", "创建成功", "任务", "完成"], "notContains": "error" },
+      "tags": ["P1", "workflow", "dev-cycle", "phase6"]
+    },
+    {
+      "name": "迭代-Phase6-发布-发布会议",
+      "message": "帮我创建一个下周四晚上10点到11点的会议，主题是「迭代-灰度发布」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "完成"], "notContains": "error" },
+      "tags": ["P1", "workflow", "dev-cycle", "phase6"]
+    },
+    {
+      "name": "迭代-Phase6-发布-通知群组",
+      "message": "帮我在「测试」群里发一条消息：「迭代-一键登录功能将于下周四晚10点灰度发布，请各位关注」",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "workflow", "dev-cycle", "phase6"]
+    },
+    {
+      "name": "迭代-Phase7-复盘-复盘文档",
+      "message": "帮我在「Sprint-迭代测试」文件夹下创建一个文档《迭代-Sprint复盘》，内容写：## 完成情况\n按时交付\n## 做得好的\n任务拆解清晰，进度可控\n## 需要改进\n测试用例准备不够充分\n## 行动项\n下次迭代前完善测试计划",
+      "assert": { "containsAny": ["已创建", "创建成功", "完成"], "matches": "feishu\\.cn", "notContains": "error" },
+      "tags": ["P1", "workflow", "dev-cycle", "phase7"]
+    },
+    {
+      "name": "迭代-Phase7-复盘-复盘会议",
+      "message": "帮我创建一个下周五下午3点到4点的会议，主题是「迭代-Sprint复盘会」",
+      "assert": { "containsAny": ["已创建", "创建成功", "日程", "完成"], "notContains": "error" },
+      "tags": ["P1", "workflow", "dev-cycle", "phase7"]
+    },
+    {
+      "name": "迭代-Phase7-复盘-汇总验证",
+      "message": "帮我看看「Sprint-迭代测试」文件夹下都有什么，确认这次迭代所有产物都齐了",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P0", "workflow", "dev-cycle", "phase7"]
+    },
+    {
+      "name": "迭代-Phase7-复盘-任务完成",
+      "message": "帮我把「迭代-跟进迭代进展」这个任务标记为已完成",
+      "assert": { "notContains": "error", "minLength": 2 },
+      "tags": ["P1", "workflow", "dev-cycle", "phase7"]
+    }
+  ]
+}

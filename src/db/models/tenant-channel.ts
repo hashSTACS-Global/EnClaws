@@ -140,7 +140,7 @@ export async function deleteTenantChannel(tenantId: string, channelId: string): 
 }
 
 /**
- * Convert tenant channels + their apps to OpenClawConfig channels format.
+ * Convert tenant channels + their apps to EnClawsConfig channels format.
  * Reads apps from tenant_channel_apps for each channel.
  */
 export async function toConfigChannels(channels: TenantChannel[]): Promise<Record<string, unknown>> {

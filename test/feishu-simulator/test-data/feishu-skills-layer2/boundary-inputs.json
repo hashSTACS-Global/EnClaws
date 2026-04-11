@@ -1,0 +1,136 @@
+{
+  "cases": [
+    {
+      "name": "边界-空字符串(只有触发词)",
+      "message": "帮我",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "boundary", "intent"]
+    },
+    {
+      "name": "边界-单个字符",
+      "message": "?",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "boundary"]
+    },
+    {
+      "name": "边界-纯标点",
+      "message": "！？。，……",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "boundary"]
+    },
+    {
+      "name": "边界-纯空格",
+      "message": "           ",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "boundary"]
+    },
+    {
+      "name": "边界-emoji触发指令",
+      "message": "帮我创建一个文档📝标题叫《emoji测试》🎯内容写：今天完成了任务 ✅ 明天继续 🚀",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "boundary"]
+    },
+    {
+      "name": "边界-纯emoji消息",
+      "message": "📅🎯✅",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "boundary"]
+    },
+    {
+      "name": "边界-超长标题",
+      "message": "帮我创建一个文档，标题叫《这是一个非常非常非常非常非常非常非常非常非常非常长的文档标题用于测试系统对于超长输入的处理能力和边界情况》，内容随便写",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "boundary"]
+    },
+    {
+      "name": "边界-超长内容",
+      "message": "帮我创建一个文档叫《超长内容测试》，内容写：测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容测试内容",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "boundary"]
+    },
+    {
+      "name": "边界-HTML特殊字符",
+      "message": "帮我创建一个文档叫《HTML测试 <div> & \"quote\"》，内容写 <script>alert('x')</script>",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P1", "boundary", "security"]
+    },
+    {
+      "name": "边界-SQL-like输入",
+      "message": "帮我搜索文档，关键词是 '; DROP TABLE users; --",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P1", "boundary", "security"]
+    },
+    {
+      "name": "边界-反斜杠和引号",
+      "message": "帮我创建一个文档叫《\"特殊\"\\n换行》，内容写 C:\\Users\\test\\file.txt",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P1", "boundary"]
+    },
+    {
+      "name": "边界-中英混合",
+      "message": "帮我 create 一个 document, title is《Mixed语言Test》, content：Hello 世界 こんにちは",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "boundary"]
+    },
+    {
+      "name": "边界-日文",
+      "message": "帮我创建一个文档，标题叫《日本語テスト》，内容写：今日は良い天気ですね",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P2", "boundary"]
+    },
+    {
+      "name": "边界-韩文",
+      "message": "帮我创建一个文档，标题叫《한국어 테스트》，内容写：안녕하세요",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P2", "boundary"]
+    },
+    {
+      "name": "边界-繁体中文",
+      "message": "幫我建立一個文件，標題叫《繁體測試》，內容寫：這是繁體中文測試內容",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P2", "boundary"]
+    },
+    {
+      "name": "边界-全角字符",
+      "message": "帮我创建文档《全角ＡＢＣ１２３测试》",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P2", "boundary"]
+    },
+    {
+      "name": "边界-带换行符的消息",
+      "message": "帮我创建一个文档\n标题叫《换行测试》\n内容第一行\n第二行\n第三行",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "boundary"]
+    },
+    {
+      "name": "边界-多个触发词混合",
+      "message": "帮我创建文档，再建个任务，然后查个日程，最后发个消息给自己",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "boundary"]
+    },
+    {
+      "name": "边界-重复词语",
+      "message": "帮我帮我帮我创建创建创建一个一个一个文档文档文档",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "boundary"]
+    },
+    {
+      "name": "边界-否定嵌套",
+      "message": "不要不创建一个文档叫《双重否定》",
+      "assert": { "notContains": "exception", "minLength": 2 },
+      "tags": ["P2", "boundary", "intent"]
+    },
+    {
+      "name": "边界-看似命令实为问题",
+      "message": "创建一个文档是怎么操作的？",
+      "assert": { "notContains": "error", "minLength": 5 },
+      "tags": ["P1", "boundary", "intent"]
+    },
+    {
+      "name": "边界-相反意图组合",
+      "message": "帮我创建一个文档，但是不要真的创建",
+      "assert": { "notContains": "exception", "minLength": 5 },
+      "tags": ["P2", "boundary", "intent"]
+    }
+  ]
+}

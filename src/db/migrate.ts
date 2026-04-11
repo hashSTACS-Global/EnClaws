@@ -11,8 +11,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadDotEnv } from "../infra/dotenv.js";
 import { initDb, closeDb, withTransaction, query, getDbType, DB_SQLITE } from "./index.js";
 import { getSqliteDb, sqliteQuery } from "./sqlite/index.js";
+
+// Load .env so that ENCLAWS_DB_URL is available when running standalone
+// (e.g. `pnpm db:migrate`).  The gateway gets this via run-main.ts, but
+// migrate.ts is its own entry point.
+loadDotEnv({ quiet: true });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, "migrations");
@@ -58,47 +64,31 @@ function getPendingMigrations(applied: Set<string>): string[] {
 async function runMigrations(): Promise<void> {
   initDb();
 
-  // Migrations here are incremental changes applied after the initial schema.
-  // Skip 001_init.sql for SQLite since it's PG-specific (schema.sql is the SQLite equivalent).
+  // ================================================================
+  // Migration strategy (fresh-install only):
+  //
+  //   • PG     — runs 001_init.sql (consolidated full schema)
+  //   • SQLite — uses schema-sql.ts at initDb() time, no migrations
+  //
+  // Incremental upgrades for existing deployments are not supported
+  // here yet — the project currently wipes the dev DB on each restart.
+  // Re-introduce inline ALTER blocks / legacy migration markers when
+  // production deployments need rolling schema upgrades.
+  // ================================================================
 
   await ensureMigrationsTable();
   const applied = await getAppliedMigrations();
-  let pending = getPendingMigrations(applied);
+  const pending = getPendingMigrations(applied);
 
   if (getDbType() === DB_SQLITE) {
-    // Filter out PG-specific migrations
-    if (!applied.has("001_init.sql") && pending.includes("001_init.sql")) {
-      sqliteQuery("INSERT OR IGNORE INTO _migrations (name) VALUES (?)", ["001_init.sql"]);
-      pending = pending.filter((f) => f !== "001_init.sql");
+    // SQLite already has its full schema from schema-sql.ts. Mark any
+    // .sql files as applied without executing them — they are PG-only.
+    for (const file of pending) {
+      sqliteQuery("INSERT OR IGNORE INTO _migrations (name) VALUES (?)", [file]);
     }
-
-    // Filter out PG-specific migrations (those with PG syntax that won't run on SQLite)
-    // 006_user_open_ids_array.sql uses PG array types — skip, already in schema.sql
-    // 002_user_channel_id.sql uses PG ALTER TABLE syntax — handled inline below
-    const pgOnlyMigrations = new Set(["006_user_open_ids_array.sql", "002_user_channel_id.sql", "004_usage_user_id_text.sql"]);
-    for (const migration of pgOnlyMigrations) {
-      if (!applied.has(migration) && pending.includes(migration)) {
-        sqliteQuery("INSERT OR IGNORE INTO _migrations (name) VALUES (?)", [migration]);
-        pending = pending.filter((f) => f !== migration);
-      }
-    }
-
-    // Inline SQLite migration: add channel_id to users if missing (for existing DBs)
-    const db = getSqliteDb();
-    const cols = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
-    if (!cols.some((c) => c.name === "channel_id")) {
-      db.exec("ALTER TABLE users ADD COLUMN channel_id TEXT REFERENCES tenant_channels(id) ON DELETE SET NULL");
-      db.exec("CREATE INDEX IF NOT EXISTS idx_users_channel ON users (channel_id)");
-      console.log("[migrate]   ✓ SQLite: added channel_id column to users");
-    }
-
-    // Inline SQLite migration: add agent_id to tenant_channel_apps if missing
-    const appCols = db.prepare("PRAGMA table_info(tenant_channel_apps)").all() as { name: string }[];
-    if (!appCols.some((c) => c.name === "agent_id")) {
-      db.exec("ALTER TABLE tenant_channel_apps ADD COLUMN agent_id TEXT");
-      db.exec("CREATE INDEX IF NOT EXISTS idx_channel_apps_agent ON tenant_channel_apps (agent_id)");
-      console.log("[migrate]   ✓ SQLite: added agent_id column to tenant_channel_apps");
-    }
+    console.log("[migrate] SQLite uses schema-sql.ts; no .sql migrations executed.");
+    await closeDb();
+    return;
   }
 
   if (pending.length === 0) {
@@ -108,29 +98,13 @@ async function runMigrations(): Promise<void> {
   }
 
   console.log(`[migrate] ${pending.length} pending migration(s):`);
-
   for (const file of pending) {
     const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf-8");
     console.log(`[migrate]   applying ${file}...`);
-
-    if (getDbType() === DB_SQLITE) {
-      const db = getSqliteDb();
-      db.exec("BEGIN");
-      try {
-        db.exec(sql);
-        sqliteQuery("INSERT INTO _migrations (name) VALUES (?)", [file]);
-        db.exec("COMMIT");
-      } catch (err) {
-        db.exec("ROLLBACK");
-        throw err;
-      }
-    } else {
-      await withTransaction(async (client) => {
-        await client.query(sql);
-        await client.query("INSERT INTO _migrations (name) VALUES ($1)", [file]);
-      });
-    }
-
+    await withTransaction(async (client) => {
+      await client.query(sql);
+      await client.query("INSERT INTO _migrations (name) VALUES ($1)", [file]);
+    });
     console.log(`[migrate]   ✓ ${file}`);
   }
 
