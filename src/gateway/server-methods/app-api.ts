@@ -12,6 +12,7 @@ export interface AppApiConfig {
   installer: AppInstaller;
   llmDeps: LLMStepDeps;
   executePipeline?: typeof defaultExecute;
+  env?: NodeJS.ProcessEnv;
 }
 
 // oxlint-disable-next-line typescript/no-explicit-any
@@ -25,12 +26,13 @@ function requireTenantId(client: any): string {
 
 export function createAppApiHandlers(cfg: AppApiConfig) {
   const execute = cfg.executePipeline ?? defaultExecute;
+  const env = cfg.env ?? process.env;
 
   return {
     // oxlint-disable-next-line typescript/no-explicit-any
     "app.list": async ({ client }: any) => {
       const tenantId = requireTenantId(client);
-      const manifest = await readAppsManifest(tenantId);
+      const manifest = await readAppsManifest(tenantId, env);
       return {
         apps: manifest.installed.map((app) => ({
           name: app.name,
@@ -80,7 +82,7 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
       if (!registered) {
         throw new Error(`pipeline "${appName}/${pipelineName}" not found for tenant "${tenantId}"`);
       }
-      const workspaceDir = resolveAppWorkspaceDir(tenantId, appName);
+      const workspaceDir = resolveAppWorkspaceDir(tenantId, appName, env);
       await mkdir(workspaceDir, { recursive: true });
       const result: RunnerResult = await execute({
         pipeline: registered,
