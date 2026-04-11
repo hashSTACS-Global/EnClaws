@@ -93,6 +93,8 @@ describe("createAppApiHandlers", () => {
       definition: {
         name: "process",
         description: "Process data",
+        triggers: [],
+        input: {},
         steps: [],
         output: "final",
       },
@@ -146,7 +148,7 @@ describe("createAppApiHandlers", () => {
 
   it("app.list returns installed apps with pipelines", async () => {
     const mockAppsManifest = {
-      version: 1,
+      version: 1 as const,
       installed: [
         {
           name: "pivot",
@@ -167,6 +169,8 @@ describe("createAppApiHandlers", () => {
       definition: {
         name: "process",
         description: "Process data",
+        triggers: [],
+        input: {},
         steps: [],
         output: "final",
       },
@@ -178,6 +182,8 @@ describe("createAppApiHandlers", () => {
       definition: {
         name: "analyze",
         description: "Analyze results",
+        triggers: [],
+        input: {},
         steps: [],
         output: "report",
       },
