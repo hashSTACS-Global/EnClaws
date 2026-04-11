@@ -260,7 +260,10 @@ function handleTerminalChatEvent(
 }
 
 function handleChatGatewayEvent(host: GatewayHost, payload: ChatEventPayload | undefined) {
-  if (payload?.sessionKey) {
+  // Only update lastActiveSessionKey for the session the webchat client is
+  // currently viewing.  Broadcast events from other channels (e.g. Feishu)
+  // carry their own session keys and should not overwrite the webchat session.
+  if (payload?.sessionKey && payload.sessionKey === (host as unknown as EnClawsApp).sessionKey) {
     setLastActiveSessionKey(
       host as unknown as Parameters<typeof setLastActiveSessionKey>[0],
       payload.sessionKey,

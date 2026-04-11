@@ -3,6 +3,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { t } from "../i18n/index.ts";
 import { refreshChat } from "./app-chat.ts";
 import { syncUrlWithSessionKey } from "./app-settings.ts";
+import { isAuthenticated } from "./auth-store.ts";
 import type { AppViewState } from "./app-view-state.ts";
 import { EnClawsApp } from "./app.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
@@ -18,15 +19,32 @@ type SessionDefaultsSnapshot = {
   mainKey?: string;
 };
 
+/**
+ * Channel session keys contain segments like `:feishu:`, `:group:`,
+ * `:channel:`, or `:sender:` — these should never be used as the
+ * sidebar "home" session for webchat.
+ */
+function isChannelSessionKey(key: string): boolean {
+  const k = key.toLowerCase();
+  return (
+    k.includes(":feishu:") ||
+    k.includes(":lark:") ||
+    k.includes(":group:") ||
+    k.includes(":channel:") ||
+    k.includes(":sender:")
+  );
+}
+
 function resolveSidebarChatSessionKey(state: AppViewState): string {
-  // Prefer the last session the user was actively chatting on so that
-  // navigating away and back (e.g. Sessions → Chat) doesn't reset the
-  // session.  In multi-tenant mode redirectToFirstTenantAgent sets
-  // lastActiveSessionKey to the tenant agent session; without this
-  // check the sidebar click would always fall back to the gateway-level
-  // default ("main") and discard the conversation.
+  // Prefer the last webchat session the user was actively chatting on
+  // so that navigating away and back doesn't reset the session.
+  // Exclude channel sessions (Feishu/Lark) — those can leak into
+  // lastActiveSessionKey via broadcast chat events.
+  // NOTE: This function is only called in single-tenant mode.
+  // Multi-tenant mode skips this entirely and relies on
+  // redirectToFirstTenantAgent in the render function.
   const lastActive = state.settings.lastActiveSessionKey?.trim();
-  if (lastActive) {
+  if (lastActive && !isChannelSessionKey(lastActive)) {
     return lastActive;
   }
   const snapshot = state.hello?.snapshot as
@@ -76,7 +94,11 @@ export function renderTab(state: AppViewState, tab: Tab) {
           return;
         }
         event.preventDefault();
-        if (tab === "chat") {
+        if (tab === "chat" && !isAuthenticated()) {
+          // Single-tenant: resolve sidebar session and switch if needed.
+          // Multi-tenant: skip — redirectToFirstTenantAgent in the render
+          // function handles agent selection after the agents list loads,
+          // avoiding stale lastActiveSessionKey pointing to deleted agents.
           const mainSessionKey = resolveSidebarChatSessionKey(state);
           if (state.sessionKey !== mainSessionKey) {
             resetChatStateForSessionSwitch(state, mainSessionKey);

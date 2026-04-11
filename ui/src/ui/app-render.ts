@@ -131,7 +131,7 @@ async function loadTenantAgentsForChat(): Promise<TenantAgentOption[]> {
         name: (a.config?.displayName as string) ?? a.name ?? a.agentId,
       }));
     _tenantAgentsLoaded = true;
-  } catch {
+     } catch {
     // Not in multi-tenant mode or not authenticated
   }
   return _cachedTenantAgents;
@@ -146,7 +146,12 @@ function redirectToFirstTenantAgent(state: AppViewState, agents: TenantAgentOpti
   if (agents.length === 0) return;
   const sk = state.sessionKey ?? "";
   const isDefaultSession = !sk || sk === "main" || sk.startsWith("agent:main:");
-  if (!isDefaultSession) return;
+  // Also redirect if the current session points to an agent that no longer
+  // exists (e.g. deleted agent still in localStorage lastActiveSessionKey).
+  const agentMatch = sk.match(/^agent:([^:]+):/);
+  const currentAgentId = agentMatch?.[1];
+  const agentStillExists = currentAgentId && agents.some((a) => a.agentId === currentAgentId);
+  if (!isDefaultSession && agentStillExists) return;
   const next = `agent:${agents[0].agentId}:chat`;
   state.sessionKey = next;
   state.chatMessage = "";
@@ -171,7 +176,7 @@ function redirectToFirstTenantAgent(state: AppViewState, agents: TenantAgentOpti
 export function invalidateTenantAgentsCache() {
   _tenantAgentsLoaded = false;
   _cachedTenantAgents = [];
-}
+ }
 
 async function checkTenantNeedsOnboarding(state: AppViewState) {
   try {
@@ -264,11 +269,14 @@ export function renderApp(state: AppViewState) {
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
   const noAgents = isAuthenticated() && _tenantAgentsLoaded && _cachedTenantAgents.length === 0;
+  const agentsLoading = isAuthenticated() && !_tenantAgentsLoaded;
   const chatDisabledReason = noAgents
     ? "请先在【代理管理】中创建并启用一个 Agent，才能开始对话"
-    : state.connected
-      ? null
-      : t("chat.disconnected");
+    : agentsLoading
+      ? "正在加载 Agent 列表…"
+      : state.connected
+        ? null
+        : t("chat.disconnected");
   const COMING_SOON_TABS = new Set(["sandbox", "nodes", "usage", "instances", "cron", "config", "debug"]);
   const isComingSoon = COMING_SOON_TABS.has(state.tab);
   const isChat = state.tab === "chat";
@@ -424,10 +432,14 @@ export function renderApp(state: AppViewState) {
           @onboarding-complete=${() => {
             state.showOnboarding = false;
             state.connect();
-            // Reload tenant agents for chat after onboarding setup
+            // Invalidate tenant agents cache so the chat tab render will
+            // reload the list and auto-select the first agent via
+            // redirectToFirstTenantAgent.  Do NOT call loadTenantAgentsForChat()
+            // here — that would set _tenantAgentsLoaded=true without redirecting,
+            // leaving the chat dropdown on "please select agent".
             _tenantAgentsLoaded = false;
-            void loadTenantAgentsForChat();
-            // Delay reload to let channels connect, then remount overview
+            _cachedTenantAgents = [];
+                       // Delay reload to let channels connect, then remount overview
             setTimeout(() => {
               if (state.tab === "tenant-overview" || state.tab === "overview") {
                 const tab = state.tab;
@@ -1436,8 +1448,8 @@ export function renderApp(state: AppViewState) {
                                               streamStartedAt: state.chatStreamStartedAt,
                                               draft: state.chatMessage,
                                               queue: state.chatQueue,
-                                              connected: state.connected && !noAgents,
-                                              canSend: state.connected && !noAgents,
+                                              connected: state.connected && !noAgents && !agentsLoading,
+                                              canSend: state.connected && !noAgents && !agentsLoading,
                                               disabledReason: chatDisabledReason,
                                               error: state.lastError,
                                               sessions: state.sessionsResult,
