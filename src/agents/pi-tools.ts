@@ -18,6 +18,7 @@ import { listChannelAgentTools } from "./channel-tools.js";
 import { resolveImageSanitizationLimits } from "./image-sanitization.js";
 import type { ModelAuthMode } from "./model-auth.js";
 import { createOpenClawTools } from "./openclaw-tools.js";
+import { createAppRuntimeTools } from "./pi-tools-app-runtime.js";
 import { wrapToolWithAbortSignal } from "./pi-tools.abort.js";
 import { wrapToolWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
 import {
@@ -301,6 +302,18 @@ export function createOpenClawCodingTools(options?: {
   tenantUserRole?: string;
   /** Tool names overridden by skills (these plugin tools will be removed). */
   skillOverrides?: string[];
+  /**
+   * Optional APP runtime dependencies for injection of app_* tools.
+   * If provided, app_list, app_install, app_uninstall, app_invoke tools will be added to the tool list.
+   */
+  appRuntime?: {
+    deps: {
+      registry: unknown;
+      installer: unknown;
+      llmDeps: unknown;
+    };
+    resolveTenantId: () => string | undefined;
+  };
 }): AnyAgentTool[] {
   const execToolName = "exec";
   const sandbox = options?.sandbox?.enabled ? options.sandbox : undefined;
@@ -563,6 +576,9 @@ export function createOpenClawCodingTools(options?: {
       tenantId: options?.tenantId,
       tenantUserId: options?.tenantUserId,
     }),
+    ...(options?.appRuntime
+      ? createAppRuntimeTools(options.appRuntime).map((t) => t as unknown as AnyAgentTool)
+      : []),
   ];
   const toolsForMessageProvider = applyMessageProviderToolPolicy(tools, options?.messageProvider);
   // Security: treat unknown/undefined as unauthorized (opt-in, not opt-out)
@@ -598,7 +614,9 @@ export function createOpenClawCodingTools(options?: {
     ? new Set(options.skillOverrides.map((n) => n.toLowerCase()))
     : undefined;
   if (overrideSet) {
-    const removed = subagentFiltered.filter((tool) => overrideSet.has(tool.name.toLowerCase())).map((t) => t.name);
+    const removed = subagentFiltered
+      .filter((tool) => overrideSet.has(tool.name.toLowerCase()))
+      .map((t) => t.name);
   }
   const afterSkillOverrides = overrideSet
     ? subagentFiltered.filter((tool) => !overrideSet.has(tool.name.toLowerCase()))

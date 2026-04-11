@@ -8,10 +8,10 @@ import {
   SessionManager,
 } from "@mariozechner/pi-coding-agent";
 import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
-import { isDbInitialized } from "../../../db/index.js";
-import { recordUsage } from "../../../db/models/usage.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import type { OpenClawConfig } from "../../../config/config.js";
+import { isDbInitialized } from "../../../db/index.js";
+import { recordUsage } from "../../../db/models/usage.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
@@ -31,7 +31,6 @@ import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
 import { resolveOpenClawAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
-import { createInteractionTraceRecorder } from "../../interaction-trace.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "../../bootstrap-files.js";
 import { createCacheTrace } from "../../cache-trace.js";
 import {
@@ -43,6 +42,7 @@ import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveOpenClawDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
 import { resolveImageSanitizationLimits } from "../../image-sanitization.js";
+import { createInteractionTraceRecorder } from "../../interaction-trace.js";
 import { resolveModelAuthMode } from "../../model-auth.js";
 import { normalizeProviderId, resolveDefaultModelForAgent } from "../../model-selection.js";
 import { createOllamaStreamFn, OLLAMA_NATIVE_BASE_URL } from "../../ollama-stream.js";
@@ -555,11 +555,12 @@ export async function runEmbeddedAttempt(
     // Check if the model supports native image input
     const modelHasVision = params.model.input?.includes("image") ?? false;
     // Collect tool names overridden by active skills (tenant skills can suppress plugin tools)
-    const skillOverrides = skillEntries.length > 0
-      ? skillEntries
-          .filter((e) => e.overrides && e.overrides.length > 0)
-          .flatMap((e) => e.overrides!)
-      : (params.skillsSnapshot?.skillOverrides ?? []);
+    const skillOverrides =
+      skillEntries.length > 0
+        ? skillEntries
+            .filter((e) => e.overrides && e.overrides.length > 0)
+            .flatMap((e) => e.overrides!)
+        : (params.skillsSnapshot?.skillOverrides ?? []);
 
     const toolsRaw = params.disableTools
       ? []
@@ -606,6 +607,7 @@ export async function runEmbeddedAttempt(
           tenantId: params.tenantId,
           tenantUserId: params.tenantUserId,
           tenantUserRole: params.tenantUserRole,
+          appRuntime: params.appRuntime,
         });
     const tools = sanitizeToolsForGoogle({ tools: toolsRaw, provider: params.provider });
     const allowedToolNames = collectAllowedToolNames({

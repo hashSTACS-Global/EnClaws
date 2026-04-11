@@ -115,4 +115,16 @@ export type RunEmbeddedPiAgentParams = {
   tenantUserId?: string;
   /** Tenant user role for permission checks during tool execution. */
   tenantUserRole?: string;
+  /**
+   * Optional APP runtime dependencies for injection of app_* tools.
+   * If provided, app_list, app_install, app_uninstall, app_invoke tools will be added to the tool list.
+   */
+  appRuntime?: {
+    deps: {
+      registry: unknown;
+      installer: unknown;
+      llmDeps: unknown;
+    };
+    resolveTenantId: () => string | undefined;
+  };
 };
