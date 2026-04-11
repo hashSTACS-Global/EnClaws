@@ -1,0 +1,171 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, writeFile, rm, readdir, mkdir } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+import { describe, it, expect, beforeEach } from "vitest";
+import { AppInstaller } from "./installer.js";
+import { readAppsManifest } from "./store.js";
+
+const execFileP = promisify(execFile);
+
+async function makeFakeAppRepo(): Promise<string> {
+  const bare = await mkdtemp(path.join(os.tmpdir(), "app-test-bare-"));
+  await execFileP("git", ["init", "--bare", bare]);
+  // Set HEAD to main so clones know which branch to check out
+  await execFileP("git", ["-C", bare, "symbolic-ref", "HEAD", "refs/heads/main"]);
+
+  const seed = await mkdtemp(path.join(os.tmpdir(), "app-test-seed-"));
+  // mkdtemp created the dir; git clone needs it empty or non-existent
+  await rm(seed, { recursive: true, force: true });
+  await execFileP("git", ["clone", bare, seed]);
+  await execFileP("git", ["-C", seed, "config", "user.email", "t@test.com"]);
+  await execFileP("git", ["-C", seed, "config", "user.name", "t"]);
+  await execFileP("git", ["-C", seed, "config", "init.defaultBranch", "main"]);
+  await execFileP("git", ["-C", seed, "checkout", "-b", "main"]);
+
+  // Create app.json manifest
+  const appJson = {
+    id: "test-app",
+    name: "Test App",
+    version: "1.0.0",
+    api_version: "1.0",
+  };
+  await writeFile(path.join(seed, "app.json"), JSON.stringify(appJson, null, 2));
+  await execFileP("git", ["-C", seed, "add", "app.json"]);
+  await execFileP("git", ["-C", seed, "commit", "-m", "initial"]);
+  await execFileP("git", ["-C", seed, "push", "origin", "HEAD:main"]);
+
+  // Cleanup seed
+  await rm(seed, { recursive: true, force: true });
+
+  return bare;
+}
+
+describe("AppInstaller", () => {
+  let fakeAppRepo: string;
+  let mockEnv: Record<string, string>;
+
+  beforeEach(async () => {
+    fakeAppRepo = await makeFakeAppRepo();
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "app-test-state-"));
+    mockEnv = {
+      ENCLAWS_STATE_DIR: stateDir,
+    };
+  });
+
+  it("happy path: installs app from git repo", async () => {
+    const installer = new AppInstaller(mockEnv);
+    const result = await installer.install({
+      tenantId: "tenant-1",
+      gitUrl: fakeAppRepo,
+    });
+
+    expect(result.name).toBe("test-app");
+    expect(result.version).toBe("1.0.0");
+    expect(result.commit).toMatch(/^[0-9a-f]{40}$/);
+    expect(result.appDir).toContain("test-app");
+
+    // Verify app.json exists
+    const appJson = await import("node:fs/promises").then((fs) =>
+      fs.readFile(path.join(result.appDir, "app.json"), "utf8"),
+    );
+    expect(JSON.parse(appJson).id).toBe("test-app");
+  });
+
+  it("rejects duplicate install for same tenant", async () => {
+    const installer = new AppInstaller(mockEnv);
+    await installer.install({
+      tenantId: "tenant-1",
+      gitUrl: fakeAppRepo,
+    });
+
+    // Try to install again
+    await expect(
+      installer.install({
+        tenantId: "tenant-1",
+        gitUrl: fakeAppRepo,
+      }),
+    ).rejects.toThrow('app "test-app" already installed for tenant "tenant-1"');
+  });
+
+  it("allows same app across different tenants", async () => {
+    const installer = new AppInstaller(mockEnv);
+    const result1 = await installer.install({
+      tenantId: "tenant-1",
+      gitUrl: fakeAppRepo,
+    });
+    const result2 = await installer.install({
+      tenantId: "tenant-2",
+      gitUrl: fakeAppRepo,
+    });
+
+    expect(result1.name).toBe(result2.name);
+    expect(result1.appDir).not.toBe(result2.appDir);
+    expect(result1.appDir).toContain("tenant-1");
+    expect(result2.appDir).toContain("tenant-2");
+  });
+
+  it("uninstall removes app dir and apps.json record", async () => {
+    const installer = new AppInstaller(mockEnv);
+    const result = await installer.install({
+      tenantId: "tenant-1",
+      gitUrl: fakeAppRepo,
+    });
+
+    // Verify installed app exists
+    let manifest = await readAppsManifest("tenant-1", mockEnv);
+    expect(manifest.installed).toHaveLength(1);
+
+    await installer.uninstall({
+      tenantId: "tenant-1",
+      appName: "test-app",
+    });
+
+    // Verify app dir gone
+    await expect(readdir(result.appDir)).rejects.toThrow();
+
+    // Verify apps.json record gone
+    manifest = await readAppsManifest("tenant-1", mockEnv);
+    expect(manifest.installed).toHaveLength(0);
+  });
+
+  it("uninstall preserves workspace by default, purges on flag", async () => {
+    const installer = new AppInstaller(mockEnv);
+    await installer.install({
+      tenantId: "tenant-1",
+      gitUrl: fakeAppRepo,
+    });
+
+    // Create fake workspace
+    const { resolveAppWorkspaceDir } = await import("../app-paths.js").then((m) => m);
+    const wsDir = resolveAppWorkspaceDir("tenant-1", "test-app", mockEnv);
+    await mkdir(wsDir, { recursive: true });
+    await writeFile(path.join(wsDir, "workspace.txt"), "test data");
+
+    // Uninstall without purge
+    await installer.uninstall({
+      tenantId: "tenant-1",
+      appName: "test-app",
+    });
+
+    // Workspace should still exist
+    const wsContents = await readdir(wsDir);
+    expect(wsContents).toContain("workspace.txt");
+
+    // Reinstall and then uninstall with purge
+    await installer.install({
+      tenantId: "tenant-1",
+      gitUrl: fakeAppRepo,
+    });
+
+    await installer.uninstall({
+      tenantId: "tenant-1",
+      appName: "test-app",
+      purgeWorkspace: true,
+    });
+
+    // Workspace should be gone
+    await expect(readdir(wsDir)).rejects.toThrow();
+  });
+});

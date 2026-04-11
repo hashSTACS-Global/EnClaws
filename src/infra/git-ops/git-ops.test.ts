@@ -77,4 +77,13 @@ describe("GitOps", () => {
     const contents = await readdir(verify);
     expect(contents).toContain("NEW.md");
   });
+
+  it("clones with depth 1 and reports headCommit", async () => {
+    const target = await mkdtemp(path.join(os.tmpdir(), "git-ops-depth-"));
+    await rm(target, { recursive: true, force: true });
+    const git = new GitOps();
+    await git.clone(bareRepo, target, { depth: 1 });
+    const commit = await git.headCommit(target);
+    expect(commit).toMatch(/^[0-9a-f]{40}$/);
+  });
 });

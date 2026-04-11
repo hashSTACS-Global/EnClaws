@@ -8,6 +8,11 @@ export interface CommitOptions {
   paths?: string[];
 }
 
+export interface CloneOptions {
+  depth?: number;
+  branch?: string;
+}
+
 export interface PushOptions {
   remote?: string;
   branch?: string;
@@ -26,8 +31,16 @@ export class GitError extends Error {
 }
 
 export class GitOps {
-  async clone(url: string, targetDir: string): Promise<void> {
-    await this.run("git", ["clone", url, targetDir]);
+  async clone(url: string, targetDir: string, opts: CloneOptions = {}): Promise<void> {
+    const args = ["clone"];
+    if (opts.depth) {
+      args.push("--depth", String(opts.depth));
+    }
+    if (opts.branch) {
+      args.push("--branch", opts.branch);
+    }
+    args.push(url, targetDir);
+    await this.run("git", args);
   }
 
   async pull(repoDir: string): Promise<void> {
@@ -92,6 +105,11 @@ export class GitOps {
   async status(repoDir: string): Promise<string> {
     const { stdout } = await this.run("git", ["status", "--porcelain"], repoDir);
     return stdout;
+  }
+
+  async headCommit(repoDir: string): Promise<string> {
+    const { stdout } = await this.run("git", ["rev-parse", "HEAD"], repoDir);
+    return stdout.trim();
   }
 
   private async run(
