@@ -23,10 +23,7 @@ export const LLMStepSchema = z.object({
 });
 export type LLMStep = z.infer<typeof LLMStepSchema>;
 
-export const StepSchema = z.discriminatedUnion("type", [
-  CodeStepSchema,
-  LLMStepSchema,
-]);
+export const StepSchema = z.discriminatedUnion("type", [CodeStepSchema, LLMStepSchema]);
 export type Step = z.infer<typeof StepSchema>;
 
 export const PipelineDefinitionSchema = z.object({

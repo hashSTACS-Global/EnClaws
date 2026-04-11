@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PipelineDefinitionSchema, parsePipelineDefinition } from "./types";
+import { parsePipelineDefinition } from "./types.js";
 
 describe("PipelineDefinition", () => {
   it("parses a minimal code-only pipeline", () => {
@@ -7,15 +7,41 @@ describe("PipelineDefinition", () => {
       name: "echo",
       description: "test pipeline",
       input: { message: "string" },
-      steps: [
-        { name: "prepare", type: "code", command: "python3 steps/prepare.py" },
-      ],
+      steps: [{ name: "prepare", type: "code", command: "python3 steps/prepare.py" }],
       output: "prepare",
     };
     const parsed = parsePipelineDefinition(raw);
     expect(parsed.name).toBe("echo");
     expect(parsed.steps).toHaveLength(1);
-    expect(parsed.steps[0].type).toBe("code");
+    const step = parsed.steps[0];
+    if (step.type !== "code") {
+      throw new Error("expected code step");
+    }
+    expect(step.command).toBe("python3 steps/prepare.py");
+  });
+
+  it("applies documented defaults when optional fields are omitted", () => {
+    const raw = {
+      name: "with-defaults",
+      description: "defaults test",
+      steps: [
+        {
+          name: "gen",
+          type: "llm",
+          prompt: "Say hi",
+        },
+      ],
+      output: "gen",
+    };
+    const parsed = parsePipelineDefinition(raw);
+    expect(parsed.triggers).toEqual([]);
+    expect(parsed.input).toEqual({});
+    const step = parsed.steps[0];
+    if (step.type !== "llm") {
+      throw new Error("expected llm step");
+    }
+    expect(step.model).toBe("standard");
+    expect(step.retry).toBe(2);
   });
 
   it("parses an LLM step with schema and retry", () => {
@@ -37,7 +63,9 @@ describe("PipelineDefinition", () => {
     };
     const parsed = parsePipelineDefinition(raw);
     const step = parsed.steps[0];
-    if (step.type !== "llm") throw new Error("expected llm step");
+    if (step.type !== "llm") {
+      throw new Error("expected llm step");
+    }
     expect(step.model).toBe("standard");
     expect(step.retry).toBe(3);
   });
