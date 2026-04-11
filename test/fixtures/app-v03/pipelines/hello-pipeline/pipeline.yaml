@@ -1,0 +1,8 @@
+name: hello
+description: "另一个 echo 风格的 pipeline"
+input: {}
+steps:
+  - name: greet
+    type: code
+    command: "python3 steps/greet.py"
+output: greet
