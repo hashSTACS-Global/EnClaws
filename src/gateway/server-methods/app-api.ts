@@ -1,6 +1,12 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
 import type { AppInstaller } from "../../runtime/app-installer/installer.js";
-import { readAppsManifest } from "../../runtime/app-installer/store.js";
+import {
+  setAppCredential,
+  getAppCredential,
+  buildGitAuthEnv,
+} from "../../runtime/app-installer/credentials-store.js";
+import { readAppsManifest, updateInstalledApp } from "../../runtime/app-installer/store.js";
+import { GitOps } from "../../infra/git-ops/index.js";
 import { resolveAppWorkspaceDir } from "../../runtime/app-paths.js";
 import type { LLMStepDeps } from "../../runtime/pipeline-runner/llm-step.js";
 import { executePipeline as defaultExecute } from "../../runtime/pipeline-runner/runner.js";
@@ -17,11 +23,18 @@ export interface AppApiConfig {
 
 // oxlint-disable-next-line typescript/no-explicit-any
 function requireTenantId(client: any): string {
-  const tenantId = client?.tenantContext?.tenantId;
+  // Gateway stores tenant context at client.tenant (set by auth middleware),
+  // not client.tenantContext as originally assumed.
+  const tenantId = client?.tenant?.tenantId;
   if (!tenantId) {
     throw new Error("tenant context required (missing tenantId)");
   }
   return tenantId;
+}
+
+function maskToken(token: string): string {
+  if (token.length <= 8) return "****";
+  return `${token.slice(0, 4)}${"*".repeat(Math.min(token.length - 8, 20))}${token.slice(-4)}`;
 }
 
 export function createAppApiHandlers(cfg: AppApiConfig) {
@@ -33,14 +46,29 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
     "app.list": async ({ client }: any) => {
       const tenantId = requireTenantId(client);
       const manifest = await readAppsManifest(tenantId, env);
-      return {
-        apps: manifest.installed.map((app) => ({
+      const apps = [];
+      for (const app of manifest.installed) {
+        const cred = await getAppCredential(tenantId, app.name, env);
+        const wsDir = resolveAppWorkspaceDir(tenantId, app.name, env);
+        let hasWorkspace = false;
+        try {
+          await stat(wsDir);
+          hasWorkspace = true;
+        } catch { /* not found */ }
+        apps.push({
           name: app.name,
           version: app.version,
           installedAt: app.installedAt,
           pipelines: cfg.registry.listPipelines(tenantId, app.name).map((p) => p.name),
-        })),
-      };
+          hasCredentials: Boolean(cred),
+          hasWorkspace,
+          workspaceRepo: app.workspaceRepo ?? "",
+          gitUser: cred?.gitUser ?? "",
+          gitEmail: cred?.gitEmail ?? "",
+          gitTokenMasked: cred ? maskToken(cred.gitToken) : "",
+        });
+      }
+      return { apps };
     },
 
     // oxlint-disable-next-line typescript/no-explicit-any
@@ -50,7 +78,17 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
       if (typeof gitUrl !== "string" || !gitUrl.trim()) {
         throw new Error("gitUrl required");
       }
-      const result = await cfg.installer.install({ tenantId, gitUrl });
+      const workspaceRepo =
+        typeof params?.workspaceRepo === "string" ? params.workspaceRepo : undefined;
+      const gitToken =
+        typeof params?.gitToken === "string" ? params.gitToken : undefined;
+      const gitUser =
+        typeof params?.gitUser === "string" ? params.gitUser : undefined;
+      const gitEmail =
+        typeof params?.gitEmail === "string" ? params.gitEmail : undefined;
+      const result = await cfg.installer.install({
+        tenantId, gitUrl, workspaceRepo, gitToken, gitUser, gitEmail,
+      });
       await cfg.registry.loadOne(tenantId, result.name);
       return { name: result.name, version: result.version };
     },
@@ -68,6 +106,59 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
         appName: name,
         purgeWorkspace: Boolean(purgeWorkspace),
       });
+      return { ok: true };
+    },
+
+    // oxlint-disable-next-line typescript/no-explicit-any
+    "app.configure": async ({ params, client }: any) => {
+      const tenantId = requireTenantId(client);
+      const appName = params?.name;
+      if (typeof appName !== "string" || !appName.trim()) {
+        throw new Error("name required");
+      }
+      // Verify app exists
+      const manifest = await readAppsManifest(tenantId, env);
+      if (!manifest.installed.find((a) => a.name === appName)) {
+        throw new Error(`app "${appName}" not installed`);
+      }
+
+      // Save credentials if provided
+      const gitToken = typeof params?.gitToken === "string" && params.gitToken.trim() ? params.gitToken.trim() : undefined;
+      const gitUser = typeof params?.gitUser === "string" && params.gitUser.trim() ? params.gitUser.trim() : undefined;
+      const gitEmail = typeof params?.gitEmail === "string" && params.gitEmail.trim() ? params.gitEmail.trim() : undefined;
+      if (gitToken || gitUser || gitEmail) {
+        // Merge with existing credentials — only overwrite fields that were provided
+        const existing = await getAppCredential(tenantId, appName, env);
+        await setAppCredential(tenantId, appName, {
+          gitToken: gitToken ?? existing?.gitToken ?? "",
+          gitUser: gitUser ?? existing?.gitUser ?? "",
+          gitEmail: gitEmail ?? existing?.gitEmail ?? "",
+        }, env);
+      }
+
+      // Clone or pull workspace repo
+      const workspaceRepo = typeof params?.workspaceRepo === "string" ? params.workspaceRepo.trim() : undefined;
+      if (workspaceRepo) {
+        const wsDir = resolveAppWorkspaceDir(tenantId, appName, env);
+        const cred = await getAppCredential(tenantId, appName, env);
+        const gitEnv = cred ? buildGitAuthEnv(cred) : undefined;
+        const git = new GitOps();
+        let exists = false;
+        try {
+          await stat(wsDir);
+          exists = true;
+        } catch { /* not found */ }
+        if (exists) {
+          // Already cloned — pull latest
+          await git.pull(wsDir, gitEnv);
+        } else {
+          // First time — clone
+          await git.clone(workspaceRepo, wsDir, { depth: 1, gitEnv });
+        }
+        // Persist workspaceRepo in apps.json so app.list can return it
+        await updateInstalledApp(tenantId, appName, { workspaceRepo }, env);
+      }
+
       return { ok: true };
     },
 

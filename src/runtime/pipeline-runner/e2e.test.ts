@@ -102,8 +102,8 @@ describe("E2E: install → invoke → uninstall", () => {
       env,
     });
 
-    const client = { tenantContext: { tenantId: "tenant-a" } } as unknown as {
-      tenantContext: { tenantId: string };
+    const client = { tenant: { tenantId: "tenant-a" } } as unknown as {
+      tenant: { tenantId: string };
     };
 
     // 1. install

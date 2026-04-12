@@ -59,6 +59,23 @@ export async function addInstalledApp(
   await writeAppsManifest(tenantId, manifest, env);
 }
 
+export async function updateInstalledApp(
+  tenantId: string,
+  appName: string,
+  updates: Partial<Pick<InstalledAppRecord, "workspaceRepo">>,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  const manifest = await readAppsManifest(tenantId, env);
+  const record = manifest.installed.find((r) => r.name === appName);
+  if (!record) {
+    throw new Error(`app "${appName}" not installed for tenant "${tenantId}"`);
+  }
+  if (updates.workspaceRepo !== undefined) {
+    record.workspaceRepo = updates.workspaceRepo;
+  }
+  await writeAppsManifest(tenantId, manifest, env);
+}
+
 export async function removeInstalledApp(
   tenantId: string,
   appName: string,

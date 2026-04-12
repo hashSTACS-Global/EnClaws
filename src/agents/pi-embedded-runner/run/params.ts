@@ -8,6 +8,7 @@ import type { ExecElevatedDefaults, ExecToolDefaults } from "../../bash-tools.js
 import type { BlockReplyPayload } from "../../pi-embedded-payloads.js";
 import type { BlockReplyChunking, ToolResultFormat } from "../../pi-embedded-subscribe.js";
 import type { SkillSnapshot } from "../../skills.js";
+import type { CreateAppRuntimeToolsOptions } from "../../pi-tools-app-runtime.js";
 
 // Simplified tool definition for client-provided tools (OpenResponses hosted tools)
 export type ClientToolDefinition = {
@@ -119,12 +120,5 @@ export type RunEmbeddedPiAgentParams = {
    * Optional APP runtime dependencies for injection of app_* tools.
    * If provided, app_list, app_install, app_uninstall, app_invoke tools will be added to the tool list.
    */
-  appRuntime?: {
-    deps: {
-      registry: unknown;
-      installer: unknown;
-      llmDeps: unknown;
-    };
-    resolveTenantId: () => string | undefined;
-  };
+  appRuntime?: CreateAppRuntimeToolsOptions;
 };

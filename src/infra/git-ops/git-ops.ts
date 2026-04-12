@@ -11,12 +11,16 @@ export interface CommitOptions {
 export interface CloneOptions {
   depth?: number;
   branch?: string;
+  /** Custom env vars merged with process.env for this git command (e.g. auth headers). */
+  gitEnv?: Record<string, string>;
 }
 
 export interface PushOptions {
   remote?: string;
   branch?: string;
   maxRetries?: number;
+  /** Custom env vars merged with process.env for this git command (e.g. auth headers). */
+  gitEnv?: Record<string, string>;
 }
 
 export class GitError extends Error {
@@ -40,12 +44,12 @@ export class GitOps {
       args.push("--branch", opts.branch);
     }
     args.push(url, targetDir);
-    await this.run("git", args);
+    await this.run("git", args, undefined, opts.gitEnv);
   }
 
-  async pull(repoDir: string): Promise<void> {
+  async pull(repoDir: string, gitEnv?: Record<string, string>): Promise<void> {
     try {
-      await this.run("git", ["pull", "--rebase", "origin"], repoDir);
+      await this.run("git", ["pull", "--rebase", "origin"], repoDir, gitEnv);
     } catch (e) {
       if (e instanceof GitError && /network|fetch/i.test(e.stderr)) {
         // transient network failure → warn but don't interrupt caller
@@ -80,14 +84,14 @@ export class GitOps {
     let lastError: Error | undefined;
     for (let i = 0; i < maxRetries; i++) {
       try {
-        await this.run("git", ["push", remote, branch], repoDir);
+        await this.run("git", ["push", remote, branch], repoDir, opts.gitEnv);
         return;
       } catch (e) {
         lastError = e as Error;
         if (e instanceof GitError && /conflict|rejected|non-fast-forward/i.test(e.stderr)) {
           // Try pull-rebase then push
           try {
-            await this.pull(repoDir);
+            await this.pull(repoDir, opts.gitEnv);
           } catch {
             // ignore
           }
@@ -116,9 +120,11 @@ export class GitOps {
     cmd: string,
     args: string[],
     cwd?: string,
+    gitEnv?: Record<string, string>,
   ): Promise<{ stdout: string; stderr: string }> {
     try {
-      const { stdout, stderr } = await execFileP(cmd, args, { cwd });
+      const env = gitEnv ? { ...process.env, ...gitEnv } : undefined;
+      const { stdout, stderr } = await execFileP(cmd, args, { cwd, env });
       return { stdout, stderr };
     } catch (e) {
       const err = e as NodeJS.ErrnoException & { stderr?: string };

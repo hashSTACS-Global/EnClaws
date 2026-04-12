@@ -6,6 +6,7 @@ import { resolveAppDir, resolveAppWorkspaceDir, resolveTenantAppsRootDir } from 
 import { loadPipelineYaml } from "../pipeline-runner/yaml-loader.js";
 import { readAppManifest } from "./manifest.js";
 import { addInstalledApp, removeInstalledApp, readAppsManifest } from "./store.js";
+import { setAppCredential, clearAppCredential, buildGitAuthEnv } from "./credentials-store.js";
 
 export interface InstallResult {
   name: string;
@@ -17,6 +18,14 @@ export interface InstallResult {
 export interface InstallOptions {
   tenantId: string;
   gitUrl: string;
+  /** Optional workspace repo URL — cloned into app-workspaces/<appId>/ for runtime data. */
+  workspaceRepo?: string;
+  /** Git HTTPS token for authenticating clone/push to workspace repo. */
+  gitToken?: string;
+  /** Git committer user name (e.g. "pivot-bot"). */
+  gitUser?: string;
+  /** Git committer email (e.g. "pivot-bot@example.com"). */
+  gitEmail?: string;
 }
 
 export interface UninstallOptions {
@@ -118,6 +127,26 @@ export class AppInstaller {
       // 8. expose SKILL.md to tenant skills directory (for agent runtime to auto-discover)
       await this.exposeAppSkill(opts.tenantId, manifest.id, targetDir);
 
+      // 9. clone workspace repo if provided (runtime data directory for the APP)
+      const wsRepoUrl = opts.workspaceRepo?.trim() || manifest.workspace_repo?.trim();
+      if (wsRepoUrl) {
+        const wsDir = resolveAppWorkspaceDir(opts.tenantId, manifest.id, this.env);
+        const hasCredentials = opts.gitToken && opts.gitUser && opts.gitEmail;
+        const cloneOpts = hasCredentials
+          ? { depth: 1, gitEnv: buildGitAuthEnv({ gitToken: opts.gitToken!, gitUser: opts.gitUser!, gitEmail: opts.gitEmail! }) }
+          : { depth: 1 };
+        await this.git.clone(wsRepoUrl, wsDir, cloneOpts);
+      }
+
+      // 10. persist git credentials for runtime use (push from pipeline steps)
+      if (opts.gitToken && opts.gitUser && opts.gitEmail) {
+        await setAppCredential(opts.tenantId, manifest.id, {
+          gitToken: opts.gitToken,
+          gitUser: opts.gitUser,
+          gitEmail: opts.gitEmail,
+        }, this.env);
+      }
+
       return {
         name: manifest.id,
         version: manifest.version,
@@ -141,6 +170,9 @@ export class AppInstaller {
 
     // Clear skill exposure on uninstall
     await this.unexposeAppSkill(opts.tenantId, opts.appName);
+
+    // Clear stored git credentials
+    await clearAppCredential(opts.tenantId, opts.appName, this.env).catch(() => {});
 
     if (opts.purgeWorkspace) {
       const wsDir = resolveAppWorkspaceDir(opts.tenantId, opts.appName, this.env);

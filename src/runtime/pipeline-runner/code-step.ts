@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { getUserMap } from "../../db/models/user.js";
+import { getAppCredential, buildGitAuthEnv } from "../app-installer/credentials-store.js";
 import { logWarn } from "../../logger.js";
 import type { CodeStep, ExecutionContext, StepOutput } from "./types.js";
 
@@ -45,11 +46,26 @@ export async function runCodeStep(step: CodeStep, ctx: ExecutionContext): Promis
     );
   }
 
+  // Load git credentials for workspace repo auth (commit + push).
+  // Failures degrade to no auth — git operations may fail if the repo requires it.
+  let gitAuthEnv: Record<string, string> = {};
+  try {
+    const cred = await getAppCredential(ctx.tenantId, ctx.appName);
+    if (cred) {
+      gitAuthEnv = buildGitAuthEnv(cred);
+    }
+  } catch (e) {
+    logWarn(
+      `pipeline-runner: getAppCredential(${ctx.tenantId}, ${ctx.appName}) failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
       cwd: ctx.pipelineDir,
       env: {
         ...process.env,
+        ...gitAuthEnv,
         PIVOT_WORKSPACE_DIR: ctx.workspaceDir,
         PIVOT_TENANT_ID: ctx.tenantId,
         PIVOT_APP_NAME: ctx.appName,

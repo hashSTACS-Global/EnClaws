@@ -58,7 +58,7 @@ describe("createAppApiHandlers", () => {
 
     const result = await handlers["app.install"]({
       params: { gitUrl: "https://github.com/example/pivot.git" },
-      client: { tenantContext: { tenantId: "tenant-a" } },
+      client: { tenant: { tenantId: "tenant-a" } },
     });
 
     expect(mockInstaller.install).toHaveBeenCalledWith({
@@ -74,7 +74,7 @@ describe("createAppApiHandlers", () => {
 
     const result = await handlers["app.uninstall"]({
       params: { name: "pivot", purgeWorkspace: false },
-      client: { tenantContext: { tenantId: "tenant-a" } },
+      client: { tenant: { tenantId: "tenant-a" } },
     });
 
     expect(mockRegistry.remove).toHaveBeenCalledWith("tenant-a", "pivot");
@@ -113,7 +113,7 @@ describe("createAppApiHandlers", () => {
         pipeline: "process",
         params: { input: "data" },
       },
-      client: { tenantContext: { tenantId: "tenant-a" } },
+      client: { tenant: { tenantId: "tenant-a" } },
     });
 
     expect(mockRegistry.getPipeline).toHaveBeenCalledWith("tenant-a", "pivot", "process");
@@ -138,7 +138,7 @@ describe("createAppApiHandlers", () => {
         pipeline: "missing",
         params: {},
       },
-      client: { tenantContext: { tenantId: "tenant-a" } },
+      client: { tenant: { tenantId: "tenant-a" } },
     });
 
     await expect(promise).rejects.toThrow(
@@ -192,7 +192,7 @@ describe("createAppApiHandlers", () => {
     mockRegistry.listPipelines.mockReturnValue([mockPipeline1, mockPipeline2]);
 
     const result = await handlers["app.list"]({
-      client: { tenantContext: { tenantId: "tenant-a" } },
+      client: { tenant: { tenantId: "tenant-a" } },
     });
 
     expect(mockRegistry.listPipelines).toHaveBeenCalledWith("tenant-a", "pivot");

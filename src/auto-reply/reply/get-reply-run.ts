@@ -21,6 +21,7 @@ const skillsLog = createSubsystemLogger("skills");
 import { clearCommandLane, getQueueSize } from "../../process/command-queue.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
+import { getGlobalAppRuntime } from "../../runtime/app-runtime-global.js";
 import { hasControlCommand } from "../command-detection.js";
 import { buildInboundMediaNote } from "../media-note.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
@@ -517,6 +518,12 @@ export async function runPreparedReply(
       tenantId: sessionCtx.TenantId || undefined,
       tenantUserId: sessionCtx.TenantUserId || undefined,
       tenantUserRole: sessionCtx.TenantUserRole || undefined,
+      appRuntime: (() => {
+        const global = getGlobalAppRuntime();
+        const tid = sessionCtx.TenantId;
+        if (!global || !tid) return undefined;
+        return { ...global, resolveTenantId: () => tid };
+      })(),
     },
   };
 

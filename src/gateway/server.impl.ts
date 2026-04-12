@@ -92,6 +92,11 @@ import { coreGatewayHandlers } from "./server-methods.js";
 import { createExecApprovalHandlers } from "./server-methods/exec-approval.js";
 import { safeParseJson } from "./server-methods/nodes.helpers.js";
 import { createSecretsHandlers } from "./server-methods/secrets.js";
+import { createAppApiHandlers } from "./server-methods/app-api.js";
+import { TenantAppRegistry } from "../runtime/tenant-app-registry/registry.js";
+import { AppInstaller } from "../runtime/app-installer/installer.js";
+import { createProviderCallFn } from "../runtime/pipeline-runner/provider-adapter.js";
+import { setGlobalAppRuntime } from "../runtime/app-runtime-global.js";
 import { hasConnectedMobileNode } from "./server-mobile-nodes.js";
 import { loadGatewayModelCatalog } from "./server-model-catalog.js";
 import { createNodeSubscriptionManager } from "./server-node-subscriptions.js";
@@ -758,6 +763,48 @@ export async function startGatewayServer(
     },
   });
 
+  // --- APP runtime (pipeline runner) ---
+  const tenantAppRegistry = new TenantAppRegistry();
+  await tenantAppRegistry.loadAll();
+  const appInstaller = new AppInstaller();
+  // Skeleton provider adapter — callProvider is a placeholder until real EC
+  // provider integration is wired (Task 19 Phase 2). Code-only pipelines
+  // (no llm steps) work fine; llm steps will throw a descriptive error.
+  const appLlmDeps = {
+    callProvider: createProviderCallFn({
+      ecProvider: async (input) => {
+        throw new Error(
+          `APP LLM provider not yet wired (model=${input.model}, tenant=${input.tenantId}). ` +
+            `Connect a real EC provider in server.impl.ts to enable llm pipeline steps.`,
+        );
+      },
+    }),
+  };
+  const rawAppHandlers = createAppApiHandlers({
+    registry: tenantAppRegistry,
+    installer: appInstaller,
+    llmDeps: appLlmDeps,
+  });
+  // Expose APP runtime to agent sessions so app_* tools are available in Pi runs
+  setGlobalAppRuntime({
+    deps: { registry: tenantAppRegistry, installer: appInstaller, llmDeps: appLlmDeps },
+    resolveTenantId: () => undefined, // placeholder — overridden per-session in get-reply-run
+  });
+  // Wrap app handlers: they return values directly, but Gateway expects
+  // handlers that call respond(). Bridge the two conventions.
+  // oxlint-disable-next-line typescript/no-explicit-any
+  const appApiHandlers: Record<string, any> = {};
+  for (const [method, handler] of Object.entries(rawAppHandlers)) {
+    appApiHandlers[method] = async (opts: { params: Record<string, unknown>; client: unknown; respond: (ok: boolean, payload?: unknown, error?: unknown) => void }) => {
+      try {
+        const result = await handler({ params: opts.params, client: opts.client });
+        opts.respond(true, result);
+      } catch (e) {
+        opts.respond(false, undefined, { message: e instanceof Error ? e.message : String(e) });
+      }
+    };
+  }
+
   const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port;
 
   attachGatewayWsHandlers({
@@ -779,6 +826,7 @@ export async function startGatewayServer(
       ...pluginRegistry.gatewayHandlers,
       ...execApprovalHandlers,
       ...secretsHandlers,
+      ...appApiHandlers,
     },
     broadcast,
     context: {

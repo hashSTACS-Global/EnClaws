@@ -18,7 +18,7 @@ import { listChannelAgentTools } from "./channel-tools.js";
 import { resolveImageSanitizationLimits } from "./image-sanitization.js";
 import type { ModelAuthMode } from "./model-auth.js";
 import { createOpenClawTools } from "./openclaw-tools.js";
-import { createAppRuntimeTools } from "./pi-tools-app-runtime.js";
+import { createAppRuntimeTools, type CreateAppRuntimeToolsOptions } from "./pi-tools-app-runtime.js";
 import { wrapToolWithAbortSignal } from "./pi-tools.abort.js";
 import { wrapToolWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
 import {
@@ -306,14 +306,7 @@ export function createOpenClawCodingTools(options?: {
    * Optional APP runtime dependencies for injection of app_* tools.
    * If provided, app_list, app_install, app_uninstall, app_invoke tools will be added to the tool list.
    */
-  appRuntime?: {
-    deps: {
-      registry: unknown;
-      installer: unknown;
-      llmDeps: unknown;
-    };
-    resolveTenantId: () => string | undefined;
-  };
+  appRuntime?: CreateAppRuntimeToolsOptions;
 }): AnyAgentTool[] {
   const execToolName = "exec";
   const sandbox = options?.sandbox?.enabled ? options.sandbox : undefined;
