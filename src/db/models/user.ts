@@ -4,6 +4,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { hashPassword } from "../../auth/password.js";
+import {
+  resolveTenantDevicesDir,
+  resolveTenantCredentialsDir,
+  resolveTenantCronDir,
+  resolveTenantAgentWorkspaceDir,
+} from "../../config/sessions/tenant-paths.js";
 import { query, getDbType, DB_SQLITE } from "../index.js";
 import * as sqliteUser from "../sqlite/models/user.js";
 import type {
@@ -14,15 +21,8 @@ import type {
   UserRole,
   UserStatus,
 } from "../types.js";
-import { hashPassword } from "../../auth/password.js";
 import { checkTenantQuota } from "./tenant.js";
 import { UserQuotaExceededError } from "./user-quota-error.js";
-import {
-  resolveTenantDevicesDir,
-  resolveTenantCredentialsDir,
-  resolveTenantCronDir,
-  resolveTenantAgentWorkspaceDir,
-} from "../../config/sessions/tenant-paths.js";
 
 // Re-export for convenience so callers can `import { UserQuotaExceededError } from "../../db/models/user.js"`.
 export { UserQuotaExceededError } from "./user-quota-error.js";
@@ -138,9 +138,7 @@ export async function getUserById(id: string): Promise<User | null> {
 /**
  * Batch-fetch display names by user IDs. Returns a map of id → displayName.
  */
-export async function getUserDisplayNamesByIds(
-  ids: string[],
-): Promise<Map<string, string>> {
+export async function getUserDisplayNamesByIds(ids: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (ids.length === 0) return map;
   const unique = [...new Set(ids)];
@@ -184,15 +182,12 @@ export async function getUserDisplayNamesByOpenIds(
   return map;
 }
 
-export async function getUserByEmail(
-  tenantId: string,
-  email: string,
-): Promise<User | null> {
+export async function getUserByEmail(tenantId: string, email: string): Promise<User | null> {
   if (getDbType() === DB_SQLITE) return sqliteUser.getUserByEmail(tenantId, email);
-  const result = await query(
-    "SELECT * FROM users WHERE tenant_id = $1 AND email = $2",
-    [tenantId, email.toLowerCase().trim()],
-  );
+  const result = await query("SELECT * FROM users WHERE tenant_id = $1 AND email = $2", [
+    tenantId,
+    email.toLowerCase().trim(),
+  ]);
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
@@ -215,7 +210,13 @@ export async function findUserByEmail(email: string): Promise<User | null> {
 
 export async function listUsers(
   tenantId: string,
-  opts?: { status?: UserStatus; role?: UserRole; channelId?: string; limit?: number; offset?: number },
+  opts?: {
+    status?: UserStatus;
+    role?: UserRole;
+    channelId?: string;
+    limit?: number;
+    offset?: number;
+  },
 ): Promise<{ users: SafeUser[]; total: number }> {
   if (getDbType() === DB_SQLITE) return sqliteUser.listUsers(tenantId, opts);
   const conditions: string[] = ["tenant_id = $1"];
@@ -253,10 +254,7 @@ export async function listUsers(
   };
 }
 
-export async function updateUser(
-  id: string,
-  updates: UpdateUserInput,
-): Promise<SafeUser | null> {
+export async function updateUser(id: string, updates: UpdateUserInput): Promise<SafeUser | null> {
   if (getDbType() === DB_SQLITE) return sqliteUser.updateUser(id, updates);
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -328,10 +326,7 @@ export async function setForceChangePassword(userId: string, force: boolean): Pr
   if (getDbType() === DB_SQLITE) {
     return sqliteUser.setForceChangePassword(userId, force);
   }
-  await query(
-    "UPDATE users SET force_change_password = $1 WHERE id = $2",
-    [force ? 1 : 0, userId],
-  );
+  await query("UPDATE users SET force_change_password = $1 WHERE id = $2", [force ? 1 : 0, userId]);
 }
 
 export async function deleteUser(id: string): Promise<boolean> {
@@ -347,7 +342,10 @@ export async function deleteUser(id: string): Promise<boolean> {
  * Update display_name for a user identified by open_id, but only if the
  * current display_name looks like a placeholder (ou_/on_ prefix or empty).
  */
-export async function updateDisplayNameByOpenId(openId: string, displayName: string): Promise<void> {
+export async function updateDisplayNameByOpenId(
+  openId: string,
+  displayName: string,
+): Promise<void> {
   if (getDbType() === DB_SQLITE) {
     return sqliteUser.updateDisplayNameByOpenId(openId, displayName);
   }
@@ -376,7 +374,8 @@ export async function findOrCreateUserByOpenId(
   unionId?: string,
   channelId?: string,
 ): Promise<{ user: User; created: boolean }> {
-  if (getDbType() === DB_SQLITE) return sqliteUser.findOrCreateUserByOpenId(tenantId, openId, displayName, unionId, channelId);
+  if (getDbType() === DB_SQLITE)
+    return sqliteUser.findOrCreateUserByOpenId(tenantId, openId, displayName, unionId, channelId);
 
   // Helper: lazily backfill channel_id on legacy records (NULL → current channel)
   async function backfillChannelId(user: User): Promise<void> {
@@ -399,16 +398,23 @@ export async function findOrCreateUserByOpenId(
       await backfillChannelId(user);
       // Append open_id to array if not already present
       if (openId && !user.openIds.includes(openId)) {
-        await query(
-          "UPDATE users SET open_ids = array_append(open_ids, $1) WHERE id = $2",
-          [openId, user.id],
-        );
+        await query("UPDATE users SET open_ids = array_append(open_ids, $1) WHERE id = $2", [
+          openId,
+          user.id,
+        ]);
         user.openIds.push(openId);
       }
       // Update display_name if a real name is now available
       if (displayName && displayName !== user.displayName && !displayName.startsWith("ou_")) {
-        if (!user.displayName || user.displayName.startsWith("ou_") || user.displayName.startsWith("on_")) {
-          await query("UPDATE users SET display_name = $1, updated_at = NOW() WHERE id = $2", [displayName, user.id]);
+        if (
+          !user.displayName ||
+          user.displayName.startsWith("ou_") ||
+          user.displayName.startsWith("on_")
+        ) {
+          await query("UPDATE users SET display_name = $1, updated_at = NOW() WHERE id = $2", [
+            displayName,
+            user.id,
+          ]);
           user.displayName = displayName;
         }
       }
@@ -433,8 +439,15 @@ export async function findOrCreateUserByOpenId(
     }
     // Update display_name if a real name is now available
     if (displayName && displayName !== user.displayName && !displayName.startsWith("ou_")) {
-      if (!user.displayName || user.displayName.startsWith("ou_") || user.displayName.startsWith("on_")) {
-        await query("UPDATE users SET display_name = $1, updated_at = NOW() WHERE id = $2", [displayName, user.id]);
+      if (
+        !user.displayName ||
+        user.displayName.startsWith("ou_") ||
+        user.displayName.startsWith("on_")
+      ) {
+        await query("UPDATE users SET display_name = $1, updated_at = NOW() WHERE id = $2", [
+          displayName,
+          user.id,
+        ]);
         user.displayName = displayName;
       }
     }
@@ -489,5 +502,37 @@ export async function findOrCreateUserByOpenId(
       return { user: rowToUser(fallback.rows[0]), created: false };
     }
     throw new Error(`Failed to find or create user for openId=${openId} unionId=${unionId}`);
+  }
+}
+
+/**
+ * Build a user mapping for pipeline env injection (PIVOT_USER_MAP).
+ * Maps user display names to their IM platform identifiers.
+ * Returns {} on empty tenant or errors.
+ */
+export async function getUserMap(
+  tenantId: string,
+): Promise<Record<string, { feishu_id?: string; wecom_id?: string }>> {
+  try {
+    // Fetch all users for this tenant (limit high enough for any reasonable tenant)
+    const { users } = await listUsers(tenantId, { limit: 10000 });
+    const map: Record<string, { feishu_id?: string; wecom_id?: string }> = {};
+    for (const user of users) {
+      if (!user.displayName) {
+        continue;
+      }
+      const entry: { feishu_id?: string; wecom_id?: string } = {};
+      // Map first openId to feishu_id (EC stores feishu open IDs in the openIds array)
+      if (user.openIds && user.openIds.length > 0 && user.openIds[0]) {
+        entry.feishu_id = user.openIds[0];
+      }
+      // Only add entries that have at least one IM field
+      if (entry.feishu_id || entry.wecom_id) {
+        map[user.displayName] = entry;
+      }
+    }
+    return map;
+  } catch {
+    return {};
   }
 }
