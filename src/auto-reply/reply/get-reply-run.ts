@@ -521,6 +521,9 @@ export async function runPreparedReply(
       appRuntime: (() => {
         const global = getGlobalAppRuntime();
         const tid = sessionCtx.TenantId;
+        skillsLog.info(
+          `[app-runtime] tenantId=${tid || "(empty)"} globalAppRuntime=${global ? "available" : "null"} → ${global && tid ? "INJECTING app tools" : "SKIPPING app tools"}`,
+        );
         if (!global || !tid) return undefined;
         return { ...global, resolveTenantId: () => tid };
       })(),

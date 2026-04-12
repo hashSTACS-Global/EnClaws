@@ -1,4 +1,5 @@
 import { mkdir } from "node:fs/promises";
+import { Type } from "@sinclair/typebox";
 import type { AppInstaller } from "../runtime/app-installer/installer.js";
 import { readAppsManifest } from "../runtime/app-installer/store.js";
 import { resolveAppWorkspaceDir } from "../runtime/app-paths.js";
@@ -6,17 +7,8 @@ import type { LLMStepDeps } from "../runtime/pipeline-runner/llm-step.js";
 import { executePipeline as defaultExecute } from "../runtime/pipeline-runner/runner.js";
 import type { RunnerResult } from "../runtime/pipeline-runner/types.js";
 import type { TenantAppRegistry } from "../runtime/tenant-app-registry/registry.js";
-
-/**
- * Minimal shape of an AgentTool compatible with @mariozechner/pi-agent-core.
- * 真实类型由 pi-agent-core 导出；此处写成结构类型以降低耦合。
- */
-export interface AppRuntimeAgentTool {
-  name: string;
-  description: string;
-  schema: Record<string, unknown>;
-  execute: (input: Record<string, unknown>) => Promise<unknown>;
-}
+import type { AnyAgentTool } from "./tools/common.js";
+import { jsonResult } from "./tools/common.js";
 
 export interface AppRuntimeDeps {
   registry: TenantAppRegistry;
@@ -26,16 +18,34 @@ export interface AppRuntimeDeps {
 
 export interface CreateAppRuntimeToolsOptions {
   deps: AppRuntimeDeps;
-  /**
-   * 从 agent session context 取当前 tenantId。
-   * 返回 undefined 代表没有 tenant 绑定——这是错误态，工具会 reject。
-   */
   resolveTenantId: () => string | undefined;
-  /** 测试用依赖注入；生产走默认 */
   executePipeline?: typeof defaultExecute;
 }
 
-export function createAppRuntimeTools(opts: CreateAppRuntimeToolsOptions): AppRuntimeAgentTool[] {
+function buildAppInvokeDescription(deps: AppRuntimeDeps, tenantId: string): string {
+  const lines = [
+    "Invoke a pipeline from an installed APP. Returns the pipeline's output as JSON.",
+    "",
+    "Available apps and pipelines:",
+  ];
+  try {
+    const appNames = deps.registry.listApps(tenantId);
+    for (const appName of appNames) {
+      const pipelines = deps.registry.listPipelines(tenantId, appName);
+      const pipelineList = pipelines.map((p) => {
+        const desc = p.definition?.description;
+        return desc ? `    - ${p.name}: ${desc}` : `    - ${p.name}`;
+      }).join("\n");
+      lines.push(`  app="${appName}":`);
+      lines.push(pipelineList);
+    }
+  } catch {
+    lines.push("  (use app_list to discover available apps)");
+  }
+  return lines.join("\n");
+}
+
+export function createAppRuntimeTools(opts: CreateAppRuntimeToolsOptions): AnyAgentTool[] {
   const { deps, resolveTenantId } = opts;
   const execute = opts.executePipeline ?? defaultExecute;
 
@@ -47,112 +57,91 @@ export function createAppRuntimeTools(opts: CreateAppRuntimeToolsOptions): AppRu
     return tid;
   };
 
-  const appList: AppRuntimeAgentTool = {
+  const appList: AnyAgentTool = {
+    label: "App List",
     name: "app_list",
     description:
       "List APPs installed for the current tenant. Returns each app's name, version, installed time, and exposed pipeline names.",
-    schema: {
-      type: "object",
-      properties: {},
-      additionalProperties: false,
-    },
+    parameters: Type.Object({}),
     async execute() {
       const tenantId = requireTenant();
       const manifest = await readAppsManifest(tenantId);
-      return {
+      return jsonResult({
         apps: manifest.installed.map((app) => ({
           name: app.name,
           version: app.version,
           installedAt: app.installedAt,
           pipelines: deps.registry.listPipelines(tenantId, app.name).map((p) => p.name),
         })),
-      };
+      });
     },
   };
 
-  const appInstall: AppRuntimeAgentTool = {
+  const appInstall: AnyAgentTool = {
+    label: "App Install",
     name: "app_install",
+    ownerOnly: true,
     description:
-      "Install an APP into the current tenant from a git URL. The APP's SKILL.md will become available to this agent on its next session.",
-    schema: {
-      type: "object",
-      required: ["gitUrl"],
-      properties: {
-        gitUrl: {
-          type: "string",
-          description: "Git clone URL (https or ssh) of the APP repository",
-        },
-      },
-      additionalProperties: false,
-    },
-    async execute(input) {
+      "Install an APP into the current tenant from a git URL.",
+    parameters: Type.Object({
+      gitUrl: Type.String({ description: "Git clone URL of the APP repository" }),
+    }),
+    async execute(_toolCallId, args) {
       const tenantId = requireTenant();
-      const gitUrl = String((input.gitUrl as string) ?? "").trim();
-      if (!gitUrl) {
-        throw new Error("gitUrl required");
-      }
+      const params = args as Record<string, unknown>;
+      const gitUrl = String(params.gitUrl ?? "").trim();
+      if (!gitUrl) throw new Error("gitUrl required");
       const result = await deps.installer.install({ tenantId, gitUrl });
       await deps.registry.loadOne(tenantId, result.name);
-      return { name: result.name, version: result.version };
+      return jsonResult({ name: result.name, version: result.version });
     },
   };
 
-  const appUninstall: AppRuntimeAgentTool = {
+  const appUninstall: AnyAgentTool = {
+    label: "App Uninstall",
     name: "app_uninstall",
+    ownerOnly: true,
     description:
-      "Uninstall an APP from the current tenant. By default the APP's workspace data is preserved; pass purgeWorkspace=true to delete it.",
-    schema: {
-      type: "object",
-      required: ["name"],
-      properties: {
-        name: { type: "string", description: "APP id (as shown by app_list)" },
-        purgeWorkspace: {
-          type: "boolean",
-          description: "Also delete app-workspaces/<app>/ (irreversible)",
-        },
-      },
-      additionalProperties: false,
-    },
-    async execute(input) {
+      "Uninstall an APP from the current tenant.",
+    parameters: Type.Object({
+      name: Type.String({ description: "APP id (as shown by app_list)" }),
+      purgeWorkspace: Type.Optional(Type.Boolean({ description: "Also delete workspace data" })),
+    }),
+    async execute(_toolCallId, args) {
       const tenantId = requireTenant();
-      const name = String((input.name as string) ?? "").trim();
-      if (!name) {
-        throw new Error("name required");
-      }
+      const params = args as Record<string, unknown>;
+      const name = String(params.name ?? "").trim();
+      if (!name) throw new Error("name required");
       deps.registry.remove(tenantId, name);
       await deps.installer.uninstall({
         tenantId,
         appName: name,
-        purgeWorkspace: Boolean(input.purgeWorkspace),
+        purgeWorkspace: Boolean(params.purgeWorkspace),
       });
-      return { ok: true };
+      return jsonResult({ ok: true });
     },
   };
 
-  const appInvoke: AppRuntimeAgentTool = {
+  const tenantIdForDesc = resolveTenantId();
+  const invokeDesc = tenantIdForDesc
+    ? buildAppInvokeDescription(deps, tenantIdForDesc)
+    : "Invoke a pipeline from an installed APP. Returns the pipeline's output as JSON.";
+  const appInvoke: AnyAgentTool = {
+    label: "App Invoke",
     name: "app_invoke",
-    description:
-      "Invoke a pipeline from an installed APP. Use app_list first to discover available apps and pipelines. Returns the pipeline's output as a JSON object.",
-    schema: {
-      type: "object",
-      required: ["app", "pipeline"],
-      properties: {
-        app: { type: "string", description: "APP id (e.g., 'pivot')" },
-        pipeline: {
-          type: "string",
-          description: "Pipeline name exposed by the APP (e.g., 'discuss-read')",
-        },
-        params: {
-          type: "object",
-          description: "Pipeline input params as defined by the pipeline's input schema",
-        },
-      },
-      additionalProperties: false,
-    },
-    async execute(input) {
+    description: invokeDesc,
+    parameters: Type.Object({
+      app: Type.String({ description: "APP id (e.g., 'pivot')" }),
+      pipeline: Type.String({ description: "Pipeline name (e.g., 'discuss-list')" }),
+      params: Type.Optional(Type.Record(Type.String(), Type.Unknown(), {
+        description: "Pipeline input params",
+      })),
+    }),
+    async execute(_toolCallId, args) {
       const tenantId = requireTenant();
-      const appName = String((input.app as string) ?? "");
-      const pipelineName = String((input.pipeline as string) ?? "");
+      const input = args as Record<string, unknown>;
+      const appName = String(input.app ?? "");
+      const pipelineName = String(input.pipeline ?? "");
       if (!appName || !pipelineName) {
         throw new Error("app and pipeline names required");
       }
@@ -173,7 +162,7 @@ export function createAppRuntimeTools(opts: CreateAppRuntimeToolsOptions): AppRu
       if (result.status === "error") {
         throw new Error(result.error ?? "pipeline execution failed");
       }
-      return result.output;
+      return jsonResult(result.output);
     },
   };
 

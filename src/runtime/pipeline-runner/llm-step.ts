@@ -21,7 +21,7 @@ export async function runLLMStep(
   deps: LLMStepDeps,
 ): Promise<StepOutput> {
   const renderedPrompt = renderTemplate(step.prompt, ctx);
-  const model = resolveModelTier(step.model);
+  const model = await resolveModelTier(step.model, ctx.tenantId);
 
   let schema: Record<string, unknown> | null = null;
   if (step.schema) {

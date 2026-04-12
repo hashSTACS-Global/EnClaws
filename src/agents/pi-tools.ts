@@ -570,7 +570,7 @@ export function createOpenClawCodingTools(options?: {
       tenantUserId: options?.tenantUserId,
     }),
     ...(options?.appRuntime
-      ? createAppRuntimeTools(options.appRuntime).map((t) => t as unknown as AnyAgentTool)
+      ? createAppRuntimeTools(options.appRuntime)
       : []),
   ];
   const toolsForMessageProvider = applyMessageProviderToolPolicy(tools, options?.messageProvider);

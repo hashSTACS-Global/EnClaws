@@ -1,4 +1,5 @@
 import type { ExecToolDefaults } from "../../../agents/bash-tools.js";
+import type { CreateAppRuntimeToolsOptions } from "../../../agents/pi-tools-app-runtime.js";
 import type { SkillSnapshot } from "../../../agents/skills.js";
 import type { OpenClawConfig } from "../../../config/config.js";
 import type { SessionEntry } from "../../../config/sessions.js";
@@ -85,6 +86,8 @@ export type FollowupRun = {
     tenantUserId?: string;
     /** Tenant user role for permission checks during tool execution. */
     tenantUserRole?: string;
+    /** APP runtime dependencies for app_* tools (app_invoke, app_list, etc.). */
+    appRuntime?: CreateAppRuntimeToolsOptions;
   };
 };
 

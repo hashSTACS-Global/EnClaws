@@ -609,6 +609,12 @@ export async function runEmbeddedAttempt(
           tenantUserRole: params.tenantUserRole,
           appRuntime: params.appRuntime,
         });
+    const appToolNames = toolsRaw.filter((t) => t.name.startsWith("app_")).map((t) => t.name);
+    if (appToolNames.length > 0) {
+      log.info(`[app-tools] injected ${appToolNames.length} app tools: ${appToolNames.join(", ")}`);
+    } else if (params.appRuntime) {
+      log.warn(`[app-tools] appRuntime was provided but NO app_* tools were created`);
+    }
     const tools = sanitizeToolsForGoogle({ tools: toolsRaw, provider: params.provider });
     const allowedToolNames = collectAllowedToolNames({
       tools,
