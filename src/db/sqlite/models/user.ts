@@ -138,20 +138,20 @@ export async function findUserByEmail(email: string): Promise<User | null> {
 export async function listUsers(
   tenantId: string,
   opts?: { status?: UserStatus; role?: UserRole; channelId?: string; limit?: number; offset?: number },
-): Promise<{ users: SafeUser[]; total: number }> {
-  const conditions: string[] = ["tenant_id = ?"];
+): Promise<{ users: (SafeUser & { channelName: string | null })[]; total: number }> {
+  const conditions: string[] = ["u.tenant_id = ?"];
   const values: unknown[] = [tenantId];
 
   if (opts?.status) {
-    conditions.push("status = ?");
+    conditions.push("u.status = ?");
     values.push(opts.status);
   }
   if (opts?.role) {
-    conditions.push("role = ?");
+    conditions.push("u.role = ?");
     values.push(opts.role);
   }
   if (opts?.channelId) {
-    conditions.push("channel_id = ?");
+    conditions.push("u.channel_id = ?");
     values.push(opts.channelId);
   }
 
@@ -159,17 +159,26 @@ export async function listUsers(
   const limit = opts?.limit ?? 50;
   const offset = opts?.offset ?? 0;
 
+  // LEFT JOIN tenant_channels 拿 channel_name；无 channel_id 的用户字段为 null。
   const dataResult = sqliteQuery(
-    `SELECT * FROM users ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    `SELECT u.*, tc.channel_name
+       FROM users u
+       LEFT JOIN tenant_channels tc ON tc.id = u.channel_id
+       ${where}
+       ORDER BY u.created_at DESC
+       LIMIT ? OFFSET ?`,
     [...values, limit, offset],
   );
   const countResult = sqliteQuery(
-    `SELECT COUNT(*) as count FROM users ${where}`,
+    `SELECT COUNT(*) as count FROM users u ${where}`,
     values,
   );
 
   return {
-    users: dataResult.rows.map(rowToUser).map(toSafeUser),
+    users: dataResult.rows.map((row) => {
+      const safe = toSafeUser(rowToUser(row));
+      return { ...safe, channelName: (row.channel_name as string) ?? null };
+    }),
     total: Number(countResult.rows[0].count),
   };
 }

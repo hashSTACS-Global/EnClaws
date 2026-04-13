@@ -742,6 +742,7 @@ export const pt_BR: TranslationMap = {
     loadFailed: "Falha ao carregar lista de usuarios",
     email: "E-mail",
     displayName: "Nome",
+    channel: "Canal",
     role: "Funcao",
     status: "Status",
     lastLogin: "Ultimo Login",
