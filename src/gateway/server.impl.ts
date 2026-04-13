@@ -95,7 +95,7 @@ import { createSecretsHandlers } from "./server-methods/secrets.js";
 import { createAppApiHandlers } from "./server-methods/app-api.js";
 import { TenantAppRegistry } from "../runtime/tenant-app-registry/registry.js";
 import { AppInstaller } from "../runtime/app-installer/installer.js";
-import { createProviderCallFn } from "../runtime/pipeline-runner/provider-adapter.js";
+import { createEcProviderCall } from "../runtime/pipeline-runner/provider-adapter.js";
 import { setGlobalAppRuntime } from "../runtime/app-runtime-global.js";
 import { hasConnectedMobileNode } from "./server-mobile-nodes.js";
 import { loadGatewayModelCatalog } from "./server-model-catalog.js";
@@ -767,18 +767,8 @@ export async function startGatewayServer(
   const tenantAppRegistry = new TenantAppRegistry();
   await tenantAppRegistry.loadAll();
   const appInstaller = new AppInstaller();
-  // Skeleton provider adapter — callProvider is a placeholder until real EC
-  // provider integration is wired (Task 19 Phase 2). Code-only pipelines
-  // (no llm steps) work fine; llm steps will throw a descriptive error.
   const appLlmDeps = {
-    callProvider: createProviderCallFn({
-      ecProvider: async (input) => {
-        throw new Error(
-          `APP LLM provider not yet wired (model=${input.model}, tenant=${input.tenantId}). ` +
-            `Connect a real EC provider in server.impl.ts to enable llm pipeline steps.`,
-        );
-      },
-    }),
+    callProvider: createEcProviderCall(),
   };
   const rawAppHandlers = createAppApiHandlers({
     registry: tenantAppRegistry,
