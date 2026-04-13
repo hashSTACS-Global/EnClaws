@@ -444,6 +444,7 @@ export type GatewaySessionRow = {
   label?: string;
   displayName?: string;
   userRole?: string;
+  channel?: string;
   surface?: string;
   subject?: string;
   room?: string;
