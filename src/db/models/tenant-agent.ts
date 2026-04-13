@@ -15,7 +15,7 @@ function rowToAgent(row: Record<string, unknown>): TenantAgent {
     config: (row.config ?? {}) as Record<string, unknown>,
     modelConfig: (row.model_config ?? []) as ModelConfigEntry[],
     tools: (row.tools ?? { deny: [] }) as { deny: string[] },
-    skills: (Array.isArray(row.skills) ? row.skills : []) as string[],
+    skills: (Array.isArray(row.skills) ? row.skills : null) as string[] | null,
     isActive: row.is_active as boolean,
     createdBy: (row.created_by as string) ?? null,
     createdAt: row.created_at as Date,
@@ -38,7 +38,7 @@ export async function createTenantAgent(params: {
     `INSERT INTO tenant_agents (tenant_id, agent_id, name, config, model_config, tools, skills, created_by)
      VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8)
      RETURNING *`,
-    [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? []), params.createdBy ?? null],
+    [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? null), params.createdBy ?? null],
   );
   return rowToAgent(result.rows[0]);
 }
@@ -184,7 +184,7 @@ export function toConfigAgentsList(
       ...a.config,
       ...(modelField !== undefined ? { model: modelField } : {}),
       ...(toolsDeny.length > 0 ? { tools: { ...((a.config?.tools as Record<string, unknown>) ?? {}), deny: toolsDeny } } : {}),
-      ...(skillsEnabled.length > 0 ? { skills: skillsEnabled } : {}),
+      ...(Array.isArray(a.skills) ? { skills: skillsEnabled } : {}),
     };
   });
 }

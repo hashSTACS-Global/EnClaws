@@ -1406,10 +1406,11 @@ export class TenantAgentsView extends LitElement {
   private renderPanelSkills(agent: TenantAgent) {
     const allSkills = this.agentSkills;
     const allSkillNames = allSkills.map((s) => s.name);
+    const hasSkillsAllowlist = Array.isArray((agent as any).skills) || Array.isArray(agent.config?.skills);
     const savedEnabled: string[] = Array.isArray((agent as any).skills) ? (agent as any).skills
       : Array.isArray(agent.config?.skills) ? agent.config.skills as string[] : [];
-    // Empty/null → all enabled (default for new agents)
-    const enableSet = new Set(this.skillsPendingEnabled ?? (savedEnabled.length > 0 ? savedEnabled : allSkillNames));
+    // No allowlist → all enabled (default for new agents); empty allowlist → none enabled
+    const enableSet = new Set(this.skillsPendingEnabled ?? (hasSkillsAllowlist ? savedEnabled : allSkillNames));
     const isDirty = this.skillsPendingEnabled !== null;
     const enabledCount = enableSet.size;
     const filter = this.skillsFilter.trim().toLowerCase();
