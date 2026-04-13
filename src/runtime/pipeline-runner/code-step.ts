@@ -34,11 +34,27 @@ export async function runCodeStep(step: CodeStep, ctx: ExecutionContext): Promis
     steps: Object.fromEntries(Object.entries(ctx.steps).map(([k, v]) => [k, { output: v.output }])),
   });
 
-  // Load user map for pipeline env injection. Failures degrade to empty map
-  // so a transient DB issue does not break an otherwise-successful pipeline run.
+  // Load app credentials (git + feishu)
+  let gitAuthEnv: Record<string, string> = {};
+  let feishuAppId: string | undefined;
+  let feishuAppSecret: string | undefined;
+  try {
+    const cred = await getAppCredential(ctx.tenantId, ctx.appName);
+    if (cred) {
+      gitAuthEnv = buildGitAuthEnv(cred);
+      feishuAppId = cred.feishuAppId;
+      feishuAppSecret = cred.feishuAppSecret;
+    }
+  } catch (e) {
+    logWarn(
+      `pipeline-runner: getAppCredential(${ctx.tenantId}, ${ctx.appName}) failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  // Load user map with feishu open_id resolution (union_id → open_id via API)
   let userMapJson = "{}";
   try {
-    const userMap = await getUserMap(ctx.tenantId);
+    const userMap = await getUserMap(ctx.tenantId, feishuAppId, feishuAppSecret);
     userMapJson = JSON.stringify(userMap);
   } catch (e) {
     logWarn(
@@ -46,18 +62,21 @@ export async function runCodeStep(step: CodeStep, ctx: ExecutionContext): Promis
     );
   }
 
-  // Load git credentials for workspace repo auth (commit + push).
-  // Failures degrade to no auth — git operations may fail if the repo requires it.
-  let gitAuthEnv: Record<string, string> = {};
-  try {
-    const cred = await getAppCredential(ctx.tenantId, ctx.appName);
-    if (cred) {
-      gitAuthEnv = buildGitAuthEnv(cred);
+  // Load feishu bot token + chat IDs for notification injection
+  let feishuAccessToken = "";
+  let feishuChatIds = "[]";
+  if (feishuAppId && feishuAppSecret) {
+    try {
+      const { getFeishuAccessToken } = await import("../../integrations/feishu/token-manager.js");
+      const { listFeishuBotChats } = await import("../../integrations/feishu/chat-discovery.js");
+      feishuAccessToken = await getFeishuAccessToken(feishuAppId, feishuAppSecret);
+      const chatIds = await listFeishuBotChats(feishuAccessToken);
+      feishuChatIds = JSON.stringify(chatIds);
+    } catch (e) {
+      logWarn(
+        `pipeline-runner: feishu token/chat discovery failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
-  } catch (e) {
-    logWarn(
-      `pipeline-runner: getAppCredential(${ctx.tenantId}, ${ctx.appName}) failed: ${e instanceof Error ? e.message : String(e)}`,
-    );
   }
 
   return new Promise((resolve, reject) => {
@@ -71,6 +90,8 @@ export async function runCodeStep(step: CodeStep, ctx: ExecutionContext): Promis
         PIVOT_TENANT_ID: ctx.tenantId,
         PIVOT_APP_NAME: ctx.appName,
         PIVOT_USER_MAP: userMapJson,
+        FEISHU_ACCESS_TOKEN: feishuAccessToken,
+        FEISHU_CHAT_IDS: feishuChatIds,
       },
       stdio: ["pipe", "pipe", "pipe"],
     });

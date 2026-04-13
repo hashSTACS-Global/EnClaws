@@ -1116,6 +1116,8 @@ export const en: TranslationMap = {
     gitTokenPlaceholder: "Git Token (for private repo auth)",
     gitUserPlaceholder: "Git User (commit author, e.g. pivot-bot)",
     gitEmailPlaceholder: "Git Email (commit email, e.g. bot@example.com)",
+    feishuAppIdPlaceholder: "Feishu App ID (for bot notifications)",
+    feishuAppSecretPlaceholder: "Feishu App Secret",
     install: "Install",
     installing: "Installing...",
     installSuccess: "APP \"{name}\" v{version} installed successfully.",
@@ -1132,6 +1134,8 @@ export const en: TranslationMap = {
     workspaceMissing: "No Workspace",
     credentialsReady: "Credentials OK",
     credentialsMissing: "No Credentials",
+    feishuReady: "Feishu OK",
+    feishuMissing: "No Feishu App",
   },
   tenantUsers: {
     title: "User Management",

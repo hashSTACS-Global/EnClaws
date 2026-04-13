@@ -1109,6 +1109,8 @@ export const zh_CN: TranslationMap = {
     gitTokenPlaceholder: "Git Token（私有仓库认证）",
     gitUserPlaceholder: "Git 用户名（提交者，如 pivot-bot）",
     gitEmailPlaceholder: "Git 邮箱（提交邮箱，如 bot@example.com）",
+    feishuAppIdPlaceholder: "飞书 App ID（用于机器人通知）",
+    feishuAppSecretPlaceholder: "飞书 App Secret",
     install: "安装",
     installing: "安装中...",
     installSuccess: "应用 \"{name}\" v{version} 安装成功。",
@@ -1125,6 +1127,8 @@ export const zh_CN: TranslationMap = {
     workspaceMissing: "未配置工作空间",
     credentialsReady: "凭证就绪",
     credentialsMissing: "未配置凭证",
+    feishuReady: "飞书已绑定",
+    feishuMissing: "未绑定飞书",
   },
   tenantUsers: {
     title: "用户管理",

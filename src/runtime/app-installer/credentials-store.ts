@@ -7,6 +7,8 @@ const AppCredentialRecordSchema = z.object({
   gitToken: z.string(),
   gitUser: z.string(),
   gitEmail: z.string(),
+  feishuAppId: z.string().optional(),
+  feishuAppSecret: z.string().optional(),
 });
 export type AppCredentialRecord = z.infer<typeof AppCredentialRecordSchema>;
 

@@ -512,21 +512,46 @@ export async function findOrCreateUserByOpenId(
  */
 export async function getUserMap(
   tenantId: string,
+  feishuAppId?: string,
+  feishuAppSecret?: string,
 ): Promise<Record<string, { feishu_id?: string; wecom_id?: string }>> {
   try {
-    // Fetch all users for this tenant (limit high enough for any reasonable tenant)
     const { users } = await listUsers(tenantId, { limit: 10000 });
+
+    // If feishu app credentials are provided, resolve union_id → open_id via API
+    let unionToOpenId: Map<string, string> | undefined;
+    if (feishuAppId && feishuAppSecret) {
+      const { getFeishuAccessToken } = await import("../../integrations/feishu/token-manager.js");
+      const { batchResolveFeishuOpenIds } = await import("../../integrations/feishu/id-resolver.js");
+      try {
+        const token = await getFeishuAccessToken(feishuAppId, feishuAppSecret);
+        const unionIds = users
+          .filter((u) => u.unionId)
+          .map((u) => u.unionId!);
+        if (unionIds.length > 0) {
+          unionToOpenId = await batchResolveFeishuOpenIds(token, feishuAppId, unionIds);
+        }
+      } catch {
+        // Feishu API failure — fall through to openIds fallback
+      }
+    }
+
     const map: Record<string, { feishu_id?: string; wecom_id?: string }> = {};
     for (const user of users) {
       if (!user.displayName) {
         continue;
       }
       const entry: { feishu_id?: string; wecom_id?: string } = {};
-      // Map first openId to feishu_id (EC stores feishu open IDs in the openIds array)
-      if (user.openIds && user.openIds.length > 0 && user.openIds[0]) {
+      // Priority: union_id → open_id (via API), fallback to stored openIds[0]
+      if (unionToOpenId && user.unionId) {
+        const resolved = unionToOpenId.get(user.unionId);
+        if (resolved) {
+          entry.feishu_id = resolved;
+        }
+      }
+      if (!entry.feishu_id && user.openIds && user.openIds.length > 0 && user.openIds[0]) {
         entry.feishu_id = user.openIds[0];
       }
-      // Only add entries that have at least one IM field
       if (entry.feishu_id || entry.wecom_id) {
         map[user.displayName] = entry;
       }

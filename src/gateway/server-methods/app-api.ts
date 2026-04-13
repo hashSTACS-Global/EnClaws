@@ -66,6 +66,8 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
           gitUser: cred?.gitUser ?? "",
           gitEmail: cred?.gitEmail ?? "",
           gitTokenMasked: cred ? maskToken(cred.gitToken) : "",
+          feishuAppId: cred?.feishuAppId ?? "",
+          hasFeishuApp: Boolean(cred?.feishuAppId && cred?.feishuAppSecret),
         });
       }
       return { apps };
@@ -86,8 +88,13 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
         typeof params?.gitUser === "string" ? params.gitUser : undefined;
       const gitEmail =
         typeof params?.gitEmail === "string" ? params.gitEmail : undefined;
+      const feishuAppId =
+        typeof params?.feishuAppId === "string" ? params.feishuAppId : undefined;
+      const feishuAppSecret =
+        typeof params?.feishuAppSecret === "string" ? params.feishuAppSecret : undefined;
       const result = await cfg.installer.install({
         tenantId, gitUrl, workspaceRepo, gitToken, gitUser, gitEmail,
+        feishuAppId, feishuAppSecret,
       });
       await cfg.registry.loadOne(tenantId, result.name);
       return { name: result.name, version: result.version };
@@ -122,17 +129,20 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
         throw new Error(`app "${appName}" not installed`);
       }
 
-      // Save credentials if provided
+      // Save credentials if provided (merge with existing — empty fields keep old values)
       const gitToken = typeof params?.gitToken === "string" && params.gitToken.trim() ? params.gitToken.trim() : undefined;
       const gitUser = typeof params?.gitUser === "string" && params.gitUser.trim() ? params.gitUser.trim() : undefined;
       const gitEmail = typeof params?.gitEmail === "string" && params.gitEmail.trim() ? params.gitEmail.trim() : undefined;
-      if (gitToken || gitUser || gitEmail) {
-        // Merge with existing credentials — only overwrite fields that were provided
+      const feishuAppId = typeof params?.feishuAppId === "string" && params.feishuAppId.trim() ? params.feishuAppId.trim() : undefined;
+      const feishuAppSecret = typeof params?.feishuAppSecret === "string" && params.feishuAppSecret.trim() ? params.feishuAppSecret.trim() : undefined;
+      if (gitToken || gitUser || gitEmail || feishuAppId || feishuAppSecret) {
         const existing = await getAppCredential(tenantId, appName, env);
         await setAppCredential(tenantId, appName, {
           gitToken: gitToken ?? existing?.gitToken ?? "",
           gitUser: gitUser ?? existing?.gitUser ?? "",
           gitEmail: gitEmail ?? existing?.gitEmail ?? "",
+          feishuAppId: feishuAppId ?? existing?.feishuAppId,
+          feishuAppSecret: feishuAppSecret ?? existing?.feishuAppSecret,
         }, env);
       }
 

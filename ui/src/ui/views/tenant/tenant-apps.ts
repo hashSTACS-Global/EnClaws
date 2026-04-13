@@ -26,6 +26,8 @@ interface AppEntry {
   gitUser: string;
   gitEmail: string;
   gitTokenMasked: string;
+  feishuAppId: string;
+  hasFeishuApp: boolean;
 }
 
 @customElement("tenant-apps-view")
@@ -141,6 +143,8 @@ export class TenantAppsView extends LitElement {
   @state() private _gitToken = "";
   @state() private _gitUser = "";
   @state() private _gitEmail = "";
+  @state() private _feishuAppId = "";
+  @state() private _feishuAppSecret = "";
   @state() private _installing = false;
   @state() private _uninstallingApp = "";
   @state() private _configuringApp = "";
@@ -148,6 +152,8 @@ export class TenantAppsView extends LitElement {
   @state() private _cfgGitToken = "";
   @state() private _cfgGitUser = "";
   @state() private _cfgGitEmail = "";
+  @state() private _cfgFeishuAppId = "";
+  @state() private _cfgFeishuAppSecret = "";
   @state() private _cfgBusy = false;
 
   connectedCallback() {
@@ -184,6 +190,10 @@ export class TenantAppsView extends LitElement {
       if (user) installParams.gitUser = user;
       const email = this._gitEmail.trim();
       if (email) installParams.gitEmail = email;
+      const fAppId = this._feishuAppId.trim();
+      if (fAppId) installParams.feishuAppId = fAppId;
+      const fAppSecret = this._feishuAppSecret.trim();
+      if (fAppSecret) installParams.feishuAppSecret = fAppSecret;
       const res = await tenantRpc("app.install", installParams, this.gatewayUrl) as { name: string; version: string };
       this._success = t("tenantApps.installSuccess", { name: res.name, version: res.version });
       this._gitUrl = "";
@@ -191,6 +201,8 @@ export class TenantAppsView extends LitElement {
       this._gitToken = "";
       this._gitUser = "";
       this._gitEmail = "";
+      this._feishuAppId = "";
+      this._feishuAppSecret = "";
       await this._load();
     } catch (err) {
       this._error = err instanceof Error ? err.message : String(err);
@@ -225,6 +237,8 @@ export class TenantAppsView extends LitElement {
     this._cfgGitToken = "";  // never prefill real token — show masked in placeholder
     this._cfgGitUser = app?.gitUser ?? "";
     this._cfgGitEmail = app?.gitEmail ?? "";
+    this._cfgFeishuAppId = app?.feishuAppId ?? "";
+    this._cfgFeishuAppSecret = "";  // never prefill secret
   }
 
   private async _saveConfigure() {
@@ -241,6 +255,10 @@ export class TenantAppsView extends LitElement {
       if (user) params.gitUser = user;
       const email = this._cfgGitEmail.trim();
       if (email) params.gitEmail = email;
+      const fAppId = this._cfgFeishuAppId.trim();
+      if (fAppId) params.feishuAppId = fAppId;
+      const fAppSecret = this._cfgFeishuAppSecret.trim();
+      if (fAppSecret) params.feishuAppSecret = fAppSecret;
       await tenantRpc("app.configure", params, this.gatewayUrl);
       this._success = t("tenantApps.configureSuccess", { name: this._configuringApp });
       this._configuringApp = "";
@@ -309,6 +327,20 @@ export class TenantAppsView extends LitElement {
           @input=${(e: InputEvent) => { this._gitEmail = (e.target as HTMLInputElement).value; }}
           ?disabled=${this._installing}
         />
+        <input
+          type="text"
+          placeholder=${t("tenantApps.feishuAppIdPlaceholder")}
+          .value=${this._feishuAppId}
+          @input=${(e: InputEvent) => { this._feishuAppId = (e.target as HTMLInputElement).value; }}
+          ?disabled=${this._installing}
+        />
+        <input
+          type="password"
+          placeholder=${t("tenantApps.feishuAppSecretPlaceholder")}
+          .value=${this._feishuAppSecret}
+          @input=${(e: InputEvent) => { this._feishuAppSecret = (e.target as HTMLInputElement).value; }}
+          ?disabled=${this._installing}
+        />
         <button class="btn btn-primary" @click=${this._install}
                 ?disabled=${this._installing || !this._gitUrl.trim()}>
           ${this._installing ? t("tenantApps.installing") : t("tenantApps.install")}
@@ -337,6 +369,9 @@ export class TenantAppsView extends LitElement {
                       </span>
                       <span class="chip ${app.hasCredentials ? "chip-success" : "chip-warning"}">
                         ${app.hasCredentials ? t("tenantApps.credentialsReady") : t("tenantApps.credentialsMissing")}
+                      </span>
+                      <span class="chip ${app.hasFeishuApp ? "chip-success" : "chip-warning"}">
+                        ${app.hasFeishuApp ? t("tenantApps.feishuReady") : t("tenantApps.feishuMissing")}
                       </span>
                       ${app.installedAt
                         ? html`<span class="chip">${new Date(app.installedAt).toLocaleDateString()}</span>`
@@ -373,6 +408,14 @@ export class TenantAppsView extends LitElement {
                       <input type="text" placeholder=${t("tenantApps.gitEmailPlaceholder")}
                              .value=${this._cfgGitEmail}
                              @input=${(e: InputEvent) => { this._cfgGitEmail = (e.target as HTMLInputElement).value; }}
+                             ?disabled=${this._cfgBusy} />
+                      <input type="text" placeholder=${app.feishuAppId || t("tenantApps.feishuAppIdPlaceholder")}
+                             .value=${this._cfgFeishuAppId}
+                             @input=${(e: InputEvent) => { this._cfgFeishuAppId = (e.target as HTMLInputElement).value; }}
+                             ?disabled=${this._cfgBusy} />
+                      <input type="password" placeholder=${t("tenantApps.feishuAppSecretPlaceholder")}
+                             .value=${this._cfgFeishuAppSecret}
+                             @input=${(e: InputEvent) => { this._cfgFeishuAppSecret = (e.target as HTMLInputElement).value; }}
                              ?disabled=${this._cfgBusy} />
                       <button class="btn btn-primary btn-sm" @click=${this._saveConfigure} ?disabled=${this._cfgBusy}>
                         ${this._cfgBusy ? t("tenantApps.saving") : t("tenantApps.save")}

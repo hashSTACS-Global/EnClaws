@@ -26,6 +26,10 @@ export interface InstallOptions {
   gitUser?: string;
   /** Git committer email (e.g. "pivot-bot@example.com"). */
   gitEmail?: string;
+  /** Feishu app ID for bot notifications and open_id resolution. */
+  feishuAppId?: string;
+  /** Feishu app secret. */
+  feishuAppSecret?: string;
 }
 
 export interface UninstallOptions {
@@ -138,12 +142,23 @@ export class AppInstaller {
         await this.git.clone(wsRepoUrl, wsDir, cloneOpts);
       }
 
-      // 10. persist git credentials for runtime use (push from pipeline steps)
+      // 10. persist credentials for runtime use (git push + feishu notifications)
       if (opts.gitToken && opts.gitUser && opts.gitEmail) {
         await setAppCredential(opts.tenantId, manifest.id, {
           gitToken: opts.gitToken,
           gitUser: opts.gitUser,
           gitEmail: opts.gitEmail,
+          feishuAppId: opts.feishuAppId,
+          feishuAppSecret: opts.feishuAppSecret,
+        }, this.env);
+      } else if (opts.feishuAppId && opts.feishuAppSecret) {
+        // Feishu credentials without git credentials
+        await setAppCredential(opts.tenantId, manifest.id, {
+          gitToken: "",
+          gitUser: "",
+          gitEmail: "",
+          feishuAppId: opts.feishuAppId,
+          feishuAppSecret: opts.feishuAppSecret,
         }, this.env);
       }
 
