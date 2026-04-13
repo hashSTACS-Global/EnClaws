@@ -7,7 +7,7 @@
 
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { login, register, LoginRateLimitedError, LoginMfaRequiredError, type AuthState } from "../auth-store.ts";
+import { login, register, LoginRateLimitedError, LoginMfaRequiredError, RegisterPendingVerificationError, type AuthState } from "../auth-store.ts";
 import { loadSettings, saveSettings } from "../storage.ts";
 import { t, i18n, I18nController, SUPPORTED_LOCALES } from "../../i18n/index.ts";
 import type { Locale } from "../../i18n/index.ts";
@@ -681,6 +681,8 @@ export class EnClawsLogin extends LitElement {
   private rateLimitTimer: ReturnType<typeof setInterval> | null = null;
   /** Phase 3: when MFA is required, store the challenge token to render the MFA view. */
   @state() private mfaChallengeToken = "";
+  /** Phase 3: when email verification is required after registration. */
+  @state() private pendingVerificationEmail = "";
 
   // Login fields
   @state() private email = "";
@@ -875,7 +877,12 @@ export class EnClawsLogin extends LitElement {
       });
       this.dispatchEvent(new CustomEvent("auth-success", { detail: { ...auth, isNewRegistration: true }, bubbles: true, composed: true }));
     } catch (err) {
-      this.serverError = err instanceof Error ? err.message : "register_failed";
+      if (err instanceof RegisterPendingVerificationError) {
+        // Phase 3: email verification required — show the pending view
+        this.pendingVerificationEmail = err.email;
+      } else {
+        this.serverError = err instanceof Error ? err.message : "register_failed";
+      }
     } finally {
       this.loading = false;
     }
@@ -915,12 +922,16 @@ export class EnClawsLogin extends LitElement {
   }
 
   render() {
+    // Phase 3: MFA challenge
     if (this.mfaChallengeToken) {
       return html`<enclaws-mfa-challenge
         .gatewayUrl=${this.resolveGatewayUrl()}
         .challengeToken=${this.mfaChallengeToken}
       ></enclaws-mfa-challenge>`;
     }
+
+    // Phase 3: email verification pending — handled inside the normal
+    // two-panel layout below (see form-main section).
 
     return html`
       <!-- Brand Panel -->
@@ -1022,26 +1033,39 @@ export class EnClawsLogin extends LitElement {
         </div>
 
         <div class="form-main">
-          <div class="form-badge">✦ ${t("login.formBadge")}</div>
-          <h1 class="form-title">
-            ${this.mode === "login"
-              ? html`${t("login.welcomeLine1")}<br/>${t("login.welcomeLine2")}`
-              : html`${t("login.createLine1")}<br/>${t("login.createLine2")}`}
-          </h1>
-          <p class="form-subtitle">
-            ${this.mode === "login"
-              ? t("login.subtitle")
-              : t("login.subtitleRegister")}
-          </p>
+          ${this.pendingVerificationEmail ? html`
+            <!-- Phase 3: email verification pending -->
+            <div class="form-badge">✉ ${t("auth.verify.pendingTitle")}</div>
+            <h1 class="form-title">${t("auth.verify.pendingTitle")}</h1>
+            <p class="form-subtitle">${t("auth.verify.pendingBody")}</p>
+            <div style="text-align:center;padding:20px 0;font-size:15px;font-weight:600;color:var(--accent,#0891b2);">
+              ${this.pendingVerificationEmail}
+            </div>
+            <button class="btn-submit" @click=${() => { this.pendingVerificationEmail = ""; this.switchMode("login"); }}>
+              ${t("auth.common.backToLogin")}
+            </button>
+          ` : html`
+            <div class="form-badge">✦ ${t("login.formBadge")}</div>
+            <h1 class="form-title">
+              ${this.mode === "login"
+                ? html`${t("login.welcomeLine1")}<br/>${t("login.welcomeLine2")}`
+                : html`${t("login.createLine1")}<br/>${t("login.createLine2")}`}
+            </h1>
+            <p class="form-subtitle">
+              ${this.mode === "login"
+                ? t("login.subtitle")
+                : t("login.subtitleRegister")}
+            </p>
 
-          <div class="form-tabs">
-            <button type="button" class="form-tab ${this.mode === "login" ? "active" : ""}"
-              @click=${() => this.switchMode("login")}>${t("login.loginBtn")}</button>
-            <button type="button" class="form-tab ${this.mode === "register" ? "active" : ""}"
-              @click=${() => this.switchMode("register")}>${t("login.registerBtn")}</button>
-          </div>
+            <div class="form-tabs">
+              <button type="button" class="form-tab ${this.mode === "login" ? "active" : ""}"
+                @click=${() => this.switchMode("login")}>${t("login.loginBtn")}</button>
+              <button type="button" class="form-tab ${this.mode === "register" ? "active" : ""}"
+                @click=${() => this.switchMode("register")}>${t("login.registerBtn")}</button>
+            </div>
 
-          ${this.mode === "login" ? this.renderLoginForm() : this.renderRegisterForm()}
+            ${this.mode === "login" ? this.renderLoginForm() : this.renderRegisterForm()}
+          `}
         </div>
 
       </div>

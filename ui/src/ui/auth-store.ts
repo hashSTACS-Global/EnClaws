@@ -142,6 +142,14 @@ export class LoginMfaRequiredError extends Error {
   }
 }
 
+/** Thrown by register() when email verification is required (Phase 3). */
+export class RegisterPendingVerificationError extends Error {
+  constructor(public readonly email: string) {
+    super("Email verification required");
+    this.name = "RegisterPendingVerificationError";
+  }
+}
+
 export interface AuthTenant {
   id: string;
   name: string;
@@ -737,6 +745,11 @@ export async function register(params: {
           ws.close();
           if (frame.ok && frame.payload) {
             const p = frame.payload;
+            // Phase 3: email verification required — no tokens issued
+            if (p.pendingVerification) {
+              reject(new RegisterPendingVerificationError(p.user?.email ?? params.email));
+              return;
+            }
             const auth: AuthState = {
               accessToken: p.accessToken,
               refreshToken: p.refreshToken,
