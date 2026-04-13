@@ -218,6 +218,13 @@ export function sqliteQuery<T = Record<string, unknown>>(
  * Adapt a SQLite row to match PG expectations:
  * - INTEGER boolean fields → real booleans
  * - JSON TEXT fields → parsed objects
+ * - Timestamp fields: append 'Z' if missing, so JS Date parses as UTC not local time.
+ *   SQLite datetime('now') returns "YYYY-MM-DD HH:MM:SS" without timezone marker.
+ *   Without 'Z', new Date() treats it as local time → 8-hour offset in UTC+8.
+ *
+ * SQLite 时间字段修正：datetime('now') 存储无时区标记的字符串，JS 会误认为本地时间。
+ * 统一在此补 Z，使 new Date() 正确解析为 UTC，前端再按用户时区格式化。
+ * 一处修改，全局所有表（含 CS 模块）自动继承。
  */
 function adaptRow(row: unknown): unknown {
   if (!row || typeof row !== "object") return row;
@@ -236,12 +243,24 @@ function adaptRow(row: unknown): unknown {
       } catch {
         adapted[key] = value;
       }
-    } else {
+    }
+    // Normalize timestamp strings: "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DDTHH:MM:SSZ"
+    // Matches columns ending in _at, _date, recorded_at, applied_at, etc.
+    // 补全时区标记：将 SQLite 无时区时间串转为标准 UTC ISO 格式。
+    else if (isTimestampColumn(key) && typeof value === "string" && value.length >= 19 && !value.endsWith("Z") && !value.includes("+")) {
+      adapted[key] = value.slice(0, 19).replace(" ", "T") + "Z";
+    }
+    else {
       adapted[key] = value;
     }
   }
 
   return adapted;
+}
+
+/** Timestamp column name patterns: *_at, *_date, applied_at, recorded_at, etc. */
+function isTimestampColumn(name: string): boolean {
+  return name.endsWith("_at") || name.endsWith("_date") || name === "timestamp";
 }
 
 const BOOLEAN_COLUMNS = new Set([
