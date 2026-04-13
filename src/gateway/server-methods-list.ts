@@ -103,6 +103,20 @@ const BASE_METHODS = [
   "chat.history",
   "chat.abort",
   "chat.send",
+  // Customer Service Widget methods
+  "cs.widget.connect",
+  "cs.widget.send",
+  "cs.widget.history",
+  // Customer Service Admin methods
+  "cs.knowledge.list",
+  "cs.knowledge.upload",
+  "cs.knowledge.view",
+  "cs.knowledge.delete",
+  "cs.sessions.list",
+  "cs.session.messages",
+  "cs.config.get",
+  "cs.config.set",
+  "cs.config.test",
 ];
 
 export function listGatewayMethods(): string[] {
