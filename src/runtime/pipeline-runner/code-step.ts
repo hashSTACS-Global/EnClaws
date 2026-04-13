@@ -66,6 +66,7 @@ export async function runCodeStep(step: CodeStep, ctx: ExecutionContext): Promis
       env: {
         ...process.env,
         ...gitAuthEnv,
+        PYTHONIOENCODING: "utf-8",
         PIVOT_WORKSPACE_DIR: ctx.workspaceDir,
         PIVOT_TENANT_ID: ctx.tenantId,
         PIVOT_APP_NAME: ctx.appName,
