@@ -115,4 +115,11 @@ export type RunEmbeddedPiAgentParams = {
   tenantUserId?: string;
   /** Tenant user role for permission checks during tool execution. */
   tenantUserRole?: string;
+  /**
+   * Override the system prompt mode. Defaults to "full" for main sessions, "minimal" for subagents.
+   * Pass "none" for lightweight runners (e.g. CS agent) that supply their own system prompt via
+   * extraSystemPrompt and do not need the full EC agent prompt.
+   * システムプロンプトモードの上書き。CS などの軽量ランナー向けに "none" を渡す。
+   */
+  promptMode?: "full" | "minimal" | "none";
 };

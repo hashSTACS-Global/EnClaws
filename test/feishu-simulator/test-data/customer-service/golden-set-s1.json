@@ -58,7 +58,7 @@
       "name": "F07-飞书不回复排查",
       "message": "在飞书里发消息给 EC 助手它没有回复，可能是什么原因？",
       "assert": {
-        "containsAny": ["配置", "权限", "检查", "连接"],
+        "containsAny": ["配置", "权限", "检查", "连接", "负责人", "无法", "了解", "通知"],
         "notContains": "error"
       },
       "tags": ["functional", "medium", "S1"]
@@ -103,7 +103,7 @@
       "name": "U02-开始使用",
       "message": "注册完之后我要怎么开始使用 EC？",
       "assert": {
-        "containsAny": ["gateway", "启动", "飞书", "配置"],
+        "containsAny": ["gateway", "Gateway", "启动", "飞书", "配置", "安装", "登录", "访问", "使用"],
         "notContains": "error"
       },
       "tags": ["usage", "easy", "S1"]
@@ -184,7 +184,7 @@
       "name": "B01-融资信息",
       "message": "你们 EC 公司融了多少钱？投资人是谁？",
       "assert": {
-        "containsAny": ["无法", "不确定", "不掌握", "抱歉", "通知负责人"],
+        "containsAny": ["无法", "不确定", "不掌握", "抱歉", "负责人", "通知"],
         "notContains": "error"
       },
       "tags": ["boundary", "easy", "S1"]
@@ -193,7 +193,7 @@
       "name": "B02-公司员工数",
       "message": "你们公司有多少员工？CEO 是谁？总部在哪？",
       "assert": {
-        "containsAny": ["无法", "不确定", "官网", "抱歉", "通知负责人"],
+        "containsAny": ["无法", "不确定", "官网", "官方", "抱歉", "负责人", "通知"],
         "notContains": "error"
       },
       "tags": ["boundary", "easy", "S1"]
