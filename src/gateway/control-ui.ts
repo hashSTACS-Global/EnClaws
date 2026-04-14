@@ -27,6 +27,8 @@ export type ControlUiRequestOptions = {
   config?: OpenClawConfig;
   agentId?: string;
   root?: ControlUiRootState;
+  /** Tenant ID to inject into index.html so cs-widget works without login. */
+  csTenantId?: string;
 };
 
 export type ControlUiRootState =
@@ -205,10 +207,19 @@ function serveResolvedFile(res: ServerResponse, filePath: string, body: Buffer) 
   res.end(body);
 }
 
-function serveResolvedIndexHtml(res: ServerResponse, body: string) {
+function serveResolvedIndexHtml(res: ServerResponse, body: string, csTenantId?: string) {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
-  res.end(body);
+  // Inject CS widget tenant ID via <meta> tag so the widget works without user login.
+  // Using <meta> instead of inline <script> to comply with script-src 'self' CSP.
+  // 用 <meta> 标签注入客服租户 ID，避免触发 CSP inline script 限制。
+  const html = csTenantId
+    ? body.replace(
+        "</head>",
+        `<meta name="ec-cs-tenant-id" content=${JSON.stringify(csTenantId)}></head>`,
+      )
+    : body;
+  res.end(html);
 }
 
 function isExpectedSafePathError(error: unknown): boolean {
@@ -430,7 +441,7 @@ export function handleControlUiHttpRequest(
         return true;
       }
       if (path.basename(safeFile.path) === "index.html") {
-        serveResolvedIndexHtml(res, fs.readFileSync(safeFile.fd, "utf8"));
+        serveResolvedIndexHtml(res, fs.readFileSync(safeFile.fd, "utf8"), opts?.csTenantId);
         return true;
       }
       serveResolvedFile(res, safeFile.path, fs.readFileSync(safeFile.fd));
@@ -461,7 +472,7 @@ export function handleControlUiHttpRequest(
         res.end();
         return true;
       }
-      serveResolvedIndexHtml(res, fs.readFileSync(safeIndex.fd, "utf8"));
+      serveResolvedIndexHtml(res, fs.readFileSync(safeIndex.fd, "utf8"), opts?.csTenantId);
       return true;
     } finally {
       fs.closeSync(safeIndex.fd);
