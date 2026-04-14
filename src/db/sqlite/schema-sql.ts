@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS users (
   mfa_secret             TEXT,
   mfa_enabled            INTEGER NOT NULL DEFAULT 0,
   mfa_backup_codes       TEXT,
+  pivot_token            TEXT,
+  pivot_token_expires_at TEXT,
   created_at             TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -69,6 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_users_tenant ON users (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
 CREATE INDEX IF NOT EXISTS idx_users_status ON users (tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_users_union_id ON users (union_id);
+CREATE INDEX IF NOT EXISTS idx_users_pivot_token ON users (pivot_token);
 CREATE INDEX IF NOT EXISTS idx_users_channel ON users (channel_id);
 
 -- 3. API Keys

@@ -83,12 +83,16 @@ export interface User {
   mfaEnabled: boolean;
   /** Phase 3: JSON array of SHA-256 hashed backup codes. */
   mfaBackupCodes: string | null;
+  /** CLI/API access token (ptk_xxx). Null = no token issued. */
+  pivotToken: string | null;
+  /** Token expiry. Null = never expires. */
+  pivotTokenExpiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
 /** User object without sensitive secrets, safe to return from API. */
-export type SafeUser = Omit<User, "passwordHash" | "mfaSecret" | "mfaBackupCodes">;
+export type SafeUser = Omit<User, "passwordHash" | "mfaSecret" | "mfaBackupCodes" | "pivotToken">;
 
 export interface CreateUserInput {
   tenantId: string;

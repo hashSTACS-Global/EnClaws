@@ -14,7 +14,7 @@
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
 import { ErrorCodes, errorShape, getPlanUpgradeLink } from "../protocol/index.js";
 import { getTenantById, updateTenant, checkTenantQuota } from "../../db/models/tenant.js";
-import { createUser, listUsers, updateUser, deleteUser, getUserById, findUserByEmail } from "../../db/models/user.js";
+import { createUser, listUsers, updateUser, deleteUser, getUserById, findUserByEmail, generatePivotToken, revokePivotToken } from "../../db/models/user.js";
 import { validatePasswordStrength } from "../../auth/password-policy.js";
 import { listAuditLogs, createAuditLog } from "../../db/models/audit-log.js";
 import { assertPermission } from "../../auth/rbac.js";
@@ -427,5 +427,65 @@ export const tenantHandlers: GatewayRequestHandlers = {
     });
 
     respond(true, result);
+  },
+
+  /**
+   * Generate a pivot token (ptk_xxx) for a user.
+   * Params:
+   *   userId: string
+   *   expiresAt?: string (ISO date, null = never expires)
+   */
+  "tenant.users.generateToken": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
+    const ctx = getTenantCtx(client, respond);
+    if (!ctx) return;
+
+    try {
+      assertPermission(ctx.role, "user.invite"); // same permission level as invite
+    } catch (err) {
+      if (handleRbacError(err, respond)) return;
+    }
+
+    const userId = (params as Record<string, unknown>).userId as string;
+    if (!userId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "userId required"));
+      return;
+    }
+
+    const user = await getUserById(userId);
+    if (!user || user.tenantId !== ctx.tenantId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "User not found"));
+      return;
+    }
+
+    const expiresAtRaw = (params as Record<string, unknown>).expiresAt as string | undefined;
+    const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
+
+    const rawToken = await generatePivotToken(ctx.tenantId, userId, expiresAt);
+    respond(true, { token: rawToken, expiresAt: expiresAt?.toISOString() ?? null });
+  },
+
+  /**
+   * Revoke a user's pivot token.
+   * Params:
+   *   userId: string
+   */
+  "tenant.users.revokeToken": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
+    const ctx = getTenantCtx(client, respond);
+    if (!ctx) return;
+
+    try {
+      assertPermission(ctx.role, "user.invite");
+    } catch (err) {
+      if (handleRbacError(err, respond)) return;
+    }
+
+    const userId = (params as Record<string, unknown>).userId as string;
+    if (!userId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "userId required"));
+      return;
+    }
+
+    await revokePivotToken(ctx.tenantId, userId);
+    respond(true, { ok: true });
   },
 };

@@ -20,6 +20,8 @@ interface TenantUser {
   status: string;
   lastLoginAt: string | null;
   createdAt: string;
+  hasPivotToken: boolean;
+  pivotTokenExpiresAt: string | null;
 }
 
 @customElement("tenant-users-view")
@@ -293,6 +295,31 @@ export class TenantUsersView extends LitElement {
     return map[role] ?? role;
   }
 
+  private async _generateToken(userId: string, label: string) {
+    this.errorKey = "";
+    this.successKey = "";
+    try {
+      const res = await tenantRpc("tenant.users.generateToken", { userId }, this.gatewayUrl) as { token: string };
+      // Show the raw token in a prompt — user must copy it now, it won't be shown again
+      window.prompt(`API Token for ${label} (copy now, it won't be shown again):`, res.token);
+      await this.loadUsers();
+    } catch (err) {
+      this.errorKey = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  private async _revokeToken(userId: string, label: string) {
+    this.errorKey = "";
+    this.successKey = "";
+    if (!confirm(`Revoke API token for ${label}?`)) return;
+    try {
+      await tenantRpc("tenant.users.revokeToken", { userId }, this.gatewayUrl);
+      await this.loadUsers();
+    } catch (err) {
+      this.errorKey = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   private statusLabel(status: string): string {
     const map: Record<string, string> = {
       active: t("tenantUsers.statusActive"),
@@ -330,6 +357,7 @@ export class TenantUsersView extends LitElement {
               <th>${t("tenantUsers.role")}</th>
               <th>${t("tenantUsers.status")}</th>
               <th>${t("tenantUsers.lastLogin")}</th>
+              <th>API Token</th>
               <th>${t("tenantUsers.actions")}</th>
             </tr>
           </thead>
@@ -345,6 +373,18 @@ export class TenantUsersView extends LitElement {
                   <span class="status-badge ${user.status}">${this.statusLabel(user.status)}</span>
                 </td>
                 <td>${user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString(this.currentLocaleTag) : "-"}</td>
+                <td>
+                  ${user.hasPivotToken
+                    ? html`
+                      <span class="status-badge active" style="font-size:0.7rem">Active</span>
+                      <button class="btn btn-warn btn-sm" style="margin-left:0.3rem;font-size:0.7rem;padding:0.15rem 0.4rem"
+                        @click=${() => this._revokeToken(user.id, user.displayName ?? user.email)}>Revoke</button>
+                    `
+                    : html`
+                      <button class="btn btn-sm" style="font-size:0.7rem;padding:0.15rem 0.4rem;background:var(--accent);color:var(--accent-foreground)"
+                        @click=${() => this._generateToken(user.id, user.displayName ?? user.email)}>Generate</button>
+                    `}
+                </td>
                 <td>
                   <div class="actions">
                     ${user.id !== currentUserId && user.role !== "owner" ? html`

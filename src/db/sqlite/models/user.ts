@@ -48,14 +48,16 @@ function rowToUser(row: Record<string, unknown>): User {
     mfaSecret: (row.mfa_secret as string) ?? null,
     mfaEnabled: Number(row.mfa_enabled ?? 0) === 1,
     mfaBackupCodes: (row.mfa_backup_codes as string) ?? null,
+    pivotToken: (row.pivot_token as string) ?? null,
+    pivotTokenExpiresAt: row.pivot_token_expires_at ? new Date(row.pivot_token_expires_at as string) : null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };
 }
 
-export function toSafeUser(user: User): SafeUser {
-  const { passwordHash: _, mfaSecret: _s, mfaBackupCodes: _b, ...safe } = user;
-  return safe;
+export function toSafeUser(user: User): SafeUser & { hasPivotToken: boolean } {
+  const { passwordHash: _, mfaSecret: _s, mfaBackupCodes: _b, pivotToken: _pt, ...safe } = user;
+  return { ...safe, hasPivotToken: Boolean(_pt) };
 }
 
 export async function createUser(

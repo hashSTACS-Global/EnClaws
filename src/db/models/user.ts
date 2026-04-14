@@ -47,14 +47,16 @@ function rowToUser(row: Record<string, unknown>): User {
     mfaSecret: (row.mfa_secret as string) ?? null,
     mfaEnabled: Number(row.mfa_enabled ?? 0) === 1,
     mfaBackupCodes: (row.mfa_backup_codes as string) ?? null,
+    pivotToken: (row.pivot_token as string) ?? null,
+    pivotTokenExpiresAt: (row.pivot_token_expires_at as Date) ?? null,
     createdAt: row.created_at as Date,
     updatedAt: row.updated_at as Date,
   };
 }
 
-export function toSafeUser(user: User): SafeUser {
-  const { passwordHash: _, mfaSecret: _s, mfaBackupCodes: _b, ...safe } = user;
-  return safe;
+export function toSafeUser(user: User): SafeUser & { hasPivotToken: boolean } {
+  const { passwordHash: _, mfaSecret: _s, mfaBackupCodes: _b, pivotToken: _pt, ...safe } = user;
+  return { ...safe, hasPivotToken: Boolean(_pt) };
 }
 
 /**
@@ -560,4 +562,83 @@ export async function getUserMap(
   } catch {
     return {};
   }
+}
+
+// ============================================================
+// Pivot Token (ptk) — CLI/API access
+// ============================================================
+
+import crypto from "node:crypto";
+
+/**
+ * Generate a new ptk token for a user. Overwrites any existing token.
+ * Returns the raw token (ptk_xxx) — store it securely, it cannot be recovered.
+ */
+export async function generatePivotToken(
+  tenantId: string,
+  userId: string,
+  expiresAt?: Date | null,
+): Promise<string> {
+  const raw = `ptk_${crypto.randomBytes(16).toString("hex")}`;
+  const tokenHash = crypto.createHash("sha256").update(raw).digest("hex");
+  if (getDbType() === DB_SQLITE) {
+    const { sqliteQuery: sq } = await import("../sqlite/index.js");
+    sq(
+      `UPDATE users SET pivot_token = ?, pivot_token_expires_at = ?, updated_at = datetime('now') WHERE tenant_id = ? AND id = ?`,
+      [tokenHash, expiresAt?.toISOString() ?? null, tenantId, userId],
+    );
+    return raw;
+  }
+  await query(
+    `UPDATE users SET pivot_token = $1, pivot_token_expires_at = $2, updated_at = NOW() WHERE tenant_id = $3 AND id = $4`,
+    [tokenHash, expiresAt ?? null, tenantId, userId],
+  );
+  return raw;
+}
+
+/**
+ * Verify a ptk token. Returns the user if valid, null otherwise.
+ * Token is stored as SHA-256 hash in DB for security.
+ */
+export async function verifyPivotToken(
+  rawToken: string,
+): Promise<User | null> {
+  if (!rawToken.startsWith("ptk_")) return null;
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  if (getDbType() === DB_SQLITE) {
+    const { sqliteQuery: sq } = await import("../sqlite/index.js");
+    const result = sq("SELECT * FROM users WHERE pivot_token = ?", [tokenHash]);
+    if (result.rows.length === 0) return null;
+    const user = rowToUser(result.rows[0]);
+    if (user.pivotTokenExpiresAt && new Date(user.pivotTokenExpiresAt) < new Date()) return null;
+    if (user.status !== "active") return null;
+    return user;
+  }
+  const result = await query("SELECT * FROM users WHERE pivot_token = $1", [tokenHash]);
+  if (result.rows.length === 0) return null;
+  const user = rowToUser(result.rows[0]);
+  if (user.pivotTokenExpiresAt && new Date(user.pivotTokenExpiresAt) < new Date()) return null;
+  if (user.status !== "active") return null;
+  return user;
+}
+
+/**
+ * Revoke a user's ptk token.
+ */
+export async function revokePivotToken(
+  tenantId: string,
+  userId: string,
+): Promise<void> {
+  if (getDbType() === DB_SQLITE) {
+    const { sqliteQuery: sq } = await import("../sqlite/index.js");
+    sq(
+      `UPDATE users SET pivot_token = NULL, pivot_token_expires_at = NULL, updated_at = datetime('now') WHERE tenant_id = ? AND id = ?`,
+      [tenantId, userId],
+    );
+    return;
+  }
+  await query(
+    `UPDATE users SET pivot_token = NULL, pivot_token_expires_at = NULL, updated_at = NOW() WHERE tenant_id = $1 AND id = $2`,
+    [tenantId, userId],
+  );
 }

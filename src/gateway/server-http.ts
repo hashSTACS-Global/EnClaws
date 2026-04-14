@@ -56,6 +56,7 @@ import {
 } from "./server/http-auth.js";
 import type { GatewayWsClient } from "./server/ws-types.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
+import { handleHttpRpc } from "./server-http-rpc.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -387,6 +388,9 @@ export function createGatewayHttpServer(opts: {
         req.url = scopedCanvas.rewrittenUrl;
       }
       const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
+      if (await handleHttpRpc(req, res)) {
+        return;
+      }
       if (await handleHooksRequest(req, res)) {
         return;
       }

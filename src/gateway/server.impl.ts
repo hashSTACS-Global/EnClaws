@@ -97,6 +97,7 @@ import { TenantAppRegistry } from "../runtime/tenant-app-registry/registry.js";
 import { AppInstaller } from "../runtime/app-installer/installer.js";
 import { createEcProviderCall } from "../runtime/pipeline-runner/provider-adapter.js";
 import { setGlobalAppRuntime } from "../runtime/app-runtime-global.js";
+import { registerRpcHandlers } from "./server-http-rpc.js";
 import { hasConnectedMobileNode } from "./server-mobile-nodes.js";
 import { loadGatewayModelCatalog } from "./server-model-catalog.js";
 import { createNodeSubscriptionManager } from "./server-node-subscriptions.js";
@@ -780,6 +781,8 @@ export async function startGatewayServer(
     deps: { registry: tenantAppRegistry, installer: appInstaller, llmDeps: appLlmDeps },
     resolveTenantId: () => undefined, // placeholder — overridden per-session in get-reply-run
   });
+  // Register app handlers for HTTP /api/rpc endpoint (CLI access)
+  registerRpcHandlers(rawAppHandlers);
   // Wrap app handlers: they return values directly, but Gateway expects
   // handlers that call respond(). Bridge the two conventions.
   // oxlint-disable-next-line typescript/no-explicit-any

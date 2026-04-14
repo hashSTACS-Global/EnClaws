@@ -63,7 +63,29 @@ export function initSqliteDb(url: string): void {
   // Initialize schema + seed data (inlined as TS constant to survive bundling)
   db.exec(SQLITE_SCHEMA_SQL);
 
+  applySqliteMigrations(db);
+
   console.log(`[sqlite] Database initialized at ${dbPath}`);
+}
+
+let migrationsApplied = false;
+
+/**
+ * Incremental column additions for existing SQLite databases.
+ * Safe to call multiple times — columns that already exist are silently skipped.
+ */
+function applySqliteMigrations(database: DatabaseSync): void {
+  if (migrationsApplied) return;
+  migrationsApplied = true;
+  const safeAddColumn = (table: string, column: string, type: string) => {
+    try {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+    } catch {
+      // Column already exists — ignore
+    }
+  };
+  safeAddColumn("users", "pivot_token", "TEXT");
+  safeAddColumn("users", "pivot_token_expires_at", "TEXT");
 }
 
 /**
@@ -73,6 +95,8 @@ export function getSqliteDb(): DatabaseSync {
   if (!db) {
     throw new Error("[sqlite] Database not initialized. Call initSqliteDb() first.");
   }
+  // Ensure migrations are applied even if initSqliteDb was called before this code existed
+  applySqliteMigrations(db);
   return db;
 }
 
