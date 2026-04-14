@@ -30,6 +30,7 @@ export const zh_CN: TranslationMap = {
     resources: "资源管理",
     enterprise: "企业管理",
     system: "系统",
+    cs: "AI 客服",
     expand: "展开侧边栏",
     collapse: "折叠侧边栏",
     logout: "退出",
@@ -67,6 +68,9 @@ export const zh_CN: TranslationMap = {
     "tenant-traces": "交互审计",
     "tenant-usage": "我的套餐",
     "platform-tools": "工具管理",
+    "cs-setup": "客服设置",
+    "cs-knowledge": "客服知识库",
+    "cs-sessions": "客服会话",
   },
   subtitles: {
     agents: "管理代理工作区、工具和身份。",
@@ -94,6 +98,9 @@ export const zh_CN: TranslationMap = {
     "tenant-traces": "追踪系统与大模型的每次交互详情。",
     "tenant-usage": "查看当前套餐、配额使用情况和 Token 用量。",
     "platform-tools": "配置平台级工具访问策略，默认应用于所有 Agent。",
+    "cs-setup": "配置飞书通知凭据，生成各渠道的网页嵌入代码。",
+    "cs-knowledge": "管理 AI 客服知识库文件，支持上传、删除 Markdown 文档。",
+    "cs-sessions": "查看 AI 客服会话记录和消息详情。",
   },
   platformTools: {
     infoBanner: "这是平台级工具策略，定义了所有 Agent 默认可用的工具。各企业或 Agent 可在此基础上叠加更严格的限制。",

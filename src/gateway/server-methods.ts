@@ -42,6 +42,8 @@ import { platformOverviewHandlers } from "./server-methods/platform-overview-api
 import { platformModelsHandlers } from "./server-methods/platform-models-api.js";
 import { tenantOverviewHandlers } from "./server-methods/tenant-overview-api.js";
 import { tenantOnboardingHandlers } from "./server-methods/tenant-onboarding-api.js";
+import { csWidgetHandlers } from "./server-methods/cs-widget.js";
+import { csAdminHandlers } from "./server-methods/cs-admin.js";
 import { ttsHandlers } from "./server-methods/tts.js";
 import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
 import { authorizeTenantMethod, type TenantContext } from "../auth/middleware.js";
@@ -136,6 +138,8 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...platformModelsHandlers,
   ...tenantOverviewHandlers,
   ...tenantOnboardingHandlers,
+  ...csWidgetHandlers,
+  ...csAdminHandlers,
 };
 
 export async function handleGatewayRequest(

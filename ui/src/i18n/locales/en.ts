@@ -30,6 +30,7 @@ export const en: TranslationMap = {
     resources: "Resources",
     enterprise: "Enterprise",
     system: "System",
+    cs: "AI Customer Service",
     expand: "Expand sidebar",
     collapse: "Collapse sidebar",
     logout: "Logout",
@@ -67,6 +68,9 @@ export const en: TranslationMap = {
     "tenant-traces": "Traces",
     "tenant-usage": "My Plan",
     "platform-tools": "Tool Management",
+    "cs-setup": "CS Setup",
+    "cs-knowledge": "CS Knowledge",
+    "cs-sessions": "CS Sessions",
   },
   subtitles: {
     agents: "Manage agent workspaces, tools, and identities.",
@@ -94,6 +98,9 @@ export const en: TranslationMap = {
     "tenant-traces": "Trace every LLM interaction for debugging and optimization.",
     "tenant-usage": "View your current plan, quota usage, and token consumption.",
     "platform-tools": "Configure platform-level tool access policy applied to all agents by default.",
+    "cs-setup": "Configure Feishu notifications and generate widget embed code for each channel.",
+    "cs-knowledge": "Manage knowledge base files for the AI customer service agent.",
+    "cs-sessions": "View AI customer service session records and message threads.",
   },
   platformTools: {
     infoBanner: "This is the platform-level tool policy. It defines which tools are available to all agents by default. Individual agents or tenants may apply stricter overrides on top of this policy.",
