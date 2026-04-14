@@ -27,6 +27,7 @@ import {
   handleControlUiHttpRequest,
   type ControlUiRootState,
 } from "./control-ui.js";
+import { listTenants } from "../db/models/tenant.js";
 import { applyHookMappings } from "./hooks-mapping.js";
 import {
   extractHookToken,
@@ -340,6 +341,38 @@ export function createGatewayHttpServer(opts: {
   rateLimiter?: AuthRateLimiter;
   tlsOptions?: TlsOptions;
 }): HttpServer {
+  // Lazily resolve the operator tenant ID for CS widget injection into index.html.
+  // Strategy: earliest registered business tenant (created_at ASC, skip _platform slugs).
+  // Single-tenant deployments work out of the box; multi-tenant deployments can override
+  // via ENCLAWS_CS_WIDGET_TENANT_ID env var.
+  // Cached after first successful lookup — tenants don't change at runtime.
+  // 懒加载运营方租户 ID（注册最早的非平台租户），注入到 index.html，让游客无需登录也能使用客服气泡。
+  // 多租户场景：通过 ENCLAWS_CS_WIDGET_TENANT_ID 环境变量显式指定。
+  let _csTenantIdCache: string | undefined;
+  async function getCsTenantIdCached(): Promise<string | undefined> {
+    if (_csTenantIdCache) return _csTenantIdCache;
+    // Allow explicit override via env for multi-tenant deployments.
+    // 多租户部署时可通过环境变量显式指定。
+    const envOverride = process.env.ENCLAWS_CS_WIDGET_TENANT_ID;
+    if (envOverride) {
+      _csTenantIdCache = envOverride;
+      return _csTenantIdCache;
+    }
+    try {
+      const { tenants } = await listTenants({ limit: 50 });
+      // Find the earliest registered non-platform tenant (business/operator tenant).
+      // listTenants returns DESC; sort ASC in memory to get the oldest first.
+      // 取注册时间最早的业务租户——业务上保证该租户即运营方。
+      const sorted = tenants
+        .filter((t) => !t.slug.startsWith("_"))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      _csTenantIdCache = sorted[0]?.id;
+    } catch {
+      // DB may not be ready yet; return undefined, widget falls back gracefully.
+    }
+    return _csTenantIdCache;
+  }
+
   const {
     canvasHost,
     clients,
@@ -466,6 +499,7 @@ export function createGatewayHttpServer(opts: {
             basePath: controlUiBasePath,
             config: configSnapshot,
             root: controlUiRoot,
+            csTenantId: await getCsTenantIdCached(),
           })
         ) {
           return;
