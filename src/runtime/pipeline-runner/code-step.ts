@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { getUserMap } from "../../db/models/user.js";
+import { getUserMap, getUserById, getUserByUnionId } from "../../db/models/user.js";
 import { getAppCredential, buildGitAuthEnv } from "../app-installer/credentials-store.js";
 import { logWarn } from "../../logger.js";
 import type { CodeStep, ExecutionContext, StepOutput } from "./types.js";
@@ -79,6 +79,33 @@ export async function runCodeStep(step: CodeStep, ctx: ExecutionContext): Promis
     }
   }
 
+  // Resolve the tenant user's displayName for PIVOT_USER_ID env var.
+  // ctx.tenantUserId may be a UUID (CLI/Web UI) or a union_id (Feishu bot).
+  let pivotUserId = "";
+  if (ctx.tenantUserId) {
+    try {
+      let user = null;
+      // Try UUID format first (36 chars with dashes)
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ctx.tenantUserId)) {
+        user = await getUserById(ctx.tenantUserId);
+      }
+      // Fallback: try as union_id (Feishu)
+      if (!user) {
+        user = await getUserByUnionId(ctx.tenantId, ctx.tenantUserId);
+      }
+      if (user && user.displayName) {
+        pivotUserId = user.displayName;
+      }
+      logWarn(
+        `pipeline-runner: PIVOT_USER_ID — tenantUserId=${ctx.tenantUserId} user=${user ? "found" : "null"} → "${pivotUserId}"`,
+      );
+    } catch (e) {
+      logWarn(
+        `pipeline-runner: failed to resolve user ${ctx.tenantUserId}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
       cwd: ctx.pipelineDir,
@@ -89,6 +116,7 @@ export async function runCodeStep(step: CodeStep, ctx: ExecutionContext): Promis
         PIVOT_WORKSPACE_DIR: ctx.workspaceDir,
         PIVOT_TENANT_ID: ctx.tenantId,
         PIVOT_APP_NAME: ctx.appName,
+        PIVOT_USER_ID: pivotUserId,
         PIVOT_USER_MAP: userMapJson,
         FEISHU_ACCESS_TOKEN: feishuAccessToken,
         FEISHU_CHAT_IDS: feishuChatIds,

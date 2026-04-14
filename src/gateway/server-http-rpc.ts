@@ -39,7 +39,7 @@ function parseShortcutMethod(method: string, params: Record<string, unknown>):
   // "app.list", "app.install" etc. are standard methods, not shortcuts
   if (parts.length === 2) return null;
   // "app.invoke" is standard
-  if (parts[1] === "invoke" || parts[1] === "list" || parts[1] === "install" || parts[1] === "uninstall" || parts[1] === "configure") {
+  if (parts[1] === "invoke" || parts[1] === "list" || parts[1] === "install" || parts[1] === "uninstall" || parts[1] === "configure" || parts[1] === "upgrade") {
     return null;
   }
   // app.<appName>.<pipelineName> → app.invoke {app, pipeline, params}

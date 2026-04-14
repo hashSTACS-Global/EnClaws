@@ -18,6 +18,7 @@ interface AppPipelineEntry {
 interface AppEntry {
   name: string;
   version: string;
+  commit: string;
   installedAt: string;
   pipelines: string[];
   hasCredentials: boolean;
@@ -148,6 +149,7 @@ export class TenantAppsView extends LitElement {
   @state() private _feishuAppSecret = "";
   @state() private _installing = false;
   @state() private _uninstallingApp = "";
+  @state() private _upgradingApp = "";
   @state() private _configuringApp = "";
   @state() private _cfgWorkspaceRepo = "";
   @state() private _cfgGitToken = "";
@@ -209,6 +211,21 @@ export class TenantAppsView extends LitElement {
       this._error = err instanceof Error ? err.message : String(err);
     } finally {
       this._installing = false;
+    }
+  }
+
+  private async _upgrade(appName: string) {
+    this._upgradingApp = appName;
+    this._error = "";
+    this._success = "";
+    try {
+      const res = await tenantRpc("app.upgrade", { name: appName }, this.gatewayUrl) as { name: string; version: string; commit: string };
+      this._success = t("tenantApps.upgradeSuccess", { name: res.name, commit: res.commit.slice(0, 7) });
+      await this._load();
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : String(err);
+    } finally {
+      this._upgradingApp = "";
     }
   }
 
@@ -364,6 +381,7 @@ export class TenantAppsView extends LitElement {
                     <span class="app-name">${app.name}</span>
                     <div class="app-meta">
                       <span class="chip chip-info">v${app.version}</span>
+                      <span class="chip">${app.commit ? app.commit.slice(0, 7) : "?"}</span>
                       <span class="chip">${t("tenantApps.pipelineCount", { count: String(app.pipelines.length) })}</span>
                       <span class="chip ${app.hasWorkspace ? "chip-success" : "chip-warning"}">
                         ${app.hasWorkspace ? t("tenantApps.workspaceReady") : t("tenantApps.workspaceMissing")}
@@ -380,6 +398,11 @@ export class TenantAppsView extends LitElement {
                     </div>
                   </div>
                   <div class="app-actions">
+                    <button class="btn btn-outline btn-sm"
+                            @click=${() => this._upgrade(app.name)}
+                            ?disabled=${this._upgradingApp === app.name}>
+                      ${this._upgradingApp === app.name ? t("tenantApps.upgrading") : t("tenantApps.upgrade")}
+                    </button>
                     <button class="btn btn-outline btn-sm"
                             @click=${() => this._openConfigure(app.name)}>
                       ${t("tenantApps.configure")}

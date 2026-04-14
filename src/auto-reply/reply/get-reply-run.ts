@@ -525,7 +525,12 @@ export async function runPreparedReply(
           `[app-runtime] tenantId=${tid || "(empty)"} globalAppRuntime=${global ? "available" : "null"} → ${global && tid ? "INJECTING app tools" : "SKIPPING app tools"}`,
         );
         if (!global || !tid) return undefined;
-        return { ...global, resolveTenantId: () => tid };
+        const uid = sessionCtx.TenantUserId;
+        return {
+          ...global,
+          resolveTenantId: () => tid,
+          resolveTenantUserId: () => uid,
+        };
       })(),
     },
   };

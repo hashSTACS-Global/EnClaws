@@ -5,8 +5,8 @@ import { GitOps } from "../../infra/git-ops/index.js";
 import { resolveAppDir, resolveAppWorkspaceDir, resolveTenantAppsRootDir } from "../app-paths.js";
 import { loadPipelineYaml } from "../pipeline-runner/yaml-loader.js";
 import { readAppManifest } from "./manifest.js";
-import { addInstalledApp, removeInstalledApp, readAppsManifest } from "./store.js";
-import { setAppCredential, clearAppCredential, buildGitAuthEnv } from "./credentials-store.js";
+import { addInstalledApp, removeInstalledApp, readAppsManifest, updateInstalledApp } from "./store.js";
+import { setAppCredential, clearAppCredential, getAppCredential, buildGitAuthEnv } from "./credentials-store.js";
 import { logWarn } from "../../logger.js";
 import { resolveAppWorkspaceBackupDir } from "../app-paths.js";
 
@@ -233,6 +233,48 @@ export class AppInstaller {
       const wsDir = resolveAppWorkspaceDir(opts.tenantId, opts.appName, this.env);
       await rm(wsDir, { recursive: true, force: true });
     }
+  }
+
+  async upgrade(tenantId: string, appName: string): Promise<InstallResult> {
+    const manifest = await readAppsManifest(tenantId, this.env);
+    const record = manifest.installed.find((r) => r.name === appName);
+    if (!record) {
+      throw new Error(`app "${appName}" not installed for tenant "${tenantId}"`);
+    }
+
+    const appDir = resolveAppDir(tenantId, appName, this.env);
+    const oldCommit = record.commit;
+
+    // 1. git pull latest code
+    logWarn(`app-installer: upgrading "${appName}" — pulling latest from ${record.gitUrl}`);
+    const cred = await getAppCredential(tenantId, appName, this.env);
+    const gitEnv = cred ? buildGitAuthEnv(cred) : undefined;
+    await this.git.pull(appDir, gitEnv);
+
+    // 2. read updated manifest
+    const updatedManifest = await readAppManifest(appDir);
+
+    // 3. new commit hash
+    const newCommit = await this.git.headCommit(appDir);
+
+    // 4. update apps.json
+    await updateInstalledApp(tenantId, appName, {
+      version: updatedManifest.version,
+      apiVersion: updatedManifest.api_version,
+      commit: newCommit,
+    }, this.env);
+
+    // 5. re-expose SKILL.md (may have changed)
+    await this.exposeAppSkill(tenantId, appName, appDir);
+
+    logWarn(`app-installer: upgraded "${appName}" ${oldCommit.slice(0, 7)} → ${newCommit.slice(0, 7)} (v${updatedManifest.version})`);
+
+    return {
+      name: appName,
+      version: updatedManifest.version,
+      appDir,
+      commit: newCommit,
+    };
   }
 
   private async exposeAppSkill(tenantId: string, appId: string, appDir: string): Promise<void> {

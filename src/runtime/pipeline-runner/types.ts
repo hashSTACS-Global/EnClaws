@@ -62,4 +62,6 @@ export interface ExecutionContext {
   workspaceDir: string;
   appName: string;
   tenantId: string;
+  /** Tenant user ID (UUID) — looked up by code-step to inject PIVOT_USER_ID (displayName). */
+  tenantUserId?: string;
 }

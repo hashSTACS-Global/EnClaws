@@ -62,7 +62,7 @@ export async function addInstalledApp(
 export async function updateInstalledApp(
   tenantId: string,
   appName: string,
-  updates: Partial<Pick<InstalledAppRecord, "workspaceRepo">>,
+  updates: Partial<Pick<InstalledAppRecord, "workspaceRepo" | "version" | "commit" | "apiVersion">>,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
   const manifest = await readAppsManifest(tenantId, env);
@@ -70,9 +70,10 @@ export async function updateInstalledApp(
   if (!record) {
     throw new Error(`app "${appName}" not installed for tenant "${tenantId}"`);
   }
-  if (updates.workspaceRepo !== undefined) {
-    record.workspaceRepo = updates.workspaceRepo;
-  }
+  if (updates.workspaceRepo !== undefined) record.workspaceRepo = updates.workspaceRepo;
+  if (updates.version !== undefined) record.version = updates.version;
+  if (updates.commit !== undefined) record.commit = updates.commit;
+  if (updates.apiVersion !== undefined) record.apiVersion = updates.apiVersion;
   await writeAppsManifest(tenantId, manifest, env);
 }
 

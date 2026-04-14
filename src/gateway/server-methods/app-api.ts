@@ -60,6 +60,7 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
         apps.push({
           name: app.name,
           version: app.version,
+          commit: app.commit,
           installedAt: app.installedAt,
           pipelines: cfg.registry.listPipelines(tenantId, app.name).map((p) => p.name),
           hasCredentials: Boolean(cred),
@@ -100,6 +101,19 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
       });
       await cfg.registry.loadOne(tenantId, result.name);
       return { name: result.name, version: result.version };
+    },
+
+    // oxlint-disable-next-line typescript/no-explicit-any
+    "app.upgrade": async ({ params, client }: any) => {
+      const tenantId = requireTenantId(client);
+      const name = params?.name;
+      if (typeof name !== "string" || !name.trim()) {
+        throw new Error("name required");
+      }
+      const result = await cfg.installer.upgrade(tenantId, name);
+      // Reload pipelines in memory (may have changed)
+      await cfg.registry.loadOne(tenantId, result.name);
+      return { name: result.name, version: result.version, commit: result.commit };
     },
 
     // oxlint-disable-next-line typescript/no-explicit-any
@@ -199,6 +213,7 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
     // oxlint-disable-next-line typescript/no-explicit-any
     "app.invoke": async ({ params, client }: any) => {
       const tenantId = requireTenantId(client);
+      const tenantUserId = client?.tenant?.userId;
       const { app: appName, pipeline: pipelineName, params: pipelineParams } = params ?? {};
       if (typeof appName !== "string" || typeof pipelineName !== "string") {
         throw new Error("app and pipeline names required");
@@ -215,6 +230,7 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
         workspaceDir,
         appName,
         tenantId,
+        tenantUserId,
         deps: cfg.llmDeps,
       });
       if (result.status === "error") {

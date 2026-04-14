@@ -194,6 +194,23 @@ export async function getUserByEmail(tenantId: string, email: string): Promise<U
 }
 
 /**
+ * Find a user by Feishu union_id within a tenant.
+ * Returns null if not found.
+ */
+export async function getUserByUnionId(tenantId: string, unionId: string): Promise<User | null> {
+  if (getDbType() === DB_SQLITE) {
+    const { sqliteQuery: sq } = await import("../sqlite/index.js");
+    const result = sq("SELECT * FROM users WHERE tenant_id = ? AND union_id = ?", [tenantId, unionId]);
+    return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+  }
+  const result = await query(
+    "SELECT * FROM users WHERE tenant_id = $1 AND union_id = $2",
+    [tenantId, unionId],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
+/**
  * Find user by email across all tenants (for login with email only).
  * Returns the first active match. If ambiguous, caller should require tenant slug.
  */

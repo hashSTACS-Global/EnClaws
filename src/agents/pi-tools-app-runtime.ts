@@ -19,6 +19,8 @@ export interface AppRuntimeDeps {
 export interface CreateAppRuntimeToolsOptions {
   deps: AppRuntimeDeps;
   resolveTenantId: () => string | undefined;
+  /** Resolve the current tenant user ID (UUID). Used to inject PIVOT_USER_ID via displayName lookup. */
+  resolveTenantUserId?: () => string | undefined;
   executePipeline?: typeof defaultExecute;
 }
 
@@ -157,12 +159,14 @@ export function createAppRuntimeTools(opts: CreateAppRuntimeToolsOptions): AnyAg
       }
       const workspaceDir = resolveAppWorkspaceDir(tenantId, appName);
       await mkdir(workspaceDir, { recursive: true });
+      const tenantUserId = opts.resolveTenantUserId?.();
       const result: RunnerResult = await execute({
         pipeline: registered,
         input: (input.params as Record<string, unknown>) ?? {},
         workspaceDir,
         appName,
         tenantId,
+        tenantUserId,
         deps: deps.llmDeps,
       });
       if (result.status === "error") {
