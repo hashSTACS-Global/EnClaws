@@ -31,6 +31,13 @@ export function resolveAppWorkspaceDir(
   return path.join(resolveTenantAppWorkspacesRootDir(tenantId, env), appName);
 }
 
+export function resolveAppWorkspaceBackupDir(
+  tenantId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return path.join(resolveTenantAppWorkspacesRootDir(tenantId, env), "backup");
+}
+
 export function resolveTenantAppsManifestPath(
   tenantId: string,
   env: NodeJS.ProcessEnv = process.env,

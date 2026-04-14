@@ -181,7 +181,7 @@ export class TenantTracesView extends LitElement {
     .chat-msg.system { background: var(--warn-subtle); color: var(--text); align-self: center; font-size: 0.75rem; max-width: 95%; border: 1px solid var(--border); }
     .chat-msg.tool { background: var(--surface-2); color: var(--accent-2); align-self: flex-start; font-size: 0.75rem; border: 1px solid var(--border); }
     .chat-role { font-size: 0.65rem; font-weight: 600; opacity: 0.7; margin-bottom: 0.15rem; text-transform: uppercase; }
-    .chat-text { white-space: pre-wrap; word-break: break-word; }
+    .chat-text { white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; }
     .tool-call-inline { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.4rem; background: var(--accent-light); border-radius: 4px; font-size: 0.7rem; color: var(--accent); margin: 0.15rem 0; }
 
     /* Tool list (friendly view) */

@@ -1,4 +1,5 @@
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, stat, rename } from "node:fs/promises";
+import path from "node:path";
 import type { AppInstaller } from "../../runtime/app-installer/installer.js";
 import {
   setAppCredential,
@@ -7,7 +8,8 @@ import {
 } from "../../runtime/app-installer/credentials-store.js";
 import { readAppsManifest, updateInstalledApp } from "../../runtime/app-installer/store.js";
 import { GitOps } from "../../infra/git-ops/index.js";
-import { resolveAppWorkspaceDir } from "../../runtime/app-paths.js";
+import { resolveAppWorkspaceDir, resolveAppWorkspaceBackupDir } from "../../runtime/app-paths.js";
+import { logWarn } from "../../logger.js";
 import type { LLMStepDeps } from "../../runtime/pipeline-runner/llm-step.js";
 import { executePipeline as defaultExecute } from "../../runtime/pipeline-runner/runner.js";
 import type { RunnerResult } from "../../runtime/pipeline-runner/types.js";
@@ -146,7 +148,7 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
         }, env);
       }
 
-      // Clone or pull workspace repo
+      // Clone, pull, or re-clone workspace repo
       const workspaceRepo = typeof params?.workspaceRepo === "string" ? params.workspaceRepo.trim() : undefined;
       if (workspaceRepo) {
         const wsDir = resolveAppWorkspaceDir(tenantId, appName, env);
@@ -158,11 +160,33 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
           await stat(wsDir);
           exists = true;
         } catch { /* not found */ }
+
         if (exists) {
-          // Already cloned — pull latest
-          await git.pull(wsDir, gitEnv);
+          let currentRemote = "";
+          try {
+            currentRemote = await git.getRemoteUrl(wsDir);
+          } catch { /* not a git repo or no remote */ }
+
+          if (currentRemote && currentRemote === workspaceRepo) {
+            logWarn(`app.configure: workspace same remote, pulling: ${wsDir}`);
+            await git.pull(wsDir, gitEnv);
+          } else if (currentRemote) {
+            logWarn(`app.configure: workspace remote changed "${currentRemote}" → "${workspaceRepo}", backing up`);
+            const backupDir = resolveAppWorkspaceBackupDir(tenantId, env);
+            await mkdir(backupDir, { recursive: true });
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            await rename(wsDir, path.join(backupDir, `${appName}-${timestamp}`));
+            await git.clone(workspaceRepo, wsDir, { depth: 1, gitEnv });
+          } else {
+            logWarn(`app.configure: workspace exists but not a git repo, backing up and cloning`);
+            const backupDir = resolveAppWorkspaceBackupDir(tenantId, env);
+            await mkdir(backupDir, { recursive: true });
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            await rename(wsDir, path.join(backupDir, `${appName}-${timestamp}`));
+            await git.clone(workspaceRepo, wsDir, { depth: 1, gitEnv });
+          }
         } else {
-          // First time — clone
+          logWarn(`app.configure: cloning workspace repo "${workspaceRepo}" → ${wsDir}`);
           await git.clone(workspaceRepo, wsDir, { depth: 1, gitEnv });
         }
         // Persist workspaceRepo in apps.json so app.list can return it

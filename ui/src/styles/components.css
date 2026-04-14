@@ -2046,6 +2046,8 @@
   word-break: break-word;
   color: var(--chat-text);
   line-height: 1.5;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .chat-text :where(p, ul, ol, pre, blockquote, table) {

@@ -32,39 +32,53 @@ async function callOpenAiCompatible(
   extraHeaders: Record<string, string> = {},
 ): Promise<string> {
   const url = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      ...extraHeaders,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content: "You are a helpful assistant. You MUST respond with valid JSON only. No markdown, no explanations outside JSON.",
-        },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.7,
-      response_format: { type: "json_object" },
-    }),
-  });
+  logWarn(`pipeline-runner: LLM request → ${url} model=${model} prompt_length=${prompt.length}`);
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        ...extraHeaders,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful assistant. You MUST respond with valid JSON only. No markdown, no explanations outside JSON.",
+          },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.7,
+        response_format: { type: "json_object" },
+      }),
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const cause = e instanceof Error && e.cause ? ` cause=${String(e.cause)}` : "";
+    throw new Error(`LLM API fetch failed: url=${url} model=${model} error=${msg}${cause}`);
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`LLM API error ${res.status}: ${body.slice(0, 500)}`);
+    throw new Error(`LLM API HTTP ${res.status}: url=${url} model=${model} body=${body.slice(0, 500)}`);
   }
 
-  const json = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
+  let json: { choices?: Array<{ message?: { content?: string } }> };
+  try {
+    json = (await res.json()) as typeof json;
+  } catch (e) {
+    throw new Error(`LLM API response is not JSON: url=${url} model=${model} error=${e instanceof Error ? e.message : String(e)}`);
+  }
+
   const text = json.choices?.[0]?.message?.content;
   if (!text) {
-    throw new Error(`LLM API returned no content: ${JSON.stringify(json).slice(0, 500)}`);
+    throw new Error(`LLM API returned no content: url=${url} model=${model} response=${JSON.stringify(json).slice(0, 500)}`);
   }
+  logWarn(`pipeline-runner: LLM response ← model=${model} content_length=${text.length}`);
   return text;
 }
 

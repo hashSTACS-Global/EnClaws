@@ -38,9 +38,10 @@ export async function executePipeline(opts: ExecuteOptions): Promise<RunnerResul
       progress.push(`${step.name} ✓`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      const errorDetail = `pipeline "${pipeline.name}" step "${step.name}" (type=${step.type}) failed: ${msg}`;
       return {
         status: "error",
-        error: msg,
+        error: errorDetail,
         progress,
       };
     }

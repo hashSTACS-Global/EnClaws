@@ -111,6 +111,11 @@ export class GitOps {
     return stdout;
   }
 
+  async getRemoteUrl(repoDir: string, remote = "origin"): Promise<string> {
+    const { stdout } = await this.run("git", ["remote", "get-url", remote], repoDir);
+    return stdout.trim();
+  }
+
   async headCommit(repoDir: string): Promise<string> {
     const { stdout } = await this.run("git", ["rev-parse", "HEAD"], repoDir);
     return stdout.trim();

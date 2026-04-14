@@ -34,7 +34,13 @@ function buildAppInvokeDescription(deps: AppRuntimeDeps, tenantId: string): stri
       const pipelines = deps.registry.listPipelines(tenantId, appName);
       const pipelineList = pipelines.map((p) => {
         const desc = p.definition?.description;
-        return desc ? `    - ${p.name}: ${desc}` : `    - ${p.name}`;
+        let line = desc ? `    - ${p.name}: ${desc}` : `    - ${p.name}`;
+        const input = p.definition?.input;
+        if (input && typeof input === "object" && Object.keys(input).length > 0) {
+          const params = Object.entries(input).map(([k, v]) => `${k}(${v})`).join(", ");
+          line += `\n        input: ${params}`;
+        }
+        return line;
       }).join("\n");
       lines.push(`  app="${appName}":`);
       lines.push(pipelineList);

@@ -58,6 +58,7 @@ export class TenantAppsView extends LitElement {
       background: var(--danger-subtle); border: 1px solid var(--danger);
       border-radius: var(--radius-md); color: var(--danger);
       padding: 0.5rem 0.75rem; font-size: 0.8rem; margin-bottom: 1rem;
+      user-select: text; -webkit-user-select: text;
     }
     .success-msg {
       background: var(--ok-subtle); border: 1px solid var(--ok);

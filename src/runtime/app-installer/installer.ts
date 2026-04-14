@@ -7,6 +7,8 @@ import { loadPipelineYaml } from "../pipeline-runner/yaml-loader.js";
 import { readAppManifest } from "./manifest.js";
 import { addInstalledApp, removeInstalledApp, readAppsManifest } from "./store.js";
 import { setAppCredential, clearAppCredential, buildGitAuthEnv } from "./credentials-store.js";
+import { logWarn } from "../../logger.js";
+import { resolveAppWorkspaceBackupDir } from "../app-paths.js";
 
 export interface InstallResult {
   name: string;
@@ -131,15 +133,53 @@ export class AppInstaller {
       // 8. expose SKILL.md to tenant skills directory (for agent runtime to auto-discover)
       await this.exposeAppSkill(opts.tenantId, manifest.id, targetDir);
 
-      // 9. clone workspace repo if provided (runtime data directory for the APP)
+      // 9. setup workspace repo if provided (clone or pull)
       const wsRepoUrl = opts.workspaceRepo?.trim() || manifest.workspace_repo?.trim();
       if (wsRepoUrl) {
         const wsDir = resolveAppWorkspaceDir(opts.tenantId, manifest.id, this.env);
         const hasCredentials = opts.gitToken && opts.gitUser && opts.gitEmail;
-        const cloneOpts = hasCredentials
-          ? { depth: 1, gitEnv: buildGitAuthEnv({ gitToken: opts.gitToken!, gitUser: opts.gitUser!, gitEmail: opts.gitEmail! }) }
-          : { depth: 1 };
-        await this.git.clone(wsRepoUrl, wsDir, cloneOpts);
+        const gitEnv = hasCredentials
+          ? buildGitAuthEnv({ gitToken: opts.gitToken!, gitUser: opts.gitUser!, gitEmail: opts.gitEmail! })
+          : undefined;
+
+        let wsExists = false;
+        try {
+          await stat(wsDir);
+          wsExists = true;
+        } catch { /* not found */ }
+
+        if (wsExists) {
+          // Workspace dir already exists (from previous install, preserved on uninstall)
+          let currentRemote = "";
+          try {
+            currentRemote = await this.git.getRemoteUrl(wsDir);
+          } catch { /* not a git repo or no remote */ }
+
+          if (currentRemote && currentRemote === wsRepoUrl) {
+            // Same repo — just pull latest
+            logWarn(`app-installer: workspace exists with same remote, pulling: ${wsDir}`);
+            await this.git.pull(wsDir, gitEnv);
+          } else if (currentRemote) {
+            // Different repo — backup old, clone new
+            logWarn(`app-installer: workspace remote changed from "${currentRemote}" to "${wsRepoUrl}", backing up and re-cloning`);
+            const backupDir = resolveAppWorkspaceBackupDir(opts.tenantId, this.env);
+            await mkdir(backupDir, { recursive: true });
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            await rename(wsDir, path.join(backupDir, `${manifest.id}-${timestamp}`));
+            await this.git.clone(wsRepoUrl, wsDir, { depth: 1, gitEnv });
+          } else {
+            // Dir exists but not a git repo — backup and clone fresh
+            logWarn(`app-installer: workspace exists but is not a git repo, backing up and cloning: ${wsDir}`);
+            const backupDir = resolveAppWorkspaceBackupDir(opts.tenantId, this.env);
+            await mkdir(backupDir, { recursive: true });
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            await rename(wsDir, path.join(backupDir, `${manifest.id}-${timestamp}`));
+            await this.git.clone(wsRepoUrl, wsDir, { depth: 1, gitEnv });
+          }
+        } else {
+          logWarn(`app-installer: cloning workspace repo "${wsRepoUrl}" → ${wsDir}`);
+          await this.git.clone(wsRepoUrl, wsDir, { depth: 1, gitEnv });
+        }
       }
 
       // 10. persist credentials for runtime use (git push + feishu notifications)
