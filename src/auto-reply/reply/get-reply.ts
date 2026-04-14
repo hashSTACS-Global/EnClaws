@@ -25,6 +25,9 @@ import { type OpenClawConfig, loadConfig } from "../../config/config.js";
 import { applyLinkUnderstanding } from "../../link-understanding/apply.js";
 import { applyMediaUnderstanding } from "../../media-understanding/apply.js";
 import { defaultRuntime } from "../../runtime.js";
+import { isDbInitialized } from "../../db/index.js";
+import { getTenantById } from "../../db/models/tenant.js";
+import { checkTokenQuota } from "../../db/models/usage.js";
 import { resolveCommandAuthorization } from "../command-auth.js";
 import type { MsgContext } from "../templating.js";
 import { SILENT_REPLY_TOKEN } from "../tokens.js";
@@ -117,10 +120,51 @@ export async function getReplyFromConfig(
     }
   }
 
+  // Multi-tenant: detect maxUsers quota exhaustion. tenant-enrich sets this
+  // flag when it tried to auto-provision a NEW IM sender but the tenant has
+  // no remaining user slots. Existing users are unaffected.
+  //
+  // Uses standard markdown link `[text](url)` which Feishu/Lark cards
+  // (the format the lark plugin renders agent replies as), Telegram, and
+  // Discord all render as clickable text. Channels without markdown
+  // support will show the literal `[联系管理员](url)` — still readable.
+  if (ctx.TenantUserQuotaExceeded) {
+    const link = process.env.ENCLAWS_PLAN_UPGRADE_LINK?.trim();
+    const contactPhrase = link ? `[联系管理员](${link})` : "联系管理员";
+    return { text: `用户数量已达套餐上限，新成员暂时无法使用，请${contactPhrase}升级套餐。` };
+  }
+
   // In multi-tenant mode, every message must be associated with a tenant user.
   // Reject if we cannot resolve the owner — do not fall back to _shared.
   if (ctx.TenantId && !ctx.TenantUserId) {
     return { text: `Agent '${agentId}' has no associated tenant user. Please configure the agent properly.` };
+  }
+
+  // Multi-tenant token quota enforcement: short-circuit before invoking LLM
+  // when the tenant has exceeded their monthly token allowance. The reply is
+  // delivered through the same path as a normal agent reply, so the user sees
+  // it in their channel as if the agent itself had answered.
+  //
+  // Quota semantics: -1 = unlimited (handled inside checkTokenQuota), >= 0
+  // = enforced limit (0 effectively blocks every call, used by accounts that
+  // should not call LLMs at all, e.g. the platform admin tenant).
+  if (ctx.TenantId && isDbInitialized()) {
+    try {
+      const tenant = await getTenantById(ctx.TenantId);
+      const max = tenant?.quotas?.maxTokensPerMonth;
+      if (typeof max === "number") {
+        const quota = await checkTokenQuota(ctx.TenantId, max);
+        if (!quota.allowed) {
+          const link = process.env.ENCLAWS_PLAN_UPGRADE_LINK?.trim();
+          const contactPhrase = link ? `[联系管理员](${link})` : "联系管理员";
+          return { text: `本月 token 用量已达上限，请${contactPhrase}升级套餐后再继续使用。` };
+        }
+      }
+    } catch (err) {
+      // Quota check is best-effort: if it fails, log and let the message proceed
+      // rather than block the user on infrastructure issues.
+      console.warn(`[tenant-quota] check failed for tenant ${ctx.TenantId}: ${String(err)}`);
+    }
   }
 
   let tenantBootstrapContext: TenantBootstrapContext | undefined;

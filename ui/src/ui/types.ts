@@ -388,6 +388,8 @@ export type AgentFileEntry = {
   size?: number;
   updatedAtMs?: number;
   content?: string;
+  /** Enterprise default content returned when the file is missing */
+  defaultContent?: string;
 };
 
 export type AgentsFilesListResult = {
@@ -441,6 +443,8 @@ export type GatewaySessionRow = {
   kind: "direct" | "group" | "global" | "unknown";
   label?: string;
   displayName?: string;
+  userRole?: string;
+  channel?: string;
   surface?: string;
   subject?: string;
   room?: string;

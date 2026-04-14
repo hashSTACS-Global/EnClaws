@@ -1,5 +1,5 @@
 -- ============================================================
--- EnClaws Multi-Tenant Schema
+-- EnClaws Multi-Tenant Schema (consolidated: includes 001-008)
 -- ============================================================
 
 -- Extension for UUID generation
@@ -10,6 +10,9 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- ============================================================
 DROP FUNCTION IF EXISTS update_updated_at_column CASCADE;
 DROP TABLE IF EXISTS _migrations CASCADE;
+DROP TABLE IF EXISTS login_attempts CASCADE;
+DROP TABLE IF EXISTS password_history CASCADE;
+DROP TABLE IF EXISTS password_reset_tokens CASCADE;
 DROP TABLE IF EXISTS llm_interaction_traces CASCADE;
 DROP TABLE IF EXISTS usage_records CASCADE;
 DROP TABLE IF EXISTS audit_logs CASCADE;
@@ -37,11 +40,11 @@ CREATE TABLE tenants (
   status      VARCHAR(32)  NOT NULL DEFAULT 'active', -- active | suspended | deleted
   settings    JSONB        NOT NULL DEFAULT '{}',  -- tenant-level settings overrides
   quotas      JSONB        NOT NULL DEFAULT '{
-    "maxUsers": 5,
-    "maxAgents": 3,
+    "maxUsers": 10,
+    "maxAgents": 5,
     "maxChannels": 5,
-    "maxTokensPerMonth": 1000000
-  }',   -- resource quotas
+    "maxTokensPerMonth": 20000000
+  }',   -- resource quotas (mirrors plans.free; createTenant overrides via getPlanQuotas)
   trace_enabled    BOOLEAN      NOT NULL DEFAULT true,  -- LLM交互追踪开关
   identity_prompt  TEXT         NOT NULL DEFAULT '',   -- 企业身份特征描述
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -52,24 +55,54 @@ CREATE INDEX idx_tenants_slug ON tenants (slug);
 CREATE INDEX idx_tenants_status ON tenants (status);
 
 -- ============================================================
+-- 1b. Plans (订阅套餐字典)
+--     Tenants reference a plan by id; on createTenant the plan's
+--     quotas are copied into the tenant's own quotas JSONB so the
+--     existing checkTenantQuota path keeps working. -1 = 无限制.
+-- ============================================================
+CREATE TABLE plans (
+  id                     VARCHAR(64) PRIMARY KEY,
+  name                   VARCHAR(255) NOT NULL,
+  max_users              INTEGER NOT NULL,
+  max_agents             INTEGER NOT NULL,
+  max_channels           INTEGER NOT NULL,
+  max_tokens_per_month   BIGINT  NOT NULL,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month) VALUES
+  ('free',       '免费版', 10, 5,  5,  20000000),
+  ('pro',        '专业版', 20, 20, 20, 200000000),
+  ('enterprise', '企业版', -1, -1, -1, -1)
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
 -- 2. Users (用户)
 -- ============================================================
 CREATE TABLE users (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID         NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  open_ids    VARCHAR(255)[] DEFAULT '{}',
-  union_id    VARCHAR(255),
-  email       VARCHAR(320),
-  password_hash VARCHAR(255),
-  display_name VARCHAR(255),
-  role        VARCHAR(32)  NOT NULL DEFAULT 'member', -- owner | admin | member | viewer
-  status      VARCHAR(32)  NOT NULL DEFAULT 'active', -- active | invited | suspended | deleted
-  avatar_url  VARCHAR(1024),
-  last_login_at TIMESTAMPTZ,
-  channel_id  UUID,
-  settings    JSONB        NOT NULL DEFAULT '{}',  -- user-level preferences
-  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id             UUID         NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  open_ids              VARCHAR(255)[] DEFAULT '{}',
+  union_id              VARCHAR(255),
+  email                 VARCHAR(320),
+  password_hash         VARCHAR(255),
+  display_name          VARCHAR(255),
+  role                  VARCHAR(32)  NOT NULL DEFAULT 'member', -- platform-admin | owner | admin | member | viewer
+  status                VARCHAR(32)  NOT NULL DEFAULT 'active', -- active | invited | suspended | deleted
+  avatar_url            VARCHAR(1024),
+  last_login_at         TIMESTAMPTZ,
+  channel_id            UUID,
+  settings              JSONB        NOT NULL DEFAULT '{}',  -- user-level preferences
+  -- Auth Phase 1
+  force_change_password INTEGER      NOT NULL DEFAULT 0,     -- 1 = must change on next login
+  password_changed_at   TIMESTAMPTZ,                         -- last password change timestamp
+  -- Auth Phase 3 (MFA)
+  mfa_secret            TEXT,                                -- encrypted TOTP secret
+  mfa_enabled           INTEGER      NOT NULL DEFAULT 0,     -- 1 = MFA active
+  mfa_backup_codes      TEXT,                                -- JSON array of SHA-256 hashed backup codes
+  created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_users_tenant ON users (tenant_id);
@@ -132,7 +165,7 @@ CREATE TABLE tenant_channel_apps (
   app_secret   VARCHAR(512) NOT NULL DEFAULT '',
   bot_name     VARCHAR(255) NOT NULL DEFAULT '',
   group_policy VARCHAR(32)  NOT NULL DEFAULT 'open', -- open | allowlist | disabled
-  agent_id     VARCHAR(128),                         -- bound agent logical ID (one-to-many: one agent can bind multiple apps)
+  agent_id     VARCHAR(128),                         -- bound agent logical ID
   is_active    BOOLEAN      NOT NULL DEFAULT true,
   created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -149,16 +182,16 @@ CREATE INDEX idx_channel_apps_agent ON tenant_channel_apps (agent_id) WHERE agen
 CREATE TABLE tenant_models (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id     UUID         NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  provider_type VARCHAR(64)  NOT NULL,   -- openai | anthropic | deepseek | qwen | ollama | custom ...
-  provider_name VARCHAR(255) NOT NULL,   -- user-friendly provider label
-  base_url      VARCHAR(1024),           -- API endpoint (required for custom/ollama)
-  api_protocol  VARCHAR(64)  NOT NULL DEFAULT 'openai-completions', -- openai-completions | anthropic-messages | ...
-  auth_mode     VARCHAR(32)  NOT NULL DEFAULT 'api-key',  -- api-key | oauth | token | none
-  api_key_encrypted TEXT,                -- encrypted API key (null for oauth/none)
-  extra_headers JSONB        NOT NULL DEFAULT '{}',  -- custom headers
-  extra_config  JSONB        NOT NULL DEFAULT '{}',  -- provider-specific config (accountId, gatewayId, endpoint variant, etc.)
-  models        JSONB        NOT NULL DEFAULT '[]',  -- array of model definitions [{id, name, reasoning, input, contextWindow, maxTokens, cost, compat}]
-  visibility    VARCHAR(16)  NOT NULL DEFAULT 'private', -- private (tenant-only) | shared (visible to all tenants)
+  provider_type VARCHAR(64)  NOT NULL,
+  provider_name VARCHAR(255) NOT NULL,
+  base_url      VARCHAR(1024),
+  api_protocol  VARCHAR(64)  NOT NULL DEFAULT 'openai-completions',
+  auth_mode     VARCHAR(32)  NOT NULL DEFAULT 'api-key',
+  api_key_encrypted TEXT,
+  extra_headers JSONB        NOT NULL DEFAULT '{}',
+  extra_config  JSONB        NOT NULL DEFAULT '{}',
+  models        JSONB        NOT NULL DEFAULT '[]',
+  visibility    VARCHAR(16)  NOT NULL DEFAULT 'private',
   is_active     BOOLEAN      NOT NULL DEFAULT true,
   created_by    UUID         REFERENCES users(id) ON DELETE SET NULL,
   created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -170,17 +203,17 @@ CREATE INDEX idx_tenant_models_active ON tenant_models (tenant_id, is_active) WH
 CREATE INDEX idx_tenant_models_shared ON tenant_models (visibility, is_active) WHERE visibility = 'shared' AND is_active = true;
 
 -- ============================================================
--- 7. Agent Configs (租户级 Agent 配置) — references tenant_models
+-- 7. Agent Configs (租户级 Agent 配置)
 -- ============================================================
 CREATE TABLE tenant_agents (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id      UUID         NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  agent_id       VARCHAR(128) NOT NULL,   -- logical agent ID (e.g., "main", "kimi")
+  agent_id       VARCHAR(128) NOT NULL,
   name           VARCHAR(255) NOT NULL,
-  config         JSONB        NOT NULL DEFAULT '{}', -- full agent config
-  model_config   JSONB        NOT NULL DEFAULT '[]', -- [{providerId, modelId, isDefault}] ordered list; isDefault=true is primary, rest are fallbacks
-  tools          JSONB        NOT NULL DEFAULT '{"deny":[]}', -- tool deny/allow overrides
-  skills         JSONB        NOT NULL DEFAULT '[]', -- enabled skill list
+  config         JSONB        NOT NULL DEFAULT '{}',
+  model_config   JSONB        NOT NULL DEFAULT '[]',
+  tools          JSONB        NOT NULL DEFAULT '{"deny":[]}',
+  skills         JSONB        NOT NULL DEFAULT '[]',
   is_active      BOOLEAN      NOT NULL DEFAULT true,
   created_by     UUID         REFERENCES users(id) ON DELETE SET NULL,
   created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -191,20 +224,64 @@ CREATE TABLE tenant_agents (
 CREATE INDEX idx_agents_tenant ON tenant_agents (tenant_id);
 
 -- ============================================================
--- 7. Refresh Tokens (JWT 刷新令牌)
+-- 8. Refresh Tokens (JWT 刷新令牌)
 -- ============================================================
 CREATE TABLE refresh_tokens (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash  VARCHAR(255) NOT NULL UNIQUE,
-  device_info VARCHAR(512),
-  expires_at  TIMESTAMPTZ  NOT NULL,
-  revoked     BOOLEAN      NOT NULL DEFAULT false,
-  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash   VARCHAR(255) NOT NULL UNIQUE,
+  device_info  VARCHAR(512),
+  ip_address   TEXT,                                 -- Auth Phase 3: session IP
+  expires_at   TIMESTAMPTZ  NOT NULL,
+  revoked      BOOLEAN      NOT NULL DEFAULT false,
+  last_used_at TIMESTAMPTZ,                          -- Auth Phase 3: bumped on refresh
+  created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_refresh_tokens_user ON refresh_tokens (user_id);
 CREATE INDEX idx_refresh_tokens_hash ON refresh_tokens (token_hash);
+
+-- ============================================================
+-- 8b. Password Reset Tokens (Auth Phase 1)
+-- ============================================================
+CREATE TABLE password_reset_tokens (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  purpose     TEXT NOT NULL DEFAULT 'reset',  -- 'reset' | 'view-temp' | 'verify-email'
+  payload     TEXT,                            -- encrypted temp password for view-temp purpose
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_password_reset_tokens_user ON password_reset_tokens (user_id);
+CREATE INDEX idx_password_reset_tokens_expires ON password_reset_tokens (expires_at);
+
+-- ============================================================
+-- 8c. Password History (Auth Phase 2)
+-- ============================================================
+CREATE TABLE password_history (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  password_hash TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_pw_history_user ON password_history (user_id, created_at DESC);
+
+-- ============================================================
+-- 8d. Login Attempts (Auth Phase 2)
+-- ============================================================
+CREATE TABLE login_attempts (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ip         TEXT NOT NULL,
+  email      TEXT,
+  success    INTEGER NOT NULL DEFAULT 0,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_login_attempts_ip_time ON login_attempts (ip, created_at DESC);
+CREATE INDEX idx_login_attempts_email_time ON login_attempts (email, created_at DESC);
+CREATE INDEX idx_login_attempts_created_at ON login_attempts (created_at);
 
 -- ============================================================
 -- 9. Audit Logs (操作审计)
@@ -213,8 +290,8 @@ CREATE TABLE audit_logs (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id   UUID         NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   user_id     UUID         REFERENCES users(id) ON DELETE SET NULL,
-  action      VARCHAR(128) NOT NULL,   -- e.g., "user.login", "agent.create", "config.update"
-  resource    VARCHAR(128),            -- e.g., "agent:main", "channel:telegram"
+  action      VARCHAR(128) NOT NULL,
+  resource    VARCHAR(128),
   detail      JSONB        DEFAULT '{}',
   ip_address  VARCHAR(45),
   user_agent  VARCHAR(1024),
@@ -231,7 +308,7 @@ CREATE INDEX idx_audit_action ON audit_logs (tenant_id, action);
 CREATE TABLE usage_records (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id   UUID         NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  user_id     VARCHAR(64),
+  user_id     VARCHAR(512),                          -- may be non-UUID (e.g. session key)
   agent_id    VARCHAR(128),
   provider    VARCHAR(64),
   model       VARCHAR(128),
@@ -257,14 +334,10 @@ CREATE TABLE llm_interaction_traces (
   agent_id      VARCHAR(128),
   channel       VARCHAR(128),
 
-  -- 用户轮次分组: 同一次用户提问共享相同turn_id
   turn_id       UUID         NOT NULL,
   turn_index    SMALLINT     NOT NULL DEFAULT 0,
-
-  -- 用户原始输入 (仅 turn_index=0 时填充)
   user_input    TEXT,
 
-  -- LLM请求
   provider      VARCHAR(64),
   model         VARCHAR(128),
   system_prompt TEXT,
@@ -272,18 +345,15 @@ CREATE TABLE llm_interaction_traces (
   tools         JSONB,
   request_params JSONB,
 
-  -- LLM响应
   response      JSONB,
   stop_reason   VARCHAR(64),
   error_message TEXT,
 
-  -- Token用量
   input_tokens    BIGINT     NOT NULL DEFAULT 0,
   output_tokens   BIGINT     NOT NULL DEFAULT 0,
   cache_read_tokens  BIGINT  NOT NULL DEFAULT 0,
   cache_write_tokens BIGINT  NOT NULL DEFAULT 0,
 
-  -- 时间
   duration_ms   INT,
   created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
@@ -432,7 +502,7 @@ VALUES (
   '_platform',
   'enterprise',
   'active',
-  '{"maxUsers":10,"maxAgents":0,"maxChannels":0,"maxTokensPerMonth":0}'
+  '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1}'
 )
 ON CONFLICT (slug) DO NOTHING;
 

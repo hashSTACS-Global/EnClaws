@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
-import { formatRelativeTimestamp } from "../format.ts";
+import { t } from "../../i18n/index.ts";
+
 import { pathForTab } from "../navigation.ts";
 import { formatSessionTokens } from "../presenter.ts";
 import type { GatewaySessionRow, SessionsListResult } from "../types.ts";
@@ -34,13 +35,56 @@ export type SessionsProps = {
 
 const THINK_LEVELS = ["", "off", "minimal", "low", "medium", "high", "xhigh"] as const;
 const BINARY_THINK_LEVELS = ["", "off", "on"] as const;
-const VERBOSE_LEVELS = [
-  { value: "", label: "inherit" },
-  { value: "off", label: "off (explicit)" },
-  { value: "on", label: "on" },
-  { value: "full", label: "full" },
-] as const;
+const VERBOSE_LEVEL_KEYS = ["", "off", "on", "full"] as const;
 const REASONING_LEVELS = ["", "off", "on", "stream"] as const;
+
+const THINK_LABEL_MAP: Record<string, string> = {
+  off: "sessions.thinkOff",
+  minimal: "sessions.thinkMinimal",
+  low: "sessions.thinkLow",
+  medium: "sessions.thinkMedium",
+  high: "sessions.thinkHigh",
+  xhigh: "sessions.thinkXhigh",
+  on: "sessions.thinkOn",
+};
+
+const VERBOSE_LABEL_MAP: Record<string, string> = {
+  off: "sessions.verboseOff",
+  on: "sessions.verboseOn",
+  full: "sessions.verboseFull",
+};
+
+const REASONING_LABEL_MAP: Record<string, string> = {
+  off: "sessions.reasoningOff",
+  on: "sessions.reasoningOn",
+  stream: "sessions.reasoningStream",
+};
+
+function localizedLabel(value: string, map: Record<string, string>): string {
+  const key = map[value];
+  return key ? t(key) : value;
+}
+
+function localizedRelativeTime(epochMs: number | null | undefined): string {
+  if (epochMs == null || !Number.isFinite(epochMs)) return "n/a";
+  const diff = Date.now() - epochMs;
+  if (diff < 0) return "n/a";
+  const sec = Math.round(diff / 1000);
+  if (sec < 60) return t("sessions.timeJustNow");
+  const min = Math.round(sec / 60);
+  if (min < 60) return t("sessions.timeMinAgo", { n: String(min) });
+  const hr = Math.round(min / 60);
+  if (hr < 48) return t("sessions.timeHourAgo", { n: String(hr) });
+  const day = Math.round(hr / 24);
+  return t("sessions.timeDayAgo", { n: String(day) });
+}
+
+const KIND_LABEL_MAP: Record<string, string> = {
+  direct: "sessions.kindDirect",
+  group: "sessions.kindGroup",
+  global: "sessions.kindGlobal",
+  unknown: "sessions.kindUnknown",
+};
 
 function normalizeProviderId(provider?: string | null): string {
   if (!provider) {
@@ -113,17 +157,17 @@ export function renderSessions(props: SessionsProps) {
     <section class="card">
       <div class="row" style="justify-content: space-between;">
         <div>
-          <div class="card-title">Sessions</div>
-          <div class="card-sub">Active session keys and per-session overrides.</div>
+          <div class="card-title">${t("sessions.title")}</div>
+          <div class="card-sub">${t("sessions.subtitle")}</div>
         </div>
         <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
-          ${props.loading ? "Loading…" : "Refresh"}
+          ${props.loading ? t("sessions.loading") : t("sessions.refresh")}
         </button>
       </div>
 
       <div class="filters" style="margin-top: 14px;">
         <label class="field">
-          <span>Active within (minutes)</span>
+          <span>${t("sessions.activeMinutes")}</span>
           <input
             .value=${props.activeMinutes}
             @input=${(e: Event) =>
@@ -136,7 +180,7 @@ export function renderSessions(props: SessionsProps) {
           />
         </label>
         <label class="field">
-          <span>Limit</span>
+          <span>${t("sessions.limit")}</span>
           <input
             .value=${props.limit}
             @input=${(e: Event) =>
@@ -149,7 +193,7 @@ export function renderSessions(props: SessionsProps) {
           />
         </label>
         <label class="field checkbox">
-          <span>Include global</span>
+          <span>${t("sessions.includeGlobal")}</span>
           <input
             type="checkbox"
             .checked=${props.includeGlobal}
@@ -163,7 +207,7 @@ export function renderSessions(props: SessionsProps) {
           />
         </label>
         <label class="field checkbox">
-          <span>Include unknown</span>
+          <span>${t("sessions.includeUnknown")}</span>
           <input
             type="checkbox"
             .checked=${props.includeUnknown}
@@ -184,26 +228,12 @@ export function renderSessions(props: SessionsProps) {
           : nothing
       }
 
-      <div class="muted" style="margin-top: 12px;">
-        ${props.result ? `Store: ${props.result.path}` : ""}
-      </div>
 
-      <div class="table" style="margin-top: 16px;">
-        <div class="table-head">
-          <div>Key</div>
-          <div>Label</div>
-          <div>Kind</div>
-          <div>Updated</div>
-          <div>Tokens</div>
-          <div>Thinking</div>
-          <div>Verbose</div>
-          <div>Reasoning</div>
-          <div>Actions</div>
-        </div>
+      <div class="session-list" style="margin-top: 16px;">
         ${
           rows.length === 0
             ? html`
-                <div class="muted">No sessions found.</div>
+                <div class="muted">${t("sessions.noSessions")}</div>
               `
             : rows.map((row) =>
                 renderRow(row, props.basePath, props.onPatch, props.onDelete, props.loading),
@@ -221,13 +251,13 @@ function renderRow(
   onDelete: SessionsProps["onDelete"],
   disabled: boolean,
 ) {
-  const updated = row.updatedAt ? formatRelativeTimestamp(row.updatedAt) : "n/a";
+  const updated = localizedRelativeTime(row.updatedAt);
   const rawThinking = row.thinkingLevel ?? "";
   const isBinaryThinking = isBinaryThinkingProvider(row.modelProvider);
   const thinking = resolveThinkLevelDisplay(rawThinking, isBinaryThinking);
   const thinkLevels = withCurrentOption(resolveThinkLevelOptions(row.modelProvider), thinking);
   const verbose = row.verboseLevel ?? "";
-  const verboseLevels = withCurrentLabeledOption(VERBOSE_LEVELS, verbose);
+  const verboseLevels = withCurrentOption(VERBOSE_LEVEL_KEYS, verbose);
   const reasoning = row.reasoningLevel ?? "";
   const reasoningLevels = withCurrentOption(REASONING_LEVELS, reasoning);
   const displayName =
@@ -235,85 +265,114 @@ function renderRow(
       ? row.displayName.trim()
       : null;
   const label = typeof row.label === "string" ? row.label.trim() : "";
-  const showDisplayName = Boolean(displayName && displayName !== row.key && displayName !== label);
-  const canLink = row.kind !== "global";
+  // userRole=owner means the session belongs to a webchat user (owner account);
+  // anything else is an external channel session — use row.channel for the badge.
+  const isWebChat = row.userRole === "owner";
+  const resolvedChannel = isWebChat ? "WebChat" : (row.channel || "unknown");
+  const canLink = row.kind !== "global" && isWebChat;
   const chatUrl = canLink
     ? `${pathForTab("chat", basePath)}?session=${encodeURIComponent(row.key)}`
     : null;
+  const titleText = displayName ?? (row.key.length > 25 ? `${row.key.slice(0, 25)}…` : row.key);
+  const channelBadge = isWebChat
+    ? html`<span class="session-channel-badge session-channel-badge--web">WebChat</span>`
+    : html`<span class="session-channel-badge session-channel-badge--${resolvedChannel}" title=${resolvedChannel}>${resolvedChannel}</span>`;
+
+  const kindLabel = KIND_LABEL_MAP[row.kind] ? t(KIND_LABEL_MAP[row.kind]) : row.kind;
+  const tokens = formatSessionTokens(row);
+  const modelDisplay = row.model ? row.model.split("/").pop() ?? row.model : "";
 
   return html`
-    <div class="table-row">
-      <div class="mono session-key-cell">
-        ${canLink ? html`<a href=${chatUrl} class="session-link">${row.key}</a>` : row.key}
-        ${showDisplayName ? html`<span class="muted session-key-display-name">${displayName}</span>` : nothing}
+    <div class="session-card">
+      <div class="session-card__header">
+        <div class="session-card__left">
+          <div class="session-card__title-line">
+            ${channelBadge}
+            ${canLink ? html`<a href=${chatUrl} class="session-link" title=${displayName ? "" : row.key} @click=${(e: MouseEvent) => {
+              if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              window.history.pushState({}, "", chatUrl);
+              window.dispatchEvent(new PopStateEvent("popstate"));
+            }}>${titleText}</a>` : html`<span class="session-card__key" title=${displayName ? "" : row.key}>${titleText}</span>`}
+          </div>
+          <div class="session-card__meta">
+            <span>${kindLabel}</span>
+            ${tokens ? html`<span>${tokens}</span>` : nothing}
+            <span>${updated}</span>
+          </div>
+        </div>
+        <div class="session-card__badges">
+          ${modelDisplay ? html`<span class="badge badge-platform">${modelDisplay}</span>` : nothing}
+        </div>
       </div>
-      <div>
-        <input
-          .value=${row.label ?? ""}
-          ?disabled=${disabled}
-          placeholder="(optional)"
-          @change=${(e: Event) => {
-            const value = (e.target as HTMLInputElement).value.trim();
-            onPatch(row.key, { label: value || null });
-          }}
-        />
-      </div>
-      <div>${row.kind}</div>
-      <div>${updated}</div>
-      <div>${formatSessionTokens(row)}</div>
-      <div>
-        <select
-          ?disabled=${disabled}
-          @change=${(e: Event) => {
-            const value = (e.target as HTMLSelectElement).value;
-            onPatch(row.key, {
-              thinkingLevel: resolveThinkLevelPatchValue(value, isBinaryThinking),
-            });
-          }}
-        >
-          ${thinkLevels.map(
-            (level) =>
-              html`<option value=${level} ?selected=${thinking === level}>
-                ${level || "inherit"}
-              </option>`,
-          )}
-        </select>
-      </div>
-      <div>
-        <select
-          ?disabled=${disabled}
-          @change=${(e: Event) => {
-            const value = (e.target as HTMLSelectElement).value;
-            onPatch(row.key, { verboseLevel: value || null });
-          }}
-        >
-          ${verboseLevels.map(
-            (level) =>
-              html`<option value=${level.value} ?selected=${verbose === level.value}>
-                ${level.label}
-              </option>`,
-          )}
-        </select>
-      </div>
-      <div>
-        <select
-          ?disabled=${disabled}
-          @change=${(e: Event) => {
-            const value = (e.target as HTMLSelectElement).value;
-            onPatch(row.key, { reasoningLevel: value || null });
-          }}
-        >
-          ${reasoningLevels.map(
-            (level) =>
-              html`<option value=${level} ?selected=${reasoning === level}>
-                ${level || "inherit"}
-              </option>`,
-          )}
-        </select>
-      </div>
-      <div>
-        <button class="btn danger" ?disabled=${disabled} @click=${() => onDelete(row.key)}>
-          Delete
+      <div class="session-card__controls">
+        <label class="session-card__field">
+          <span class="session-card__field-label">${t("sessions.colLabel")}</span>
+          <input
+            .value=${row.label ?? ""}
+            ?disabled=${disabled}
+            placeholder=${t("sessions.optional")}
+            @change=${(e: Event) => {
+              const value = (e.target as HTMLInputElement).value.trim();
+              onPatch(row.key, { label: value || null });
+            }}
+          />
+        </label>
+        <label class="session-card__field">
+          <span class="session-card__field-label">${t("sessions.colThinking")}</span>
+          <select
+            ?disabled=${disabled}
+            @change=${(e: Event) => {
+              const value = (e.target as HTMLSelectElement).value;
+              onPatch(row.key, {
+                thinkingLevel: resolveThinkLevelPatchValue(value, isBinaryThinking),
+              });
+            }}
+          >
+            ${thinkLevels.map(
+              (level) =>
+                html`<option value=${level} ?selected=${thinking === level}>
+                  ${level ? localizedLabel(level, THINK_LABEL_MAP) : t("sessions.inherit")}
+                </option>`,
+            )}
+          </select>
+        </label>
+        <label class="session-card__field">
+          <span class="session-card__field-label">${t("sessions.colVerbose")}</span>
+          <select
+            ?disabled=${disabled}
+            @change=${(e: Event) => {
+              const value = (e.target as HTMLSelectElement).value;
+              onPatch(row.key, { verboseLevel: value || null });
+            }}
+          >
+            ${verboseLevels.map(
+              (level) =>
+                html`<option value=${level} ?selected=${verbose === level}>
+                  ${level ? localizedLabel(level, VERBOSE_LABEL_MAP) : t("sessions.inherit")}
+                </option>`,
+            )}
+          </select>
+        </label>
+        <label class="session-card__field">
+          <span class="session-card__field-label">${t("sessions.colReasoning")}</span>
+          <select
+            ?disabled=${disabled}
+            @change=${(e: Event) => {
+              const value = (e.target as HTMLSelectElement).value;
+              onPatch(row.key, { reasoningLevel: value || null });
+            }}
+          >
+            ${reasoningLevels.map(
+              (level) =>
+                html`<option value=${level} ?selected=${reasoning === level}>
+                  ${level ? localizedLabel(level, REASONING_LABEL_MAP) : t("sessions.inherit")}
+                </option>`,
+            )}
+          </select>
+        </label>
+        <button class="btn danger session-card__delete" ?disabled=${disabled} @click=${() => onDelete(row.key)}>
+          ${t("sessions.delete")}
         </button>
       </div>
     </div>

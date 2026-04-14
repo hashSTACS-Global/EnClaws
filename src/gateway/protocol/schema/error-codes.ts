@@ -11,6 +11,13 @@ export const ErrorCodes = {
   UNAVAILABLE: "UNAVAILABLE",
   /** Auth Phase 1: returned by auth.login when rate-limited / in backoff. */
   RATE_LIMITED: "RATE_LIMITED",
+  /**
+   * Tenant quota exceeded — returned by createAgent / createChannel /
+   * inviteUser / onboarding setup when the tenant's plan limit is hit.
+   * `details` carries `{ resource: "agents"|"channels"|"users"|"tokensPerMonth", current: number, max: number }`
+   * so the frontend can render a localized message.
+   */
+  QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
@@ -25,4 +32,15 @@ export function errorShape(
     message,
     ...opts,
   };
+}
+
+/**
+ * Read the configured "contact admin to upgrade plan" link from env.
+ * Used by all QUOTA_EXCEEDED errors so the UI / IM channels can render
+ * a clickable upgrade link. Returns undefined when unset so callers can
+ * gracefully omit it from the message.
+ */
+export function getPlanUpgradeLink(): string | undefined {
+  const v = process.env.ENCLAWS_PLAN_UPGRADE_LINK;
+  return v && v.trim() ? v.trim() : undefined;
 }

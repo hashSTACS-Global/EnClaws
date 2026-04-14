@@ -29,19 +29,55 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
   };
 }
 
-const DEFAULT_QUOTAS: TenantQuotas = {
-  maxUsers: 5,
-  maxAgents: 3,
+/**
+ * Hard-coded fallback used only when the `plans` table is unavailable
+ * (e.g. plans table not seeded yet, or DB connection issue during boot).
+ * Real defaults live in the `plans` table — see migration 009_plans.sql.
+ */
+const FALLBACK_FREE_QUOTAS: TenantQuotas = {
+  maxUsers: 10,
+  maxAgents: 5,
   maxChannels: 5,
-  maxTokensPerMonth: 1_000_000,
+  maxTokensPerMonth: 20_000_000,
 };
+
+/**
+ * Look up the quotas for a given plan id from the `plans` table.
+ * Returns FALLBACK_FREE_QUOTAS if the plan id is unknown or the table
+ * cannot be queried (best-effort, never throws).
+ */
+export async function getPlanQuotas(planId: string): Promise<TenantQuotas> {
+  if (getDbType() === DB_SQLITE) return sqliteTenant.getPlanQuotas(planId);
+  try {
+    const result = await query(
+      `SELECT max_users, max_agents, max_channels, max_tokens_per_month
+       FROM plans WHERE id = $1`,
+      [planId],
+    );
+    const row = result.rows[0];
+    if (!row) return FALLBACK_FREE_QUOTAS;
+    return {
+      maxUsers: parseInt(row.max_users as string, 10),
+      maxAgents: parseInt(row.max_agents as string, 10),
+      maxChannels: parseInt(row.max_channels as string, 10),
+      maxTokensPerMonth: parseInt(row.max_tokens_per_month as string, 10),
+    };
+  } catch (err) {
+    console.warn(`[tenant] getPlanQuotas(${planId}) failed, using fallback: ${String(err)}`);
+    return FALLBACK_FREE_QUOTAS;
+  }
+}
 
 export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
   if (getDbType() === DB_SQLITE) return sqliteTenant.createTenant(input);
-  const quotas = { ...DEFAULT_QUOTAS, ...input.quotas };
+  // Quotas come from the plans table snapshot for this plan, with optional
+  // per-tenant overrides supplied by the caller (e.g. platform admin granting
+  // a custom quota beyond the plan's defaults).
+  const planQuotas = await getPlanQuotas(input.plan ?? "free");
+  const quotas = { ...planQuotas, ...input.quotas };
   const result = await query(
     `INSERT INTO tenants (name, slug, plan, settings, quotas)
-     VALUES ($1, $2, $3, $4, $5)
+     VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)
      RETURNING *`,
     [
       input.name,
@@ -126,11 +162,11 @@ export async function updateTenant(
     values.push(updates.status);
   }
   if (updates.settings !== undefined) {
-    sets.push(`settings = $${idx++}`);
+    sets.push(`settings = $${idx++}::jsonb`);
     values.push(JSON.stringify(updates.settings));
   }
   if (updates.quotas !== undefined) {
-    sets.push(`quotas = $${idx++}`);
+    sets.push(`quotas = $${idx++}::jsonb`);
     values.push(JSON.stringify(updates.quotas));
   }
   if (updates.traceEnabled !== undefined) {
@@ -190,5 +226,7 @@ export async function checkTenantQuota(
   const current = parseInt(countResult.rows[0].count as string, 10);
   const max = tenant.quotas[quotaKeyMap[resource]];
 
+  // -1 means unlimited (enterprise plan).
+  if (max < 0) return { allowed: true, current, max };
   return { allowed: current < max, current, max };
 }

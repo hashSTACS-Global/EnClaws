@@ -38,7 +38,7 @@ export async function createAuditLog(input: CreateAuditLogInput): Promise<void> 
   try {
     await query(
       `INSERT INTO audit_logs (tenant_id, user_id, action, resource, detail, ip_address, user_agent)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
       [
         input.tenantId,
         input.userId ?? null,

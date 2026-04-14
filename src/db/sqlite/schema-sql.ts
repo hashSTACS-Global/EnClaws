@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   plan        TEXT NOT NULL DEFAULT 'free',
   status      TEXT NOT NULL DEFAULT 'active',
   settings    TEXT NOT NULL DEFAULT '{}',
-  quotas      TEXT NOT NULL DEFAULT '{"maxUsers":5,"maxAgents":3,"maxChannels":5,"maxTokensPerMonth":1000000}',
+  quotas      TEXT NOT NULL DEFAULT '{"maxUsers":10,"maxAgents":5,"maxChannels":5,"maxTokensPerMonth":20000000}',
   trace_enabled    INTEGER NOT NULL DEFAULT 1,
   identity_prompt  TEXT NOT NULL DEFAULT '',
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -25,6 +25,22 @@ CREATE TABLE IF NOT EXISTS tenants (
 );
 CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants (slug);
 CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants (status);
+
+-- Plans (subscription plan dictionary). -1 = unlimited.
+CREATE TABLE IF NOT EXISTS plans (
+  id                   TEXT PRIMARY KEY,
+  name                 TEXT NOT NULL,
+  max_users            INTEGER NOT NULL,
+  max_agents           INTEGER NOT NULL,
+  max_channels         INTEGER NOT NULL,
+  max_tokens_per_month INTEGER NOT NULL,
+  created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month) VALUES
+  ('free',       '免费版', 10, 5,  5,  20000000),
+  ('pro',        '专业版', 20, 20, 20, 200000000),
+  ('enterprise', '企业版', -1, -1, -1, -1);
 
 -- 2. Users
 CREATE TABLE IF NOT EXISTS users (
@@ -395,7 +411,7 @@ VALUES (
   '_platform',
   'enterprise',
   'active',
-  '{"maxUsers":10,"maxAgents":0,"maxChannels":0,"maxTokensPerMonth":0}'
+  '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1}'
 );
 
 INSERT OR IGNORE INTO users (id, tenant_id, email, password_hash, display_name, role, status)

@@ -121,8 +121,8 @@ let _cachedTenantAgents: TenantAgentOption[] = [];
 let _tenantAgentsLoaded = false;
 
 async function loadTenantAgentsForChat(): Promise<TenantAgentOption[]> {
-  if (_tenantAgentsLoaded) return _cachedTenantAgents;
-  if (!isAuthenticated()) return [];
+  if (_tenantAgentsLoaded) {return _cachedTenantAgents;}
+  if (!isAuthenticated()) {return [];}
   if (loadAuth()?.user?.role === "platform-admin") { _tenantAgentsLoaded = true; return []; }
   try {
     const result = await tenantRpc("tenant.agents.list") as {
@@ -135,7 +135,7 @@ async function loadTenantAgentsForChat(): Promise<TenantAgentOption[]> {
         name: (a.config?.displayName as string) ?? a.name ?? a.agentId,
       }));
     _tenantAgentsLoaded = true;
-  } catch {
+     } catch {
     // Not in multi-tenant mode or not authenticated
   }
   return _cachedTenantAgents;
@@ -147,10 +147,15 @@ async function loadTenantAgentsForChat(): Promise<TenantAgentOption[]> {
  * first available tenant agent so the browser lands on a real chat session.
  */
 function redirectToFirstTenantAgent(state: AppViewState, agents: TenantAgentOption[]) {
-  if (agents.length === 0) return;
+  if (agents.length === 0) {return;}
   const sk = state.sessionKey ?? "";
   const isDefaultSession = !sk || sk === "main" || sk.startsWith("agent:main:");
-  if (!isDefaultSession) return;
+  // Also redirect if the current session points to an agent that no longer
+  // exists (e.g. deleted agent still in localStorage lastActiveSessionKey).
+  const agentMatch = sk.match(/^agent:([^:]+):/);
+  const currentAgentId = agentMatch?.[1];
+  const agentStillExists = currentAgentId && agents.some((a) => a.agentId === currentAgentId);
+  if (!isDefaultSession && agentStillExists) {return;}
   const next = `agent:${agents[0].agentId}:chat`;
   state.sessionKey = next;
   state.chatMessage = "";
@@ -175,7 +180,7 @@ function redirectToFirstTenantAgent(state: AppViewState, agents: TenantAgentOpti
 export function invalidateTenantAgentsCache() {
   _tenantAgentsLoaded = false;
   _cachedTenantAgents = [];
-}
+ }
 
 async function checkTenantNeedsOnboarding(state: AppViewState) {
   try {
@@ -268,12 +273,15 @@ export function renderApp(state: AppViewState) {
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
   const noAgents = isAuthenticated() && _tenantAgentsLoaded && _cachedTenantAgents.length === 0;
+  const agentsLoading = isAuthenticated() && !_tenantAgentsLoaded;
   const chatDisabledReason = noAgents
     ? "请先在【代理管理】中创建并启用一个 Agent，才能开始对话"
-    : state.connected
-      ? null
-      : t("chat.disconnected");
-  const COMING_SOON_TABS = new Set(["sessions", "sandbox", "nodes", "usage", "tenant-usage", "instances", "cron", "config", "debug"]);
+    : agentsLoading
+      ? "正在加载 Agent 列表…"
+      : state.connected
+        ? null
+        : t("chat.disconnected");
+  const COMING_SOON_TABS = new Set(["sandbox", "nodes", "usage", "instances", "cron", "config", "debug"]);
   const isComingSoon = COMING_SOON_TABS.has(state.tab);
   const isChat = state.tab === "chat";
   const chatFocus = isChat && (state.settings.chatFocusMode || state.onboarding);
@@ -431,10 +439,14 @@ export function renderApp(state: AppViewState) {
           @onboarding-complete=${() => {
             state.showOnboarding = false;
             state.connect();
-            // Reload tenant agents for chat after onboarding setup
+            // Invalidate tenant agents cache so the chat tab render will
+            // reload the list and auto-select the first agent via
+            // redirectToFirstTenantAgent.  Do NOT call loadTenantAgentsForChat()
+            // here — that would set _tenantAgentsLoaded=true without redirecting,
+            // leaving the chat dropdown on "please select agent".
             _tenantAgentsLoaded = false;
-            void loadTenantAgentsForChat();
-            // Delay reload to let channels connect, then remount overview
+            _cachedTenantAgents = [];
+                       // Delay reload to let channels connect, then remount overview
             setTimeout(() => {
               if (state.tab === "tenant-overview" || state.tab === "overview") {
                 const tab = state.tab;
@@ -451,20 +463,21 @@ export function renderApp(state: AppViewState) {
               <div class="nav-brand-header">
                   <div class="brand">
                       <div class="brand-logo">
-                          <img src=${basePath ? `${basePath}/favicon.svg` : "/favicon.svg"} alt="EnClaws"/>
+                          <img src="/favicon.svg" alt="EnClaws" />
                       </div>
                       ${
                               !state.settings.navCollapsed
                                       ? html`
                                           <div class="brand-text">
                                               <div class="brand-title">EnClaws</div>
-                                              <div class="brand-sub">Gateway Dashboard</div>
                                           </div>
+                                          <span class="brand-version-badge">${enClawsVersion !== t("common.na") ? enClawsVersion : "v2"}</span>
                                       `
                                       : nothing
                       }
                   </div>
               </div>
+              <div class="nav-scroll-area">
               ${TAB_GROUPS.map((group) => {
                   // Filter tabs by user role
                   const authState = loadAuth();
@@ -474,11 +487,11 @@ export function renderApp(state: AppViewState) {
                   const tenantOnlyTabs = new Set(["tenant-settings", "tenant-users", "tenant-agents", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage", "cs-setup", "cs-knowledge", "cs-sessions"]);
                   const platformOnlyTabs = new Set(["overview", "platform-models","platform-tools"]);
                   const visibleTabs = group.tabs.filter((tab) => {
-                    if (platformOnlyTabs.has(tab)) return isPlatformAdmin;
-                    if (tenantOnlyTabs.has(tab)) return isTenantAdmin;
+                    if (platformOnlyTabs.has(tab)) {return isPlatformAdmin;}
+                    if (tenantOnlyTabs.has(tab)) {return isTenantAdmin;}
                     return !isPlatformAdmin; // platform-admin only sees overview
                   });
-                  if (visibleTabs.length === 0) return nothing;
+                  if (visibleTabs.length === 0) {return nothing;}
                   if (!group.label) {
                     return html`
                       <div class="nav-group">
@@ -513,58 +526,52 @@ export function renderApp(state: AppViewState) {
                       </div>
                   `;
               })}
-              <!-- resources / docs link hidden -->
+              </div>
               ${(() => {
                   const authState = loadAuth();
-                  if (!authState?.user) return nothing;
+                  if (!authState?.user) {return nothing;}
                   const goChangePassword = () => {
-                      // Native hashchange fires from location.hash assignment;
-                      // app-lifecycle bumps hashRouteTick → Lit re-renders.
                       window.location.hash = "#/auth/change-password";
                   };
                   const doLogout = () => {
                       clearAuth();
                       window.location.reload();
                   };
+                  const displayName = authState.user.displayName || authState.user.email || "";
+                  const initials = displayName.slice(0, 2).toUpperCase();
+                  const roleLabel = authState.user.role === "platform-admin" ? "Platform Admin"
+                    : authState.user.role === "owner" ? "Owner"
+                    : authState.user.role === "admin" ? "Admin"
+                    : "Member";
                   return html`
-                      <div class="nav-user-footer"
-                           style="padding: 0.75rem; border-top: 1px solid var(--border, #262626); margin-top: auto; font-size: 0.8rem;">
-                          <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-                              ${state.settings.navCollapsed
-                                      ? html`
-                                          <div style="display: flex; flex-direction: column; gap: 0.3rem; width: 100%; align-items: center;">
-                                              <button
-                                                      style="background: none; border: none; color: var(--text-muted, #a3a3a3); cursor: pointer; padding: 0.3rem; font-size: 0.9rem;"
-                                                      title=${t("nav.changePasswordTitle")}
-                                                      aria-label=${t("nav.changePasswordTitle")}
-                                                      @click=${goChangePassword}
-                                              >🔑</button>
-                                              <button
-                                                      style="background: none; border: none; color: var(--text-muted, #a3a3a3); cursor: pointer; padding: 0.3rem; font-size: 0.75rem;"
-                                                      title="${authState.user.email} — ${t("nav.logoutTitle")}"
-                                                      @click=${doLogout}
-                                              >⏻</button>
-                                          </div>`
-                                      : html`
-                                          <span style="color: var(--text-secondary, #a3a3a3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;"
-                                                title=${authState.user.email}>
-                      ${authState.user.displayName || authState.user.email}
-                    </span>
-                                          <div style="display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0;">
-                                              <button
-                                                      style="background: none; border: none; color: var(--text-muted, #737373); cursor: pointer; padding: 0.2rem 0.4rem; font-size: 0.75rem;"
-                                                      title=${t("nav.changePasswordTitle")}
-                                                      @click=${goChangePassword}
-                                              >${t("nav.changePassword")}</button>
-                                              <span style="color: var(--border, #262626); font-size: 0.7rem;">·</span>
-                                              <button
-                                                      style="background: none; border: none; color: var(--text-muted, #737373); cursor: pointer; padding: 0.2rem 0.4rem; font-size: 0.75rem;"
-                                                      title=${t("nav.logoutTitle")}
-                                                      @click=${doLogout}
-                                              >${t("nav.logout")}</button>
-                                          </div>
-                                      `}
-                          </div>
+                      <div class="nav-user-footer">
+                          ${state.settings.navCollapsed
+                              ? html`
+                                  <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                                      <div class="user-avatar" title=${authState.user.email}>${initials}</div>
+                                      <button class="user-action-btn" title=${t("nav.changePasswordTitle")} @click=${goChangePassword}>
+                                          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                      </button>
+                                      <button class="user-action-btn" title=${t("nav.logoutTitle")} @click=${doLogout}>
+                                          <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                      </button>
+                                  </div>`
+                              : html`
+                                  <div class="user-row">
+                                      <div class="user-avatar" title=${authState.user.email}>${initials}</div>
+                                      <div class="user-info">
+                                          <div class="user-name">${displayName}</div>
+                                          <div class="user-role">${roleLabel}</div>
+                                      </div>
+                                      <div class="user-actions">
+                                          <button class="user-action-btn" title=${t("nav.changePasswordTitle")} @click=${goChangePassword}>
+                                              <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                          </button>
+                                          <button class="user-action-btn" title=${t("nav.logoutTitle")} @click=${doLogout}>
+                                              <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                          </button>
+                                      </div>
+                                  </div>`}
                       </div>
                   `;
               })()}
@@ -598,7 +605,7 @@ export function renderApp(state: AppViewState) {
                   </div>
                   <div class="header-right">
                       <language-switcher
-                              .locale=${state.settings.locale || "en"}
+                              .locale=${state.settings.locale || i18n.getLocale()}
                               @locale-change=${(e: CustomEvent) => {
                                   const loc = e.detail.locale;
                                   state.applySettings({...state.settings, locale: loc});
@@ -972,7 +979,7 @@ export function renderApp(state: AppViewState) {
                                       },
                                       onSelectPanel: (panel) => {
                                           state.agentsPanel = panel;
-                                          if (panel === "files" && resolvedAgentId) {
+                                          if ((panel === "files" || panel === "persona") && resolvedAgentId) {
                                               if (state.agentFilesList?.agentId !== resolvedAgentId) {
                                                   state.agentFilesList = null;
                                                   state.agentFilesError = null;
@@ -1011,8 +1018,8 @@ export function renderApp(state: AppViewState) {
                                       },
                                       onLoadFiles: (agentId) => loadAgentFiles(state, agentId),
                                       onSelectFile: (name) => {
-                                          state.agentFileActive = name;
-                                          if (!resolvedAgentId) {
+                                          state.agentFileActive = name || null;
+                                          if (!resolvedAgentId || !name) {
                                               return;
                                           }
                                           void loadAgentFileContent(state, resolvedAgentId, name);
@@ -1448,8 +1455,8 @@ export function renderApp(state: AppViewState) {
                                               streamStartedAt: state.chatStreamStartedAt,
                                               draft: state.chatMessage,
                                               queue: state.chatQueue,
-                                              connected: state.connected && !noAgents,
-                                              canSend: state.connected && !noAgents,
+                                              connected: state.connected && !noAgents && !agentsLoading,
+                                              canSend: state.connected && !noAgents && !agentsLoading,
                                               disabledReason: chatDisabledReason,
                                               error: state.lastError,
                                               sessions: state.sessionsResult,

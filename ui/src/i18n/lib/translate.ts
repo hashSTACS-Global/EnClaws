@@ -1,4 +1,8 @@
 import { en } from "../locales/en.ts";
+import { zh_CN } from "../locales/zh-CN.ts";
+import { zh_TW } from "../locales/zh-TW.ts";
+import { pt_BR } from "../locales/pt-BR.ts";
+import { de } from "../locales/de.ts";
 import type { Locale, TranslationMap } from "./types.ts";
 
 type Subscriber = (locale: Locale) => void;
@@ -11,7 +15,13 @@ export function isSupportedLocale(value: string | null | undefined): value is Lo
 
 class I18nManager {
   private locale: Locale = "en";
-  private translations: Record<Locale, TranslationMap> = { en } as Record<Locale, TranslationMap>;
+  private translations: Record<Locale, TranslationMap> = {
+    en,
+    "zh-CN": zh_CN,
+    "zh-TW": zh_TW,
+    "pt-BR": pt_BR,
+    de,
+  };
   private subscribers: Set<Subscriber> = new Set();
 
   constructor() {
@@ -37,14 +47,7 @@ class I18nManager {
   }
 
   private loadLocale() {
-    const initialLocale = this.resolveInitialLocale();
-    if (initialLocale === "en") {
-      this.locale = "en";
-      return;
-    }
-    // Use the normal locale setter so startup locale loading follows the same
-    // translation-loading + notify path as manual locale changes.
-    void this.setLocale(initialLocale);
+    this.locale = this.resolveInitialLocale();
   }
 
   public getLocale(): Locale {
@@ -52,40 +55,14 @@ class I18nManager {
   }
 
   public async setLocale(locale: Locale) {
-    const needsTranslationLoad = !this.translations[locale];
-    if (this.locale === locale && !needsTranslationLoad) {
-      return;
-    }
-
-    // Lazy load translations if needed
-    if (needsTranslationLoad) {
-      try {
-        let module: Record<string, TranslationMap>;
-        if (locale === "zh-CN") {
-          module = await import("../locales/zh-CN.ts");
-        } else if (locale === "zh-TW") {
-          module = await import("../locales/zh-TW.ts");
-        } else if (locale === "pt-BR") {
-          module = await import("../locales/pt-BR.ts");
-        } else if (locale === "de") {
-          module = await import("../locales/de.ts");
-        } else {
-          return;
-        }
-        this.translations[locale] = module[locale.replace("-", "_")];
-      } catch (e) {
-        console.error(`Failed to load locale: ${locale}`, e);
-        return;
-      }
-    }
+    if (this.locale === locale) return;
+    // All locales are statically imported in `translations` above, so the
+    // map is always populated — no dynamic import path is needed.
+    if (!this.translations[locale]) return;
 
     this.locale = locale;
     localStorage.setItem("enclaws.i18n.locale", locale);
     this.notify();
-  }
-
-  public registerTranslation(locale: Locale, map: TranslationMap) {
-    this.translations[locale] = map;
   }
 
   public subscribe(sub: Subscriber) {
@@ -128,7 +105,7 @@ class I18nManager {
     }
 
     if (params) {
-      return value.replace(/\{(\w+)\}/g, (_, k) => params[k] || `{${k}}`);
+      return value.replace(/\{(\w+)}/g, (_, k) => params[k] || `{${k}}`);
     }
 
     return value;

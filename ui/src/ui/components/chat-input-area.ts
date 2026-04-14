@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { t, I18nController } from "../../i18n/index.ts";
 import { icons } from "../icons.ts";
 import { detectTextDirection } from "../text-direction.ts";
 import type { ChatAttachment } from "../ui-types.ts";
@@ -7,6 +8,7 @@ import { caretFix } from "../shared-styles.ts";
 
 @customElement("chat-input-area")
 export class ChatInputArea extends LitElement {
+  private _i18n = new I18nController(this);
   @property({ type: String }) draft = "";
   @property({ type: Boolean }) connected = false;
   @property({ type: Boolean }) sending = false;
@@ -226,9 +228,9 @@ export class ChatInputArea extends LitElement {
     const hasAttachments = this.attachments.length > 0;
     const composePlaceholder = this.connected
       ? hasAttachments
-        ? "Add a message or paste more images..."
-        : "Message (↩ to send, Shift+↩ for line breaks, paste images)"
-      : this.disabledHint || "Connect to the gateway to start chatting…";
+        ? t("chat.placeholderAttach")
+        : t("chat.placeholder")
+      : this.disabledHint || t("chat.placeholderDisconnected");
 
     return html`
       <div class="chat-compose">
@@ -303,14 +305,14 @@ export class ChatInputArea extends LitElement {
               ?disabled=${!this.connected || (!this.canAbort && this.sending)}
               @click=${() => this.dispatchEvent(new CustomEvent(this.canAbort ? "abort" : "new-session", { bubbles: true, composed: true }))}
             >
-              ${this.canAbort ? "Stop" : "New session"}
+              ${this.canAbort ? t("chat.stop") : t("chat.newSession")}
             </button>
             <button
               class="btn primary"
               ?disabled=${!this.connected}
               @click=${() => this.dispatchEvent(new CustomEvent("send", { bubbles: true, composed: true }))}
             >
-              ${this.sending ? "Queue" : "Send"}<kbd class="btn-kbd">↵</kbd>
+              ${this.sending ? t("chat.queue") : t("chat.send")}<kbd class="btn-kbd">↵</kbd>
             </button>
           </div>
         </div>

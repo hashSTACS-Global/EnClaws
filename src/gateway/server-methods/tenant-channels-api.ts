@@ -13,7 +13,7 @@
  */
 
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape, getPlanUpgradeLink } from "../protocol/index.js";
 import { isDbInitialized } from "../../db/index.js";
 import { checkTenantQuota } from "../../db/models/tenant.js";
 import {
@@ -218,8 +218,9 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
     const quota = await checkTenantQuota(ctx.tenantId, "channels");
     if (!quota.allowed) {
       respond(false, undefined, errorShape(
-        ErrorCodes.INVALID_REQUEST,
+        ErrorCodes.QUOTA_EXCEEDED,
         `Channel quota reached (${quota.current}/${quota.max}). Upgrade your plan.`,
+        { details: { resource: "channels", current: quota.current, max: quota.max, contactLink: getPlanUpgradeLink() } },
       ));
       return;
     }

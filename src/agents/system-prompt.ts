@@ -6,6 +6,7 @@ import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import type { EmbeddedSandboxInfo } from "./pi-embedded-runner/types.js";
+import { SELF_DRIVING_MODE } from "./enterprise-defaults.js";
 import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
 
 /**
@@ -32,16 +33,16 @@ function detectTenantDirFromContextFiles(
     // Use forward-slash normalization for detection only
     const normalized = filePath.replace(/\\/g, "/");
     const tenantsIdx = normalized.lastIndexOf("/tenants/");
-    if (tenantsIdx === -1) continue;
+    if (tenantsIdx === -1) {continue;}
     const afterTenants = normalized.slice(tenantsIdx + "/tenants/".length);
     const slashIdx = afterTenants.indexOf("/");
-    if (slashIdx === -1) continue;
+    if (slashIdx === -1) {continue;}
     const tenantId = afterTenants.slice(0, slashIdx);
-    if (!tenantId) continue;
+    if (!tenantId) {continue;}
     // Return using original path format (preserves Windows backslashes)
     const sep = filePath.includes("\\") ? "\\" : "/";
     const origTenantsIdx = filePath.lastIndexOf(`${sep}tenants${sep}`);
-    if (origTenantsIdx === -1) continue;
+    if (origTenantsIdx === -1) {continue;}
     return filePath.slice(0, origTenantsIdx + `${sep}tenants${sep}`.length + tenantId.length);
   }
   return undefined;
@@ -661,6 +662,10 @@ export function buildAgentSystemPrompt(params: {
     "## Workspace Files (injected)",
     "These user-editable files are loaded by EnClaws and included below in Project Context.",
     "",
+    // Self-Driving Mode: hardcoded into system prompt so users cannot override it.
+    // Included for both full and minimal (subagent) modes since subagents also
+    // need delegation and cognitive-loop guidance.
+    ...(!isMinimal ? [SELF_DRIVING_MODE, ""] : []),
     ...buildReplyTagsSection(isMinimal),
     ...buildMessagingSection({
       isMinimal,

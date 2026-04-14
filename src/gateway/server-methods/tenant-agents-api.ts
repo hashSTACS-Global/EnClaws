@@ -14,7 +14,7 @@
  */
 
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape, getPlanUpgradeLink } from "../protocol/index.js";
 import { isDbInitialized } from "../../db/index.js";
 import { checkTenantQuota } from "../../db/models/tenant.js";
 import {
@@ -157,8 +157,9 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
     const quota = await checkTenantQuota(ctx.tenantId, "agents");
     if (!quota.allowed) {
       respond(false, undefined, errorShape(
-        ErrorCodes.INVALID_REQUEST,
+        ErrorCodes.QUOTA_EXCEEDED,
         `Agent quota reached (${quota.current}/${quota.max}). Upgrade your plan.`,
+        { details: { resource: "agents", current: quota.current, max: quota.max, contactLink: getPlanUpgradeLink() } },
       ));
       return;
     }

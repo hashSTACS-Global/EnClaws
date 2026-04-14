@@ -132,8 +132,7 @@ inline: true
 
 | 文件 | 改动 |
 |------|------|
-| `src/db/migrations/001_init.sql` | 新建库默认值 |
-| `src/db/migrations/003_exec_defaults.sql` | 存量库迁移 |
+| `src/db/migrations/001_init.sql` | 新建库默认值（已包含存量迁移） |
 | `src/db/sqlite/schema-sql.ts` | SQLite 同步 |
 
 建议额外配置 `"host": "gateway"` 显式指定本地执行（否则默认 `"sandbox"`，无 sandbox 时 fallback 到本地）。

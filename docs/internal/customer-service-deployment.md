@@ -62,7 +62,45 @@ npm run build   # or pnpm build
 pm2 restart enclaws   # or however the process is managed
 ```
 
-### 4.2 Set the Widget Secret
+### 4.2 Configure the Embedding Provider (Required for RAG)
+
+> **Why is this step needed?** S1 is intentionally **zero-invasion** — the CS module does not implement its own embedding pipeline and fully reuses EC's existing `memorySearch` infrastructure. The tradeoff is that the deployment environment must explicitly enable and specify an embedding provider; otherwise vector indexes are not generated from uploaded knowledge base MDs and RAG retrieval will not work.
+>
+> This configuration step is a **consequence of the architectural tradeoff**, not an omission. S2 will discuss whether EC should auto-derive the embedding provider from the tenant's LLM config at the base layer — if adopted, this section will be simplified or removed. See team discussion `ai-customer-service-integration` topic 2.
+
+Create/edit `~/.enclaws/enclaws.json` on the server:
+
+```bash
+mkdir -p ~/.enclaws
+cat > ~/.enclaws/enclaws.json <<'EOF'
+{
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "enabled": true,
+        "provider": "openai",
+        "model": "text-embedding-3-small"
+      }
+    }
+  }
+}
+EOF
+```
+
+**API Key:** The embedding client automatically reads the LLM-side provider key (e.g. `OPENAI_API_KEY` from `.env`). No separate `apiKey` needed in this config.
+
+**Provider choice:** If the server LLM is not OpenAI, pick the matching provider and key:
+
+| provider | example model | env var required |
+|----------|---------------|-----------------|
+| `openai` | `text-embedding-3-small` | `OPENAI_API_KEY` |
+| `gemini` | `gemini-embedding-001` | `GEMINI_API_KEY` |
+| `voyage` | `voyage-4-large` | `VOYAGE_API_KEY` |
+| `mistral` | `mistral-embed` | `MISTRAL_API_KEY` |
+
+Restart the server after editing. On the first CS widget access, the server will scan the knowledge base → chunk → embed → write to SQLite (`~/.enclaws/memory/{agentId}.sqlite`).
+
+### 4.3 Set the Widget Secret
 
 In the dev SaaS deployment config (`.env` or process manager config):
 
@@ -72,7 +110,7 @@ ENCLAWS_CS_WIDGET_SECRET=<generated hex secret>
 
 Restart the server after setting.
 
-### 4.3 Configure a Tenant (Admin UI)
+### 4.4 Configure a Tenant (Admin UI)
 
 1. Log in as the target tenant's admin
 2. Navigate to **AI 客服** → **客服设置**
@@ -82,7 +120,7 @@ Restart the server after setting.
    - **飞书群聊 Chat ID** — target group → ··· → Group Settings → Copy Chat ID
 4. Click **保存配置**, then **连通性测试** to verify Feishu connectivity
 
-### 4.4 Upload Knowledge Base
+### 4.5 Upload Knowledge Base
 
 Option A — via Admin UI (recommended for initial setup):
 
@@ -98,7 +136,7 @@ cp my-product-faq.md ~/.enclaws/tenants/{TENANT_ID}/customer-service/memory/
 
 File format: plain Markdown. Section headers become retrieval chunks.
 
-### 4.5 Generate Embed Code
+### 4.6 Generate Embed Code
 
 1. In **客服设置** → **嵌入代码生成**, enter a channel label (e.g. `default`, `website`, `docs`)
 2. Click **生成** — an HTML snippet is produced

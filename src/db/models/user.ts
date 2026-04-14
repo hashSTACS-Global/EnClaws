@@ -15,12 +15,17 @@ import type {
   UserStatus,
 } from "../types.js";
 import { hashPassword } from "../../auth/password.js";
+import { checkTenantQuota } from "./tenant.js";
+import { UserQuotaExceededError } from "./user-quota-error.js";
 import {
   resolveTenantDevicesDir,
   resolveTenantCredentialsDir,
   resolveTenantCronDir,
   resolveTenantAgentWorkspaceDir,
 } from "../../config/sessions/tenant-paths.js";
+
+// Re-export for convenience so callers can `import { UserQuotaExceededError } from "../../db/models/user.js"`.
+export { UserQuotaExceededError } from "./user-quota-error.js";
 
 function rowToUser(row: Record<string, unknown>): User {
   return {
@@ -88,7 +93,7 @@ export async function createUser(
   const result = await query(
     `INSERT INTO users (tenant_id, channel_id, email, password_hash, display_name, role,
                         force_change_password, password_changed_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $4 IS NULL THEN NULL ELSE NOW() END)
+     VALUES ($1, $2, $3, $4::text, $5, $6, $7, CASE WHEN $4::text IS NULL THEN NULL ELSE NOW() END)
      RETURNING *`,
     [
       input.tenantId,
@@ -130,6 +135,55 @@ export async function getUserById(id: string): Promise<User | null> {
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
+/**
+ * Batch-fetch display names by user IDs. Returns a map of id → displayName.
+ */
+export async function getUserDisplayNamesByIds(
+  ids: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (ids.length === 0) return map;
+  const unique = [...new Set(ids)];
+  await Promise.all(
+    unique.map(async (id) => {
+      const user = await getUserById(id);
+      if (user?.displayName) map.set(id, user.displayName);
+    }),
+  );
+  return map;
+}
+
+/**
+ * Batch-fetch display names by Feishu open_ids. Returns a map of openId → displayName.
+ */
+export async function getUserDisplayNamesByOpenIds(
+  tenantId: string,
+  openIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (openIds.length === 0) return map;
+  const unique = [...new Set(openIds)];
+  const isSqlite = getDbType() === DB_SQLITE;
+  await Promise.all(
+    unique.map(async (oid) => {
+      let name: string | null = null;
+      if (isSqlite) {
+        const result = sqliteUser.findUserByOpenIdForDisplay(tenantId, oid);
+        const row = result.rows[0] as Record<string, unknown> | undefined;
+        name = (row?.display_name as string) ?? null;
+      } else {
+        const result = await query(
+          `SELECT display_name FROM users WHERE tenant_id = $1 AND open_ids @> ARRAY[$2]::varchar[] AND status = 'active' LIMIT 1`,
+          [tenantId, oid],
+        );
+        name = (result.rows[0]?.display_name as string) ?? null;
+      }
+      if (name) map.set(oid, name);
+    }),
+  );
+  return map;
+}
+
 export async function getUserByEmail(
   tenantId: string,
   email: string,
@@ -159,25 +213,32 @@ export async function findUserByEmail(email: string): Promise<User | null> {
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
+/**
+ * List users result row. Extends {@link SafeUser} with the resolved channel
+ * display name (via LEFT JOIN on `tenant_channels`). `channelName` is null
+ * when the user has no `channel_id` set or the channel row has been deleted.
+ */
+export type ListedUser = SafeUser & { channelName: string | null };
+
 export async function listUsers(
   tenantId: string,
   opts?: { status?: UserStatus; role?: UserRole; channelId?: string; limit?: number; offset?: number },
-): Promise<{ users: SafeUser[]; total: number }> {
+): Promise<{ users: ListedUser[]; total: number }> {
   if (getDbType() === DB_SQLITE) return sqliteUser.listUsers(tenantId, opts);
-  const conditions: string[] = ["tenant_id = $1"];
+  const conditions: string[] = ["u.tenant_id = $1"];
   const values: unknown[] = [tenantId];
   let idx = 2;
 
   if (opts?.status) {
-    conditions.push(`status = $${idx++}`);
+    conditions.push(`u.status = $${idx++}`);
     values.push(opts.status);
   }
   if (opts?.role) {
-    conditions.push(`role = $${idx++}`);
+    conditions.push(`u.role = $${idx++}`);
     values.push(opts.role);
   }
   if (opts?.channelId) {
-    conditions.push(`channel_id = $${idx++}`);
+    conditions.push(`u.channel_id = $${idx++}`);
     values.push(opts.channelId);
   }
 
@@ -185,16 +246,26 @@ export async function listUsers(
   const limit = opts?.limit ?? 50;
   const offset = opts?.offset ?? 0;
 
+  // LEFT JOIN on tenant_channels so users with no channel / dangling channel_id
+  // still come back (channel_name will just be NULL).
   const [dataResult, countResult] = await Promise.all([
     query(
-      `SELECT * FROM users ${where} ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
+      `SELECT u.*, tc.channel_name
+         FROM users u
+         LEFT JOIN tenant_channels tc ON tc.id = u.channel_id
+         ${where}
+         ORDER BY u.created_at DESC
+         LIMIT $${idx++} OFFSET $${idx++}`,
       [...values, limit, offset],
     ),
-    query(`SELECT COUNT(*) as count FROM users ${where}`, values),
+    query(`SELECT COUNT(*) as count FROM users u ${where}`, values),
   ]);
 
   return {
-    users: dataResult.rows.map(rowToUser).map(toSafeUser),
+    users: dataResult.rows.map((row) => {
+      const safe = toSafeUser(rowToUser(row));
+      return { ...safe, channelName: (row.channel_name as string) ?? null };
+    }),
     total: parseInt(countResult.rows[0].count as string, 10),
   };
 }
@@ -221,7 +292,7 @@ export async function updateUser(
     values.push(updates.status);
   }
   if (updates.settings !== undefined) {
-    sets.push(`settings = $${idx++}`);
+    sets.push(`settings = $${idx++}::jsonb`);
     values.push(JSON.stringify(updates.settings));
   }
   if (updates.avatarUrl !== undefined) {
@@ -388,6 +459,15 @@ export async function findOrCreateUserByOpenId(
   }
 
   // 3. Create new user with open_ids array, union_id, and channel_id
+  // Check user quota before insert — IM-channel users were previously
+  // auto-provisioned without any quota enforcement, so a tenant could
+  // exceed maxUsers freely. Existing users (steps 1 and 2 above) are
+  // never blocked even after the limit is reached.
+  const userQuota = await checkTenantQuota(tenantId, "users");
+  if (!userQuota.allowed) {
+    throw new UserQuotaExceededError(userQuota.current, userQuota.max);
+  }
+
   try {
     const result = await query(
       `INSERT INTO users (tenant_id, channel_id, open_ids, union_id, display_name, role)

@@ -22,7 +22,9 @@ import {
 } from "../config/sessions.js";
 import { isDbInitialized } from "../db/index.js";
 import { loadTenantConfig } from "../config/tenant-config.js";
+import fs from "node:fs";
 import {
+  resolveTenantDir,
   resolveTenantSessionStorePath,
   ensureTenantSessionDirs,
 } from "../config/sessions/tenant-paths.js";
@@ -112,6 +114,80 @@ export function loadTenantSessionStore(
   } catch {
     return {};
   }
+}
+
+/**
+ * Load sessions from ALL users under a tenant.
+ * Used by admin/owner views to see the full tenant session list.
+ */
+export function loadAllTenantSessionStores(
+  tenantId: string,
+  cfg: OpenClawConfig,
+): Record<string, SessionEntry> {
+  const tenantDir = resolveTenantDir(tenantId);
+  const usersDir = `${tenantDir}/users`;
+  let userDirs: string[];
+  try {
+    userDirs = fs.readdirSync(usersDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return {};
+  }
+  const merged: Record<string, SessionEntry> = {};
+  for (const userId of userDirs) {
+    const storePath = resolveTenantSessionStorePath(tenantId, DEFAULT_AGENT_ID, userId);
+    try {
+      const store = loadSessionStore(storePath);
+      for (const [key, entry] of Object.entries(store)) {
+        merged[key] = entry;
+      }
+    } catch {
+      // Skip users with no session store.
+    }
+  }
+  return merged;
+}
+
+/**
+ * Find the store path that contains a given session key across all users in a tenant.
+ * Used by admin operations (patch/delete) that may target other users' sessions.
+ * Falls back to the requesting user's store if no match is found.
+ */
+export function findTenantStorePathForKey(
+  tenantId: string,
+  cfg: OpenClawConfig,
+  sessionKey: string,
+  fallbackUserId?: string,
+): string {
+  const agentId = normalizeAgentId(
+    parseAgentSessionKey(sessionKey)?.agentId ?? DEFAULT_AGENT_ID,
+  );
+  const tenantDir = resolveTenantDir(tenantId);
+  const usersDir = `${tenantDir}/users`;
+  let userDirs: string[];
+  try {
+    userDirs = fs.readdirSync(usersDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return resolveTenantSessionStorePath(tenantId, agentId, fallbackUserId);
+  }
+  const canonical = sessionKey.trim().toLowerCase();
+  for (const userId of userDirs) {
+    const storePath = resolveTenantSessionStorePath(tenantId, agentId, userId);
+    try {
+      const store = loadSessionStore(storePath);
+      for (const storeKey of Object.keys(store)) {
+        if (storeKey.toLowerCase() === canonical) {
+          return storePath;
+        }
+      }
+    } catch {
+      // Skip unreadable stores.
+    }
+  }
+  return resolveTenantSessionStorePath(tenantId, agentId, fallbackUserId);
 }
 
 /**

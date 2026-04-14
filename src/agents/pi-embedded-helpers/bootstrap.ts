@@ -207,16 +207,23 @@ export function buildBootstrapContextFiles(
       continue;
     }
     if (file.missing) {
-      const missingText = `[MISSING] Expected at: ${pathValue}`;
-      const cappedMissingText = clampToBudget(missingText, remainingTotalChars);
-      if (!cappedMissingText) {
-        break;
+      // When a missing file has fallback content (e.g. enterprise defaults),
+      // inject that content instead of the [MISSING] marker so the system
+      // prompt still receives baseline guidance before the user saves.
+      if (file.content?.trim()) {
+        const fileMaxChars = Math.max(1, Math.min(maxChars, remainingTotalChars));
+        const trimmed = trimBootstrapContent(file.content, file.name, fileMaxChars);
+        const contentWithinBudget = clampToBudget(trimmed.content, remainingTotalChars);
+        if (!contentWithinBudget) { break; }
+        remainingTotalChars = Math.max(0, remainingTotalChars - contentWithinBudget.length);
+        result.push({ path: pathValue, content: contentWithinBudget });
+      } else {
+        const missingText = `[MISSING] Expected at: ${pathValue}`;
+        const cappedMissingText = clampToBudget(missingText, remainingTotalChars);
+        if (!cappedMissingText) { break; }
+        remainingTotalChars = Math.max(0, remainingTotalChars - cappedMissingText.length);
+        result.push({ path: pathValue, content: cappedMissingText });
       }
-      remainingTotalChars = Math.max(0, remainingTotalChars - cappedMissingText.length);
-      result.push({
-        path: pathValue,
-        content: cappedMissingText,
-      });
       continue;
     }
     if (remainingTotalChars < MIN_BOOTSTRAP_FILE_BUDGET_CHARS) {

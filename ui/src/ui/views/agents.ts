@@ -18,6 +18,7 @@ import {
   renderAgentCron,
 } from "./agents-panels-status-files.ts";
 import { renderAgentKnowledge } from "./agents-panels-knowledge.ts";
+import { renderAgentPersona } from "./agents-panels-persona.ts";
 import { renderAgentTools, renderAgentSkills } from "./agents-panels-tools-skills.ts";
 import {
   agentBadgeText,
@@ -33,7 +34,7 @@ import {
   resolveModelPrimary,
 } from "./agents-utils.ts";
 
-export type AgentsPanel = "overview" | "files" | "tools" | "skills" | "channels" | "cron" | "knowledge";
+export type AgentsPanel = "overview" | "persona" | "files" | "tools" | "skills" | "channels" | "cron" | "knowledge";
 
 export type AgentsProps = {
   loading: boolean;
@@ -206,6 +207,25 @@ export function renderAgents(props: AgentsProps) {
                     : nothing
                 }
                 ${
+                  props.activePanel === "persona"
+                    ? renderAgentPersona({
+                        agentId: selectedAgent.id,
+                        agentFilesList: props.agentFilesList,
+                        agentFilesLoading: props.agentFilesLoading,
+                        agentFilesError: props.agentFilesError,
+                        agentFileActive: props.agentFileActive,
+                        agentFileContents: props.agentFileContents,
+                        agentFileDrafts: props.agentFileDrafts,
+                        agentFileSaving: props.agentFileSaving,
+                        onLoadFiles: props.onLoadFiles,
+                        onSelectFile: props.onSelectFile,
+                        onFileDraftChange: props.onFileDraftChange,
+                        onFileReset: props.onFileReset,
+                        onFileSave: props.onFileSave,
+                      })
+                    : nothing
+                }
+                ${
                   props.activePanel === "files"
                     ? renderAgentFiles({
                         agentId: selectedAgent.id,
@@ -360,6 +380,7 @@ function renderAgentHeader(
 function renderAgentTabs(active: AgentsPanel, onSelect: (panel: AgentsPanel) => void) {
   const tabs: Array<{ id: AgentsPanel; label: string }> = [
     { id: "overview", label: String(t("tabs.overview")) },
+    { id: "persona", label: String(t("tabs.persona")) },
     { id: "files", label: String(t("tabs.files")) },
     { id: "tools", label: String(t("tabs.tools")) },
     { id: "skills", label: String(t("tabs.skills")) },

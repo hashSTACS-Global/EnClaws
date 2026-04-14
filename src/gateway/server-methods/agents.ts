@@ -5,6 +5,7 @@ import {
   resolveAgentDir,
   resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
+import { getEnterpriseDefault } from "../../agents/enterprise-defaults.js";
 import {
   DEFAULT_AGENTS_FILENAME,
   DEFAULT_BOOTSTRAP_FILENAME,
@@ -27,6 +28,8 @@ import {
 } from "../../commands/agents.config.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
 import { resolveSessionTranscriptsDirForAgent } from "../../config/sessions/paths.js";
+import { resolveTenantAgentDir } from "../../config/sessions/tenant-paths.js";
+import type { TenantContext } from "../../auth/middleware.js";
 import { sameFileIdentity } from "../../infra/file-identity.js";
 import { SafeOpenError, readLocalFileSafely, writeFileWithinRoot } from "../../infra/fs-safe.js";
 import { assertNoPathAliasEscape } from "../../infra/path-alias-guards.js";
@@ -65,9 +68,19 @@ const MEMORY_FILE_NAMES = [DEFAULT_MEMORY_FILENAME, DEFAULT_MEMORY_ALT_FILENAME]
 
 const ALLOWED_FILE_NAMES = new Set<string>([...BOOTSTRAP_FILE_NAMES, ...MEMORY_FILE_NAMES]);
 
+/** Agent-level file names that live in agentDir (not workspaceDir) in multi-tenant mode. */
+const AGENT_DIR_FILES = new Set([
+  DEFAULT_AGENTS_FILENAME,
+  DEFAULT_SOUL_FILENAME,
+  DEFAULT_IDENTITY_FILENAME,
+  DEFAULT_HEARTBEAT_FILENAME,
+  DEFAULT_BOOTSTRAP_FILENAME,
+]);
+
 function resolveAgentWorkspaceFileOrRespondError(
   params: Record<string, unknown>,
   respond: RespondFn,
+  tenant?: TenantContext | null,
 ): {
   cfg: ReturnType<typeof loadConfig>;
   agentId: string;
@@ -92,7 +105,11 @@ function resolveAgentWorkspaceFileOrRespondError(
     respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `unsupported file "${name}"`));
     return null;
   }
-  const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+  // Multi-tenant: agent-level files live in tenants/{tid}/agents/{agentId}/
+  const workspaceDir =
+    tenant?.tenantId && AGENT_DIR_FILES.has(name)
+      ? resolveTenantAgentDir(tenant.tenantId, agentId)
+      : resolveAgentWorkspaceDir(cfg, agentId);
   return { cfg, agentId, workspaceDir, name };
 }
 
@@ -545,7 +562,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
 
     respond(true, { ok: true, agentId, removedBindings: result.removedBindings }, undefined);
   },
-  "agents.files.list": async ({ params, respond }) => {
+  "agents.files.list": async ({ params, respond, client }) => {
     if (!validateAgentsFilesListParams(params)) {
       respond(
         false,
@@ -565,7 +582,11 @@ export const agentsHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
       return;
     }
-    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
+    // Multi-tenant: list files from the agent directory instead of workspace
+    const workspaceDir = tenant?.tenantId
+      ? resolveTenantAgentDir(tenant.tenantId, agentId)
+      : resolveAgentWorkspaceDir(cfg, agentId);
     let hideBootstrap = false;
     try {
       hideBootstrap = await isWorkspaceOnboardingCompleted(workspaceDir);
@@ -575,7 +596,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     const files = await listAgentFiles(workspaceDir, { hideBootstrap });
     respond(true, { agentId, workspace: workspaceDir, files }, undefined);
   },
-  "agents.files.get": async ({ params, respond }) => {
+  "agents.files.get": async ({ params, respond, client }) => {
     if (!validateAgentsFilesGetParams(params)) {
       respond(
         false,
@@ -589,7 +610,8 @@ export const agentsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const resolved = resolveAgentWorkspaceFileOrRespondError(params, respond);
+    const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
+    const resolved = resolveAgentWorkspaceFileOrRespondError(params, respond, tenant);
     if (!resolved) {
       return;
     }
@@ -612,12 +634,14 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
     if (resolvedPath.kind === "missing") {
+      const locale = typeof params.locale === "string" ? params.locale : undefined;
+      const defaultContent = getEnterpriseDefault(name, locale);
       respond(
         true,
         {
           agentId,
           workspace: workspaceDir,
-          file: { name, path: filePath, missing: true },
+          file: { name, path: filePath, missing: true, defaultContent },
         },
         undefined,
       );
@@ -628,12 +652,14 @@ export const agentsHandlers: GatewayRequestHandlers = {
       safeRead = await readLocalFileSafely({ filePath: resolvedPath.ioPath });
     } catch (err) {
       if (err instanceof SafeOpenError && err.code === "not-found") {
+        const locale2 = typeof params.locale === "string" ? params.locale : undefined;
+        const defaultContent = getEnterpriseDefault(name, locale2);
         respond(
           true,
           {
             agentId,
             workspace: workspaceDir,
-            file: { name, path: filePath, missing: true },
+            file: { name, path: filePath, missing: true, defaultContent },
           },
           undefined,
         );
@@ -663,7 +689,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       undefined,
     );
   },
-  "agents.files.set": async ({ params, respond }) => {
+  "agents.files.set": async ({ params, respond, client }) => {
     if (!validateAgentsFilesSetParams(params)) {
       respond(
         false,
@@ -677,7 +703,8 @@ export const agentsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const resolved = resolveAgentWorkspaceFileOrRespondError(params, respond);
+    const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
+    const resolved = resolveAgentWorkspaceFileOrRespondError(params, respond, tenant);
     if (!resolved) {
       return;
     }

@@ -62,7 +62,45 @@ npm run build   # 或 pnpm build
 pm2 restart enclaws   # 按实际进程管理方式重启
 ```
 
-### 4.2 设置 Widget 密钥
+### 4.2 配置 Embedding 向量索引（RAG 必需）
+
+> **为什么需要这一步？** S1 采用**零侵入**设计——CS 模块不自己实现 embedding 调用链路，完全复用 EC 已有的 `memorySearch` 基础设施。代价是需要在部署环境显式启用并指定 embedding provider，否则知识库 MD 上传后向量索引不会生成，RAG 检索无法工作。
+>
+> 这一步配置是**架构权衡的产物**，不是遗漏。S2 已计划讨论是否由 EC 底层自动从租户 LLM 配置推导 embedding provider，届时本节将简化或移除。详见团队讨论 `ai-customer-service-integration` 话题二。
+
+在服务器的 `~/.enclaws/enclaws.json` 中配置（文件不存在则创建）：
+
+```bash
+mkdir -p ~/.enclaws
+cat > ~/.enclaws/enclaws.json <<'EOF'
+{
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "enabled": true,
+        "provider": "openai",
+        "model": "text-embedding-3-small"
+      }
+    }
+  }
+}
+EOF
+```
+
+**API Key：** embedding 会自动读取 LLM 侧已配置的 provider key（即 `.env` 中的 `OPENAI_API_KEY` 等），无需在此处重复配置 apiKey。
+
+**Provider 选择：** 如服务器 LLM 使用的不是 OpenAI，请改用对应 provider 和 key：
+
+| provider | model 示例 | 所需环境变量 |
+|----------|-----------|-------------|
+| `openai` | `text-embedding-3-small` | `OPENAI_API_KEY` |
+| `gemini` | `gemini-embedding-001` | `GEMINI_API_KEY` |
+| `voyage` | `voyage-4-large` | `VOYAGE_API_KEY` |
+| `mistral` | `mistral-embed` | `MISTRAL_API_KEY` |
+
+配置完成后重启服务器。首次访问 CS widget 时会触发知识库扫描 → 切片 → 向量化 → 写入 SQLite（`~/.enclaws/memory/{agentId}.sqlite`）。
+
+### 4.3 设置 Widget 密钥
 
 在 dev SaaS 的部署配置（`.env` 或进程管理器配置）中：
 
@@ -72,7 +110,7 @@ ENCLAWS_CS_WIDGET_SECRET=<生成的十六进制密钥>
 
 设置后重启服务器。
 
-### 4.3 配置租户（管理后台）
+### 4.4 配置租户（管理后台）
 
 1. 以目标租户管理员身份登录
 2. 进入 **AI 客服** → **客服设置**
@@ -82,7 +120,7 @@ ENCLAWS_CS_WIDGET_SECRET=<生成的十六进制密钥>
    - **飞书群聊 Chat ID** — 目标群 → ··· → 群设置 → 复制 Chat ID
 4. 点击 **保存配置**，再点 **连通性测试** 验证飞书连通性
 
-### 4.4 上传知识库
+### 4.5 上传知识库
 
 方式 A — 通过管理后台（推荐用于初始配置）：
 
@@ -98,7 +136,7 @@ cp 产品FAQ.md ~/.enclaws/tenants/{TENANT_ID}/customer-service/memory/
 
 文件格式：普通 Markdown。段落标题会自动成为检索的知识片段。
 
-### 4.5 生成嵌入代码
+### 4.6 生成嵌入代码
 
 1. 在 **客服设置** → **嵌入代码生成** 中，输入渠道标签（如 `default`、`website`、`docs`）
 2. 点击 **生成** — 自动生成 HTML 片段

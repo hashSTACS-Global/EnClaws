@@ -6,9 +6,10 @@
  */
 
 import { html, css, LitElement, nothing } from "lit";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../../i18n/index.ts";
-import { tenantRpc } from "./rpc.ts";
+import { tenantRpc, quotaErrorKey } from "./rpc.ts";
 import { pathForTab, inferBasePathFromPathname } from "../../navigation.ts";
 import { CHANNEL_TYPES } from "../../../constants/channels.ts";
 import feishuScopes from "./feishu-scopes.json";
@@ -157,6 +158,8 @@ export class TenantChannelsView extends LitElement {
       border-radius: var(--radius-md, 6px); color: var(--text-destructive, #fca5a5);
       padding: 0.5rem 0.75rem; font-size: 0.8rem; margin-bottom: 1rem;
     }
+    .error-msg a { color: inherit; text-decoration: underline; font-weight: 600; }
+    .error-msg a:hover { opacity: 0.85; }
     .success-msg {
       background: #052e16; border: 1px solid #166534; border-radius: var(--radius-md, 6px);
       color: #86efac; padding: 0.5rem 0.75rem; font-size: 0.8rem; margin-bottom: 1rem;
@@ -662,7 +665,12 @@ export class TenantChannelsView extends LitElement {
         this.feishuAuthGuideAppId = scannedAppId;
       }
     } catch (err) {
-      this.showError(err instanceof Error ? err.message : "tenantChannels.saveFailed");
+      const q = quotaErrorKey(err);
+      if (q) {
+        this.showError(q.key, q.params);
+      } else {
+        this.showError(err instanceof Error ? err.message : "tenantChannels.saveFailed");
+      }
     } finally {
       this.saving = false;
     }
@@ -706,7 +714,13 @@ export class TenantChannelsView extends LitElement {
         </div>
       </div>
 
-      ${this.errorKey ? html`<div class="error-msg">${this.tr(this.errorKey)}</div>` : nothing}
+      ${this.errorKey
+        ? html`<div class="error-msg">${
+            this.errorKey.startsWith("errors.quotaExceeded.")
+              ? unsafeHTML(this.tr(this.errorKey))
+              : this.tr(this.errorKey)
+          }</div>`
+        : nothing}
       ${this.successKey ? html`<div class="success-msg">${this.tr(this.successKey)}</div>` : nothing}
 
       ${this.showForm ? this.renderForm() : nothing}

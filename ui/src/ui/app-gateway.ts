@@ -170,16 +170,17 @@ export function connectGateway(host: GatewayHost) {
       (host as unknown as { chatStream: string | null }).chatStream = null;
       (host as unknown as { chatStreamStartedAt: number | null }).chatStreamStartedAt = null;
       resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
-      // Verify auth is still valid after reconnect (refresh token may have been revoked on restart)
+      // Proactively refresh the access token after reconnect so the session
+      // stays alive. Use a short delay to let the shared client settle first.
+      // If the refresh fails we do NOT force a logout — the activity-based
+      // listener will retry on next user interaction and only log out when the
+      // refresh token itself is truly revoked/expired.
       if (isAuthenticated()) {
-        void refreshAccessToken().then((result) => {
-          if (!result) {
-            clearAuth();
-            if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-              window.location.href = "/login";
-            }
-          }
-        });
+        setTimeout(() => {
+          void refreshAccessToken().catch(() => {
+            // silent — activity listener will handle retries
+          });
+        }, 500);
       }
       void loadAssistantIdentity(host as unknown as EnClawsApp);
       void loadAgents(host as unknown as EnClawsApp);
@@ -259,7 +260,10 @@ function handleTerminalChatEvent(
 }
 
 function handleChatGatewayEvent(host: GatewayHost, payload: ChatEventPayload | undefined) {
-  if (payload?.sessionKey) {
+  // Only update lastActiveSessionKey for the session the webchat client is
+  // currently viewing.  Broadcast events from other channels (e.g. Feishu)
+  // carry their own session keys and should not overwrite the webchat session.
+  if (payload?.sessionKey && payload.sessionKey === (host as unknown as EnClawsApp).sessionKey) {
     setLastActiveSessionKey(
       host as unknown as Parameters<typeof setLastActiveSessionKey>[0],
       payload.sessionKey,

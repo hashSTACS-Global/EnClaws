@@ -57,7 +57,7 @@ type SettingsHost = {
   basePath: string;
   agentsList?: AgentsListResult | null;
   agentsSelectedId?: string | null;
-  agentsPanel?: "overview" | "files" | "tools" | "skills" | "channels" | "cron";
+  agentsPanel?: "overview" | "persona" | "files" | "tools" | "skills" | "channels" | "cron";
   themeMedia: MediaQueryList | null;
   themeMediaHandler: ((event: MediaQueryListEvent) => void) | null;
   pendingGatewayUrl?: string | null;
@@ -356,7 +356,7 @@ export function syncTabWithLocation(host: SettingsHost, replace: boolean) {
     return;
   }
   const auth = loadAuth();
-  if (!auth) return; // Don't sync URL before login
+  if (!auth) {return;} // Don't sync URL before login
   const defaultTab: Tab = auth.user?.role === "platform-admin" ? "overview" : "tenant-overview";
   const resolved = tabFromPath(window.location.pathname, host.basePath) ?? defaultTab;
   setTabFromRoute(host, resolved);

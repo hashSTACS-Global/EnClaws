@@ -19,7 +19,7 @@ const log = createSubsystemLogger("feishu-user-resolve");
 type TokenEntry = { token: string; expiresAt: number };
 const tokenCache = new Map<string, TokenEntry>();
 
-async function getTenantAccessToken(appId: string, appSecret: string): Promise<string | null> {
+export async function getTenantAccessToken(appId: string, appSecret: string): Promise<string | null> {
   const key = appId;
   const cached = tokenCache.get(key);
   if (cached && cached.expiresAt > Date.now()) {

@@ -143,6 +143,14 @@ export type MsgContext = {
   TenantUserId?: string;
   /** Tenant user role for permission checks during tool execution. */
   TenantUserRole?: string;
+  /**
+   * Set to true by tenant-enrich when a new IM user could not be
+   * provisioned because the tenant has hit its `maxUsers` quota.
+   * The reply pipeline (get-reply.ts) inspects this flag before
+   * invoking the LLM and short-circuits with a friendly upgrade
+   * message instead of trying to run the agent.
+   */
+  TenantUserQuotaExceeded?: boolean;
   /** Thread identifier (Telegram topic id or Matrix thread event id). */
   MessageThreadId?: string | number;
   /** Telegram forum supergroup marker. */

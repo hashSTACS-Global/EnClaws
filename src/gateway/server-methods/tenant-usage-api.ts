@@ -14,6 +14,31 @@ import { getTenantUsageSummary, checkTokenQuota } from "../../db/models/usage.js
 import { assertPermission, RbacError } from "../../auth/rbac.js";
 import type { TenantContext } from "../../auth/middleware.js";
 
+/**
+ * Parse a date-only string and pin it to the LOCAL start of that day.
+ *
+ * `new Date("2026-04-01")` is interpreted as UTC midnight by the JS Date
+ * spec, so for users east of UTC (e.g. UTC+8) the first 8 hours of their
+ * local day would be excluded from `recorded_at >= since` queries. Calling
+ * setHours(0,0,0,0) reinterprets the Date to local midnight.
+ */
+function parseSinceDate(s: string): Date {
+  const d = new Date(s);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Parse a date-only string and pin it to the LOCAL end of that day
+ * (23:59:59.999) so that `recorded_at < until` ranges include the entire
+ * chosen end day. Mirrors the helper in tenant-traces-api.
+ */
+function parseUntilDate(s: string): Date {
+  const d = new Date(s);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
 function getTenantCtx(
   client: GatewayRequestHandlerOptions["client"],
   respond: GatewayRequestHandlerOptions["respond"],
@@ -62,8 +87,8 @@ export const tenantUsageHandlers: GatewayRequestHandlers = {
     };
 
     const summary = await getTenantUsageSummary(ctx.tenantId, {
-      since: since ? new Date(since) : undefined,
-      until: until ? new Date(until) : undefined,
+      since: since ? parseSinceDate(since) : undefined,
+      until: until ? parseUntilDate(until) : undefined,
       userId,
       agentId,
     });

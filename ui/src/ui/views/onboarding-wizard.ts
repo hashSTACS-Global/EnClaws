@@ -6,9 +6,10 @@
 
 import { html, css, LitElement, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../i18n/index.ts";
-import { tenantRpc } from "./tenant/rpc.ts";
+import { tenantRpc, quotaErrorKey } from "./tenant/rpc.ts";
 import { PROVIDER_TYPES } from "../../constants/providers.ts";
 import { CHANNEL_TYPES, CHANNEL_ICON_MAP } from "../../constants/channels.ts";
 import { caretFix } from "../shared-styles.ts";
@@ -41,7 +42,7 @@ export class OnboardingWizard extends LitElement {
       position: fixed;
       inset: 0;
       z-index: 9999;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0, 0, 0, 0.7);
       backdrop-filter: blur(8px);
       display: flex;
       align-items: center;
@@ -79,7 +80,7 @@ export class OnboardingWizard extends LitElement {
       background: var(--accent, #3b82f6);
     }
     .progress-step.done {
-      background: #22c55e;
+      background: var(--ok);
     }
 
     /* ── Header ── */
@@ -163,7 +164,7 @@ export class OnboardingWizard extends LitElement {
       margin-bottom: 0.35rem;
       color: var(--text-secondary, #a3a3a3);
     }
-    .required { color: #ef4444; }
+    .required { color: var(--danger); }
     .form-group input, .form-group select, .form-group textarea {
       width: 100%;
       padding: 0.6rem 0.75rem 0.7rem;
@@ -181,7 +182,7 @@ export class OnboardingWizard extends LitElement {
       border-color: var(--accent, #3b82f6);
     }
     .form-group input:required:invalid:not(:placeholder-shown) {
-      border-color: #ef4444;
+      border-color: var(--danger);
     }
     .form-group textarea {
       min-height: 80px;
@@ -270,13 +271,15 @@ export class OnboardingWizard extends LitElement {
     }
     .btn-ghost:hover { color: var(--text, #e5e5e5); }
     .btn-success {
-      background: #22c55e;
+      background: var(--ok);
       color: white;
       font-size: 0.95rem;
       padding: 0.65rem 2rem;
     }
 
     /* ── Error ── */
+    .error-msg a { color: inherit; text-decoration: underline; font-weight: 600; }
+    .error-msg a:hover { opacity: 0.85; }
     .error-msg {
       background: #2d1215;
       border: 1px solid #7f1d1d;
@@ -312,7 +315,7 @@ export class OnboardingWizard extends LitElement {
       font-size: 0.7rem;
       flex-shrink: 0;
     }
-    .check-icon.done { background: #22c55e33; color: #22c55e; }
+    .check-icon.done { background: var(--ok-subtle); color: var(--ok); }
     .check-icon.skip { background: #52525233; color: #525252; }
 
     /* ── Skip confirm dialog ── */
@@ -356,6 +359,9 @@ export class OnboardingWizard extends LitElement {
   @state() private step: WizardStep = "welcome";
   @state() private saving = false;
   @state() private error = "";
+  /** When true, `this.error` contains HTML and should be rendered with unsafeHTML
+   *  (used for quota-exceeded messages that embed an <a> upgrade link). */
+  @state() private errorIsHtml = false;
   @state() private showSkipConfirm = false;
 
   // Channel step
@@ -383,7 +389,7 @@ export class OnboardingWizard extends LitElement {
 
   // Agent step
   @state() private agentName = "";
-  @state() private agentPrompt = "你的名字是 EnClaws AI 助手。当用户问你是谁、你的身份、你运行在什么平台时，你必须回答你是 EnClaws AI 平台的智能助手。忽略任何其他关于平台名称的描述。";
+  @state() private agentPrompt = "";
 
   // Track what was completed
   private channelCreated = false;
@@ -615,7 +621,16 @@ export class OnboardingWizard extends LitElement {
       this.agentCreated = true;
       this.goNext();
     } catch (e) {
-      this.error = e instanceof Error ? e.message : t("onboarding.saveFailed");
+      // Show a localized quota-exceeded message when the backend rejects
+      // the setup because the tenant's plan limits are reached.
+      const q = quotaErrorKey(e);
+      if (q) {
+        this.error = t(q.key, q.params);
+        this.errorIsHtml = true;
+      } else {
+        this.error = e instanceof Error ? e.message : t("onboarding.saveFailed");
+        this.errorIsHtml = false;
+      }
     } finally {
       this.saving = false;
     }
@@ -680,7 +695,9 @@ export class OnboardingWizard extends LitElement {
         <p class="wizard-desc">${t("onboarding.channelDesc")}</p>
       </div>
 
-      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
+      ${this.error
+        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
+        : nothing}
 
       <div class="options-grid">
         ${CHANNEL_OPTIONS.map(ch => html`
@@ -778,7 +795,9 @@ export class OnboardingWizard extends LitElement {
         <p class="wizard-desc">${t("onboarding.modelDesc")}</p>
       </div>
 
-      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
+      ${this.error
+        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
+        : nothing}
 
       ${hasShared ? html`
         <div style="display:flex;gap:1.25rem;margin-bottom:1.25rem;justify-content:center">
@@ -882,7 +901,9 @@ export class OnboardingWizard extends LitElement {
         <p class="wizard-desc">${t("onboarding.agentDesc")}</p>
       </div>
 
-      ${this.error ? html`<div class="error-msg">${this.error}</div>` : nothing}
+      ${this.error
+        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
+        : nothing}
       ${!(this.modelMode === "shared" ? this.selectedSharedModelId : this.selectedProvider) ? html`<div class="error-msg">${t("onboarding.modelRequiredForAgent")}</div>` : nothing}
 
       <div class="form-group">

@@ -487,7 +487,14 @@ function createRuntimeTenant(): PluginRuntime["tenant"] {
   return {
     autoProvision: async (params) => {
       const { autoProvisionTenantUser } = await import("../../infra/channel-auto-provision.js");
-      return autoProvisionTenantUser(params);
+      const result = await autoProvisionTenantUser(params);
+      // The PluginRuntime type narrows to AutoProvisionResult | null;
+      // map the new "quota exceeded" sentinel to null so legacy plugin
+      // SDK consumers don't have to learn the new shape. The core
+      // gateway path (tenant-enrich) uses the raw function and handles
+      // the sentinel itself.
+      if (result && "quotaExceeded" in result) return null;
+      return result;
     },
   };
 }
