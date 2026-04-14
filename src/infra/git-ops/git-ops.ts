@@ -133,10 +133,11 @@ export class GitOps {
       return { stdout, stderr };
     } catch (e) {
       const err = e as NodeJS.ErrnoException & { stderr?: string };
+      const stderrStr = err.stderr ?? String(err);
       throw new GitError(
-        `git command failed: ${cmd} ${args.join(" ")}`,
+        `git command failed: ${cmd} ${args.join(" ")}\nstderr: ${stderrStr.slice(0, 1000)}`,
         `${cmd} ${args.join(" ")}`,
-        err.stderr ?? String(err),
+        stderrStr,
       );
     }
   }
