@@ -22,7 +22,6 @@ import {
   resolveSkillInline,
   resolveSkillInvocationPolicy,
   resolveSkillOverrides,
-  resolveSkillSummary,
 } from "./frontmatter.js";
 import { resolvePluginSkillDirs } from "./plugin-skills.js";
 import { serializeByKey } from "./serialize.js";
@@ -507,23 +506,6 @@ function applySkillsPromptLimits(params: { skills: Skill[]; config?: OpenClawCon
   return { skillsForPrompt, truncated, truncatedReason };
 }
 
-/**
- * Format skills as compact markdown list instead of XML.
- * Uses summary (from frontmatter) when available, falling back to description.
- */
-function formatSkillsCompact(skills: Skill[], entries: SkillEntry[]): string {
-  const entryMap = new Map(entries.map((e) => [e.skill.name, e]));
-  const lines = ["<available_skills>"];
-  for (const skill of skills) {
-    const entry = entryMap.get(skill.name);
-    const summary = entry ? resolveSkillSummary(entry.frontmatter) : undefined;
-    const desc = summary ?? skill.description ?? "";
-    lines.push(`- ${skill.name}: ${desc} [${skill.filePath}]`);
-  }
-  lines.push("</available_skills>");
-  return lines.join("\n");
-}
-
 export function buildWorkspaceSkillSnapshot(
   workspaceDir: string,
   opts?: WorkspaceSkillBuildOptions & { snapshotVersion?: number },
@@ -630,9 +612,7 @@ function resolveWorkspaceSkillPromptState(
       ].join("\n");
     }
   }
-  const skillsListBlock = isOptEnabled("PROMPT")
-    ? formatSkillsCompact(compactSkillPaths(skillsForPrompt), promptEntries)
-    : formatSkillsForPrompt(compactSkillPaths(skillsForPrompt));
+  const skillsListBlock = formatSkillsForPrompt(compactSkillPaths(skillsForPrompt));
   const prompt = [remoteNote, truncationNote, skillsListBlock, ...inlineBlocks, disabledBlock]
     .filter(Boolean)
     .join("\n");
