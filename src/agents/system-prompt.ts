@@ -125,11 +125,6 @@ function buildTenantMemorySection(params: { isMinimal: boolean; availableTools: 
   if (params.isMinimal) {
     return [];
   }
-  if (isOptEnabled("PROMPT")) {
-    // Proactivity & Scheduling section already has complete memory classification rules with examples.
-    // Skip duplicate scope descriptions to save ~100 tokens.
-    return [];
-  }
   const hasTenantMemory = params.availableTools.has("tenant_memory");
   const hasUserMemory = params.availableTools.has("user_memory");
   if (!hasTenantMemory && !hasUserMemory) {
@@ -194,15 +189,9 @@ function buildTimeSection(params: { userTimezone?: string }) {
   return ["## Current Date & Time", `Time zone: ${params.userTimezone}`, ""];
 }
 
-function buildReplyTagsSection(isMinimal: boolean, runtimeChannel?: string) {
+function buildReplyTagsSection(isMinimal: boolean, _runtimeChannel?: string) {
   if (isMinimal) {
     return [];
-  }
-  if (isOptEnabled("PROMPT") && runtimeChannel) {
-    const imChannels = new Set(["feishu", "telegram", "discord", "slack", "whatsapp", "signal"]);
-    if (imChannels.has(runtimeChannel)) {
-      return [];
-    }
   }
   return [
     "## Reply Tags",
@@ -465,19 +454,6 @@ export function buildAgentSystemPrompt(params: {
     : "Heartbeat prompt: (configured)";
   const runtimeInfo = params.runtimeInfo;
   const runtimeChannel = runtimeInfo?.channel?.trim().toLowerCase();
-  const isImChannel = (ch?: string) => {
-    if (!ch) {return false;}
-    const imSet = new Set([
-      "feishu",
-      "telegram",
-      "discord",
-      "slack",
-      "whatsapp",
-      "signal",
-      "imessage",
-    ]);
-    return imSet.has(ch);
-  };
   const runtimeCapabilities = (runtimeInfo?.capabilities ?? [])
     .map((cap) => String(cap).trim())
     .filter(Boolean);
@@ -618,7 +594,7 @@ export function buildAgentSystemPrompt(params: {
         ]
       : []),
     ...safetySection,
-    ...(!isWorker && !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel))
+    ...(!isWorker
       ? [
           "## EnClaws CLI Quick Reference",
           "EnClaws is controlled via subcommands. Do not invent commands.",
@@ -631,17 +607,9 @@ export function buildAgentSystemPrompt(params: {
     ...(!isWorker ? skillsSection : []),
     ...memorySection,
     ...tenantMemorySection,
-    // Skip self-update for subagent/worker/none modes (and IM channels when PROMPT enabled)
-    hasGateway &&
-    !isMinimal &&
-    !isWorker &&
-    !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel))
-      ? "## EnClaws Self-Update"
-      : "",
-    hasGateway &&
-    !isMinimal &&
-    !isWorker &&
-    !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel))
+    // Skip self-update for subagent/worker/none modes
+    hasGateway && !isMinimal && !isWorker ? "## EnClaws Self-Update" : "",
+    hasGateway && !isMinimal && !isWorker
       ? [
           "Get Updates (self-update) is ONLY allowed when the user explicitly asks for it.",
           "Do not run config.apply or update.run unless the user explicitly requests an update or config change; if it's not explicit, ask first.",
@@ -650,12 +618,7 @@ export function buildAgentSystemPrompt(params: {
           "After restart, EnClaws pings the last active session automatically.",
         ].join("\n")
       : "",
-    hasGateway &&
-    !isMinimal &&
-    !isWorker &&
-    !(isOptEnabled("PROMPT") && isImChannel(runtimeChannel))
-      ? ""
-      : "",
+    hasGateway && !isMinimal && !isWorker ? "" : "",
     "",
     // Skip model aliases for subagent/worker/none modes
     params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
@@ -784,17 +747,7 @@ export function buildAgentSystemPrompt(params: {
   const validContextFiles = contextFiles.filter(
     (file) => typeof file.path === "string" && file.path.trim().length > 0,
   );
-  const effectiveContextFiles = isOptEnabled("PROMPT")
-    ? validContextFiles.filter((file) => {
-        // Strip frontmatter, comments, and blank lines; skip if remaining text < 50 chars
-        const stripped = file.content
-          .replace(/^---[\s\S]*?---\s*/m, "")
-          .replace(/<!--[\s\S]*?-->/g, "")
-          .replace(/^\s*$/gm, "")
-          .trim();
-        return stripped.length >= 50;
-      })
-    : validContextFiles;
+  const effectiveContextFiles = validContextFiles;
   if (effectiveContextFiles.length > 0) {
     const hasSoulFile = effectiveContextFiles.some((file) => {
       const normalizedPath = file.path.trim().replace(/\\/g, "/");
