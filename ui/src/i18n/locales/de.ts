@@ -745,6 +745,7 @@ export const de: TranslationMap = {
     loadFailed: "Benutzerliste konnte nicht geladen werden",
     email: "E-Mail",
     displayName: "Name",
+    channel: "Kanal",
     role: "Rolle",
     status: "Status",
     lastLogin: "Letzter Login",

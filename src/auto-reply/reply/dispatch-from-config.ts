@@ -26,6 +26,10 @@ import { isRoutableChannel, routeReply } from "./route-reply.js";
 import { resolveRunTypingPolicy } from "./typing-policy.js";
 import { enrichTenantContext } from "./tenant-enrich.js";
 import { checkInputFilter } from "./input-filter.js";
+import { coreAuthGate } from "../../infra/auth-gate.js";
+// Side-effect import: registers feishu driver into the auth-gate registry.
+// Future IM drivers (wecom, dingtalk, ...) should be imported here too.
+import "../../infra/feishu-lite-auth.js";
 
 const AUDIO_PLACEHOLDER_RE = /^<media:audio>(\s*\([^)]*\))?$/i;
 const AUDIO_HEADER_RE = /^\[Audio\b/i;
@@ -180,6 +184,27 @@ export async function dispatchReplyFromConfig(params: {
   // account-scoped channel config so the downstream reply engine resolves
   // tenant-scoped workspace/session paths.
   await enrichTenantContext(ctx, cfg);
+
+  // ── Pre-LLM auth gate ────────────────────────────────────────
+  // 跨 IM 平台通用：如果某个 provider 注册了 driver、且当前用户的 SenderName
+  // 仍然没拿到（contact API 没权限 / DB 未命中 / 没有存量 UAT），就：
+  //   1. 把这条入站消息暂存到 pending 队列
+  //   2. 通过 driver 给用户发一张轻量授权卡片（飞书是 DM via open_id）
+  //   3. 早退 —— LLM 不跑，token 不消耗
+  //   4. 用户授权后 driver 把名字写 DB，pending 队列重放本消息（这次有名字了）
+  // 没注册 driver 的 provider（slack/discord/telegram 等）会直接放行，互不影响。
+  const gateResult = await coreAuthGate({
+    ctx,
+    cfg,
+    dispatcher,
+    replyOptions: params.replyOptions,
+    replyResolver: params.replyResolver,
+  });
+  if (gateResult.skipDispatch) {
+    recordProcessed("skipped", { reason: gateResult.reason ?? "auth-required" });
+    markIdle("auth_gate");
+    return { queuedFinal: false, counts: dispatcher.getQueuedCounts() };
+  }
 
   // ── Inbound message log ───────────────────────────────────────
   {

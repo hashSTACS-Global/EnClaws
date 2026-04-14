@@ -148,3 +148,7 @@ installer/rcedit-x64.exe
 # docs/superpowers/
 docs/superpowers/
 .superpowers
+
+
+# test results
+test-results/

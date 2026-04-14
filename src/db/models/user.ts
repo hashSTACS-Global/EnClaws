@@ -210,6 +210,13 @@ export async function findUserByEmail(email: string): Promise<User | null> {
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
+/**
+ * List users result row. Extends {@link SafeUser} with the resolved channel
+ * display name (via LEFT JOIN on `tenant_channels`). `channelName` is null
+ * when the user has no `channel_id` set or the channel row has been deleted.
+ */
+export type ListedUser = SafeUser & { channelName: string | null };
+
 export async function listUsers(
   tenantId: string,
   opts?: {
@@ -221,20 +228,20 @@ export async function listUsers(
   },
 ): Promise<{ users: SafeUser[]; total: number }> {
   if (getDbType() === DB_SQLITE) return sqliteUser.listUsers(tenantId, opts);
-  const conditions: string[] = ["tenant_id = $1"];
+  const conditions: string[] = ["u.tenant_id = $1"];
   const values: unknown[] = [tenantId];
   let idx = 2;
 
   if (opts?.status) {
-    conditions.push(`status = $${idx++}`);
+    conditions.push(`u.status = $${idx++}`);
     values.push(opts.status);
   }
   if (opts?.role) {
-    conditions.push(`role = $${idx++}`);
+    conditions.push(`u.role = $${idx++}`);
     values.push(opts.role);
   }
   if (opts?.channelId) {
-    conditions.push(`channel_id = $${idx++}`);
+    conditions.push(`u.channel_id = $${idx++}`);
     values.push(opts.channelId);
   }
 
@@ -242,16 +249,26 @@ export async function listUsers(
   const limit = opts?.limit ?? 50;
   const offset = opts?.offset ?? 0;
 
+  // LEFT JOIN on tenant_channels so users with no channel / dangling channel_id
+  // still come back (channel_name will just be NULL).
   const [dataResult, countResult] = await Promise.all([
     query(
-      `SELECT * FROM users ${where} ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
+      `SELECT u.*, tc.channel_name
+         FROM users u
+         LEFT JOIN tenant_channels tc ON tc.id = u.channel_id
+         ${where}
+         ORDER BY u.created_at DESC
+         LIMIT $${idx++} OFFSET $${idx++}`,
       [...values, limit, offset],
     ),
-    query(`SELECT COUNT(*) as count FROM users ${where}`, values),
+    query(`SELECT COUNT(*) as count FROM users u ${where}`, values),
   ]);
 
   return {
-    users: dataResult.rows.map(rowToUser).map(toSafeUser),
+    users: dataResult.rows.map((row) => {
+      const safe = toSafeUser(rowToUser(row));
+      return { ...safe, channelName: (row.channel_name as string) ?? null };
+    }),
     total: parseInt(countResult.rows[0].count as string, 10),
   };
 }

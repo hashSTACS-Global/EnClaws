@@ -1144,6 +1144,7 @@ export const en: TranslationMap = {
     loadFailed: "Failed to load user list",
     email: "Email",
     displayName: "Name",
+    channel: "Channel",
     role: "Role",
     status: "Status",
     lastLogin: "Last Login",

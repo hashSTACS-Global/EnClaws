@@ -53,3 +53,16 @@ export function shouldSkipDuplicateInbound(
 export function resetInboundDedupe(): void {
   inboundDedupeCache.clear();
 }
+
+/**
+ * Remove a single ctx's dedupe entry, allowing it to be re-dispatched.
+ *
+ * Used by the auth-gate replay path: after a queued message has been held
+ * pending user authorization, replay needs to re-enter `dispatchReplyFromConfig`
+ * with the same ctx, which would otherwise be blocked by the dedupe check.
+ */
+export function deleteInboundDedupeEntry(ctx: MsgContext): void {
+  const key = buildInboundDedupeKey(ctx);
+  if (!key) return;
+  inboundDedupeCache.delete(key);
+}

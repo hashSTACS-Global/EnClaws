@@ -265,26 +265,18 @@ function renderRow(
       ? row.displayName.trim()
       : null;
   const label = typeof row.label === "string" ? row.label.trim() : "";
-  const EXTERNAL_CHANNELS = new Set(["feishu", "telegram", "whatsapp", "discord", "slack", "signal", "imessage", "irc", "googlechat"]);
-  const keyChannel = row.key.split(":").find((seg) => EXTERNAL_CHANNELS.has(seg));
-  const isExternalChannel = Boolean(keyChannel);
-  // Show a clickable link only for webchat sessions where the user has
-  // owner/admin role — Feishu and other external channel sessions are
-  // read-only in the web UI.
-  const canLink =
-    row.kind !== "global" &&
-    !isExternalChannel &&
-    (!row.userRole || row.userRole === "owner");
+  // userRole=owner means the session belongs to a webchat user (owner account);
+  // anything else is an external channel session — use row.channel for the badge.
+  const isWebChat = row.userRole === "owner";
+  const resolvedChannel = isWebChat ? "WebChat" : (row.channel || "unknown");
+  const canLink = row.kind !== "global" && isWebChat;
   const chatUrl = canLink
     ? `${pathForTab("chat", basePath)}?session=${encodeURIComponent(row.key)}`
     : null;
-  // Show displayName as the primary title; fall back to truncated key.
-  // Append the raw key in parentheses when displayName is resolved so
-  // admins can still identify the underlying session.
   const titleText = displayName ?? (row.key.length > 25 ? `${row.key.slice(0, 25)}…` : row.key);
-  const channelBadge = isExternalChannel
-    ? html`<span class="session-channel-badge session-channel-badge--${keyChannel}" title=${keyChannel!}>${keyChannel}</span>`
-    : html`<span class="session-channel-badge session-channel-badge--web">WebChat</span>`;
+  const channelBadge = isWebChat
+    ? html`<span class="session-channel-badge session-channel-badge--web">WebChat</span>`
+    : html`<span class="session-channel-badge session-channel-badge--${resolvedChannel}" title=${resolvedChannel}>${resolvedChannel}</span>`;
 
   const kindLabel = KIND_LABEL_MAP[row.kind] ? t(KIND_LABEL_MAP[row.kind]) : row.kind;
   const tokens = formatSessionTokens(row);

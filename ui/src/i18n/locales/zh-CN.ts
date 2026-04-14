@@ -1137,6 +1137,7 @@ export const zh_CN: TranslationMap = {
     loadFailed: "加载用户列表失败",
     email: "邮箱",
     displayName: "姓名",
+    channel: "渠道",
     role: "角色",
     status: "状态",
     lastLogin: "最后登录",

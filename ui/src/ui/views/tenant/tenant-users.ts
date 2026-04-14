@@ -20,6 +20,8 @@ interface TenantUser {
   status: string;
   lastLoginAt: string | null;
   createdAt: string;
+  /** Resolved from tenant_channels.channel_name via backend LEFT JOIN. */
+  channelName: string | null;
   hasPivotToken: boolean;
   pivotTokenExpiresAt: string | null;
 }
@@ -354,6 +356,7 @@ export class TenantUsersView extends LitElement {
             <tr>
               <th>${t("tenantUsers.email")}</th>
               <th>${t("tenantUsers.displayName")}</th>
+              <th>${t("tenantUsers.channel")}</th>
               <th>${t("tenantUsers.role")}</th>
               <th>${t("tenantUsers.status")}</th>
               <th>${t("tenantUsers.lastLogin")}</th>
@@ -366,6 +369,7 @@ export class TenantUsersView extends LitElement {
               <tr>
                 <td>${user.email ?? "-"}</td>
                 <td>${user.displayName ?? "-"}</td>
+                <td>${user.channelName ?? "-"}</td>
                 <td>
                   <span class="role-badge ${user.role}">${this.roleLabel(user.role)}</span>
                 </td>

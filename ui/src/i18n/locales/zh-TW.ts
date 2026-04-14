@@ -757,6 +757,7 @@ export const zh_TW: TranslationMap = {
     loadFailed: "載入使用者列表失敗",
     email: "電子郵件",
     displayName: "姓名",
+    channel: "渠道",
     role: "角色",
     status: "狀態",
     lastLogin: "最後登入",
