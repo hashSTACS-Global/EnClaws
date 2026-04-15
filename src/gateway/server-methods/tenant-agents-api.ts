@@ -28,6 +28,7 @@ import { listAllTenantChannelApps } from "../../db/models/tenant-channel-app.js"
 import { createAuditLog } from "../../db/models/audit-log.js";
 import { assertPermission, RbacError } from "../../auth/rbac.js";
 import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
+import { bumpSkillsSnapshotVersion } from "../../agents/skills/refresh.js";
 import type { TenantContext } from "../../auth/middleware.js";
 import type { ModelConfigEntry } from "../../db/types.js";
 import { resolveTenantAgentDir } from "../../config/sessions/tenant-paths.js";
@@ -317,6 +318,16 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       await syncIdentityFile(ctx.tenantId, agentId, config);
     }
     invalidateTenantConfigCache(ctx.tenantId);
+    // When skills or tools denylist changes via UI, cached skillsSnapshot in
+    // sessionStore becomes stale (watcher-based invalidation only fires on
+    // file changes, not config writes). Bump the global snapshot version so
+    // the next turn of any session rebuilds from fresh DB state.
+    if (resolvedSkills !== undefined || resolvedTools !== undefined) {
+      bumpSkillsSnapshotVersion({
+        reason: "manual",
+        changedPath: `tenant:${ctx.tenantId}/agent:${agentId}`,
+      });
+    }
     await context.reloadDbChannels();
 
     await createAuditLog({
