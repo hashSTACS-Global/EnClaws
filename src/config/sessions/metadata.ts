@@ -150,6 +150,28 @@ export function deriveGroupSessionPatch(params: {
   return patch;
 }
 
+function isPlaceholderSenderName(name: string | undefined): boolean {
+  if (!name) return true;
+  return name.startsWith("ou_") || name.startsWith("on_") || name.startsWith("oc_");
+}
+
+function deriveDirectChatPatch(ctx: MsgContext): Partial<SessionEntry> {
+  const patch: Partial<SessionEntry> = {};
+  const providerRaw =
+    (typeof ctx.OriginatingChannel === "string" && ctx.OriginatingChannel) ||
+    ctx.Surface ||
+    ctx.Provider;
+  const channel = normalizeMessageChannel(providerRaw);
+  if (channel) {
+    patch.channel = channel;
+  }
+  const senderName = ctx.SenderName?.trim();
+  if (senderName && !isPlaceholderSenderName(senderName)) {
+    patch.displayName = senderName;
+  }
+  return patch;
+}
+
 export function deriveSessionMetaPatch(params: {
   ctx: MsgContext;
   sessionKey: string;
@@ -158,11 +180,13 @@ export function deriveSessionMetaPatch(params: {
 }): Partial<SessionEntry> | null {
   const groupPatch = deriveGroupSessionPatch(params);
   const origin = deriveSessionOrigin(params.ctx);
-  if (!groupPatch && !origin) {
+  const directPatch = groupPatch ? null : deriveDirectChatPatch(params.ctx);
+
+  if (!groupPatch && !origin && (!directPatch || Object.keys(directPatch).length === 0)) {
     return null;
   }
 
-  const patch: Partial<SessionEntry> = groupPatch ? { ...groupPatch } : {};
+  const patch: Partial<SessionEntry> = groupPatch ? { ...groupPatch } : { ...(directPatch ?? {}) };
   const mergedOrigin = mergeOrigin(params.existing?.origin, origin);
   if (mergedOrigin) {
     patch.origin = mergedOrigin;

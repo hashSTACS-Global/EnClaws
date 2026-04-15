@@ -251,11 +251,16 @@ function buildMessageContext(
 
     MessageSid: body.msgid,
 
-    From: chatType === "group" ? `${CHANNEL_ID}:group:${chatId}` : `${CHANNEL_ID}:${body.from.userid}`,
+    From: chatType === "group"
+      ? `${CHANNEL_ID}:group:${chatId}:sender:${body.from.userid}`
+      : `${CHANNEL_ID}:${body.from.userid}`,
     To: `${CHANNEL_ID}:${chatId}`,
     SenderId: body.from.userid,
 
-    SessionKey: route.sessionKey,
+    // In a group, different senders must land on different sessions (see matching comment in webhook/monitor.ts).
+    SessionKey: chatType === "group"
+      ? `${route.sessionKey}:sender:${body.from.userid}`
+      : route.sessionKey,
     AccountId: route.accountId,
 
     ChatType: chatType,

@@ -1545,6 +1545,20 @@
   border-color: #1e3a5f;
 }
 
+/* WeCom — brand green */
+.session-channel-badge--wecom {
+  background: #0d3b1f;
+  color: #6ee7b7;
+  border-color: #0d3b1f;
+}
+
+/* DingTalk — brand blue */
+.session-channel-badge--dingtalk {
+  background: #0b2a4a;
+  color: #7dd3fc;
+  border-color: #0b2a4a;
+}
+
 /* ===========================================
    Session Card List (matches traces card style)
    =========================================== */

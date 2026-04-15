@@ -1416,7 +1416,7 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
       BodyForAgent: finalContent,
       RawBody: userContent,
       CommandBody: userContent,
-      From: senderId,
+      From: isDirect ? `dingtalk:${senderId}` : `dingtalk:group:${data.conversationId}:sender:${senderId}`,
       To: toField,  // ✅ 修复：单聊用 senderId，群聊用 conversationId
       SessionKey: sessionKey,  // ✅ 使用手动匹配的 sessionKey
       AccountId: accountId,

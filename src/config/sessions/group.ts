@@ -42,6 +42,13 @@ export function buildGroupDisplayName(params: {
   if (!token) {
     token = normalizeGroupLabel(shortenGroupId(rawLabel));
   }
+  // detail (e.g. subject) may contain non-ASCII chars that normalize to empty; fall back to id.
+  if (!token && detail && detail !== fallbackId) {
+    token = normalizeGroupLabel(fallbackId);
+    if (!token) {
+      token = normalizeGroupLabel(shortenGroupId(fallbackId));
+    }
+  }
   if (!params.groupChannel && token.startsWith("#")) {
     token = token.replace(/^#+/, "");
   }

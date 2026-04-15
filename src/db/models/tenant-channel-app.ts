@@ -118,12 +118,16 @@ export async function findTenantByChannelApp(
   appId: string,
 ): Promise<{ tenantId: string; userId: string; channelId?: string } | null> {
   if (getDbType() === DB_SQLITE) return sqliteChannelApp.findTenantByChannelApp(channelType, appId);
+  // Some channel plugins (e.g. WeCom) normalize the inbound accountId to
+  // lowercase, while tenant_channel_apps.app_id stores the original-case
+  // credential id from onboarding. Match case-insensitively so the lookup
+  // survives this divergence — otherwise user.channel_id stays NULL.
   const result = await query(
     `SELECT a.tenant_id, c.created_by, c.id as channel_id
      FROM tenant_channel_apps a
      JOIN tenant_channels c ON a.channel_id = c.id
      WHERE c.channel_type = $1
-       AND a.app_id = $2
+       AND LOWER(a.app_id) = LOWER($2)
        AND a.is_active = true
        AND c.is_active = true
      LIMIT 1`,

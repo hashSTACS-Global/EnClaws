@@ -504,11 +504,12 @@ async function processAgentMessage(params: {
         RawBody: finalContent,
         CommandBody: finalContent,
         Attachments: attachments.length > 0 ? attachments : undefined,
-        From: isGroup ? `wecom:group:${peerId}` : `wecom:${fromUser}`,
+        From: isGroup ? `wecom:group:${peerId}:sender:${fromUser}` : `wecom:${fromUser}`,
         // 使用 wecom-agent: 前缀标记 Agent 会话，确保 outbound 路由不会混入 Bot WS 发送路径。
         // resolveWecomTarget 已支持剥离 wecom-agent: 前缀（target.ts L41），解析结果不变。
         To: `wecom-agent:${fromUser}`,
-        SessionKey: route.sessionKey,
+        // In a group, different senders must land on different sessions (see matching comment in webhook/monitor.ts).
+        SessionKey: isGroup ? `${route.sessionKey}:sender:${fromUser}` : route.sessionKey,
         AccountId: route.accountId,
         ChatType: isGroup ? "group" : "direct",
         ConversationLabel: fromLabel,

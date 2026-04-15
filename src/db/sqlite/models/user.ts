@@ -413,10 +413,12 @@ export function findUserByOpenIdForDisplay(
   tenantId: string,
   openId: string,
 ): { rows: Array<Record<string, unknown>> } {
+  // Case-insensitive: core canonicalizes session keys to lowercase (e.g. "liuyu"),
+  // but users.open_ids may preserve the channel's original casing (e.g. "LiuYu").
   return sqliteQuery(
     `SELECT display_name FROM users
      WHERE tenant_id = ? AND status = 'active'
-       AND EXISTS (SELECT 1 FROM json_each(open_ids) WHERE json_each.value = ?)
+       AND EXISTS (SELECT 1 FROM json_each(open_ids) WHERE lower(json_each.value) = lower(?))
      LIMIT 1`,
     [tenantId, openId],
   );

@@ -73,12 +73,20 @@ import type { SessionsListResult } from "../session-utils.types.js";
 // ── User display name resolution for session keys ───────────────────
 // Session keys embed user identifiers in two forms:
 //   - `t:{tenantId}:...:user:{userId}`  → UUID, look up in users table by id
-//   - `...:sender:{openId}`             → Feishu open_id (ou_xxx), look up via open_ids array
+//   - `...:sender:{externalId}`         → channel external id (Feishu ou_xxx, WeCom userid, DingTalk staffId, ...), resolved via users.open_ids
 // When a match is found, set displayName and userRole on the session row so
 // the UI shows a human-readable name and can decide link behavior.
 
 const USER_SUFFIX_RE = /:user:([0-9a-f-]{36})$/i;
-const SENDER_SUFFIX_RE = /:sender:(ou_[a-zA-Z0-9_]+)$/;
+const SENDER_MARKER = ":sender:";
+
+// Extract the raw id after ":sender:" in a session key, accepting any channel's external id format.
+function extractSenderId(key: string): string | null {
+  const idx = key.lastIndexOf(SENDER_MARKER);
+  if (idx < 0) return null;
+  const value = key.slice(idx + SENDER_MARKER.length).trim();
+  return value || null;
+}
 
 type UserInfo = { displayName: string | null; role: string | null };
 
@@ -99,9 +107,9 @@ async function enrichSessionDisplayNames(
       userIdSet.add(userMatch[1]);
       continue;
     }
-    const senderMatch = SENDER_SUFFIX_RE.exec(key);
-    if (senderMatch) {
-      openIdSet.add(senderMatch[1]);
+    const senderId = extractSenderId(key);
+    if (senderId) {
+      openIdSet.add(senderId);
     }
   }
 
@@ -118,15 +126,14 @@ async function enrichSessionDisplayNames(
     }),
   );
 
-  // Batch-fetch display names by Feishu open_id
+  // Batch-fetch display names by channel external id (ou_xxx / wecom userid / dingtalk staffId)
   const openIdNames = openIdSet.size > 0
     ? await getUserDisplayNamesByOpenIds(tenantId, [...openIdSet])
     : new Map<string, string>();
 
   // Apply resolved names and roles to session rows.
   // For `:user:` (webchat) keys, set displayName only if not already present.
-  // For `:sender:` (Feishu) keys, always override displayName with the
-  // sender's name so the person's name shows instead of the group name.
+  // For `:sender:` keys (per-sender group sessions on feishu/wecom/dingtalk), override displayName with the sender's real name.
   for (const session of result.sessions) {
     const key = session.key;
     const userMatch = USER_SUFFIX_RE.exec(key);
@@ -140,9 +147,9 @@ async function enrichSessionDisplayNames(
       }
       continue;
     }
-    const senderMatch = SENDER_SUFFIX_RE.exec(key);
-    if (senderMatch) {
-      const name = openIdNames.get(senderMatch[1]);
+    const senderId = extractSenderId(key);
+    if (senderId) {
+      const name = openIdNames.get(senderId);
       if (name) {
         session.displayName = name;
       }

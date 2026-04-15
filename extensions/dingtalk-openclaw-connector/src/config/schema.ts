@@ -101,7 +101,7 @@ export const DingtalkConfigBaseSchema = z
     requireMention: z.boolean().optional().default(true),
     separateSessionByConversation: z.boolean().optional().default(true),
     sharedMemoryAcrossConversations: z.boolean().optional().default(false),
-    groupSessionScope: GroupSessionScopeSchema.optional().default("group"),
+    groupSessionScope: GroupSessionScopeSchema.optional().default("group_sender"),
     // Multi-account configuration
     accounts: z.record(z.string(), DingtalkAccountConfigSchema.optional()).optional(),
   })

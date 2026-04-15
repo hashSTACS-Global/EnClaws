@@ -106,28 +106,31 @@ export function buildSessionContext(params: {
     };
   }
 
-  // 群聊：根据 groupSessionScope 配置决定会话隔离策略
-  if (groupSessionScope === 'group_sender') {
-    // 群内每个用户独立会话
+  // Group chat: session isolation strategy driven by groupSessionScope.
+  // Default 'group_sender': each user in the group gets an isolated session
+  // (avoids context bleed and session write contention when multiple users @bot).
+  // Only when explicitly set to 'group' does the whole group share one session.
+  if (groupSessionScope === 'group') {
     return {
       channel: 'dingtalk',
       accountId,
       chatType: 'group',
       peerId,
-      sessionPeerId: `${conversationId}:${senderId}`,
+      sessionPeerId: conversationId || senderId,
       conversationId,
       senderName,
       groupSubject,
     };
   }
 
-  // 默认：整个群共享一个会话
   return {
     channel: 'dingtalk',
     accountId,
     chatType: 'group',
     peerId,
-    sessionPeerId: conversationId || senderId,
+    // Use the `:sender:` marker to match Feishu/WeCom session-key naming,
+    // so core can parse it with the same pattern (e.g. resolveGroupSessionKey's sender detection).
+    sessionPeerId: `${conversationId}:sender:${senderId}`,
     conversationId,
     senderName,
     groupSubject,

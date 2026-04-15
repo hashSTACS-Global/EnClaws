@@ -751,9 +751,12 @@ export async function startAgentForStream(params: {
     RawBody: rawBody,
     CommandBody: rawBody,
     Attachments: attachments,
-    From: chatType === "group" ? `wecom:group:${chatId}` : `wecom:${userid}`,
+    From: chatType === "group" ? `wecom:group:${chatId}:sender:${userid}` : `wecom:${userid}`,
     To: `wecom:${chatId}`,
-    SessionKey: route.sessionKey,
+    // In a group, different senders must land on different sessions — otherwise a shared session bleeds context.
+    // route.sessionKey is built from peer.id = chatId (keeping bindings matched at group granularity);
+    // here we append a sender segment to yield `...wecom:group:{chatId}:sender:{userid}`.
+    SessionKey: chatType === "group" ? `${route.sessionKey}:sender:${userid}` : route.sessionKey,
     AccountId: route.accountId,
     ChatType: chatType,
     ConversationLabel: fromLabel,

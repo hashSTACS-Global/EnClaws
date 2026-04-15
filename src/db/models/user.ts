@@ -172,8 +172,13 @@ export async function getUserDisplayNamesByOpenIds(
         const row = result.rows[0] as Record<string, unknown> | undefined;
         name = (row?.display_name as string) ?? null;
       } else {
+        // Case-insensitive: core canonicalizes session keys to lowercase (e.g. "James"),
+        // but users.open_ids may preserve the channel's original casing (e.g. "James").
         const result = await query(
-          `SELECT display_name FROM users WHERE tenant_id = $1 AND open_ids @> ARRAY[$2]::varchar[] AND status = 'active' LIMIT 1`,
+          `SELECT display_name FROM users
+             WHERE tenant_id = $1 AND status = 'active'
+               AND EXISTS (SELECT 1 FROM unnest(open_ids) oid WHERE lower(oid) = lower($2))
+             LIMIT 1`,
           [tenantId, oid],
         );
         name = (result.rows[0]?.display_name as string) ?? null;
