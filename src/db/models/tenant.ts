@@ -230,3 +230,15 @@ export async function checkTenantQuota(
   if (max < 0) return { allowed: true, current, max };
   return { allowed: current < max, current, max };
 }
+
+export async function getMonthlyTokenUsage(tenantId: string): Promise<number> {
+  if (getDbType() === DB_SQLITE) return sqliteTenant.getMonthlyTokenUsage(tenantId);
+  const result = await query(
+    `SELECT COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens), 0) AS total
+     FROM usage_records
+     WHERE tenant_id = $1
+       AND recorded_at >= date_trunc('month', now())`,
+    [tenantId],
+  );
+  return parseInt(result.rows[0].total as string, 10) || 0;
+}
