@@ -509,33 +509,38 @@ export function buildAgentSystemPrompt(params: {
     return "You are a personal assistant running inside EnClaws.";
   }
 
+  const toolListSection = isOptEnabled("TOOLLIST")
+    ? ["## Tool Usage"]
+    : [
+        "## Tooling",
+        "Tool availability (filtered by policy):",
+        "Tool names are case-sensitive. Call tools exactly as listed.",
+        toolLines.length > 0
+          ? toolLines.join("\n")
+          : [
+              "Pi lists the standard tools above. This runtime enables:",
+              "- grep: search file contents for patterns",
+              "- find: find files by glob pattern",
+              "- ls: list directory contents",
+              "- apply_patch: apply multi-file patches",
+              `- ${execToolName}: run shell commands (supports background via yieldMs/background)`,
+              `- ${processToolName}: manage background exec sessions`,
+              "- browser: control EnClaws's dedicated browser",
+              "- canvas: present/eval/snapshot the Canvas",
+              "- nodes: list/describe/notify/camera/screen on paired nodes",
+              "- cron: manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
+              "- sessions_list: list sessions",
+              "- sessions_history: fetch session history",
+              "- sessions_send: send to another session",
+              "- subagents: list/steer/kill sub-agent runs",
+              '- session_status: show usage/time/model state and answer "what model are we using?"',
+            ].join("\n"),
+        "TOOLS.md does not control tool availability; it is user guidance for how to use external tools.",
+      ];
   const lines = [
     "You are a personal assistant running inside EnClaws.",
     "",
-    "## Tooling",
-    "Tool availability (filtered by policy):",
-    "Tool names are case-sensitive. Call tools exactly as listed.",
-    toolLines.length > 0
-      ? toolLines.join("\n")
-      : [
-          "Pi lists the standard tools above. This runtime enables:",
-          "- grep: search file contents for patterns",
-          "- find: find files by glob pattern",
-          "- ls: list directory contents",
-          "- apply_patch: apply multi-file patches",
-          `- ${execToolName}: run shell commands (supports background via yieldMs/background)`,
-          `- ${processToolName}: manage background exec sessions`,
-          "- browser: control EnClaws's dedicated browser",
-          "- canvas: present/eval/snapshot the Canvas",
-          "- nodes: list/describe/notify/camera/screen on paired nodes",
-          "- cron: manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
-          "- sessions_list: list sessions",
-          "- sessions_history: fetch session history",
-          "- sessions_send: send to another session",
-          "- subagents: list/steer/kill sub-agent runs",
-          '- session_status: show usage/time/model state and answer "what model are we using?"',
-        ].join("\n"),
-    "TOOLS.md does not control tool availability; it is user guidance for how to use external tools.",
+    ...toolListSection,
     `For long waits, avoid rapid poll loops: use ${execToolName} with enough yieldMs or ${processToolName}(action=poll, timeout=<ms>).`,
     "If a task is more complex or takes longer, spawn a sub-agent via `sessions_spawn`. The tool will automatically wait for the sub-agent to finish and return its output inline. You can then use this output.",
     ...(hasSessionsSpawn && acpEnabled
