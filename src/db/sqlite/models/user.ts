@@ -135,6 +135,17 @@ export async function findUserByEmail(email: string): Promise<User | null> {
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
+export async function findUserByEmailAnyTenant(email: string): Promise<User | null> {
+  const result = sqliteQuery(
+    `SELECT u.* FROM users u
+     WHERE u.email = ? AND u.status = 'active'
+     ORDER BY CASE WHEN u.last_login_at IS NULL THEN 1 ELSE 0 END, u.last_login_at DESC
+     LIMIT 1`,
+    [email.toLowerCase().trim()],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
 export async function listUsers(
   tenantId: string,
   opts?: { status?: UserStatus; role?: UserRole; channelId?: string; limit?: number; offset?: number },

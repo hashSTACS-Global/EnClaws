@@ -34,6 +34,7 @@ import {
   createUser,
   getUserById,
   findUserByEmail,
+  findUserByEmailAnyTenant,
   getUserByEmail,
   updateLastLogin,
   updateUserPassword,
@@ -325,9 +326,21 @@ export const authHandlers: GatewayRequestHandlers = {
     }
 
     let user;
+    let tenantSuspended = false;
     if (tenantSlug) {
       const tenant = await getTenantBySlug(tenantSlug);
+      if (tenant && tenant.status === "suspended") {
+        tenantSuspended = true;
+      }
       if (!tenant || tenant.status !== "active") {
+        if (tenantSuspended) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.INVALID_REQUEST, "该企业账号已被禁用，请联系平台管理员"),
+          );
+          return;
+        }
         const after = loginRateLimiter.recordFailure(clientIp, email);
         respond(
           false,
@@ -340,7 +353,25 @@ export const authHandlers: GatewayRequestHandlers = {
       }
       user = await getUserByEmail(tenant.id, email);
     } else {
+      // findUserByEmail JOINs tenants WHERE t.status='active', so suspended
+      // tenant users get null. We need a separate check to distinguish
+      // "wrong password" from "tenant suspended".
       user = await findUserByEmail(email);
+      if (!user) {
+        // Try to find the user ignoring tenant status to detect suspension
+        const userAnyStatus = await findUserByEmailAnyTenant(email);
+        if (userAnyStatus) {
+          const tenant = await getTenantById(userAnyStatus.tenantId);
+          if (tenant && tenant.status === "suspended") {
+            respond(
+              false,
+              undefined,
+              errorShape(ErrorCodes.INVALID_REQUEST, "该企业账号已被禁用，请联系平台管理员"),
+            );
+            return;
+          }
+        }
+      }
     }
 
     // Phase 3: handle pending email verification separately so the

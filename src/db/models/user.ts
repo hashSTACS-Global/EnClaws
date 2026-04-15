@@ -214,6 +214,22 @@ export async function findUserByEmail(email: string): Promise<User | null> {
 }
 
 /**
+ * Find user by email across all tenants regardless of tenant status.
+ * Used to detect whether a login failure is due to tenant suspension.
+ */
+export async function findUserByEmailAnyTenant(email: string): Promise<User | null> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.findUserByEmailAnyTenant(email);
+  const result = await query(
+    `SELECT u.* FROM users u
+     WHERE u.email = $1 AND u.status = 'active'
+     ORDER BY u.last_login_at DESC NULLS LAST
+     LIMIT 1`,
+    [email.toLowerCase().trim()],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
+/**
  * List users result row. Extends {@link SafeUser} with the resolved channel
  * display name (via LEFT JOIN on `tenant_channels`). `channelName` is null
  * when the user has no `channel_id` set or the channel row has been deleted.

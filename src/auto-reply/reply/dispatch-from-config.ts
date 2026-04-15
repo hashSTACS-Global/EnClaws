@@ -185,6 +185,24 @@ export async function dispatchReplyFromConfig(params: {
   // tenant-scoped workspace/session paths.
   await enrichTenantContext(ctx, cfg);
 
+  // ── Tenant suspension check ────────────────────────────────────
+  // If the tenant has been suspended by platform admin, silently drop the
+  // inbound message so no LLM calls, agent runs, or replies happen.
+  if (ctx.TenantId) {
+    try {
+      const { getTenantById } = await import("../../db/models/tenant.js");
+      const tenant = await getTenantById(ctx.TenantId);
+      if (tenant && tenant.status === "suspended") {
+        logVerbose(`[dispatch] tenant ${ctx.TenantId} is suspended, dropping inbound message`);
+        recordProcessed("skipped", { reason: "tenant-suspended" });
+        markIdle("tenant_suspended");
+        return { queuedFinal: false, counts: dispatcher.getQueuedCounts() };
+      }
+    } catch {
+      // Non-fatal: if DB check fails, allow the message through
+    }
+  }
+
   // ── Pre-LLM auth gate ────────────────────────────────────────
   // 跨 IM 平台通用：如果某个 provider 注册了 driver、且当前用户的 SenderName
   // 仍然没拿到（contact API 没权限 / DB 未命中 / 没有存量 UAT），就：
