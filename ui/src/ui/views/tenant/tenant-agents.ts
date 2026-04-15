@@ -17,6 +17,20 @@ import { pathForTab, inferBasePathFromPathname } from "../../navigation.ts";
 import { invalidateTenantAgentsCache } from "../../app-render.ts";
 import { showConfirm } from "../../components/confirm-dialog.ts";
 import { CHANNEL_ICON_MAP } from "../../../constants/channels.ts";
+import { DEFAULT_CRON_FORM } from "../../app-defaults.ts";
+import {
+  buildCronSchedule,
+  buildCronPayload,
+  buildFailureAlert,
+  validateCronForm,
+  hasCronFormErrors,
+  normalizeCronFormState,
+} from "../../controllers/cron.ts";
+import type { CronFieldErrors } from "../../controllers/cron.ts";
+import type { CronFormState } from "../../ui-types.ts";
+import type { CronJob } from "../../types.ts";
+import { formatRelativeTimestamp } from "../../format.ts";
+import { formatCronSchedule, formatNextRun } from "../../presenter.ts";
 import { caretFix } from "../../shared-styles.ts";
 
 
@@ -191,7 +205,7 @@ export class TenantAgentsView extends LitElement {
       align-self: start;
       background: var(--card, #141414);
       border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px);
+      border-radius: var(--radius, 8px);
       padding: 1.25rem;
     }
     .sidebar-header {
@@ -271,7 +285,7 @@ export class TenantAgentsView extends LitElement {
     /* ── Detail panel ── */
     .detail-card {
       background: var(--card, #141414); border: 1px solid var(--border, #262626);
-      border-radius: var(--radius-lg, 8px); padding: 1.25rem;
+      border-radius: var(--radius, 8px); padding: 1.25rem;
     }
     .detail-header {
       display: flex; justify-content: space-between; align-items: center;
@@ -595,6 +609,8 @@ export class TenantAgentsView extends LitElement {
   @state() private successKey = "";
   private msgParams: Record<string, string> = {};
   private msgTimer?: ReturnType<typeof setTimeout>;
+  @property({ type: String, attribute: "initial-agent-id" }) initialAgentId: string | null = null;
+  @property({ type: String, attribute: "initial-panel" }) initialPanel: string | null = null;
   @state() private selectedAgentId: string | null = null;
   @state() private activePanel: "overview" | "persona" | "files" | "tools" | "skills" | "channels" | "cron" | "knowledge" = "overview";
   @state() private showForm = false;
@@ -636,6 +652,18 @@ export class TenantAgentsView extends LitElement {
   @state() private personaFileContents: Record<string, string> = {};
   @state() private personaFileDrafts: Record<string, string> = {};
   @state() private personaFileSaving = false;
+
+  // Cron panel state
+  @state() private cronJobs: CronJob[] = [];
+  @state() private cronLoading = false;
+  @state() private cronLoaded = false;
+  @state() private cronBusy = false;
+  @state() private cronError: string | null = null;
+  @state() private cronModalVisible = false;
+  @state() private cronModalEditingJobId: string | null = null;
+  @state() private cronForm: CronFormState = { ...DEFAULT_CRON_FORM };
+  @state() private cronFieldErrors: CronFieldErrors = {};
+  @state() private cronRunLogExpanded = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -821,7 +849,16 @@ export class TenantAgentsView extends LitElement {
       // chat after creating/deleting an agent picks up the latest list.
       invalidateTenantAgentsCache();
       if (!this.selectedAgentId && this.agents.length > 0) {
-        this.selectedAgentId = this.agents[0].agentId;
+        if (this.initialAgentId && this.agents.some(a => a.agentId === this.initialAgentId)) {
+          this.selectedAgentId = this.initialAgentId;
+          if (this.initialPanel) {
+            this.activePanel = this.initialPanel as typeof this.activePanel;
+          }
+          this.initialAgentId = null;
+          this.initialPanel = null;
+        } else {
+          this.selectedAgentId = this.agents[0].agentId;
+        }
       }
     } catch (err) {
       this.showError(err instanceof Error ? err.message : "tenantAgents.loadFailed");
@@ -1114,7 +1151,7 @@ export class TenantAgentsView extends LitElement {
     const isSelected = this.selectedAgentId === agent.agentId;
     return html`
       <button type="button" class="agent-row ${isSelected ? "active" : ""}"
-        @click=${() => { this.selectedAgentId = agent.agentId; this.activePanel = "overview"; this.showForm = false; this.inlineModelConfig = null; this.toolsPendingDeny = null; this.skillsPendingEnabled = null; }}>
+        @click=${() => { this.selectedAgentId = agent.agentId; this.activePanel = "overview"; this.showForm = false; this.inlineModelConfig = null; this.toolsPendingDeny = null; this.skillsPendingEnabled = null; this.cronLoaded = false; }}>
         <div class="agent-avatar">${initial}</div>
         <div class="agent-info">
           <div class="agent-title">${displayName}</div>
@@ -1164,7 +1201,7 @@ export class TenantAgentsView extends LitElement {
         ${this.activePanel === "tools" ? this.renderPanelTools(agent) : nothing}
         ${this.activePanel === "skills" ? this.renderPanelSkills(agent) : nothing}
         ${this.activePanel === "channels" ? this.renderPanelChannels() : nothing}
-        ${this.activePanel === "cron" ? this.renderPanelEmpty() : nothing}
+        ${this.activePanel === "cron" ? this.renderPanelCron(agent) : nothing}
         ${this.activePanel === "knowledge" ? this.renderPanelEmpty() : nothing}
       </div>
     `;
@@ -1381,6 +1418,560 @@ export class TenantAgentsView extends LitElement {
         })}
       </div>
     `;
+  }
+
+  // ── Cron panel methods ──
+
+  private async loadCronJobs() {
+    const agent = this.agents.find(a => a.agentId === this.selectedAgentId);
+    if (!agent) return;
+    this.cronLoading = true;
+    this.cronError = null;
+    try {
+      const res = await this.rpc("cron.list", {
+        _agentId: agent.agentId,
+        includeDisabled: true,
+      }) as { jobs?: CronJob[]; total?: number };
+      this.cronJobs = res.jobs ?? [];
+    } catch (err) {
+      this.cronError = String(err);
+    } finally {
+      this.cronLoading = false;
+      this.cronLoaded = true;
+    }
+  }
+
+  private openCronNewModal(agentId: string) {
+    this.cronModalEditingJobId = null;
+    this.cronForm = { ...DEFAULT_CRON_FORM, agentId };
+    this.cronFieldErrors = {};
+    this.cronModalVisible = true;
+  }
+
+  private openCronEditModal(job: CronJob) {
+    this.cronModalEditingJobId = job.id;
+    // Convert job to form state
+    const form: CronFormState = {
+      ...DEFAULT_CRON_FORM,
+      name: job.name,
+      description: job.description ?? "",
+      agentId: job.agentId ?? "",
+      enabled: job.enabled,
+      deleteAfterRun: job.deleteAfterRun ?? false,
+      sessionTarget: job.sessionTarget,
+      wakeMode: job.wakeMode,
+      payloadKind: job.payload.kind,
+      payloadText: job.payload.kind === "systemEvent" ? job.payload.text : job.payload.message,
+      payloadModel: job.payload.kind === "agentTurn" ? (job.payload.model ?? "") : "",
+      payloadThinking: job.payload.kind === "agentTurn" ? (job.payload.thinking ?? "") : "",
+      deliveryMode: job.delivery?.mode ?? "none",
+      deliveryChannel: job.delivery?.channel ?? "last",
+      deliveryTo: job.delivery?.to ?? "",
+      deliveryBestEffort: job.delivery?.bestEffort ?? false,
+      timeoutSeconds: job.payload.kind === "agentTurn" && typeof job.payload.timeoutSeconds === "number"
+        ? String(job.payload.timeoutSeconds) : "",
+      scheduleKind: job.schedule.kind,
+      scheduleAt: job.schedule.kind === "at" ? job.schedule.at : "",
+      everyAmount: job.schedule.kind === "every" ? String(job.schedule.everyMs / 60000) : DEFAULT_CRON_FORM.everyAmount,
+      everyUnit: "minutes",
+      cronExpr: job.schedule.kind === "cron" ? job.schedule.expr : DEFAULT_CRON_FORM.cronExpr,
+      cronTz: job.schedule.kind === "cron" ? (job.schedule.tz ?? "") : "",
+    };
+    if (job.schedule.kind === "every") {
+      const ms = job.schedule.everyMs;
+      if (ms % 86_400_000 === 0) { form.everyAmount = String(ms / 86_400_000); form.everyUnit = "days"; }
+      else if (ms % 3_600_000 === 0) { form.everyAmount = String(ms / 3_600_000); form.everyUnit = "hours"; }
+      else { form.everyAmount = String(ms / 60_000); form.everyUnit = "minutes"; }
+    }
+    const fa = job.failureAlert;
+    if (fa === false) { form.failureAlertMode = "disabled"; }
+    else if (fa && typeof fa === "object") {
+      form.failureAlertMode = "custom";
+      form.failureAlertAfter = typeof fa.after === "number" ? String(fa.after) : DEFAULT_CRON_FORM.failureAlertAfter;
+      form.failureAlertCooldownSeconds = typeof fa.cooldownMs === "number" ? String(Math.floor(fa.cooldownMs / 1000)) : DEFAULT_CRON_FORM.failureAlertCooldownSeconds;
+      form.failureAlertChannel = fa.channel ?? "last";
+      form.failureAlertTo = fa.to ?? "";
+    }
+    this.cronForm = normalizeCronFormState(form);
+    this.cronFieldErrors = {};
+    this.cronModalVisible = true;
+  }
+
+  private closeCronModal() {
+    this.cronModalVisible = false;
+    this.cronModalEditingJobId = null;
+  }
+
+  private async saveCronJob() {
+    const errors = validateCronForm(this.cronForm);
+    if (hasCronFormErrors(errors)) {
+      this.cronFieldErrors = errors;
+      return;
+    }
+    this.cronBusy = true;
+    this.cronError = null;
+    try {
+      const schedule = buildCronSchedule(this.cronForm);
+      const payload = buildCronPayload(this.cronForm);
+      const failureAlert = buildFailureAlert(this.cronForm);
+      const delivery = this.cronForm.deliveryMode !== "none" ? {
+        mode: this.cronForm.deliveryMode,
+        channel: this.cronForm.deliveryChannel || undefined,
+        to: this.cronForm.deliveryTo.trim() || undefined,
+        bestEffort: this.cronForm.deliveryBestEffort || undefined,
+      } : undefined;
+      if (this.cronModalEditingJobId) {
+        await this.rpc("cron.update", {
+          _agentId: this.cronForm.agentId,
+          id: this.cronModalEditingJobId,
+          patch: {
+            name: this.cronForm.name,
+            description: this.cronForm.description || undefined,
+            enabled: this.cronForm.enabled,
+            deleteAfterRun: this.cronForm.deleteAfterRun,
+            schedule,
+            sessionTarget: this.cronForm.sessionTarget,
+            wakeMode: this.cronForm.wakeMode,
+            payload,
+            delivery,
+            failureAlert,
+          },
+        });
+      } else {
+        await this.rpc("cron.add", {
+          _agentId: this.cronForm.agentId,
+          name: this.cronForm.name,
+          description: this.cronForm.description || undefined,
+          agentId: this.cronForm.agentId,
+          enabled: this.cronForm.enabled,
+          deleteAfterRun: this.cronForm.deleteAfterRun,
+          schedule,
+          sessionTarget: this.cronForm.sessionTarget,
+          wakeMode: this.cronForm.wakeMode,
+          payload,
+          delivery,
+          failureAlert,
+        });
+      }
+      this.closeCronModal();
+      await this.loadCronJobs();
+    } catch (err) {
+      this.cronError = String(err);
+    } finally {
+      this.cronBusy = false;
+    }
+  }
+
+  private async toggleCronJob(job: CronJob, enabled: boolean) {
+    this.cronBusy = true;
+    try {
+      await this.rpc("cron.update", {
+        _agentId: job.agentId,
+        id: job.id,
+        patch: { enabled },
+      });
+      await this.loadCronJobs();
+    } catch (err) {
+      this.cronError = String(err);
+    } finally {
+      this.cronBusy = false;
+    }
+  }
+
+  private async runCronJob(job: CronJob) {
+    this.cronBusy = true;
+    try {
+      await this.rpc("cron.run", { _agentId: job.agentId, id: job.id });
+      await this.loadCronJobs();
+    } catch (err) {
+      this.cronError = String(err);
+    } finally {
+      this.cronBusy = false;
+    }
+  }
+
+  private async removeCronJob(job: CronJob) {
+    const confirmed = await showConfirm({
+      title: t("cron.remove.confirmTitle"),
+      message: t("cron.remove.confirmMessage", { name: job.name }),
+      confirmText: t("cron.remove.confirmButton"),
+      cancelText: t("cron.remove.cancelButton"),
+      danger: true,
+    });
+    if (!confirmed) return;
+    this.cronBusy = true;
+    try {
+      await this.rpc("cron.remove", { _agentId: job.agentId, id: job.id });
+      await this.loadCronJobs();
+    } catch (err) {
+      this.cronError = String(err);
+    } finally {
+      this.cronBusy = false;
+    }
+  }
+
+  private renderPanelCron(agent: TenantAgent) {
+    // Auto-load on first render
+    if (!this.cronLoaded && !this.cronLoading) {
+      this.loadCronJobs();
+    }
+    const enabledCount = this.cronJobs.filter(j => j.enabled).length;
+    const disabledCount = this.cronJobs.length - enabledCount;
+    const nextRunJob = this.cronJobs
+      .filter(j => j.enabled && j.state?.nextRunAtMs)
+      .sort((a, b) => (a.state?.nextRunAtMs ?? 0) - (b.state?.nextRunAtMs ?? 0))[0];
+    const nextRunText = nextRunJob?.state?.nextRunAtMs
+      ? formatRelativeTimestamp(nextRunJob.state.nextRunAtMs)
+      : "--";
+
+    return html`
+      ${this.cronModalVisible ? this.renderCronModal(agent) : nothing}
+
+      <div style="margin-bottom: 16px; padding: 12px 16px; background: var(--surface-2, #f8fcfd); border-radius: var(--radius-md, 6px); display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+        <div>
+          <span style="color: var(--muted, #7ea5b2); font-size: 0.8rem;">${t("cron.summary.jobs")}</span>
+          <div style="font-size: 1.1rem; font-weight: 600;">${this.cronJobs.length}</div>
+        </div>
+        <div>
+          <span style="color: var(--muted, #7ea5b2); font-size: 0.8rem;">${t("cron.summary.enabled")}</span>
+          <div style="font-size: 1.1rem; font-weight: 600;">${enabledCount}</div>
+        </div>
+        <div>
+          <span style="color: var(--muted, #7ea5b2); font-size: 0.8rem;">${t("cron.jobList.disabled")}</span>
+          <div style="font-size: 1.1rem; font-weight: 600;">${disabledCount}</div>
+        </div>
+        <div>
+          <span style="color: var(--muted, #7ea5b2); font-size: 0.8rem;">${t("cron.summary.nextWake")}</span>
+          <div style="font-size: 1.1rem; font-weight: 600;">${nextRunText}</div>
+        </div>
+        <div style="margin-left: auto; display: flex; gap: 8px;">
+          <button class="btn" ?disabled=${this.cronLoading} @click=${() => this.loadCronJobs()}>
+            ${this.cronLoading ? t("cron.summary.refreshing") : t("cron.summary.refresh")}
+          </button>
+          <button class="btn btn-primary" @click=${() => this.openCronNewModal(agent.agentId)}>
+            + ${t("cron.form.addJob")}
+          </button>
+        </div>
+      </div>
+
+      ${this.cronError ? html`<div class="form-error" style="margin-bottom: 12px;">${this.cronError}</div>` : nothing}
+
+      ${this.cronLoading && this.cronJobs.length === 0
+        ? html`<div class="loading">${t("cron.jobs.loading")}</div>`
+        : this.cronJobs.length === 0
+          ? html`<div class="empty">${t("cron.agentPanel.noJobs")}</div>`
+          : html`
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              ${this.cronJobs.map(job => this.renderCronJobRow(job))}
+            </div>
+          `
+      }
+    `;
+  }
+
+  private renderCronJobRow(job: CronJob) {
+    const status = job.state?.lastRunStatus ?? job.state?.lastStatus;
+    const statusIcon = status === "ok" ? "\u2705" : status === "error" ? "\u274C" : status === "skipped" ? "\u23ED" : "";
+    const lastRunText = job.state?.lastRunAtMs ? formatRelativeTimestamp(job.state.lastRunAtMs) : "";
+    const nextRunText = job.state?.nextRunAtMs ? formatRelativeTimestamp(job.state.nextRunAtMs) : "--";
+    const scheduleText = formatCronSchedule(job);
+    const createdByName = job.createdBy?.displayName ?? job.createdBy?.userId;
+
+    return html`
+      <div style="padding: 12px 16px; background: var(--surface-2, #f8fcfd); border-radius: var(--radius-md, 6px); border: 1px solid var(--border, #e2eef2);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-weight: 600;">${job.name}</span>
+              <span class=${`chip ${job.enabled ? "chip-ok" : "chip-muted"}`} style="font-size: 0.75rem;">
+                ${job.enabled ? t("cron.jobList.enabled") : t("cron.jobList.disabled")}
+              </span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-top: 4px; display: flex; gap: 16px; flex-wrap: wrap;">
+              <span>${scheduleText}</span>
+              <span>${t("cron.summary.nextWake")}: ${nextRunText}</span>
+              ${lastRunText ? html`<span>${statusIcon} ${lastRunText}</span>` : nothing}
+              ${createdByName ? html`<span style="opacity: 0.7;">${t("cron.agentPanel.createdBy")}: ${createdByName}</span>` : nothing}
+            </div>
+            ${job.description ? html`<div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-top: 2px;">${job.description}</div>` : nothing}
+          </div>
+          <div style="display: flex; gap: 6px; flex-shrink: 0;">
+            <button class="btn btn-sm" ?disabled=${this.cronBusy} @click=${() => this.runCronJob(job)}>
+              ${t("cron.jobList.run")}
+            </button>
+            <button class="btn btn-sm" @click=${() => this.openCronEditModal(job)}>
+              ${t("cron.jobList.edit")}
+            </button>
+            <button class="btn btn-sm" ?disabled=${this.cronBusy}
+              @click=${() => this.toggleCronJob(job, !job.enabled)}>
+              ${job.enabled ? t("cron.jobList.disable") : t("cron.jobList.enable")}
+            </button>
+            <button class="btn btn-sm btn-danger" ?disabled=${this.cronBusy}
+              @click=${() => this.removeCronJob(job)}>
+              ${t("cron.jobList.remove")}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderCronModal(agent: TenantAgent) {
+    const isEditing = Boolean(this.cronModalEditingJobId);
+    const title = isEditing ? t("cron.form.editJob") : t("cron.form.addJob");
+    const form = this.cronForm;
+    const errors = this.cronFieldErrors;
+
+    return html`
+      <div style="position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 24px;"
+        @click=${(e: Event) => { if (e.target === e.currentTarget) this.closeCronModal(); }}>
+        <div style="background: var(--card, #ffffff); border: 1px solid var(--border, #e2eef2); border-radius: var(--radius, 8px); width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; padding: 24px;"
+          @click=${(e: Event) => e.stopPropagation()}>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin: 0;">${title}</h3>
+            <button class="btn btn-sm" @click=${() => this.closeCronModal()}>\u2715</button>
+          </div>
+
+          <div style="margin-bottom: 16px; padding: 8px 12px; background: var(--surface-2, #f8fcfd); border-radius: var(--radius-md, 6px); color: var(--muted, #7ea5b2); font-size: 0.85rem;">
+            Agent: <strong style="color: var(--text, #0c1a1f);">${agent.name ?? agent.agentId}</strong>
+          </div>
+
+          <!-- Basic info -->
+          <fieldset style="border: 1px solid var(--border, #e2eef2); border-radius: 6px; padding: 16px; margin-bottom: 16px;">
+            <legend style="font-size: 0.85rem; color: var(--muted, #7ea5b2); padding: 0 4px;">${t("cron.form.basics")}</legend>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <div>
+                <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.fieldName")} *</div>
+                <input style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                  .value=${form.name} @input=${(e: Event) => this.updateCronForm({ name: (e.target as HTMLInputElement).value })} />
+                ${errors.name ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${errors.name}</div>` : nothing}
+              </div>
+              <div>
+                <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.description")}</div>
+                <input style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                  .value=${form.description} @input=${(e: Event) => this.updateCronForm({ description: (e.target as HTMLInputElement).value })} />
+              </div>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" .checked=${form.enabled} @change=${(e: Event) => this.updateCronForm({ enabled: (e.target as HTMLInputElement).checked })} />
+                <span style="font-size: 0.85rem;">${t("cron.summary.enabled")}</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <!-- Schedule -->
+          <fieldset style="border: 1px solid var(--border, #e2eef2); border-radius: 6px; padding: 16px; margin-bottom: 16px;">
+            <legend style="font-size: 0.85rem; color: var(--muted, #7ea5b2); padding: 0 4px;">${t("cron.form.schedule")}</legend>
+            <div style="display: flex; gap: 16px; margin-bottom: 12px;">
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="cronScheduleKind" value="at" .checked=${form.scheduleKind === "at"}
+                  @change=${() => this.updateCronForm({ scheduleKind: "at" })} />
+                ${t("cron.form.at")}
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="cronScheduleKind" value="every" .checked=${form.scheduleKind === "every"}
+                  @change=${() => this.updateCronForm({ scheduleKind: "every" })} />
+                ${t("cron.form.every")}
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="cronScheduleKind" value="cron" .checked=${form.scheduleKind === "cron"}
+                  @change=${() => this.updateCronForm({ scheduleKind: "cron" })} />
+                ${t("cron.form.cronOption")}
+              </label>
+            </div>
+            ${form.scheduleKind === "at" ? html`
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div>
+                  <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.runAt")}</div>
+                  <input type="datetime-local" style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                    .value=${form.scheduleAt}
+                    @input=${(e: Event) => this.updateCronForm({ scheduleAt: (e.target as HTMLInputElement).value })} />
+                  ${errors.scheduleAt ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${errors.scheduleAt}</div>` : nothing}
+                </div>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" .checked=${form.deleteAfterRun}
+                    @change=${(e: Event) => this.updateCronForm({ deleteAfterRun: (e.target as HTMLInputElement).checked })} />
+                  <span style="font-size: 0.85rem;">${t("cron.form.deleteAfterRun")}</span>
+                </label>
+              </div>
+            ` : nothing}
+            ${form.scheduleKind === "every" ? html`
+              <div style="display: flex; gap: 10px; align-items: flex-end;">
+                <div style="flex: 1;">
+                  <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.every")}</div>
+                  <input type="number" min="1" style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                    .value=${form.everyAmount}
+                    @input=${(e: Event) => this.updateCronForm({ everyAmount: (e.target as HTMLInputElement).value })} />
+                  ${errors.everyAmount ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${errors.everyAmount}</div>` : nothing}
+                </div>
+                <select style="padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit;"
+                  .value=${form.everyUnit} @change=${(e: Event) => this.updateCronForm({ everyUnit: (e.target as HTMLSelectElement).value as "minutes" | "hours" | "days" })}>
+                  <option value="minutes">${t("cron.form.minutes")}</option>
+                  <option value="hours">${t("cron.form.hours")}</option>
+                  <option value="days">${t("cron.form.days")}</option>
+                </select>
+              </div>
+            ` : nothing}
+            ${form.scheduleKind === "cron" ? html`
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div>
+                  <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.expression")}</div>
+                  <input style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                    .value=${form.cronExpr} placeholder="0 9 * * *"
+                    @input=${(e: Event) => this.updateCronForm({ cronExpr: (e.target as HTMLInputElement).value })} />
+                  ${errors.cronExpr ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${errors.cronExpr}</div>` : nothing}
+                </div>
+                <div>
+                  <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.timezoneOptional")}</div>
+                  <input style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                    .value=${form.cronTz} placeholder="Asia/Shanghai"
+                    @input=${(e: Event) => this.updateCronForm({ cronTz: (e.target as HTMLInputElement).value })} />
+                </div>
+              </div>
+            ` : nothing}
+          </fieldset>
+
+          <!-- Execution settings -->
+          <fieldset style="border: 1px solid var(--border, #e2eef2); border-radius: 6px; padding: 16px; margin-bottom: 16px;">
+            <legend style="font-size: 0.85rem; color: var(--muted, #7ea5b2); padding: 0 4px;">${t("cron.form.execution")}</legend>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <div>
+                <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 6px;">${t("cron.form.session")}</div>
+                <div style="display: flex; gap: 16px;">
+                  <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                    <input type="radio" name="cronSessionTarget" value="isolated" .checked=${form.sessionTarget === "isolated"}
+                      @change=${() => this.updateCronForm({ sessionTarget: "isolated" })} />
+                    ${t("cron.form.isolated")}
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                    <input type="radio" name="cronSessionTarget" value="main" .checked=${form.sessionTarget === "main"}
+                      @change=${() => this.updateCronForm({ sessionTarget: "main" })} />
+                    ${t("cron.form.main")}
+                  </label>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--muted, #7ea5b2); margin-top: 4px;">
+                  ${form.sessionTarget === "isolated"
+                    ? t("cron.agentPanel.sessionIsolatedHelp")
+                    : t("cron.agentPanel.sessionMainHelp")}
+                </div>
+              </div>
+              <div>
+                <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">
+                  ${t("cron.agentPanel.messageContent")} *
+                </div>
+                <textarea rows="3" style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box; font-family: inherit; resize: vertical;"
+                  .value=${form.payloadText}
+                  @input=${(e: Event) => this.updateCronForm({ payloadText: (e.target as HTMLTextAreaElement).value })}></textarea>
+                ${errors.payloadText ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${errors.payloadText}</div>` : nothing}
+              </div>
+              ${form.payloadKind === "agentTurn" ? html`
+                <div style="display: flex; gap: 12px;">
+                  <div style="flex: 1;">
+                    <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.model")}</div>
+                    <input style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                      .value=${form.payloadModel} placeholder=${t("cron.form.modelPlaceholder")}
+                      @input=${(e: Event) => this.updateCronForm({ payloadModel: (e.target as HTMLInputElement).value })} />
+                  </div>
+                  <div style="width: 120px;">
+                    <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.timeoutSeconds")}</div>
+                    <input type="number" style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                      .value=${form.timeoutSeconds} placeholder="300"
+                      @input=${(e: Event) => this.updateCronForm({ timeoutSeconds: (e.target as HTMLInputElement).value })} />
+                  </div>
+                </div>
+              ` : nothing}
+            </div>
+          </fieldset>
+
+          <!-- Delivery -->
+          <fieldset style="border: 1px solid var(--border, #e2eef2); border-radius: 6px; padding: 16px; margin-bottom: 16px;">
+            <legend style="font-size: 0.85rem; color: var(--muted, #7ea5b2); padding: 0 4px;">${t("cron.form.deliverySection")}</legend>
+            <div style="display: flex; gap: 16px; margin-bottom: 10px;">
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="cronDeliveryMode" value="none" .checked=${form.deliveryMode === "none"}
+                  @change=${() => this.updateCronForm({ deliveryMode: "none" })} />
+                ${t("cron.form.noneInternal")}
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="cronDeliveryMode" value="announce" .checked=${form.deliveryMode === "announce"}
+                  @change=${() => this.updateCronForm({ deliveryMode: "announce" })} />
+                ${t("cron.form.announceDefault")}
+              </label>
+            </div>
+            ${form.deliveryMode !== "none" ? html`
+              <div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                  <span style="font-size: 0.8rem; color: var(--muted, #7ea5b2);">${t("cron.form.to")}</span>
+                  <span .title=${t("cron.agentPanel.deliveryToHelp")} style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border, #e2eef2); font-size: 0.6rem; color: var(--muted, #7ea5b2); cursor: help;">?</span>
+                </div>
+                <input style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                  .value=${form.deliveryTo} placeholder="ou_xxx / oc_xxx"
+                  @input=${(e: Event) => this.updateCronForm({ deliveryTo: (e.target as HTMLInputElement).value })} />
+              </div>
+            ` : nothing}
+          </fieldset>
+
+          <!-- Failure alert -->
+          <fieldset style="border: 1px solid var(--border, #e2eef2); border-radius: 6px; padding: 16px; margin-bottom: 20px;">
+            <legend style="font-size: 0.85rem; color: var(--muted, #7ea5b2); padding: 0 4px;">${t("cron.form.advanced")}</legend>
+            <div style="display: flex; gap: 16px; margin-bottom: 10px;">
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="cronFailureAlertMode" value="inherit" .checked=${form.failureAlertMode === "inherit"}
+                  @change=${() => this.updateCronForm({ failureAlertMode: "inherit" })} />
+                ${t("cron.agentPanel.alertInherit")}
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="cronFailureAlertMode" value="disabled" .checked=${form.failureAlertMode === "disabled"}
+                  @change=${() => this.updateCronForm({ failureAlertMode: "disabled" })} />
+                ${t("cron.agentPanel.alertDisabled")}
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="cronFailureAlertMode" value="custom" .checked=${form.failureAlertMode === "custom"}
+                  @change=${() => this.updateCronForm({ failureAlertMode: "custom" })} />
+                ${t("cron.agentPanel.alertCustom")}
+              </label>
+            </div>
+            ${form.failureAlertMode === "custom" ? html`
+              <div style="display: flex; gap: 12px;">
+                <div style="flex: 1;">
+                  <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.agentPanel.alertAfter")}</div>
+                  <input type="number" min="1" style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                    .value=${form.failureAlertAfter}
+                    @input=${(e: Event) => this.updateCronForm({ failureAlertAfter: (e.target as HTMLInputElement).value })} />
+                </div>
+                <div style="flex: 1;">
+                  <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.agentPanel.alertCooldown")}</div>
+                  <input type="number" min="0" style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
+                    .value=${form.failureAlertCooldownSeconds}
+                    @input=${(e: Event) => this.updateCronForm({ failureAlertCooldownSeconds: (e.target as HTMLInputElement).value })} />
+                </div>
+              </div>
+            ` : nothing}
+          </fieldset>
+
+          ${this.cronError ? html`<div class="form-error" style="margin-bottom: 12px;">${this.cronError}</div>` : nothing}
+
+          <div style="display: flex; justify-content: flex-end; gap: 8px;">
+            <button class="btn" @click=${() => this.closeCronModal()}>${t("cron.form.cancel")}</button>
+            <button class="btn btn-primary" ?disabled=${this.cronBusy} @click=${() => this.saveCronJob()}>
+              ${this.cronBusy ? t("cron.form.saving") : (isEditing ? t("cron.form.saveChanges") : t("cron.form.addJob"))}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private updateCronForm(patch: Partial<CronFormState>) {
+    const merged = { ...this.cronForm, ...patch };
+    // payloadKind is fully derived from sessionTarget (no separate selector)
+    merged.payloadKind = merged.sessionTarget === "main" ? "systemEvent" : "agentTurn";
+    // deleteAfterRun only makes sense for one-shot "at" schedule
+    if (patch.scheduleKind && patch.scheduleKind !== "at") {
+      merged.deleteAfterRun = false;
+    }
+    this.cronForm = normalizeCronFormState(merged);
+    this.cronFieldErrors = validateCronForm(this.cronForm);
   }
 
   private renderPanelEmpty() {

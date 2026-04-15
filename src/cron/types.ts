@@ -124,6 +124,7 @@ export type CronJobState = {
 export type CronJob = {
   id: string;
   agentId?: string;
+  createdBy?: { userId: string; displayName?: string };
   /** Origin session namespace for reminder delivery and wake routing. */
   sessionKey?: string;
   name: string;

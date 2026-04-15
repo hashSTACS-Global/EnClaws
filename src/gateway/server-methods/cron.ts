@@ -4,8 +4,11 @@ import {
   readCronRunLogEntriesPageAll,
   resolveCronRunLogPath,
 } from "../../cron/run-log.js";
-import type { CronJobCreate, CronJobPatch } from "../../cron/types.js";
+import type { CronJob, CronJobCreate, CronJobPatch } from "../../cron/types.js";
 import { validateScheduleTimestamp } from "../../cron/validate-timestamp.js";
+import { listTenantAgentIdsFromDisk } from "../../config/sessions/tenant-paths.js";
+import { isDbInitialized } from "../../db/index.js";
+import { getUserDisplayNamesByOpenIds } from "../../db/models/user.js";
 import {
   ErrorCodes,
   errorShape,
@@ -37,6 +40,18 @@ function resolveEffectiveCron(
   client: GatewayClient | null,
   params?: Record<string, unknown>,
 ): { cron: typeof context.cron; cronStorePath: string } {
+  // Agent-scoped path: when _agentId is provided, route to the agent's cron store.
+  if (context.resolveTenantAgentCron && params) {
+    const agentId = typeof params._agentId === "string" ? params._agentId.trim() : "";
+    const tenantId =
+      client?.tenant?.tenantId ??
+      (typeof params._tenantId === "string" ? params._tenantId.trim() : "");
+    if (agentId && tenantId) {
+      context.logGateway.info(`resolveEffectiveCron: agent-scoped tenantId=${tenantId} agentId=${agentId}`);
+      const resolved = context.resolveTenantAgentCron(tenantId, agentId);
+      if (resolved) return resolved;
+    }
+  }
   // Primary path: client already carries a tenant context (JWT-authenticated).
   if (client?.tenant && context.resolveTenantCron) {
     context.logGateway.info(`resolveEffectiveCron: using client.tenant userId=${client.tenant.userId}`);
@@ -65,10 +80,10 @@ function resolveEffectiveCron(
  * (the tenant fields are read from it by `resolveEffectiveCron`).
  */
 function stripTenantParams(params: Record<string, unknown>): Record<string, unknown> {
-  if (!("_tenantId" in params) && !("_tenantUserId" in params)) {
+  if (!("_tenantId" in params) && !("_tenantUserId" in params) && !("_agentId" in params) && !("_tenantUserDisplayName" in params)) {
     return params;
   }
-  const { _tenantId: _, _tenantUserId: __, ...rest } = params;
+  const { _tenantId: _, _tenantUserId: __, _agentId: ___, _tenantUserDisplayName: ____, ...rest } = params;
   return rest;
 }
 
@@ -169,6 +184,33 @@ export const cronHandlers: GatewayRequestHandlers = {
         errorShape(ErrorCodes.INVALID_REQUEST, timestampValidation.message),
       );
       return;
+    }
+    // Auto-fill createdBy from tenant context if not already set.
+    if (!jobCreate.createdBy && client?.tenant) {
+      jobCreate.createdBy = {
+        userId: client.tenant.userId,
+        displayName: (client.tenant as Record<string, unknown>).displayName as string | undefined,
+      };
+    }
+    // Fallback for internal calls (e.g. cron-tool) that pass _tenantUserId
+    // but don't have a JWT client.
+    if (!jobCreate.createdBy && typeof params?._tenantUserId === "string" && params._tenantUserId.trim()) {
+      const userId = params._tenantUserId.trim();
+      const senderId = typeof params._tenantUserDisplayName === "string" ? params._tenantUserDisplayName.trim() : "";
+      const tenantId =
+        client?.tenant?.tenantId ??
+        (typeof params._tenantId === "string" ? params._tenantId.trim() : "");
+      // Resolve display name from DB using the sender's external ID (e.g. ou_xxx, liuyu).
+      let displayName: string | undefined;
+      if (senderId && tenantId && isDbInitialized()) {
+        try {
+          const nameMap = await getUserDisplayNamesByOpenIds(tenantId, [senderId]);
+          displayName = nameMap.get(senderId);
+        } catch {
+          // Best-effort: DB lookup failure should not block job creation.
+        }
+      }
+      jobCreate.createdBy = { userId, displayName: displayName || senderId || undefined };
     }
     const { cron, cronStorePath } = resolveEffectiveCron(context, client, params);
     const job = await cron.add(jobCreate);
@@ -367,5 +409,65 @@ export const cronHandlers: GatewayRequestHandlers = {
       sortDir: p.sortDir,
     });
     respond(true, page, undefined);
+  },
+  /**
+   * List all cron jobs across all agents for a tenant (enterprise cross-agent view).
+   * Returns jobs annotated with their agentId for the tenant-cron overview.
+   */
+  "cron.listAll": async ({ params, respond, context, client }) => {
+    const tenantId =
+      client?.tenant?.tenantId ??
+      (typeof params._tenantId === "string" ? params._tenantId.trim() : "");
+    if (!tenantId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "cron.listAll requires a tenant context"),
+      );
+      return;
+    }
+    const agentIds = listTenantAgentIdsFromDisk(tenantId);
+    const allJobs: (CronJob & { _agentId: string })[] = [];
+    for (const agentId of agentIds) {
+      if (!context.resolveTenantAgentCron) continue;
+      const resolved = context.resolveTenantAgentCron(tenantId, agentId);
+      if (!resolved) continue;
+      try {
+        const jobs = await resolved.cron.list({ includeDisabled: true });
+        for (const job of jobs) {
+          allJobs.push({ ...job, _agentId: agentId });
+        }
+      } catch {
+        // Non-fatal: skip agents whose cron store can't be read.
+      }
+    }
+    const p = params as {
+      query?: string;
+      enabled?: "all" | "enabled" | "disabled";
+      sortBy?: "nextRunAtMs" | "updatedAtMs" | "name";
+      sortDir?: "asc" | "desc";
+    };
+    let filtered = allJobs as (CronJob & { _agentId: string })[];
+    if (p.enabled === "enabled") {
+      filtered = filtered.filter((j) => j.enabled);
+    } else if (p.enabled === "disabled") {
+      filtered = filtered.filter((j) => !j.enabled);
+    }
+    if (p.query) {
+      const q = p.query.toLowerCase();
+      filtered = filtered.filter(
+        (j) => j.name.toLowerCase().includes(q) || j._agentId.toLowerCase().includes(q),
+      );
+    }
+    const sortDir = p.sortDir === "desc" ? -1 : 1;
+    const sortBy = p.sortBy ?? "updatedAtMs";
+    filtered.sort((a, b) => {
+      const av = sortBy === "name" ? a.name : (a.state[sortBy] ?? 0);
+      const bv = sortBy === "name" ? b.name : (b.state[sortBy] ?? 0);
+      if (av < bv) return -1 * sortDir;
+      if (av > bv) return 1 * sortDir;
+      return 0;
+    });
+    respond(true, { jobs: filtered, total: filtered.length }, undefined);
   },
 };

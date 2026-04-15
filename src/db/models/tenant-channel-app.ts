@@ -141,6 +141,36 @@ export async function findTenantByChannelApp(
   return { tenantId, userId, channelId: row.channel_id as string };
 }
 
+/**
+ * Find the first active channel app bound to a specific agent.
+ * Used by agent-scoped cron to resolve the delivery accountId automatically.
+ */
+export async function findChannelAppByAgent(
+  tenantId: string,
+  agentId: string,
+): Promise<{ channelType: string; appId: string; appSecret: string; botName: string } | null> {
+  if (getDbType() === DB_SQLITE) return sqliteChannelApp.findChannelAppByAgent(tenantId, agentId);
+  const result = await query(
+    `SELECT tc.channel_type, ca.app_id, ca.app_secret, ca.bot_name
+     FROM tenant_channel_apps ca
+     JOIN tenant_channels tc ON tc.id = ca.channel_id
+     WHERE ca.tenant_id = $1
+       AND ca.agent_id = $2
+       AND ca.is_active = true
+       AND tc.is_active = true
+     LIMIT 1`,
+    [tenantId, agentId],
+  );
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
+  return {
+    channelType: row.channel_type as string,
+    appId: row.app_id as string,
+    appSecret: row.app_secret as string,
+    botName: row.bot_name as string,
+  };
+}
+
 export async function deleteChannelApp(appDbId: string, tenantId: string): Promise<boolean> {
   if (getDbType() === DB_SQLITE) return sqliteChannelApp.deleteChannelApp(appDbId, tenantId);
   const result = await query(

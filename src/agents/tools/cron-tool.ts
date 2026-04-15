@@ -19,7 +19,7 @@ import { resolveTenantSessionStorePath } from "../../config/sessions/tenant-path
 // contain nested unions. Tool schemas need to stay provider-friendly, so we
 // accept "any object" here and validate at runtime.
 
-const CRON_ACTIONS = ["status", "list", "add", "update", "remove", "run", "runs", "wake"] as const;
+const CRON_ACTIONS = ["status", "list", "add", "update", "remove", "stop", "start", "run", "runs", "wake"] as const;
 
 const CRON_WAKE_MODES = ["now", "next-heartbeat"] as const;
 const CRON_RUN_MODES = ["due", "force"] as const;
@@ -217,6 +217,60 @@ function resolveFeishuOpenIdFromTenantStore(
   return undefined;
 }
 
+/**
+ * Resolve delivery target from the tenant user's session store deliveryContext.
+ * This is the most reliable source — it contains the exact ou_xxx / oc_xxx and
+ * accountId that the user's current chat session uses.
+ */
+function inferDeliveryFromSessionStore(
+  tenantId: string,
+  userId: string,
+): CronDelivery | null {
+  try {
+    const storePath = resolveTenantSessionStorePath(tenantId, undefined, userId);
+    const store = loadSessionStore(storePath);
+    // Find the most recently updated session entry with a deliveryContext
+    let best: { channel?: string; to?: string; accountId?: string } | undefined;
+    let bestUpdatedAt = 0;
+    for (const entry of Object.values(store)) {
+      const dc = (entry as { deliveryContext?: { channel?: string; to?: string; accountId?: string } } | undefined)?.deliveryContext;
+      if (!dc?.channel || !dc?.to) continue;
+      const updatedAt = (entry as { updatedAt?: number } | undefined)?.updatedAt ?? 0;
+      if (updatedAt >= bestUpdatedAt) {
+        bestUpdatedAt = updatedAt;
+        best = dc;
+      }
+    }
+    if (!best?.to) return null;
+    // Strip "user:" prefix from to (e.g. "user:ou_xxx" → "ou_xxx")
+    const rawTo = best.to.trim();
+    const to = rawTo.startsWith("user:") ? rawTo.slice(5) : rawTo;
+    if (!to) return null;
+    return {
+      mode: "announce",
+      to,
+      channel: best.channel as CronMessageChannel | undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const SENDER_MARKER = ":sender:";
+
+/**
+ * Extract the sender name from an agent session key.
+ * Session keys encode the sender as `:sender:<name>` suffix, e.g.
+ * `agent:aaa:wecom:group:xxx:sender:liuyu` → `liuyu`
+ */
+function extractSenderFromSessionKey(sessionKey?: string): string | undefined {
+  if (!sessionKey) return undefined;
+  const idx = sessionKey.lastIndexOf(SENDER_MARKER);
+  if (idx < 0) return undefined;
+  const value = sessionKey.slice(idx + SENDER_MARKER.length).trim();
+  return value || undefined;
+}
+
 function inferDeliveryFromSessionKey(agentSessionKey?: string): CronDelivery | null {
   const rawSessionKey = agentSessionKey?.trim();
   if (!rawSessionKey) {
@@ -226,12 +280,18 @@ function inferDeliveryFromSessionKey(agentSessionKey?: string): CronDelivery | n
   if (!parsed || !parsed.rest) {
     return null;
   }
-  const parts = parsed.rest.split(":").filter(Boolean);
+  let parts = parsed.rest.split(":").filter(Boolean);
   if (parts.length === 0) {
     return null;
   }
+  // Skip session scope prefixes (e.g. "main", "subagent", "acp") to reach the
+  // peer/channel portion.  Example: "main:user:on_xxx" → skip "main", parse "user:on_xxx".
+  const SESSION_SCOPES = new Set(["main", "subagent", "acp"]);
+  while (parts.length > 0 && SESSION_SCOPES.has(parts[0]?.trim().toLowerCase() ?? "")) {
+    parts = parts.slice(1);
+  }
   const head = parts[0]?.trim().toLowerCase();
-  if (!head || head === "main" || head === "subagent" || head === "acp") {
+  if (!head || parts.length === 0) {
     return null;
   }
 
@@ -241,11 +301,12 @@ function inferDeliveryFromSessionKey(agentSessionKey?: string): CronDelivery | n
   // - <channel>:<accountId>:direct:<peerId>
   // - <channel>:group:<peerId>
   // - <channel>:channel:<peerId>
-  // Note: legacy keys may use "dm" instead of "direct".
+  // Note: legacy keys may use "dm" instead of "direct", and multi-tenant IM
+  // sessions may use "user" to mean a direct/private message peer.
   // Threaded sessions append :thread:<id>, which we strip so delivery targets the parent peer.
   // NOTE: Telegram forum topics encode as <chatId>:topic:<topicId> and should be preserved.
   const markerIndex = parts.findIndex(
-    (part) => part === "direct" || part === "dm" || part === "group" || part === "channel",
+    (part) => part === "direct" || part === "dm" || part === "group" || part === "channel" || part === "user",
   );
   if (markerIndex === -1) {
     return null;
@@ -285,6 +346,15 @@ function inferDeliveryFromSessionKey(agentSessionKey?: string): CronDelivery | n
     return null;
   }
 
+  // If no explicit channel was found in the session key, try to infer it from
+  // the peer ID format (e.g. ou_/on_/oc_ → feishu).
+  if (!channel) {
+    const id = peerId.trim().toLowerCase();
+    if (/^(ou_|on_|oc_)/.test(id)) {
+      channel = "feishu";
+    }
+  }
+
   const delivery: CronDelivery = { mode: "announce", to: peerId };
   if (channel) {
     delivery.channel = channel;
@@ -306,7 +376,9 @@ ACTIONS:
 - list: List jobs (use includeDisabled:true to include disabled)
 - add: Create job (requires job object, see schema below)
 - update: Modify job (requires jobId + patch object)
-- remove: Delete job (requires jobId)
+- stop: Pause a job without deleting it (requires jobId). The job can be resumed later with "start".
+- start: Resume a previously stopped/paused job (requires jobId)
+- remove: Permanently delete job (requires jobId). This cannot be undone. Prefer "stop" to pause.
 - run: Trigger job immediately (requires jobId)
 - runs: Get job run history (requires jobId)
 - wake: Send wake event (requires text, optional mode)
@@ -373,6 +445,16 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
       const tenantParams: Record<string, string> = {};
       if (opts?.tenantId) tenantParams._tenantId = opts.tenantId;
       if (opts?.tenantUserId) tenantParams._tenantUserId = opts.tenantUserId;
+      // Extract sender name from session key (e.g. ":sender:liuyu") for createdBy.displayName.
+      const senderName = extractSenderFromSessionKey(opts?.agentSessionKey);
+      if (senderName) tenantParams._tenantUserDisplayName = senderName;
+      // Route to agent-scoped cron store so jobs follow the same execution path
+      // (runIsolatedAgentJob with credential injection) as UI-created jobs.
+      if (opts?.agentSessionKey) {
+        const cfg = loadConfig();
+        const resolvedAgentId = resolveSessionAgentId({ sessionKey: opts.agentSessionKey, config: cfg });
+        if (resolvedAgentId) tenantParams._agentId = resolvedAgentId;
+      }
       process.stderr.write(`[cron-tool] execute: action=${action} tenantParams=${JSON.stringify(tenantParams)} opts.tenantId=${opts?.tenantId || "(empty)"} opts.tenantUserId=${opts?.tenantUserId || "(empty)"}\n`);
 
       switch (action) {
@@ -479,6 +561,27 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
             }
           }
 
+          // In tenant IM context, auto-convert systemEvent to agentTurn so the
+          // job goes through runIsolatedAgentJob (which has credential injection
+          // for IM delivery).  systemEvent + heartbeat path cannot deliver to IM
+          // because it lacks tenant channel credentials.
+          if (
+            opts?.tenantId &&
+            opts?.agentSessionKey &&
+            job &&
+            typeof job === "object" &&
+            "payload" in job
+          ) {
+            const jobPayload = (job as { payload?: { kind?: string; text?: string; message?: string } }).payload;
+            if (jobPayload?.kind === "systemEvent" && jobPayload.text) {
+              jobPayload.kind = "agentTurn";
+              jobPayload.message = jobPayload.text;
+              delete jobPayload.text;
+              // Also fix sessionTarget to match
+              (job as { sessionTarget?: string }).sessionTarget = "isolated";
+            }
+          }
+
           if (
             opts?.agentSessionKey &&
             job &&
@@ -510,7 +613,12 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
               (mode === "" || mode === "announce") &&
               !hasTarget;
             if (shouldInfer) {
-              const inferred = inferDeliveryFromSessionKey(opts.agentSessionKey);
+              // Priority: session store deliveryContext (has exact ou_xxx) > session key parsing
+              const inferred =
+                (opts?.tenantId && opts?.tenantUserId
+                  ? inferDeliveryFromSessionStore(opts.tenantId, opts.tenantUserId)
+                  : null) ??
+                inferDeliveryFromSessionKey(opts?.agentSessionKey);
               if (inferred) {
                 (job as { delivery?: unknown }).delivery = {
                   ...delivery,
@@ -560,6 +668,32 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
             await callGateway("cron.update", gatewayOpts, {
               id,
               patch,
+              ...tenantParams,
+            }),
+          );
+        }
+        case "stop": {
+          const id = readStringParam(params, "jobId") ?? readStringParam(params, "id");
+          if (!id) {
+            throw new Error("jobId required (id accepted for backward compatibility)");
+          }
+          return jsonResult(
+            await callGateway("cron.update", gatewayOpts, {
+              id,
+              patch: { enabled: false },
+              ...tenantParams,
+            }),
+          );
+        }
+        case "start": {
+          const id = readStringParam(params, "jobId") ?? readStringParam(params, "id");
+          if (!id) {
+            throw new Error("jobId required (id accepted for backward compatibility)");
+          }
+          return jsonResult(
+            await callGateway("cron.update", gatewayOpts, {
+              id,
+              patch: { enabled: true },
               ...tenantParams,
             }),
           );

@@ -78,7 +78,10 @@ import {
   resolveTenantDevicesDir,
   resolveTenantCredentialsDir,
   resolveTenantCronDir,
+  resolveTenantAgentCronDir,
+  resolveTenantAgentCronStorePath,
   resolveTenantAgentWorkspaceDir,
+  resolveTenantAgentSessionsDir,
 } from "../config/sessions/tenant-paths.js";
 import { isMultiTenantMode } from "../config/multi-tenant.js";
 import { isDbInitialized } from "../db/index.js";
@@ -556,6 +559,42 @@ export async function startGatewayServer(
     return cached;
   };
 
+  // Per-tenant-agent CronService cache (keyed by "tenantId:agentId").
+  const tenantAgentCronCache = new Map<string, { cron: CronService; cronStorePath: string }>();
+  const resolveTenantAgentCron = (tenantId: string, agentId: string) => {
+    const key = `${tenantId}:agent:${agentId}`;
+    let cached = tenantAgentCronCache.get(key);
+    if (cached) return cached;
+    const cronDir = resolveTenantAgentCronDir(tenantId, agentId);
+    if (!fs.existsSync(cronDir)) {
+      fs.mkdirSync(cronDir, { recursive: true });
+    }
+    // Ensure tenant-scoped sessions directory exists for the agent so isolated
+    // cron runs can acquire the session write-lock without ENOENT.
+    // Sessions live under tenants/{tid}/users/{agentId}/sessions/ (agentId is
+    // used as the userId for agent-scoped cron).
+    const tenantAgentSessionsDir = resolveTenantAgentSessionsDir(tenantId, agentId, undefined, undefined, agentId);
+    if (!fs.existsSync(tenantAgentSessionsDir)) {
+      fs.mkdirSync(tenantAgentSessionsDir, { recursive: true });
+    }
+    const agentStorePath = resolveTenantAgentCronStorePath(tenantId, agentId);
+    const agentCronState = buildTenantCronService({
+      tenantId,
+      userId: agentId, // agent acts as the "user" for the cron service
+      storePath: agentStorePath,
+      cfg: cfgAtStart,
+      deps,
+      broadcast,
+      cronEnabled: cronState.cronEnabled,
+    });
+    void agentCronState.cron.start().catch((err) =>
+      logCron.error(`agent cron start failed (${key}): ${String(err)}`),
+    );
+    cached = { cron: agentCronState.cron, cronStorePath: agentCronState.storePath };
+    tenantAgentCronCache.set(key, cached);
+    return cached;
+  };
+
   const channelManager = createChannelManager({
     loadConfig,
     channelLogs,
@@ -786,6 +825,7 @@ export async function startGatewayServer(
       cron,
       cronStorePath,
       resolveTenantCron,
+      resolveTenantAgentCron,
       execApprovalManager,
       loadGatewayModelCatalog,
       getHealthCache,

@@ -593,6 +593,8 @@ export const en: TranslationMap = {
     remove: {
       confirmTitle: "Remove Job",
       confirmMessage: "Remove scheduled job \"{name}\"? This cannot be undone.",
+      confirmButton: "Remove",
+      cancelButton: "Cancel",
     },
     agentPanel: {
       createdBy: "Creator",
@@ -602,6 +604,10 @@ export const en: TranslationMap = {
       alertCustom: "Custom",
       alertAfter: "After N failures",
       alertCooldown: "Cooldown (seconds)",
+      deliveryToHelp: "Fill in the user's openId (ou_xxx) to send to a specific person, or the group chatId (oc_xxx) to send to a group chat.",
+      sessionIsolatedHelp: "Each run creates a temporary conversation. Suitable for periodic reports, inspections, and other one-off tasks.",
+      sessionMainHelp: "Sends a message into the agent's main conversation. The agent will not generate a reply — only the message is inserted.",
+      messageContent: "Message content",
     },
   },
   agents: {

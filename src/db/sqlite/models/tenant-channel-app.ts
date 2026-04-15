@@ -128,6 +128,31 @@ export async function findTenantByChannelApp(
   return { tenantId, userId, channelId: row.channel_id as string };
 }
 
+export async function findChannelAppByAgent(
+  tenantId: string,
+  agentId: string,
+): Promise<{ channelType: string; appId: string; appSecret: string; botName: string } | null> {
+  const result = sqliteQuery(
+    `SELECT tc.channel_type, ca.app_id, ca.app_secret, ca.bot_name
+     FROM tenant_channel_apps ca
+     JOIN tenant_channels tc ON tc.id = ca.channel_id
+     WHERE ca.tenant_id = ?
+       AND ca.agent_id = ?
+       AND ca.is_active = 1
+       AND tc.is_active = 1
+     LIMIT 1`,
+    [tenantId, agentId],
+  );
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
+  return {
+    channelType: row.channel_type as string,
+    appId: row.app_id as string,
+    appSecret: row.app_secret as string,
+    botName: row.bot_name as string,
+  };
+}
+
 export async function deleteChannelApp(appDbId: string, tenantId: string): Promise<boolean> {
   const result = sqliteQuery(
     "DELETE FROM tenant_channel_apps WHERE id = ? AND tenant_id = ?",

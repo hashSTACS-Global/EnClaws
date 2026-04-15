@@ -19,8 +19,12 @@ import {
 import { CronService } from "../cron/service.js";
 import { loadCronStore, resolveCronStorePath, resolveUserCronStorePath } from "../cron/store.js";
 import { loadSessionStore } from "../config/sessions.js";
-import { resolveTenantSessionStorePath } from "../config/sessions/tenant-paths.js";
+import {
+  resolveTenantSessionStorePath,
+  resolveTenantAgentCronStorePath,
+} from "../config/sessions/tenant-paths.js";
 import type { CronJob } from "../cron/types.js";
+import { findChannelAppByAgent } from "../db/models/tenant-channel-app.js";
 import type { TenantContext } from "../types/tenant-context.js";
 import { normalizeHttpWebhookUrl } from "../cron/webhook-url.js";
 import { formatErrorMessage } from "../infra/errors.js";
@@ -576,8 +580,38 @@ export function buildTenantCronService(params: {
     },
     runIsolatedAgentJob: async ({ job, message, abortSignal }) => {
       const { agentId, cfg: runtimeConfig } = resolveCronAgent(job.agentId);
+      // Auto-resolve credentials from the agent's bound channel app in tenant DB
+      // and inject them into the config so the delivery layer can find them.
+      let effectiveCfg = runtimeConfig;
+      // Always try to resolve tenant channel credentials for agent-scoped cron,
+      // not just for "announce" mode — the delivery mode in the job config may
+      // differ from how the dispatch actually resolves delivery.
+      try {
+        const channelApp = await findChannelAppByAgent(params.tenantId, agentId);
+        cronLogger.info(
+          { tenantId: params.tenantId, agentId, channelApp: channelApp ? { channelType: channelApp.channelType, appId: channelApp.appId?.slice(0, 8) + "..." } : null },
+          "cron: resolved agent channel app",
+        );
+        if (channelApp?.appId && channelApp.appSecret) {
+          const channelKey = channelApp.channelType; // e.g. "feishu"
+          const existingChannel = (runtimeConfig.channels as Record<string, Record<string, unknown>> | undefined)?.[channelKey];
+          effectiveCfg = {
+            ...runtimeConfig,
+            channels: {
+              ...runtimeConfig.channels,
+              [channelKey]: {
+                ...existingChannel,
+                appId: channelApp.appId,
+                appSecret: channelApp.appSecret,
+              },
+            },
+          } as typeof runtimeConfig;
+        }
+      } catch (err) {
+        cronLogger.warn({ err: String(err) }, "cron: failed to resolve agent channel app for delivery");
+      }
       return await runCronIsolatedAgentTurn({
-        cfg: runtimeConfig,
+        cfg: effectiveCfg,
         deps: params.deps,
         job,
         message,
@@ -637,6 +671,12 @@ export interface RegisteredCronUser extends TenantContext {
   storePath: string;
 }
 
+export interface RegisteredCronAgent {
+  tenantId: string;
+  agentId: string;
+  storePath: string;
+}
+
 export type MultiTenantCronState = {
   scheduler: MultiTenantCronScheduler;
 };
@@ -649,6 +689,9 @@ export type MultiTenantCronState = {
  */
 export class MultiTenantCronScheduler {
   private users = new Map<string, RegisteredCronUser>();
+  private agents = new Map<string, RegisteredCronAgent>();
+  private agentCache = new Map<string, { store: any; loadedAtMs: number }>();
+  private readonly agentCacheTtlMs = 60_000;
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
   private readonly pollIntervalMs: number;
@@ -695,6 +738,45 @@ export class MultiTenantCronScheduler {
     return this.users.size;
   }
 
+  /** Register an agent for cron scheduling. */
+  registerAgent(tenantId: string, agentId: string): void {
+    const key = `${tenantId}:${agentId}`;
+    if (this.agents.has(key)) return;
+    this.agents.set(key, {
+      tenantId,
+      agentId,
+      storePath: resolveTenantAgentCronStorePath(tenantId, agentId),
+    });
+    this.log.info({ tenantId, agentId }, "cron: registered agent");
+  }
+
+  /** Unregister an agent from cron scheduling. */
+  unregisterAgent(tenantId: string, agentId: string): void {
+    const key = `${tenantId}:${agentId}`;
+    if (this.agents.delete(key)) {
+      this.agentCache.delete(key);
+      this.log.info({ tenantId, agentId }, "cron: unregistered agent");
+    }
+  }
+
+  /** Invalidate cached agent store so it is re-read on next tick. */
+  invalidateAgentCache(tenantId: string, agentId: string): void {
+    this.agentCache.delete(`${tenantId}:${agentId}`);
+  }
+
+  /** Load an agent's cron store with TTL-based caching. */
+  private async loadAgentStore(agent: RegisteredCronAgent): Promise<any> {
+    const key = `${agent.tenantId}:${agent.agentId}`;
+    const cached = this.agentCache.get(key);
+    const now = Date.now();
+    if (cached && now - cached.loadedAtMs < this.agentCacheTtlMs) {
+      return cached.store;
+    }
+    const store = await loadCronStore(agent.storePath);
+    this.agentCache.set(key, { store, loadedAtMs: now });
+    return store;
+  }
+
   /** Start the scheduler. */
   start(): void {
     if (this.timer) return;
@@ -722,6 +804,7 @@ export class MultiTenantCronScheduler {
     let errorCount = 0;
 
     try {
+      // Iterate user-based cron stores (backward compat)
       for (const [key, user] of this.users) {
         try {
           const store = await loadCronStore(user.storePath);
@@ -746,6 +829,48 @@ export class MultiTenantCronScheduler {
             { err: formatErrorMessage(err), key },
             "cron: failed to read user cron store",
           );
+        }
+      }
+
+      // Iterate agent-based cron stores (concurrent loading)
+      if (this.agents.size > 0) {
+        const agentEntries = Array.from(this.agents.entries());
+        const agentStores = await Promise.all(
+          agentEntries.map(async ([key, agent]) => {
+            try {
+              const store = await this.loadAgentStore(agent);
+              return { key, agent, store };
+            } catch (err) {
+              errorCount++;
+              this.log.warn(
+                { err: formatErrorMessage(err), key },
+                "cron: failed to read agent cron store",
+              );
+              return null;
+            }
+          }),
+        );
+        for (const entry of agentStores) {
+          if (!entry) continue;
+          for (const job of entry.store.jobs) {
+            if (!job.enabled) continue;
+            if (!this.isJobDue(job, startTime)) continue;
+            try {
+              // Wrap agent as a RegisteredCronUser for backward compat with executeJob
+              await this.executeJob(job, {
+                tenantId: entry.agent.tenantId,
+                userId: entry.agent.agentId,
+                storePath: entry.agent.storePath,
+              });
+              executedCount++;
+            } catch (err) {
+              errorCount++;
+              this.log.warn(
+                { err: formatErrorMessage(err), jobId: job.id, tenantId: entry.agent.tenantId, agentId: entry.agent.agentId },
+                "cron: agent job execution failed",
+              );
+            }
+          }
         }
       }
     } finally {

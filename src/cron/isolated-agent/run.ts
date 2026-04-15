@@ -156,6 +156,11 @@ export async function runCronIsolatedAgentTurn(params: {
   const baseSessionKey = (params.sessionKey?.trim() || `cron:${params.job.id}`).trim();
   const agentSessionKey = resolveCronAgentSessionKey({ sessionKey: baseSessionKey, agentId });
 
+  // For agent-scoped cron (userId === agentId), the "user" is actually the
+  // agent itself — not a real person.  Skip user-level bootstrap files
+  // (USER.md, workspace MEMORY.md) to avoid ENOENT noise and orphan data.
+  const isAgentScopedUser = params.userId != null && params.userId === agentId;
+
   const workspaceDirRaw = params.tenantId
     ? resolveTenantAgentWorkspaceDir(params.tenantId, agentId, params.userId)
     : resolveAgentWorkspaceDir(params.cfg, agentId);
@@ -164,7 +169,9 @@ export async function runCronIsolatedAgentTurn(params: {
     : resolveAgentDir(params.cfg, agentId);
   const workspace = await ensureAgentWorkspace({
     dir: workspaceDirRaw,
-    ensureBootstrapFiles: !agentCfg?.skipBootstrap && !isFastTestEnv,
+    // Agent-scoped cron uses agentId as userId — skip bootstrap files to
+    // avoid creating orphan memory/USER.md under the phantom user dir.
+    ensureBootstrapFiles: !isAgentScopedUser && !agentCfg?.skipBootstrap && !isFastTestEnv,
   });
   const workspaceDir = workspace.dir;
 
@@ -428,6 +435,75 @@ export async function runCronIsolatedAgentTurn(params: {
         }
       }
     }
+
+    // Fallback: if session store didn't yield a delivery target, try to infer
+    // it from the job's sessionKey (e.g. "agent:my-agent:main:user:on_xxx").
+    if (!deliveryTo && !tenantWebchatDelivery && params.job.sessionKey) {
+      const skParts = params.job.sessionKey.split(":").filter(Boolean);
+      // Look for "user" marker (direct/private message peer)
+      const userIdx = skParts.findIndex(
+        (p) => p === "user" || p === "direct" || p === "dm",
+      );
+      if (userIdx >= 0 && userIdx < skParts.length - 1) {
+        const peerId = skParts.slice(userIdx + 1).join(":");
+        if (peerId) {
+          deliveryTo = peerId;
+          deliveryRequested = true;
+          // Infer channel from peer ID format
+          const pid = peerId.trim().toLowerCase();
+          if (/^(ou_|on_|oc_)/.test(pid)) {
+            deliveryChannel = "feishu";
+          }
+          if (!tenantFeishuOpenId && /^(ou_|on_)/.test(pid)) {
+            tenantFeishuOpenId = peerId;
+          }
+        }
+      }
+      // Look for "group" marker (group chat)
+      if (!deliveryTo) {
+        const groupIdx = skParts.findIndex((p) => p === "group");
+        if (groupIdx >= 0 && groupIdx < skParts.length - 1) {
+          const rawGroupId = skParts.slice(groupIdx + 1).join(":");
+          // Strip ":sender:ou_xxx" suffix
+          const senderIdx = rawGroupId.indexOf(":sender:");
+          const groupId = senderIdx > 0 ? rawGroupId.slice(0, senderIdx) : rawGroupId;
+          if (groupId) {
+            deliveryTo = groupId;
+            deliveryRequested = true;
+            const gid = groupId.trim().toLowerCase();
+            if (/^oc_/.test(gid)) {
+              deliveryChannel = "feishu";
+            }
+          }
+          // Extract sender for @mention
+          if (senderIdx > 0) {
+            const sender = rawGroupId.slice(senderIdx + ":sender:".length);
+            if (sender && /^ou_/.test(sender.toLowerCase())) {
+              tenantFeishuOpenId = sender;
+            }
+          }
+        }
+      }
+    }
+
+    // Resolve union_id (on_xxx) → open_id (ou_xxx) for Feishu delivery.
+    // This handles legacy jobs or sessionKey fallback that yielded on_ instead of ou_.
+    if (deliveryTo?.startsWith("on_") && params.tenantId) {
+      try {
+        const { findOrCreateUserByOpenId } = await import("../../db/models/user.js");
+        const { user } = await findOrCreateUserByOpenId(params.tenantId, "", undefined, deliveryTo, undefined);
+        const ouIds = user.openIds.filter((id: string) => id.startsWith("ou_"));
+        const openId = ouIds.length > 0 ? ouIds[ouIds.length - 1] : undefined;
+        if (openId) {
+          deliveryTo = openId;
+          if (!tenantFeishuOpenId) {
+            tenantFeishuOpenId = openId;
+          }
+        }
+      } catch {
+        // Best-effort: if DB lookup fails, keep the union_id as-is
+      }
+    }
   }
 
   // For webchat users in multi-tenant mode, bypass resolveDeliveryTarget.
@@ -635,7 +711,7 @@ export async function runCronIsolatedAgentTurn(params: {
           disableMessageTool: deliveryRequested || deliveryPlan.mode === "none",
           abortSignal,
           tenantId: params.tenantId,
-          tenantUserId: params.userId,
+          tenantUserId: isAgentScopedUser ? undefined : params.userId,
         });
       },
     });

@@ -1,6 +1,9 @@
 import { runSubagentAnnounceFlow } from "../../agents/subagent-announce.js";
 import { randomUUID } from "node:crypto";
 import { callGateway } from "../../gateway/call.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
+
+const log = createSubsystemLogger("cron/delivery-dispatch");
 import { countActiveDescendantRuns } from "../../agents/subagent-registry.js";
 import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 import type { ReplyPayload } from "../../auto-reply/types.js";
@@ -205,6 +208,10 @@ export async function dispatchCronDelivery(
         agentId: params.agentId,
         sessionKey: params.agentSessionKey,
       });
+      const hasCfgChannelCreds = !!(params.cfgWithAgentDefaults.channels as Record<string, Record<string, unknown>> | undefined)?.feishu?.appId;
+      log.info(
+        `[cron-delivery] deliverViaDirect: channel=${delivery.channel} to=${delivery.to} accountId=${delivery.accountId ?? "(none)"} hasCfgChannelCreds=${hasCfgChannelCreds} bestEffort=${params.deliveryBestEffort}`,
+      );
       const deliveryResults = await deliverOutboundPayloads({
         cfg: params.cfgWithAgentDefaults,
         channel: delivery.channel,
@@ -219,8 +226,10 @@ export async function dispatchCronDelivery(
         abortSignal: params.abortSignal,
       });
       delivered = deliveryResults.length > 0;
+      log.info(`[cron-delivery] deliverViaDirect: delivered=${delivered} results=${deliveryResults.length}`);
       return null;
     } catch (err) {
+      log.warn(`[cron-delivery] deliverViaDirect error: ${String(err)}`);
       if (!params.deliveryBestEffort) {
         return params.withRunSession({
           status: "error",
@@ -514,10 +523,17 @@ export async function dispatchCronDelivery(
       (params.resolvedDelivery.channel === "feishu" ||
         params.resolvedDelivery.channel === "lark") &&
       (params.resolvedDelivery.to?.startsWith("oc_") ?? false);
+    // Agent-scoped cron (userId === agentId) must use direct delivery because:
+    // 1. Tenant channel credentials are injected into cfgWithAgentDefaults but
+    //    the announce flow calls callGateway which re-reads the global config.
+    // 2. Agent has no real user session in the global store for announce to find.
+    const isAgentScopedCron =
+      params.tenantId && params.userId && params.userId === params.agentId;
     const useDirectDelivery =
       params.deliveryPayloadHasStructuredContent ||
       params.resolvedDelivery.threadId != null ||
-      isFeishuGroupDelivery;
+      isFeishuGroupDelivery ||
+      isAgentScopedCron;
     if (useDirectDelivery) {
       const directResult = await deliverViaDirect(params.resolvedDelivery);
       if (directResult) {
