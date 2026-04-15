@@ -122,13 +122,15 @@ export const platformTenantsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      await createAuditLog({
-        tenantId: ctx.tenantId,
-        userId: ctx.userId,
-        action: "platform.tenant.update",
-        resource: `tenant:${tenantId}`,
-        detail: { plan, quotas: resolvedQuotas, name },
-      });
+      try {
+        await createAuditLog({
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          action: "platform.tenant.update",
+          resource: `tenant:${tenantId}`,
+          detail: { plan, quotas: resolvedQuotas, name },
+        });
+      } catch { /* audit failure must not mask successful mutation */ }
 
       respond(true, updated);
     } catch (err) {
@@ -152,13 +154,15 @@ export const platformTenantsHandlers: GatewayRequestHandlers = {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Tenant not found"));
         return;
       }
-      await createAuditLog({
-        tenantId: ctx.tenantId,
-        userId: ctx.userId,
-        action: "platform.tenant.suspend",
-        resource: `tenant:${tenantId}`,
-        detail: {},
-      });
+      try {
+        await createAuditLog({
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          action: "platform.tenant.suspend",
+          resource: `tenant:${tenantId}`,
+          detail: {},
+        });
+      } catch { /* audit failure must not mask successful mutation */ }
       respond(true, { id: updated.id, status: updated.status });
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.INTERNAL_ERROR, err instanceof Error ? err.message : "Failed to suspend tenant"));
@@ -181,13 +185,15 @@ export const platformTenantsHandlers: GatewayRequestHandlers = {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Tenant not found"));
         return;
       }
-      await createAuditLog({
-        tenantId: ctx.tenantId,
-        userId: ctx.userId,
-        action: "platform.tenant.unsuspend",
-        resource: `tenant:${tenantId}`,
-        detail: {},
-      });
+      try {
+        await createAuditLog({
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          action: "platform.tenant.unsuspend",
+          resource: `tenant:${tenantId}`,
+          detail: {},
+        });
+      } catch { /* audit failure must not mask successful mutation */ }
       respond(true, { id: updated.id, status: updated.status });
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.INTERNAL_ERROR, err instanceof Error ? err.message : "Failed to unsuspend tenant"));
