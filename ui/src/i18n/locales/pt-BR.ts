@@ -62,6 +62,7 @@ export const pt_BR: TranslationMap = {
     "tenant-traces": "Rastreamento",
     "tenant-usage": "Meu Plano",
     "platform-tools": "Gerenciamento de Ferramentas",
+    "platform-tenants": "Inquilinos",
   },
   subtitles: {
     agents: "Gerenciar espaços de trabalho, ferramentas e identidades de agentes.",
@@ -88,6 +89,7 @@ export const pt_BR: TranslationMap = {
     "tenant-traces": "Rastrear cada interação LLM para depuração e otimização.",
     "tenant-usage": "Veja o plano atual, uso de cotas e consumo de tokens.",
     "platform-tools": "Configurar política de acesso a ferramentas em nível de plataforma, aplicada a todos os agentes por padrão.",
+    "platform-tenants": "Gerenciar planos, cotas e status de todos os inquilinos.",
   },
   platformTools: {
     infoBanner: "Esta é a política de ferramentas em nível de plataforma. Ela define quais ferramentas estão disponíveis para todos os agentes por padrão. Agentes ou inquilinos individuais podem aplicar restrições mais rígidas.",

@@ -62,6 +62,7 @@ export const de: TranslationMap = {
     "tenant-traces": "Traces",
     "tenant-usage": "Mein Tarif",
     "platform-tools": "Werkzeugverwaltung",
+    "platform-tenants": "Mandanten",
   },
   subtitles: {
     agents: "Agent-Arbeitsbereiche, Tools und Identitäten verwalten.",
@@ -88,6 +89,7 @@ export const de: TranslationMap = {
     "tenant-traces": "Jede LLM-Interaktion zur Fehlersuche und Optimierung verfolgen.",
     "tenant-usage": "Aktuellen Tarif, Kontingentnutzung und Token-Verbrauch anzeigen.",
     "platform-tools": "Plattformweite Tool-Zugriffsrichtlinie konfigurieren, die standardmäßig für alle Agenten gilt.",
+    "platform-tenants": "Alle Mandanten-Tarife, Kontingente und Status verwalten.",
   },
   platformTools: {
     infoBanner: "Dies ist die plattformweite Werkzeugrichtlinie. Sie legt fest, welche Werkzeuge allen Agenten standardmäßig zur Verfügung stehen. Einzelne Agenten oder Mandanten können darüber hinaus strengere Einschränkungen anwenden.",

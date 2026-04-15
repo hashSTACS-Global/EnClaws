@@ -62,6 +62,7 @@ export const zh_TW: TranslationMap = {
     "tenant-traces": "交互審計",
     "tenant-usage": "我的方案",
     "platform-tools": "工具管理",
+    "platform-tenants": "租戶管理",
   },
   subtitles: {
     agents: "管理代理工作區、工具和身份。",
@@ -88,6 +89,7 @@ export const zh_TW: TranslationMap = {
     "tenant-traces": "追蹤系統與大模型的每次交互詳情。",
     "tenant-usage": "查看目前方案、配額使用情況和 Token 用量。",
     "platform-tools": "設定平台級工具存取策略，預設套用至所有 Agent。",
+    "platform-tenants": "管理平台所有租戶的方案、配額和狀態。",
   },
   platformTools: {
     infoBanner: "這是平台級工具策略，定義了所有 Agent 預設可用的工具。各企業或 Agent 可在此基礎上疊加更嚴格的限制。",

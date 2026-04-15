@@ -66,7 +66,9 @@ export const en: TranslationMap = {
     "tenant-skills": "Skill Store",
     "tenant-traces": "Traces",
     "tenant-usage": "My Plan",
+    "tenant-cron": "Cron Overview",
     "platform-tools": "Tool Management",
+    "platform-tenants": "Tenants",
   },
   subtitles: {
     agents: "Manage agent workspaces, tools, and identities.",
@@ -93,7 +95,9 @@ export const en: TranslationMap = {
     "tenant-skills": "View and manage skills available to this enterprise.",
     "tenant-traces": "Trace every LLM interaction for debugging and optimization.",
     "tenant-usage": "View your current plan, quota usage, and token consumption.",
+    "tenant-cron": "Monitor all scheduled jobs across agents.",
     "platform-tools": "Configure platform-level tool access policy applied to all agents by default.",
+    "platform-tenants": "Manage all tenant plans, quotas, and statuses.",
   },
   platformTools: {
     infoBanner: "This is the platform-level tool policy. It defines which tools are available to all agents by default. Individual agents or tenants may apply stricter overrides on top of this policy.",
@@ -573,6 +577,19 @@ export const en: TranslationMap = {
       agentMessageRequiredShort: "Agent message required.",
       nameRequiredShort: "Name required.",
     },
+    remove: {
+      confirmTitle: "Remove Job",
+      confirmMessage: "Remove scheduled job \"{name}\"? This cannot be undone.",
+    },
+    agentPanel: {
+      createdBy: "Creator",
+      noJobs: "No scheduled jobs for this agent.",
+      alertInherit: "Inherit",
+      alertDisabled: "Disabled",
+      alertCustom: "Custom",
+      alertAfter: "After N failures",
+      alertCooldown: "Cooldown (seconds)",
+    },
   },
   agents: {
     title: "Agents",
@@ -903,6 +920,17 @@ export const en: TranslationMap = {
     selectAgent: "Select agent...",
     noAgentsAvailable: "No agents available. Create one in Agent Management.",
     agentBinding: "Bound Agent",
+  },
+  tenantCron: {
+    title: "Enterprise Cron Overview",
+    subtitle: "Monitor and manage scheduled jobs across all agents.",
+    totalJobs: "Total Jobs",
+    failedAlerts: "Failed Alerts",
+    agents: "Agents",
+    allAgents: "All Agents",
+    agent: "Agent",
+    consecutiveErrors: "{count} consecutive errors",
+    autoDisabled: "auto-disabled",
   },
   tenantAgents: {
     title: "Agent Management",
