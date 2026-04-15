@@ -424,4 +424,42 @@ VALUES (
   'platform-admin',
   'active'
 );
+
+-- 16. Customer Service Sessions
+CREATE TABLE IF NOT EXISTS cs_sessions (
+  id               TEXT PRIMARY KEY,
+  tenant_id        TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  visitor_id       TEXT NOT NULL,
+  visitor_name     TEXT,
+  state            TEXT NOT NULL DEFAULT 'ai_active',
+  channel          TEXT NOT NULL DEFAULT 'web_widget',
+  tags             TEXT NOT NULL DEFAULT '[]',
+  identity_anchors TEXT NOT NULL DEFAULT '{}',
+  metadata         TEXT NOT NULL DEFAULT '{}',
+  assigned_to      TEXT REFERENCES users(id),
+  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cs_sessions_tenant ON cs_sessions(tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_cs_sessions_state ON cs_sessions(tenant_id, state);
+
+-- 17. Customer Service Messages
+CREATE TABLE IF NOT EXISTS cs_messages (
+  id             TEXT PRIMARY KEY,
+  session_id     TEXT NOT NULL REFERENCES cs_sessions(id) ON DELETE CASCADE,
+  tenant_id      TEXT NOT NULL,
+  role           TEXT NOT NULL,
+  content        TEXT NOT NULL,
+  confidence     TEXT,
+  feedback_type  TEXT,
+  source_chunks  TEXT,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cs_messages_session ON cs_messages(session_id, created_at);
+
+CREATE TRIGGER IF NOT EXISTS trg_cs_sessions_updated_at AFTER UPDATE ON cs_sessions
+  FOR EACH ROW BEGIN
+    UPDATE cs_sessions SET updated_at = datetime('now') WHERE id = NEW.id;
+  END;
 `;
