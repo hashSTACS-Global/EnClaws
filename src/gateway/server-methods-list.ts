@@ -103,6 +103,12 @@ const BASE_METHODS = [
   "chat.history",
   "chat.abort",
   "chat.send",
+  // Platform tenant management
+  "platform.tenants.list",
+  "platform.tenants.get",
+  "platform.tenants.update",
+  "platform.tenants.suspend",
+  "platform.tenants.unsuspend",
 ];
 
 export function listGatewayMethods(): string[] {
