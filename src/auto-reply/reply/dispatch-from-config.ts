@@ -188,20 +188,38 @@ export async function dispatchReplyFromConfig(params: {
   // ── Tenant suspension check ────────────────────────────────────
   // If the tenant has been suspended by platform admin, reply with a short
   // notice and skip LLM execution so no agent runs or token consumption.
-  if (ctx.TenantId) {
-    try {
-      const { getTenantById } = await import("../../db/models/tenant.js");
-      const tenant = await getTenantById(ctx.TenantId);
-      if (tenant && tenant.status === "suspended") {
-        logVerbose(`[dispatch] tenant ${ctx.TenantId} is suspended, replying with notice`);
-        const payload = { text: "该企业账号已被禁用，请联系平台管理员。" } satisfies ReplyPayload;
-        const queuedFinal = dispatcher.sendFinalReply(payload);
-        recordProcessed("completed", { reason: "tenant-suspended" });
-        markIdle("tenant_suspended");
-        return { queuedFinal, counts: dispatcher.getQueuedCounts() };
+  // Resolve tenantId from ctx (set by enrichTenantContext) OR from channel
+  // config directly — the latter covers cases where auto-provision failed
+  // (e.g. during suspension) and ctx.TenantId was never set.
+  {
+    let checkTenantId = ctx.TenantId;
+    if (!checkTenantId) {
+      const provider = (ctx.Provider ?? ctx.Surface ?? "").toLowerCase();
+      const channelCfg = (cfg.channels as Record<string, Record<string, unknown> | undefined>)?.[provider];
+      checkTenantId = channelCfg?.tenantId as string | undefined;
+      if (!checkTenantId) {
+        const accountId = (ctx as Record<string, unknown>).AccountId as string | undefined;
+        if (accountId) {
+          const accounts = channelCfg?.accounts as Record<string, Record<string, unknown> | undefined> | undefined;
+          checkTenantId = accounts?.[accountId]?.tenantId as string | undefined;
+        }
       }
-    } catch {
-      // Non-fatal: if DB check fails, allow the message through
+    }
+    if (checkTenantId) {
+      try {
+        const { getTenantById } = await import("../../db/models/tenant.js");
+        const tenant = await getTenantById(checkTenantId);
+        if (tenant && tenant.status === "suspended") {
+          logVerbose(`[dispatch] tenant ${checkTenantId} is suspended, replying with notice`);
+          const payload = { text: "该企业账号已被禁用，请联系平台管理员。" } satisfies ReplyPayload;
+          const queuedFinal = dispatcher.sendFinalReply(payload);
+          recordProcessed("completed", { reason: "tenant-suspended" });
+          markIdle("tenant_suspended");
+          return { queuedFinal, counts: dispatcher.getQueuedCounts() };
+        }
+      } catch {
+        // Non-fatal: if DB check fails, allow the message through
+      }
     }
   }
 
