@@ -33,6 +33,7 @@ import { tenantHandlers } from "./server-methods/tenant-api.js";
 import { tenantAgentsHandlers } from "./server-methods/tenant-agents-api.js";
 import { tenantChannelsHandlers } from "./server-methods/tenant-channels-api.js";
 import { feishuRegisterHandlers } from "./server-methods/feishu-register-api.js";
+import { wecomRegisterHandlers } from "./server-methods/wecom-register-api.js";
 import { tenantSessionsHandlers } from "./server-methods/tenant-sessions-api.js";
 import { tenantModelsHandlers } from "./server-methods/tenant-models-api.js";
 import { tenantSettingsHandlers } from "./server-methods/tenant-settings-api.js";
@@ -130,6 +131,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...tenantAgentsHandlers,
   ...tenantChannelsHandlers,
   ...feishuRegisterHandlers,
+  ...wecomRegisterHandlers,
   ...tenantModelsHandlers,
   ...tenantSettingsHandlers,
   ...tenantSessionsHandlers,

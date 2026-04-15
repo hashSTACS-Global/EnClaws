@@ -415,6 +415,11 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
                 dmPolicy: ch.channelPolicy,
                 ...(ch.channelPolicy === "open" && { allowFrom: ["*"] }),
               }),
+              // WeCom plugin reads botId/secret (not appId/appSecret) for its Bot WebSocket connection
+              ...(channelType === "wecom" && {
+                botId: app.appId,
+                secret: app.appSecret,
+              }),
             };
           }
 

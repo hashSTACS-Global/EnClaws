@@ -18,6 +18,13 @@ export type InboundLastRouteUpdate = {
   threadId?: string | number;
 };
 
+function isMissingSessionDirError(err: unknown): boolean {
+  // In multi-tenant mode, plugins may compute a non-tenant storePath before
+  // enrichTenantContext redirects sessions to the tenant dir. The resulting
+  // ENOENT on the root-agent sessions dir is expected, not a real failure.
+  return (err as NodeJS.ErrnoException)?.code === "ENOENT";
+}
+
 export async function recordInboundSession(params: {
   storePath: string;
   sessionKey: string;
@@ -35,24 +42,31 @@ export async function recordInboundSession(params: {
     ctx,
     groupResolution,
     createIfMissing,
-  }).catch(params.onRecordError);
+  }).catch((err) => {
+    if (isMissingSessionDirError(err)) return;
+    params.onRecordError(err);
+  });
 
   const update = params.updateLastRoute;
   if (!update) {
     return;
   }
   const targetSessionKey = normalizeSessionStoreKey(update.sessionKey);
-  await updateLastRoute({
-    storePath,
-    sessionKey: targetSessionKey,
-    deliveryContext: {
-      channel: update.channel,
-      to: update.to,
-      accountId: update.accountId,
-      threadId: update.threadId,
-    },
-    // Avoid leaking inbound origin metadata into a different target session.
-    ctx: targetSessionKey === canonicalSessionKey ? ctx : undefined,
-    groupResolution,
-  });
+  try {
+    await updateLastRoute({
+      storePath,
+      sessionKey: targetSessionKey,
+      deliveryContext: {
+        channel: update.channel,
+        to: update.to,
+        accountId: update.accountId,
+        threadId: update.threadId,
+      },
+      ctx: targetSessionKey === canonicalSessionKey ? ctx : undefined,
+      groupResolution,
+    });
+  } catch (err) {
+    if (isMissingSessionDirError(err)) return;
+    params.onRecordError(err);
+  }
 }

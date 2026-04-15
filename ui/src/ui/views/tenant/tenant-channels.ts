@@ -56,6 +56,13 @@ interface ChannelApp {
   feishuPollTimer?: ReturnType<typeof setInterval>;
   feishuDomain?: string;
   feishuEnv?: string;
+  // WeCom registration form state
+  wecomMode?: "scan" | "manual";
+  wecomScode?: string;
+  wecomVerificationUrl?: string;
+  wecomQrPageUrl?: string;
+  wecomPolling?: boolean;
+  wecomPollTimer?: ReturnType<typeof setInterval>;
 }
 
 interface TenantChannel {
@@ -312,6 +319,7 @@ export class TenantChannelsView extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this.clearAllFeishuTimers();
+    this.clearAllWecomTimers();
   }
 
   private showError(key: string, params?: Record<string, string>) {
@@ -385,6 +393,15 @@ export class TenantChannelsView extends LitElement {
     }
   }
 
+  private clearAllWecomTimers() {
+    for (const app of this.formApps) {
+      if (app.wecomPollTimer) {
+        clearInterval(app.wecomPollTimer);
+        app.wecomPollTimer = undefined;
+      }
+    }
+  }
+
   private rpc(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
     return tenantRpc(method, params, this.gatewayUrl);
   }
@@ -438,6 +455,9 @@ export class TenantChannelsView extends LitElement {
     const removed = this.formApps[index];
     if (removed?.feishuPollTimer) {
       clearInterval(removed.feishuPollTimer);
+    }
+    if (removed?.wecomPollTimer) {
+      clearInterval(removed.wecomPollTimer);
     }
     this.formApps = this.formApps.filter((_, i) => i !== index);
   }
@@ -539,6 +559,91 @@ export class TenantChannelsView extends LitElement {
     // Store timer for cleanup
     const apps = [...this.formApps];
     apps[index].feishuPollTimer = timer;
+    this.formApps = apps;
+  }
+
+  private setWecomMode(index: number, mode: "scan" | "manual") {
+    const apps = [...this.formApps];
+    const app = apps[index];
+    if (app.wecomPollTimer) {
+      clearInterval(app.wecomPollTimer);
+      app.wecomPollTimer = undefined;
+    }
+    app.wecomMode = mode;
+    app.wecomPolling = false;
+    app.wecomScode = undefined;
+    app.wecomVerificationUrl = undefined;
+    app.wecomQrPageUrl = undefined;
+    this.formApps = apps;
+    if (mode === "scan") {
+      void this.startWecomRegister(index);
+    }
+  }
+
+  private async startWecomRegister(index: number) {
+    try {
+      const result = (await this.rpc("tenant.wecom.register.begin")) as {
+        scode: string;
+        authUrl: string;
+        qrPageUrl: string;
+        interval: number;
+        expireIn: number;
+      };
+      const apps = [...this.formApps];
+      const app = apps[index];
+      app.wecomScode = result.scode;
+      app.wecomVerificationUrl = result.authUrl;
+      app.wecomQrPageUrl = result.qrPageUrl;
+      app.wecomPolling = true;
+      this.formApps = apps;
+      this.startWecomPoll(index, result.interval);
+    } catch (err) {
+      this.showError(`${t("tenantChannels.wecomRegisterFailed")}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private startWecomPoll(index: number, intervalSec: number) {
+    const app = this.formApps[index];
+    if (!app?.wecomScode) return;
+    const scode = app.wecomScode;
+    const timer = setInterval(async () => {
+      const currentIndex = this.formApps.findIndex((a) => a.wecomScode === scode);
+      if (currentIndex === -1) {
+        clearInterval(timer);
+        return;
+      }
+      try {
+        const result = (await this.rpc("tenant.wecom.register.poll", { scode })) as {
+          status: "completed" | "pending" | "error";
+          botId?: string;
+          secret?: string;
+          error?: string;
+        };
+        if (result.status === "completed" && result.botId && result.secret) {
+          clearInterval(timer);
+          const apps = [...this.formApps];
+          const a = apps[currentIndex];
+          a.appId = result.botId;
+          a.appSecret = result.secret;
+          a.wecomPolling = false;
+          a.wecomPollTimer = undefined;
+          a.wecomMode = "manual";
+          this.formApps = apps;
+          this.showSuccess("tenantChannels.wecomBotCreated");
+        } else if (result.status === "error") {
+          clearInterval(timer);
+          const apps = [...this.formApps];
+          apps[currentIndex].wecomPolling = false;
+          apps[currentIndex].wecomPollTimer = undefined;
+          this.formApps = apps;
+          this.showError(`${t("tenantChannels.wecomRegisterError")}: ${result.error ?? t("tenantChannels.wecomUnknownError")}`);
+        }
+      } catch {
+        // transient errors ignored
+      }
+    }, Math.max(intervalSec, 3) * 1000);
+    const apps = [...this.formApps];
+    apps[index].wecomPollTimer = timer;
     this.formApps = apps;
   }
 
@@ -657,6 +762,7 @@ export class TenantChannelsView extends LitElement {
         ? this.formApps.find((a) => !a.id && a.appId)?.appId
         : null;
       this.clearAllFeishuTimers();
+      this.clearAllWecomTimers();
       this.showForm = false;
       await this.loadChannels();
       // Refresh again after delay to pick up connection status from runtime
@@ -708,7 +814,7 @@ export class TenantChannelsView extends LitElement {
         <div style="display:flex;gap:0.5rem">
           <button class="btn btn-outline" @click=${() => this.loadChannels()}>${t("tenantChannels.refresh")}</button>
           <button class="btn btn-primary"
-            @click=${() => { if (this.showForm) { this.clearAllFeishuTimers(); this.showForm = false; } else { this.startCreate(); } }}>
+            @click=${() => { if (this.showForm) { this.clearAllFeishuTimers(); this.clearAllWecomTimers(); this.showForm = false; } else { this.startCreate(); } }}>
             ${this.showForm ? t("tenantChannels.cancel") : t("tenantChannels.createChannel")}
           </button>
         </div>
@@ -799,7 +905,7 @@ export class TenantChannelsView extends LitElement {
               </span>
             </div>
             <div class="info-row">
-              <span class="info-label">${t("tenantChannels.appId")}</span>
+              <span class="info-label">${ch.channelType === "wecom" ? t("tenantChannels.wecomBotId") : t("tenantChannels.appId")}</span>
               <span class="info-value mono">${app.appId}</span>
             </div>
             ${app.connectionStatus ? html`
@@ -871,7 +977,7 @@ export class TenantChannelsView extends LitElement {
             <button class="btn btn-primary" type="submit" ?disabled=${this.saving}>
               ${this.saving ? t("tenantChannels.saving") : t("tenantChannels.save")}
             </button>
-            <button class="btn btn-outline" type="button" @click=${() => { this.clearAllFeishuTimers(); this.showForm = false; }}>${t("tenantChannels.cancel")}</button>
+            <button class="btn btn-outline" type="button" @click=${() => { this.clearAllFeishuTimers(); this.clearAllWecomTimers(); this.showForm = false; }}>${t("tenantChannels.cancel")}</button>
           </div>
         </form>
       </div>
@@ -911,19 +1017,48 @@ export class TenantChannelsView extends LitElement {
           ` : nothing}
         ` : nothing}
 
+        <!-- WeCom mode selector (only for wecom channel without existing app) -->
+        ${this.formChannelType === "wecom" && !app.id ? html`
+          <div class="feishu-mode-bar">
+            <button type="button" class="feishu-mode-btn ${app.wecomMode === "scan" ? "active" : ""}"
+              @click=${() => this.setWecomMode(i, "scan")}>&#x1F4F1; ${t("tenantChannels.wecomScanCreate")}</button>
+            <button type="button" class="feishu-mode-btn ${(app.wecomMode ?? "manual") === "manual" ? "active" : ""}"
+              @click=${() => this.setWecomMode(i, "manual")}>&#x2328;&#xFE0F; ${t("tenantChannels.wecomManualBind")}</button>
+          </div>
+          ${app.wecomMode === "scan" ? html`
+            ${app.wecomVerificationUrl ? html`
+              <div class="qr-container">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(app.wecomVerificationUrl)}" alt="QR Code" />
+              </div>
+              <div class="qr-hint">${t("tenantChannels.wecomScanHint")}</div>
+              ${app.wecomQrPageUrl ? html`
+                <div class="qr-hint"><a href=${app.wecomQrPageUrl} target="_blank" rel="noopener noreferrer" style="color:var(--accent,#3b82f6)">${t("tenantChannels.wecomOpenQrPage")}</a></div>
+              ` : nothing}
+              ${app.wecomPolling ? html`
+                <div class="qr-polling">
+                  <span class="dot">&#x25CF;</span> ${t("tenantChannels.wecomPolling")}
+                </div>
+              ` : nothing}
+            ` : html`
+              <div class="qr-hint">${t("tenantChannels.wecomInitializing")}</div>
+            `}
+          ` : nothing}
+        ` : nothing}
+
         <!-- App config fields -->
-        ${this.formChannelType !== "feishu" || app.feishuMode !== "scan" || app.id ? html`
+        ${(this.formChannelType !== "feishu" || app.feishuMode !== "scan" || app.id) &&
+          (this.formChannelType !== "wecom" || app.wecomMode !== "scan" || app.id) ? html`
         <div class="form-row">
           <div class="form-field">
-            <label>${t("tenantChannels.appId")}</label>
-            <input type="text" .placeholder=${t("tenantChannels.appIdPlaceholder")}
+            <label>${this.formChannelType === "wecom" ? t("tenantChannels.wecomBotId") : t("tenantChannels.appId")}</label>
+            <input type="text" .placeholder=${this.formChannelType === "wecom" ? t("tenantChannels.wecomBotIdPlaceholder") : t("tenantChannels.appIdPlaceholder")}
               .value=${app.appId}
               @input=${(e: InputEvent) => this.updateApp(i, "appId", (e.target as HTMLInputElement).value)} />
           </div>
           <div class="form-field">
-            <label>${t("tenantChannels.appSecret")}</label>
+            <label>${this.formChannelType === "wecom" ? t("tenantChannels.wecomSecret") : t("tenantChannels.appSecret")}</label>
             <div class="secret-wrap">
-              <input type="password" .placeholder=${t("tenantChannels.appSecretPlaceholder")}
+              <input type="password" .placeholder=${this.formChannelType === "wecom" ? t("tenantChannels.wecomSecretPlaceholder") : t("tenantChannels.appSecretPlaceholder")}
                 .value=${app.appSecret}
                 @input=${(e: InputEvent) => this.updateApp(i, "appSecret", (e.target as HTMLInputElement).value)} />
               <button type="button" class="eye-btn"

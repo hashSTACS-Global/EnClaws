@@ -76,6 +76,9 @@ export const SCOPE_BYPASS_METHODS = new Set([
   // Feishu bot registration
   "tenant.feishu.register.begin",
   "tenant.feishu.register.poll",
+  // WeCom bot registration
+  "tenant.wecom.register.begin",
+  "tenant.wecom.register.poll",
   // Tenant session management
   "tenant.sessions.list",
   "tenant.sessions.get",
