@@ -24,6 +24,96 @@ export interface AppApiConfig {
   env?: NodeJS.ProcessEnv;
 }
 
+export interface AppConfigureParams {
+  tenantId: string;
+  name: string;
+  workspaceRepo?: string;
+  gitToken?: string;
+  gitUser?: string;
+  gitEmail?: string;
+  feishuAppId?: string;
+  feishuAppSecret?: string;
+}
+
+/**
+ * Core implementation of app.configure. Shared by the RPC handler and the
+ * app_configure LLM tool so the bot install flow (feishu form → configure)
+ * and the admin console path go through the same logic.
+ */
+export async function appConfigureImpl(
+  params: AppConfigureParams,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<{ ok: true }> {
+  const { tenantId } = params;
+  const appName = params.name;
+  if (!appName || !appName.trim()) {
+    throw new Error("name required");
+  }
+  const manifest = await readAppsManifest(tenantId, env);
+  if (!manifest.installed.find((a) => a.name === appName)) {
+    throw new Error(`app "${appName}" not installed`);
+  }
+
+  const pick = (v: unknown): string | undefined =>
+    typeof v === "string" && v.trim() ? v.trim() : undefined;
+  const gitToken = pick(params.gitToken);
+  const gitUser = pick(params.gitUser);
+  const gitEmail = pick(params.gitEmail);
+  const feishuAppId = pick(params.feishuAppId);
+  const feishuAppSecret = pick(params.feishuAppSecret);
+
+  if (gitToken || gitUser || gitEmail || feishuAppId || feishuAppSecret) {
+    const existing = await getAppCredential(tenantId, appName, env);
+    await setAppCredential(tenantId, appName, {
+      gitToken: gitToken ?? existing?.gitToken ?? "",
+      gitUser: gitUser ?? existing?.gitUser ?? `${appName}-bot`,
+      gitEmail: gitEmail ?? existing?.gitEmail ?? `${appName}-bot@enclaws.local`,
+      feishuAppId: feishuAppId ?? existing?.feishuAppId,
+      feishuAppSecret: feishuAppSecret ?? existing?.feishuAppSecret,
+    }, env);
+  }
+
+  const workspaceRepo = pick(params.workspaceRepo);
+  if (workspaceRepo) {
+    const wsDir = resolveAppWorkspaceDir(tenantId, appName, env);
+    const cred = await getAppCredential(tenantId, appName, env);
+    const gitEnv = cred ? buildGitAuthEnv(cred) : undefined;
+    const git = new GitOps();
+    let exists = false;
+    try { await stat(wsDir); exists = true; } catch { /* not found */ }
+
+    const backup = async () => {
+      const backupDir = resolveAppWorkspaceBackupDir(tenantId, env);
+      await mkdir(backupDir, { recursive: true });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      await rename(wsDir, path.join(backupDir, `${appName}-${timestamp}`));
+    };
+
+    if (exists) {
+      let currentRemote = "";
+      try { currentRemote = await git.getRemoteUrl(wsDir); } catch { /* not a repo */ }
+      if (currentRemote && currentRemote === workspaceRepo) {
+        logWarn(`app.configure: workspace same remote, pulling: ${wsDir}`);
+        await git.pull(wsDir, gitEnv);
+      } else if (currentRemote) {
+        logWarn(`app.configure: workspace remote changed "${currentRemote}" → "${workspaceRepo}", backing up`);
+        await backup();
+        await git.clone(workspaceRepo, wsDir, { depth: 1, gitEnv });
+      } else {
+        logWarn(`app.configure: workspace exists but not a git repo, backing up and cloning`);
+        await backup();
+        await git.clone(workspaceRepo, wsDir, { depth: 1, gitEnv });
+      }
+    } else {
+      logWarn(`app.configure: cloning workspace repo "${workspaceRepo}" → ${wsDir}`);
+      await git.clone(workspaceRepo, wsDir, { depth: 1, gitEnv });
+    }
+    await updateInstalledApp(tenantId, appName, { workspaceRepo }, env);
+  }
+
+  return { ok: true };
+}
+
 // oxlint-disable-next-line typescript/no-explicit-any
 function requireTenantId(client: any): string {
   // Gateway stores tenant context at client.tenant (set by auth middleware),
@@ -136,79 +226,19 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
     // oxlint-disable-next-line typescript/no-explicit-any
     "app.configure": async ({ params, client }: any) => {
       const tenantId = requireTenantId(client);
-      const appName = params?.name;
-      if (typeof appName !== "string" || !appName.trim()) {
-        throw new Error("name required");
-      }
-      // Verify app exists
-      const manifest = await readAppsManifest(tenantId, env);
-      if (!manifest.installed.find((a) => a.name === appName)) {
-        throw new Error(`app "${appName}" not installed`);
-      }
-
-      // Save credentials if provided (merge with existing — empty fields keep old values)
-      const gitToken = typeof params?.gitToken === "string" && params.gitToken.trim() ? params.gitToken.trim() : undefined;
-      const gitUser = typeof params?.gitUser === "string" && params.gitUser.trim() ? params.gitUser.trim() : undefined;
-      const gitEmail = typeof params?.gitEmail === "string" && params.gitEmail.trim() ? params.gitEmail.trim() : undefined;
-      const feishuAppId = typeof params?.feishuAppId === "string" && params.feishuAppId.trim() ? params.feishuAppId.trim() : undefined;
-      const feishuAppSecret = typeof params?.feishuAppSecret === "string" && params.feishuAppSecret.trim() ? params.feishuAppSecret.trim() : undefined;
-      if (gitToken || gitUser || gitEmail || feishuAppId || feishuAppSecret) {
-        const existing = await getAppCredential(tenantId, appName, env);
-        await setAppCredential(tenantId, appName, {
-          gitToken: gitToken ?? existing?.gitToken ?? "",
-          gitUser: gitUser ?? existing?.gitUser ?? "",
-          gitEmail: gitEmail ?? existing?.gitEmail ?? "",
-          feishuAppId: feishuAppId ?? existing?.feishuAppId,
-          feishuAppSecret: feishuAppSecret ?? existing?.feishuAppSecret,
-        }, env);
-      }
-
-      // Clone, pull, or re-clone workspace repo
-      const workspaceRepo = typeof params?.workspaceRepo === "string" ? params.workspaceRepo.trim() : undefined;
-      if (workspaceRepo) {
-        const wsDir = resolveAppWorkspaceDir(tenantId, appName, env);
-        const cred = await getAppCredential(tenantId, appName, env);
-        const gitEnv = cred ? buildGitAuthEnv(cred) : undefined;
-        const git = new GitOps();
-        let exists = false;
-        try {
-          await stat(wsDir);
-          exists = true;
-        } catch { /* not found */ }
-
-        if (exists) {
-          let currentRemote = "";
-          try {
-            currentRemote = await git.getRemoteUrl(wsDir);
-          } catch { /* not a git repo or no remote */ }
-
-          if (currentRemote && currentRemote === workspaceRepo) {
-            logWarn(`app.configure: workspace same remote, pulling: ${wsDir}`);
-            await git.pull(wsDir, gitEnv);
-          } else if (currentRemote) {
-            logWarn(`app.configure: workspace remote changed "${currentRemote}" → "${workspaceRepo}", backing up`);
-            const backupDir = resolveAppWorkspaceBackupDir(tenantId, env);
-            await mkdir(backupDir, { recursive: true });
-            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-            await rename(wsDir, path.join(backupDir, `${appName}-${timestamp}`));
-            await git.clone(workspaceRepo, wsDir, { depth: 1, gitEnv });
-          } else {
-            logWarn(`app.configure: workspace exists but not a git repo, backing up and cloning`);
-            const backupDir = resolveAppWorkspaceBackupDir(tenantId, env);
-            await mkdir(backupDir, { recursive: true });
-            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-            await rename(wsDir, path.join(backupDir, `${appName}-${timestamp}`));
-            await git.clone(workspaceRepo, wsDir, { depth: 1, gitEnv });
-          }
-        } else {
-          logWarn(`app.configure: cloning workspace repo "${workspaceRepo}" → ${wsDir}`);
-          await git.clone(workspaceRepo, wsDir, { depth: 1, gitEnv });
-        }
-        // Persist workspaceRepo in apps.json so app.list can return it
-        await updateInstalledApp(tenantId, appName, { workspaceRepo }, env);
-      }
-
-      return { ok: true };
+      return appConfigureImpl(
+        {
+          tenantId,
+          name: params?.name,
+          workspaceRepo: params?.workspaceRepo,
+          gitToken: params?.gitToken,
+          gitUser: params?.gitUser,
+          gitEmail: params?.gitEmail,
+          feishuAppId: params?.feishuAppId,
+          feishuAppSecret: params?.feishuAppSecret,
+        },
+        env,
+      );
     },
 
     // oxlint-disable-next-line typescript/no-explicit-any

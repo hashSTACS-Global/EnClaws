@@ -64,6 +64,13 @@ interface QuestionItem {
   header: string;
   options: Array<{ label: string; description: string }>;
   multiSelect: boolean;
+  /**
+   * Input rendering mode for free-text questions (options === []).
+   * 'password' masks the entered value in the Feishu card UI — use for
+   * tokens / secrets collected via the card.
+   * Ignored when options is non-empty.
+   */
+  inputType?: 'text' | 'password';
 }
 
 /** Lightweight context stored while awaiting user response (no Promise / timeout). */
@@ -563,17 +570,25 @@ function buildQuestionFormElements(q: QuestionItem, questionIndex: number): Reco
 
   if (q.options.length === 0) {
     // ---- Free-text input ----
-    elems.push(
-      buildLabeledRow(labelMd, {
-        tag: 'input',
-        name: getInputFieldName(questionIndex),
-        placeholder: {
-          tag: 'plain_text',
-          content: '请输入...',
-          i18n_content: { zh_cn: '请输入...', en_us: 'Type your answer...' },
-        },
-      }),
-    );
+    const isPassword = q.inputType === 'password';
+    const inputElem: Record<string, unknown> = {
+      tag: 'input',
+      name: getInputFieldName(questionIndex),
+      placeholder: {
+        tag: 'plain_text',
+        content: isPassword ? '请输入（内容将被隐藏）...' : '请输入...',
+        i18n_content: isPassword
+          ? { zh_cn: '请输入（内容将被隐藏）...', en_us: 'Type your answer (hidden)...' }
+          : { zh_cn: '请输入...', en_us: 'Type your answer...' },
+      },
+    };
+    if (isPassword) {
+      // Feishu interactive card v2 input element accepts input_type='password'
+      // for masked entry. When unsupported, the client falls back to plain text
+      // — the label already warns the user, so degradation is acceptable.
+      inputElem.input_type = 'password';
+    }
+    elems.push(buildLabeledRow(labelMd, inputElem));
     return elems;
   }
 
@@ -902,6 +917,15 @@ const AskUserQuestionSchema = Type.Object({
       multiSelect: Type.Boolean({
         description: 'Whether multiple options can be selected (ignored when options is empty)',
       }),
+      inputType: Type.Optional(
+        Type.Unsafe<'text' | 'password'>({
+          type: 'string',
+          enum: ['text', 'password'],
+          description:
+            "For free-text questions (options=[]) only. Set to 'password' to mask the " +
+            "user's input in the Feishu card — use for tokens / secrets. Default is 'text'.",
+        }),
+      ),
     }),
     {
       description: 'Questions to ask the user (1-6 questions)',

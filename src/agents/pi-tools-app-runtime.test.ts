@@ -38,13 +38,19 @@ function mockDeps() {
 }
 
 describe("createAppRuntimeTools", () => {
-  it("returns 4 AgentTool entries when deps provided", () => {
+  it("returns 5 AgentTool entries when deps provided", () => {
     const tools = createAppRuntimeTools({
       deps: mockDeps(),
       resolveTenantId: () => "tenant-a",
     });
     const names = tools.map((t) => t.name).toSorted();
-    expect(names).toEqual(["app_install", "app_invoke", "app_list", "app_uninstall"]);
+    expect(names).toEqual([
+      "app_configure",
+      "app_install",
+      "app_invoke",
+      "app_list",
+      "app_uninstall",
+    ]);
   });
 
   it("app_invoke passes session tenantId, not caller-provided", async () => {
