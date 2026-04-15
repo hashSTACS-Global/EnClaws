@@ -9,6 +9,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- Drop all tables (reverse dependency order)
 -- ============================================================
 DROP FUNCTION IF EXISTS update_updated_at_column CASCADE;
+DROP TABLE IF EXISTS cs_messages CASCADE;
+DROP TABLE IF EXISTS cs_sessions CASCADE;
 DROP TABLE IF EXISTS _migrations CASCADE;
 DROP TABLE IF EXISTS login_attempts CASCADE;
 DROP TABLE IF EXISTS password_history CASCADE;
@@ -449,7 +451,43 @@ CREATE TABLE IF NOT EXISTS sys_tools_config (
 INSERT INTO sys_tools_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 -- ============================================================
--- 15. Migration tracking
+-- 15. Customer Service (sessions + messages)
+-- ============================================================
+CREATE TABLE cs_sessions (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id        UUID         NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  visitor_id       VARCHAR(128) NOT NULL,
+  visitor_name     VARCHAR(255),
+  state            VARCHAR(32)  NOT NULL DEFAULT 'ai_active',
+  channel          VARCHAR(32)  NOT NULL DEFAULT 'web_widget',
+  tags             JSONB        NOT NULL DEFAULT '[]',
+  identity_anchors JSONB        NOT NULL DEFAULT '{}',
+  metadata         JSONB        NOT NULL DEFAULT '{}',
+  assigned_to      UUID         REFERENCES users(id),
+  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  closed_at        TIMESTAMPTZ
+);
+
+CREATE INDEX idx_cs_sessions_tenant ON cs_sessions (tenant_id, created_at DESC);
+CREATE INDEX idx_cs_sessions_state  ON cs_sessions (tenant_id, state) WHERE closed_at IS NULL;
+
+CREATE TABLE cs_messages (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id    UUID         NOT NULL REFERENCES cs_sessions(id) ON DELETE CASCADE,
+  tenant_id     UUID         NOT NULL,
+  role          VARCHAR(16)  NOT NULL,
+  content       TEXT         NOT NULL,
+  confidence    JSONB,
+  feedback_type VARCHAR(32),
+  source_chunks JSONB,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_cs_messages_session ON cs_messages (session_id, created_at);
+
+-- ============================================================
+-- 16. Migration tracking
 -- ============================================================
 CREATE TABLE IF NOT EXISTS _migrations (
   id          SERIAL PRIMARY KEY,
@@ -481,6 +519,8 @@ CREATE TRIGGER trg_channels_updated_at BEFORE UPDATE ON tenant_channels
 CREATE TRIGGER trg_channel_apps_updated_at BEFORE UPDATE ON tenant_channel_apps
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER trg_tenant_models_updated_at BEFORE UPDATE ON tenant_models
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trg_cs_sessions_updated_at BEFORE UPDATE ON cs_sessions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================
