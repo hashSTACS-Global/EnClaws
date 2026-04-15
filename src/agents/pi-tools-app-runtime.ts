@@ -21,6 +21,8 @@ export interface CreateAppRuntimeToolsOptions {
   resolveTenantId: () => string | undefined;
   /** Resolve the current tenant user ID (UUID). Used to inject PIVOT_USER_ID via displayName lookup. */
   resolveTenantUserId?: () => string | undefined;
+  /** Resolve the current agent ID. Used by llm-step to pick the agent's default model. */
+  resolveAgentId?: () => string | undefined;
   executePipeline?: typeof defaultExecute;
 }
 
@@ -160,6 +162,7 @@ export function createAppRuntimeTools(opts: CreateAppRuntimeToolsOptions): AnyAg
       const workspaceDir = resolveAppWorkspaceDir(tenantId, appName);
       await mkdir(workspaceDir, { recursive: true });
       const tenantUserId = opts.resolveTenantUserId?.();
+      const agentId = opts.resolveAgentId?.();
       const result: RunnerResult = await execute({
         pipeline: registered,
         input: (input.params as Record<string, unknown>) ?? {},
@@ -167,6 +170,7 @@ export function createAppRuntimeTools(opts: CreateAppRuntimeToolsOptions): AnyAg
         appName,
         tenantId,
         tenantUserId,
+        agentId,
         deps: deps.llmDeps,
       });
       if (result.status === "error") {

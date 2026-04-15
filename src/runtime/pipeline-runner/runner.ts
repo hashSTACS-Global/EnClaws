@@ -11,11 +11,12 @@ export interface ExecuteOptions {
   appName: string;
   tenantId: string;
   tenantUserId?: string;
+  agentId?: string;
   deps: LLMStepDeps;
 }
 
 export async function executePipeline(opts: ExecuteOptions): Promise<RunnerResult> {
-  const { pipeline, input, workspaceDir, appName, tenantId, tenantUserId, deps } = opts;
+  const { pipeline, input, workspaceDir, appName, tenantId, tenantUserId, agentId, deps } = opts;
   const ctx: ExecutionContext = {
     input,
     steps: {},
@@ -24,6 +25,7 @@ export async function executePipeline(opts: ExecuteOptions): Promise<RunnerResul
     appName,
     tenantId,
     tenantUserId,
+    agentId,
   };
   const progress: string[] = [];
 

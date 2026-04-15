@@ -7,6 +7,7 @@ import {
   buildGitAuthEnv,
 } from "../../runtime/app-installer/credentials-store.js";
 import { readAppsManifest, updateInstalledApp } from "../../runtime/app-installer/store.js";
+import { findTenantByChannelApp } from "../../db/models/tenant-channel-app.js";
 import { GitOps } from "../../infra/git-ops/index.js";
 import { resolveAppWorkspaceDir, resolveAppWorkspaceBackupDir } from "../../runtime/app-paths.js";
 import { logWarn } from "../../logger.js";
@@ -222,6 +223,31 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
       if (!registered) {
         throw new Error(`pipeline "${appName}/${pipelineName}" not found for tenant "${tenantId}"`);
       }
+
+      // Resolve agentId from app's bound feishu app → tenant_channel_apps.agent_id.
+      // Feishu bot callers already have agentId in client.tenant (from session ctx);
+      // CLI callers don't, so we look up via the APP's feishu credentials.
+      let agentId: string | undefined = client?.tenant?.agentId;
+      if (!agentId) {
+        try {
+          const cred = await getAppCredential(tenantId, appName, env);
+          if (cred?.feishuAppId) {
+            const binding = await findTenantByChannelApp("feishu", cred.feishuAppId);
+            if (binding?.tenantId === tenantId) {
+              // Load the channel app record to get agent_id
+              const { listChannelApps } = await import("../../db/models/tenant-channel-app.js");
+              if (binding.channelId) {
+                const apps = await listChannelApps(binding.channelId);
+                const match = apps.find((a) => a.appId === cred.feishuAppId && a.isActive);
+                if (match?.agentId) agentId = match.agentId;
+              }
+            }
+          }
+        } catch (e) {
+          logWarn(`app.invoke: failed to resolve agentId for ${appName}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
       const workspaceDir = resolveAppWorkspaceDir(tenantId, appName, env);
       await mkdir(workspaceDir, { recursive: true });
       const result: RunnerResult = await execute({
@@ -231,6 +257,7 @@ export function createAppApiHandlers(cfg: AppApiConfig) {
         appName,
         tenantId,
         tenantUserId,
+        agentId,
         deps: cfg.llmDeps,
       });
       if (result.status === "error") {

@@ -530,6 +530,7 @@ export async function runPreparedReply(
           ...global,
           resolveTenantId: () => tid,
           resolveTenantUserId: () => uid,
+          resolveAgentId: () => agentId,
         };
       })(),
     },

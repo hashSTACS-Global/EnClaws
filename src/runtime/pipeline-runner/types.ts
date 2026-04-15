@@ -64,4 +64,6 @@ export interface ExecutionContext {
   tenantId: string;
   /** Tenant user ID (UUID) — looked up by code-step to inject PIVOT_USER_ID (displayName). */
   tenantUserId?: string;
+  /** Agent ID — used by llm-step to resolve the default model via tenant_agents.model_config. */
+  agentId?: string;
 }
