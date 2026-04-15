@@ -109,6 +109,7 @@ const BASE_METHODS = [
   "platform.tenants.update",
   "platform.tenants.suspend",
   "platform.tenants.unsuspend",
+  "tenant.plan.current",
 ];
 
 export function listGatewayMethods(): string[] {
