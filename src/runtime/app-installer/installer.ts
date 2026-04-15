@@ -60,8 +60,12 @@ export class AppInstaller {
 
     let movedTarget: string | undefined;
     try {
-      // 1. shallow clone
-      await this.git.clone(opts.gitUrl, tmpDir, { depth: 1 });
+      // 1. shallow clone (use git credentials if provided — needed for private repos)
+      const hasGitCreds = opts.gitToken && opts.gitUser && opts.gitEmail;
+      const appCloneEnv = hasGitCreds
+        ? buildGitAuthEnv({ gitToken: opts.gitToken!, gitUser: opts.gitUser!, gitEmail: opts.gitEmail! })
+        : { GIT_TERMINAL_PROMPT: "0" }; // disable interactive prompt for public repos
+      await this.git.clone(opts.gitUrl, tmpDir, { depth: 1, gitEnv: appCloneEnv });
 
       // 2. manifest
       const manifest = await readAppManifest(tmpDir);
