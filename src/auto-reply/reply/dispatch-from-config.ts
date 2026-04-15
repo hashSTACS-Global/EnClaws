@@ -186,17 +186,19 @@ export async function dispatchReplyFromConfig(params: {
   await enrichTenantContext(ctx, cfg);
 
   // ── Tenant suspension check ────────────────────────────────────
-  // If the tenant has been suspended by platform admin, silently drop the
-  // inbound message so no LLM calls, agent runs, or replies happen.
+  // If the tenant has been suspended by platform admin, reply with a short
+  // notice and skip LLM execution so no agent runs or token consumption.
   if (ctx.TenantId) {
     try {
       const { getTenantById } = await import("../../db/models/tenant.js");
       const tenant = await getTenantById(ctx.TenantId);
       if (tenant && tenant.status === "suspended") {
-        logVerbose(`[dispatch] tenant ${ctx.TenantId} is suspended, dropping inbound message`);
-        recordProcessed("skipped", { reason: "tenant-suspended" });
+        logVerbose(`[dispatch] tenant ${ctx.TenantId} is suspended, replying with notice`);
+        const payload = { text: "该企业账号已被禁用，请联系平台管理员。" } satisfies ReplyPayload;
+        const queuedFinal = dispatcher.sendFinalReply(payload);
+        recordProcessed("completed", { reason: "tenant-suspended" });
         markIdle("tenant_suspended");
-        return { queuedFinal: false, counts: dispatcher.getQueuedCounts() };
+        return { queuedFinal, counts: dispatcher.getQueuedCounts() };
       }
     } catch {
       // Non-fatal: if DB check fails, allow the message through
