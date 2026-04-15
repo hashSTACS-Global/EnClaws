@@ -909,7 +909,7 @@ export class TenantChannelsView extends LitElement {
               </span>
             </div>
             <div class="info-row">
-              <span class="info-label">${ch.channelType === "wecom" ? t("tenantChannels.wecomBotId") : t("tenantChannels.appId")}</span>
+              <span class="info-label">${ch.channelType === "wecom" ? t("tenantChannels.wecomBotId") : ch.channelType === "dingtalk" ? t("tenantChannels.dingtalkClientId") : t("tenantChannels.appId")}</span>
               <span class="info-value mono">${app.appId}</span>
             </div>
             ${app.connectionStatus ? (() => {
@@ -1068,15 +1068,15 @@ export class TenantChannelsView extends LitElement {
           (this.formChannelType !== "wecom" || app.wecomMode !== "scan" || app.id) ? html`
         <div class="form-row">
           <div class="form-field">
-            <label>${this.formChannelType === "wecom" ? t("tenantChannels.wecomBotId") : t("tenantChannels.appId")}</label>
-            <input type="text" .placeholder=${this.formChannelType === "wecom" ? t("tenantChannels.wecomBotIdPlaceholder") : t("tenantChannels.appIdPlaceholder")}
+            <label>${this.formChannelType === "wecom" ? t("tenantChannels.wecomBotId") : this.formChannelType === "dingtalk" ? t("tenantChannels.dingtalkClientId") : t("tenantChannels.appId")}</label>
+            <input type="text" .placeholder=${this.formChannelType === "wecom" ? t("tenantChannels.wecomBotIdPlaceholder") : this.formChannelType === "dingtalk" ? t("tenantChannels.dingtalkClientIdPlaceholder") : t("tenantChannels.appIdPlaceholder")}
               .value=${app.appId}
               @input=${(e: InputEvent) => this.updateApp(i, "appId", (e.target as HTMLInputElement).value)} />
           </div>
           <div class="form-field">
-            <label>${this.formChannelType === "wecom" ? t("tenantChannels.wecomSecret") : t("tenantChannels.appSecret")}</label>
+            <label>${this.formChannelType === "wecom" ? t("tenantChannels.wecomSecret") : this.formChannelType === "dingtalk" ? t("tenantChannels.dingtalkClientSecret") : t("tenantChannels.appSecret")}</label>
             <div class="secret-wrap">
-              <input type="password" .placeholder=${this.formChannelType === "wecom" ? t("tenantChannels.wecomSecretPlaceholder") : t("tenantChannels.appSecretPlaceholder")}
+              <input type="password" .placeholder=${this.formChannelType === "wecom" ? t("tenantChannels.wecomSecretPlaceholder") : this.formChannelType === "dingtalk" ? t("tenantChannels.dingtalkClientSecretPlaceholder") : t("tenantChannels.appSecretPlaceholder")}
                 .value=${app.appSecret}
                 @input=${(e: InputEvent) => this.updateApp(i, "appSecret", (e.target as HTMLInputElement).value)} />
               <button type="button" class="eye-btn"

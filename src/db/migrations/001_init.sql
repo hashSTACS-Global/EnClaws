@@ -413,11 +413,11 @@ INSERT INTO sys_logging_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS sys_plugins_config (
   id                       INTEGER PRIMARY KEY CHECK (id = 1),
   enabled                  BOOLEAN NOT NULL DEFAULT true,
-  allow                    JSONB NOT NULL DEFAULT '["openclaw-lark","wecom-openclaw-plugin"]',
+  allow                    JSONB NOT NULL DEFAULT '["openclaw-lark","wecom-openclaw-plugin","dingtalk-openclaw-connector"]',
   deny                     JSONB NOT NULL DEFAULT '[]',
   load                     JSONB NOT NULL DEFAULT '{}',
   slots                    JSONB NOT NULL DEFAULT '{}',
-  entries                  JSONB NOT NULL DEFAULT '{"openclaw-lark":{"enabled":true},"wecom-openclaw-plugin":{"enabled":true}}',
+  entries                  JSONB NOT NULL DEFAULT '{"openclaw-lark":{"enabled":true},"wecom-openclaw-plugin":{"enabled":true},"dingtalk-openclaw-connector":{"enabled":true}}',
   installs                 JSONB NOT NULL DEFAULT '{}',
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

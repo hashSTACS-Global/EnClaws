@@ -130,7 +130,7 @@ export async function enrichTenantContext(
     // 但 senderId 已经是企业内稳定的跨会话标识——等价于 unionId 的角色。
     // 这里按 provider 做兜底，保证 DB 的 union_id 列能被填上，
     // 下游 autoProvisionTenantUser 的 union_id 优先查找也能命中。
-    const unionIdFallbackProviders = new Set(["wecom"]);
+    const unionIdFallbackProviders = new Set(["wecom", "dingtalk"]);
     const resolvedUnionId = ctx.SenderUnionId
       ?? (unionIdFallbackProviders.has(provider) ? senderId : undefined);
 

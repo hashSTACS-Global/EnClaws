@@ -332,11 +332,11 @@ INSERT OR IGNORE INTO sys_logging_config (id) VALUES (1);
 CREATE TABLE IF NOT EXISTS sys_plugins_config (
   id                       INTEGER PRIMARY KEY CHECK (id = 1),
   enabled                  INTEGER NOT NULL DEFAULT 1,
-  allow                    TEXT NOT NULL DEFAULT '["openclaw-lark","wecom-openclaw-plugin"]',
+  allow                    TEXT NOT NULL DEFAULT '["openclaw-lark","wecom-openclaw-plugin","dingtalk-openclaw-connector"]',
   deny                     TEXT NOT NULL DEFAULT '[]',
   load                     TEXT NOT NULL DEFAULT '{}',
   slots                    TEXT NOT NULL DEFAULT '{}',
-  entries                  TEXT NOT NULL DEFAULT '{"openclaw-lark":{"enabled":true},"wecom-openclaw-plugin":{"enabled":true}}',
+  entries                  TEXT NOT NULL DEFAULT '{"openclaw-lark":{"enabled":true},"wecom-openclaw-plugin":{"enabled":true},"dingtalk-openclaw-connector":{"enabled":true}}',
   installs                 TEXT NOT NULL DEFAULT '{}',
   updated_at               TEXT NOT NULL DEFAULT (datetime('now'))
 );

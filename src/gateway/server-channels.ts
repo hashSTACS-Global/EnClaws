@@ -440,6 +440,11 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
                 botId: app.appId,
                 secret: app.appSecret,
               }),
+              // DingTalk plugin reads clientId/clientSecret for its Stream SDK
+              ...(channelType === "dingtalk" && {
+                clientId: app.appId,
+                clientSecret: app.appSecret,
+              }),
             };
           }
 

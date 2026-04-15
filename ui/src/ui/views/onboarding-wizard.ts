@@ -759,9 +759,12 @@ export class OnboardingWizard extends LitElement {
   private renderChannel() {
     const isFeishu = this.selectedChannel === "feishu";
     const isWecom = this.selectedChannel === "wecom";
+    const isDingtalk = this.selectedChannel === "dingtalk";
     const showManualForm = this.selectedChannel
       && (!isFeishu || this.feishuMode === "manual")
       && (!isWecom || this.wecomMode === "manual");
+    const appIdLabel = isWecom ? "Bot ID" : isDingtalk ? "Client ID (AppKey)" : "App ID";
+    const appSecretLabel = isWecom ? "Secret" : isDingtalk ? "Client Secret (AppSecret)" : "App Secret";
     return html`
       <div class="step-indicator">${t("onboarding.step", { current: "3", total: "3" })}</div>
       <div class="wizard-header">
@@ -851,12 +854,12 @@ export class OnboardingWizard extends LitElement {
 
       ${showManualForm ? html`
         <div class="form-group">
-          <label>${isWecom ? "Bot ID" : "App ID"} <span class="required">*</span></label>
+          <label>${appIdLabel} <span class="required">*</span></label>
           <input type="text" .value=${this.channelAppId}
             @input=${(e: InputEvent) => { this.channelAppId = (e.target as HTMLInputElement).value; }} />
         </div>
         <div class="form-group">
-          <label>${isWecom ? "Secret" : "App Secret"} <span class="required">*</span></label>
+          <label>${appSecretLabel} <span class="required">*</span></label>
           <div class="secret-wrap">
             <input type="password" .value=${this.channelAppSecret}
               @input=${(e: InputEvent) => { this.channelAppSecret = (e.target as HTMLInputElement).value; }} />
