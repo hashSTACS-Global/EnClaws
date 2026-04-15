@@ -19,6 +19,8 @@ import {
   registerTenantBootstrapContext,
   type TenantBootstrapContext,
 } from "../../agents/workspace.js";
+import { getTenantAgent } from "../../db/models/tenant-agent.js";
+import { isDbInitialized } from "../../db/index.js";
 import { resolveChannelModelOverride } from "../../channels/model-overrides.js";
 import { type OpenClawConfig, loadConfig } from "../../config/config.js";
 import { applyLinkUnderstanding } from "../../link-understanding/apply.js";
@@ -81,11 +83,26 @@ export async function getReplyFromConfig(
     config: cfg,
   });
   const agentSkillFilter = resolveAgentSkillsFilter(cfg, agentId);
+  // Multi-tenant: file config (cfg.agents[id]) doesn't contain tenant-managed
+  // agents — their skill enable list lives in the `tenant_agents.skills` DB
+  // column, written by the UI agent skill management. Fetch it here and
+  // merge as an additional filter source so UI changes take effect.
+  let tenantAgentSkillFilter: string[] | undefined;
+  if (ctx.TenantId && isDbInitialized()) {
+    try {
+      const tenantAgentRecord = await getTenantAgent(ctx.TenantId, agentId);
+      if (tenantAgentRecord?.skills && tenantAgentRecord.skills.length > 0) {
+        tenantAgentSkillFilter = tenantAgentRecord.skills;
+      }
+    } catch (err) {
+      skillsLog.warn(`[skills-chain] failed to fetch tenant agent skill list: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   const mergedSkillFilter = mergeSkillFilters(
     opts?.skillFilter,
-    agentSkillFilter,
+    agentSkillFilter ?? tenantAgentSkillFilter,
   );
-  skillsLog.info(`[skills-chain] get-reply: agentId=${agentId}, agentSkillFilter=${JSON.stringify(agentSkillFilter ?? null)}, channelFilter=${JSON.stringify(opts?.skillFilter ?? null)}, merged=${JSON.stringify(mergedSkillFilter ?? null)}`);
+  skillsLog.info(`[skills-chain] get-reply: agentId=${agentId}, agentSkillFilter=${JSON.stringify(agentSkillFilter ?? null)}, tenantAgentSkillFilter=${JSON.stringify(tenantAgentSkillFilter ?? null)}, channelFilter=${JSON.stringify(opts?.skillFilter ?? null)}, merged=${JSON.stringify(mergedSkillFilter ?? null)}`);
   const resolvedOpts =
     mergedSkillFilter !== undefined ? { ...opts, skillFilter: mergedSkillFilter } : opts;
   const agentCfg = cfg.agents?.defaults;
