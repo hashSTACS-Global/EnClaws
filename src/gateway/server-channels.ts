@@ -132,7 +132,21 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
     const cfg = loadConfigWithDb();
     resetDirectoryCache({ channel: channelId, accountId });
     const store = getStore(channelId);
-    const accountIds = accountId ? [accountId] : plugin.config.listAccountIds(cfg);
+    // Align accountId with plugin's canonical form. Plugins (e.g. WeCom) may
+    // normalize account ids (lowercase), while the caller (tenant API) passes
+    // the original-case DB appId. Without this, startChannelInternal would
+    // write runtime state under the original-case key while the snapshot
+    // iterates canonical ids — leaving running:false in the visible snapshot.
+    const canonicalIds = plugin.config.listAccountIds(cfg);
+    let accountIds: string[];
+    if (accountId) {
+      const match = canonicalIds.find(
+        (cid) => cid === accountId || cid.toLowerCase() === accountId.toLowerCase(),
+      );
+      accountIds = [match ?? accountId];
+    } else {
+      accountIds = canonicalIds;
+    }
     if (accountIds.length === 0) {
       return;
     }
@@ -285,8 +299,14 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
       ...(plugin ? plugin.config.listAccountIds(cfg) : []),
     ]);
     if (accountId) {
+      // Align to plugin's canonical form so we match the key used by
+      // startChannelInternal and the plugin's setStatus updates.
+      const canonicalIds = plugin ? plugin.config.listAccountIds(cfg) : [];
+      const match = canonicalIds.find(
+        (cid) => cid === accountId || cid.toLowerCase() === accountId.toLowerCase(),
+      );
       knownIds.clear();
-      knownIds.add(accountId);
+      knownIds.add(match ?? accountId);
     }
 
     await Promise.all(

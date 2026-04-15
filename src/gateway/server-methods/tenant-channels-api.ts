@@ -68,6 +68,24 @@ function isValidPolicy(v: unknown): v is ChannelPolicy {
   return typeof v === "string" && VALID_POLICIES.includes(v as ChannelPolicy);
 }
 
+type ConnectionState = "online" | "offline" | "connecting";
+
+// Three-state status derived from the plugin's runtime snapshot:
+// - plugin not running                     → offline
+// - plugin explicitly reported connected   → online / offline
+// - plugin running but never reported      → connecting (state unknown)
+// This avoids falsely showing a misconfigured bot as "online" while its
+// plugin is still retrying WS auth in the background.
+function resolveConnectionState(snapshot: {
+  running?: boolean;
+  connected?: boolean;
+}): ConnectionState {
+  if (snapshot.running !== true) return "offline";
+  if (snapshot.connected === true) return "online";
+  if (snapshot.connected === false) return "offline";
+  return "connecting";
+}
+
 export const tenantChannelsHandlers: GatewayRequestHandlers = {
   "tenant.channels.list": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
@@ -108,9 +126,22 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
             const linkedAgent = a.agentId
               ? allAgents.find((ag) => ag.agentId === a.agentId)
               : null;
-            // Resolve connection status from runtime snapshot
-            const accountSnapshot =
-              runtimeSnapshot.channelAccounts[ch.channelType as ChannelId]?.[a.appId];
+            // Resolve connection status from runtime snapshot.
+            // Some plugins (e.g. WeCom) normalize account keys to lowercase in
+            // their snapshot while DB stores the original-case appId — try the
+            // exact key first, then fall back to a case-insensitive scan.
+            const accountsForChannel =
+              runtimeSnapshot.channelAccounts[ch.channelType as ChannelId];
+            let accountSnapshot = accountsForChannel?.[a.appId];
+            if (!accountSnapshot && accountsForChannel) {
+              const lowerAppId = a.appId.toLowerCase();
+              for (const [key, snap] of Object.entries(accountsForChannel)) {
+                if (key.toLowerCase() === lowerAppId) {
+                  accountSnapshot = snap;
+                  break;
+                }
+              }
+            }
             return {
               id: a.id,
               appId: a.appId,
@@ -119,6 +150,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
               groupPolicy: a.groupPolicy,
               isActive: a.isActive,
               connectionStatus: accountSnapshot ? {
+                state: resolveConnectionState(accountSnapshot),
                 connected: accountSnapshot.connected === true,
                 lastConnectedAt: accountSnapshot.lastStartAt ?? null,
                 lastDisconnectedAt: accountSnapshot.lastStopAt ?? null,
@@ -373,6 +405,34 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         detail: { channelName, channelPolicy, appCount: createdApps.length },
       });
 
+      // Attach live connectionStatus so the UI doesn't flicker "offline" before
+      // the first list refresh picks up the started runtime.
+      const snapshotAfterStart = context.getRuntimeSnapshot();
+      const appsWithStatus = createdApps.map((app) => {
+        const accountsForChannel =
+          snapshotAfterStart.channelAccounts[channelType as ChannelId];
+        let accountSnapshot = accountsForChannel?.[app.appId];
+        if (!accountSnapshot && accountsForChannel) {
+          const lowerAppId = app.appId.toLowerCase();
+          for (const [key, snap] of Object.entries(accountsForChannel)) {
+            if (key.toLowerCase() === lowerAppId) {
+              accountSnapshot = snap;
+              break;
+            }
+          }
+        }
+        return {
+          ...app,
+          connectionStatus: accountSnapshot ? {
+            state: resolveConnectionState(accountSnapshot),
+            connected: accountSnapshot.connected === true,
+            lastConnectedAt: accountSnapshot.lastStartAt ?? null,
+            lastDisconnectedAt: accountSnapshot.lastStopAt ?? null,
+            lastError: accountSnapshot.lastError ?? null,
+          } : null,
+        };
+      });
+
       respond(true, {
         id: channel.id,
         channelType: channel.channelType,
@@ -380,7 +440,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         channelPolicy: channel.channelPolicy,
         config: channel.config,
         isActive: channel.isActive,
-        apps: createdApps,
+        apps: appsWithStatus,
         agents: createdAgents,
       });
     } catch (err: unknown) {

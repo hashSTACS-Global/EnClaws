@@ -830,11 +830,20 @@ export async function monitorWeComProvider(options: WeComMonitorOptions): Promis
     wsClient.on("authenticated", () => {
       runtime.log?.(`[${account.accountId}] Authentication successful`);
       setWeComWebSocket(account.accountId, wsClient);
+      setStatus?.({
+        accountId: account.accountId,
+        connected: true,
+        lastError: null,
+      });
     });
 
     // 监听断开事件
     wsClient.on("disconnected", (reason) => {
       runtime.log?.(`[${account.accountId}] WebSocket disconnected: ${reason}`);
+      setStatus?.({
+        accountId: account.accountId,
+        connected: false,
+      });
     });
 
 

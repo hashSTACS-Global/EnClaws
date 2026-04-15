@@ -31,6 +31,7 @@ interface AgentOption {
 }
 
 interface AppConnectionStatus {
+  state?: "online" | "offline" | "connecting";
   connected: boolean;
   lastConnectedAt: number | null;
   lastDisconnectedAt: number | null;
@@ -153,9 +154,12 @@ export class TenantChannelsView extends LitElement {
     }
     .connection-badge.online { background: #16a34a; color: #fff; }
     .connection-badge.offline { background: #71717a; color: #fff; }
+    .connection-badge.connecting { background: #ca8a04; color: #fff; }
     .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
     .status-dot.active { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
     .status-dot.inactive { background: #525252; }
+    .status-dot.pending { background: #eab308; box-shadow: 0 0 6px #eab30888; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
     .channel-actions {
       display: flex; gap: 0.5rem; padding-top: 0.85rem;
       margin-top: 0.5rem;
@@ -908,15 +912,29 @@ export class TenantChannelsView extends LitElement {
               <span class="info-label">${ch.channelType === "wecom" ? t("tenantChannels.wecomBotId") : t("tenantChannels.appId")}</span>
               <span class="info-value mono">${app.appId}</span>
             </div>
-            ${app.connectionStatus ? html`
-              <div class="info-row">
-                <span class="info-label">${t("tenantChannels.connectionStatus")}</span>
-                <span class="connection-badge ${app.connectionStatus.connected ? "online" : "offline"}">
-                  <span class="status-dot ${app.connectionStatus.connected ? "active" : "inactive"}"></span>
-                  ${app.connectionStatus.connected ? t("tenantChannels.online") : t("tenantChannels.offline")}
-                </span>
-              </div>
-            ` : nothing}
+            ${app.connectionStatus ? (() => {
+              const st = app.connectionStatus.state
+                ?? (app.connectionStatus.connected ? "online" : "offline");
+              const badgeLabel = st === "online"
+                ? t("tenantChannels.online")
+                : st === "connecting"
+                  ? t("tenantChannels.connecting")
+                  : t("tenantChannels.offline");
+              const dotClass = st === "online"
+                ? "active"
+                : st === "connecting"
+                  ? "pending"
+                  : "inactive";
+              return html`
+                <div class="info-row">
+                  <span class="info-label">${t("tenantChannels.connectionStatus")}</span>
+                  <span class="connection-badge ${st}">
+                    <span class="status-dot ${dotClass}"></span>
+                    ${badgeLabel}
+                  </span>
+                </div>
+              `;
+            })() : nothing}
             ${app.agent ? html`
               <div class="info-row">
                 <span class="info-label">${t("tenantChannels.agent")}</span>
