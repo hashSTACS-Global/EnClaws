@@ -140,6 +140,7 @@ export function buildPathPermissionPolicy(ctx: {
     { prefix: tmpRoot, ops: ALL_OPS },
 
     // ── L2: read + write, no delete, no empty for critical files ───────────
+    { prefix: path.join(tenantRoot, "IDENTITY.md"), ops: READ_ONLY },
     { prefix: path.join(tenantRoot, "MEMORY.md"), ops: NO_DELETE, noEmpty: true },
     { prefix: path.join(userRoot, "USER.md"), ops: NO_DELETE, noEmpty: true },
     { prefix: path.join(userRoot, "sessions"), ops: NO_DELETE },
