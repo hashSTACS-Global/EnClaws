@@ -2,54 +2,127 @@
  * Tenant-level statistics — SQLite implementation.
  */
 
-import { sqliteQuery } from "../index.js";
 import { isCronSessionKey } from "../../../sessions/session-key-utils.js";
+import { sqliteQuery } from "../index.js";
 
 function periodCondition(column: string, period: "all" | "month" | "today"): string {
-  if (period === "month") {return `${column} >= date('now', 'start of month')`;}
-  if (period === "today") {return `${column} >= date('now')`;}
+  if (period === "month") {
+    return `${column} >= date('now', 'start of month')`;
+  }
+  if (period === "today") {
+    return `${column} >= date('now')`;
+  }
   return "1=1";
 }
 
 function pInt(v: unknown): number {
-  return parseInt(String(v ?? 0), 10) || 0;
+  return parseInt(String(Number(v) || 0), 10) || 0;
 }
 
 export function getTenantSummary(tenantId: string) {
-  const tenantRes = sqliteQuery("SELECT name, plan, status, created_at FROM tenants WHERE id = ?", [tenantId]);
+  const tenantRes = sqliteQuery("SELECT name, plan, status, created_at FROM tenants WHERE id = ?", [
+    tenantId,
+  ]);
   const t = tenantRes.rows[0] ?? {};
-  const adminRes = sqliteQuery("SELECT display_name FROM users WHERE tenant_id = ? AND role = 'owner' LIMIT 1", [tenantId]);
+  const adminRes = sqliteQuery(
+    "SELECT display_name FROM users WHERE tenant_id = ? AND role = 'owner' LIMIT 1",
+    [tenantId],
+  );
 
-  const agentTotal = pInt(sqliteQuery("SELECT COUNT(*) as c FROM tenant_agents WHERE tenant_id = ?", [tenantId]).rows[0]?.c);
-  const agentActive = pInt(sqliteQuery("SELECT COUNT(*) as c FROM tenant_agents WHERE tenant_id = ? AND is_active = 1", [tenantId]).rows[0]?.c);
-  const agentActive30d = pInt(sqliteQuery("SELECT COUNT(DISTINCT agent_id) as c FROM llm_interaction_traces WHERE tenant_id = ? AND created_at >= datetime('now', '-30 days')", [tenantId]).rows[0]?.c);
+  const agentTotal = pInt(
+    sqliteQuery("SELECT COUNT(*) as c FROM tenant_agents WHERE tenant_id = ?", [tenantId]).rows[0]
+      ?.c,
+  );
+  const agentActive = pInt(
+    sqliteQuery("SELECT COUNT(*) as c FROM tenant_agents WHERE tenant_id = ? AND is_active = 1", [
+      tenantId,
+    ]).rows[0]?.c,
+  );
+  const agentActive30d = pInt(
+    sqliteQuery(
+      "SELECT COUNT(DISTINCT agent_id) as c FROM llm_interaction_traces WHERE tenant_id = ? AND created_at >= datetime('now', '-30 days')",
+      [tenantId],
+    ).rows[0]?.c,
+  );
 
-  const channelTotal = pInt(sqliteQuery("SELECT COUNT(*) as c FROM tenant_channels WHERE tenant_id = ?", [tenantId]).rows[0]?.c);
-  const channelActive = pInt(sqliteQuery("SELECT COUNT(*) as c FROM tenant_channels WHERE tenant_id = ? AND is_active = 1", [tenantId]).rows[0]?.c);
-  const appCount = pInt(sqliteQuery("SELECT COUNT(*) as c FROM tenant_channel_apps WHERE tenant_id = ?", [tenantId]).rows[0]?.c);
+  const channelTotal = pInt(
+    sqliteQuery("SELECT COUNT(*) as c FROM tenant_channels WHERE tenant_id = ?", [tenantId]).rows[0]
+      ?.c,
+  );
+  const channelActive = pInt(
+    sqliteQuery("SELECT COUNT(*) as c FROM tenant_channels WHERE tenant_id = ? AND is_active = 1", [
+      tenantId,
+    ]).rows[0]?.c,
+  );
+  const appCount = pInt(
+    sqliteQuery("SELECT COUNT(*) as c FROM tenant_channel_apps WHERE tenant_id = ?", [tenantId])
+      .rows[0]?.c,
+  );
 
   // Count models from JSON array in tenant_models.models column
-  const modelRows = sqliteQuery("SELECT models FROM tenant_models WHERE tenant_id = ? AND is_active = 1", [tenantId]).rows;
+  const modelRows = sqliteQuery(
+    "SELECT models FROM tenant_models WHERE tenant_id = ? AND is_active = 1",
+    [tenantId],
+  ).rows;
   let modelTotal = 0;
   for (const r of modelRows) {
     try {
       const arr = typeof r.models === "string" ? JSON.parse(r.models) : r.models;
-      if (Array.isArray(arr)) {modelTotal += arr.length;}
-    } catch { /* skip */ }
+      if (Array.isArray(arr)) {
+        modelTotal += arr.length;
+      }
+    } catch {
+      /* skip */
+    }
   }
   const providerCount = modelRows.length;
 
-  const userTotal = pInt(sqliteQuery("SELECT COUNT(DISTINCT COALESCE(union_id, id)) as c FROM users WHERE tenant_id = ? AND status = 'active'", [tenantId]).rows[0]?.c);
-  const userActive30d = pInt(sqliteQuery("SELECT COUNT(DISTINCT user_id) as c FROM llm_interaction_traces WHERE tenant_id = ? AND created_at >= datetime('now', '-30 days')", [tenantId]).rows[0]?.c);
+  const userTotal = pInt(
+    sqliteQuery(
+      "SELECT COUNT(DISTINCT COALESCE(union_id, id)) as c FROM users WHERE tenant_id = ? AND status = 'active'",
+      [tenantId],
+    ).rows[0]?.c,
+  );
+  const userActive30d = pInt(
+    sqliteQuery(
+      "SELECT COUNT(DISTINCT user_id) as c FROM llm_interaction_traces WHERE tenant_id = ? AND created_at >= datetime('now', '-30 days')",
+      [tenantId],
+    ).rows[0]?.c,
+  );
 
-  const tokensAll = pInt(sqliteQuery("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = ?", [tenantId]).rows[0]?.c);
-  const tokensMonth = pInt(sqliteQuery("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = ? AND recorded_at >= date('now', 'start of month')", [tenantId]).rows[0]?.c);
-  const tokensToday = pInt(sqliteQuery("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = ? AND recorded_at >= date('now')", [tenantId]).rows[0]?.c);
-  const tokensLastMonth = pInt(sqliteQuery("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = ? AND recorded_at >= date('now', 'start of month', '-1 month') AND recorded_at < date('now', 'start of month')", [tenantId]).rows[0]?.c);
+  const tokensAll = pInt(
+    sqliteQuery(
+      "SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = ?",
+      [tenantId],
+    ).rows[0]?.c,
+  );
+  const tokensMonth = pInt(
+    sqliteQuery(
+      "SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = ? AND recorded_at >= date('now', 'start of month')",
+      [tenantId],
+    ).rows[0]?.c,
+  );
+  const tokensToday = pInt(
+    sqliteQuery(
+      "SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = ? AND recorded_at >= date('now')",
+      [tenantId],
+    ).rows[0]?.c,
+  );
+  const tokensLastMonth = pInt(
+    sqliteQuery(
+      "SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE tenant_id = ? AND recorded_at >= date('now', 'start of month', '-1 month') AND recorded_at < date('now', 'start of month')",
+      [tenantId],
+    ).rows[0]?.c,
+  );
 
-  const quotasRaw = sqliteQuery("SELECT quotas FROM tenants WHERE id = ?", [tenantId]).rows[0]?.quotas;
+  const quotasRaw = sqliteQuery("SELECT quotas FROM tenants WHERE id = ?", [tenantId]).rows[0]
+    ?.quotas;
   let quotas: Record<string, unknown> = {};
-  try { quotas = typeof quotasRaw === "string" ? JSON.parse(quotasRaw) : (quotasRaw ?? {}); } catch { /* */ }
+  try {
+    quotas = typeof quotasRaw === "string" ? JSON.parse(quotasRaw) : (quotasRaw ?? {});
+  } catch {
+    /* */
+  }
 
   return {
     tenant: {
@@ -64,8 +137,11 @@ export function getTenantSummary(tenantId: string) {
     models: { total: modelTotal, providers: providerCount },
     users: { total: userTotal, active30d: userActive30d },
     tokens: {
-      all: tokensAll, month: tokensMonth, today: tokensToday,
-      quota: pInt(quotas.maxTokensPerMonth), lastMonth: tokensLastMonth,
+      all: tokensAll,
+      month: tokensMonth,
+      today: tokensToday,
+      quota: pInt(quotas.maxTokensPerMonth),
+      lastMonth: tokensLastMonth,
     },
   };
 }
@@ -80,13 +156,21 @@ export function getTenantTokenTrend(tenantId: string, days = 7) {
      GROUP BY DATE(recorded_at) ORDER BY day ASC`,
     [tenantId, `-${days} days`],
   );
-  return result.rows.map((r: any) => {
+  return result.rows.map((r: Record<string, unknown>) => {
     const d = new Date(r.day as string);
-    return { date: `${d.getMonth() + 1}/${d.getDate()}`, inputTokens: pInt(r.input_tokens), outputTokens: pInt(r.output_tokens) };
+    return {
+      date: `${d.getMonth() + 1}/${d.getDate()}`,
+      inputTokens: pInt(r.input_tokens),
+      outputTokens: pInt(r.output_tokens),
+    };
   });
 }
 
-export function getTenantTokenRank(tenantId: string, period: "all" | "month" | "today" = "all", limit = 5) {
+export function getTenantTokenRank(
+  tenantId: string,
+  period: "all" | "month" | "today" = "all",
+  limit = 5,
+) {
   const cond = periodCondition("ur.recorded_at", period);
   const condNoAlias = periodCondition("recorded_at", period);
 
@@ -114,21 +198,33 @@ export function getTenantTokenRank(tenantId: string, period: "all" | "month" | "
     [tenantId, limit],
   );
 
-  const modelTotal = modelsRes.rows.reduce((s: number, r: any) => s + pInt(r.tokens), 0);
+  const modelTotal = modelsRes.rows.reduce(
+    (s: number, r: Record<string, unknown>) => s + pInt(r.tokens),
+    0,
+  );
 
   return {
-    users: usersRes.rows.map((r: any) => {
+    users: usersRes.rows.map((r: Record<string, unknown>) => {
       const hasRealUser = r.matched_user_id != null;
       const name = hasRealUser
         ? (r.name as string) || "-"
-        : isCronSessionKey(r.session_key as string | null) ? "System" : (r.name as string) || "-";
+        : isCronSessionKey(r.session_key as string | null)
+          ? "System"
+          : (r.name as string) || "-";
       return { name, tokens: pInt(r.tokens) };
     }),
-    models: modelsRes.rows.map((r: any) => {
+    models: modelsRes.rows.map((r: Record<string, unknown>) => {
       const tokens = pInt(r.tokens);
-      return { model: r.model as string, tokens, percent: modelTotal > 0 ? Math.round(tokens / modelTotal * 1000) / 10 : 0 };
+      return {
+        model: r.model as string,
+        tokens,
+        percent: modelTotal > 0 ? Math.round((tokens / modelTotal) * 1000) / 10 : 0,
+      };
     }),
-    agents: agentsRes.rows.map((r: any) => ({ name: (r.name as string) || "-", tokens: pInt(r.tokens) })),
+    agents: agentsRes.rows.map((r: Record<string, unknown>) => ({
+      name: (r.name as string) || "-",
+      tokens: pInt(r.tokens),
+    })),
   };
 }
 
@@ -136,21 +232,49 @@ export function getTenantLlmStats(tenantId: string, period: "all" | "month" | "t
   const cond = periodCondition("created_at", period);
   const where = `tenant_id = ? AND ${cond}`;
 
-  const turns = pInt(sqliteQuery(`SELECT COUNT(DISTINCT turn_id) as c FROM llm_interaction_traces WHERE ${where}`, [tenantId]).rows[0]?.c);
-  const avgDurationMs = Math.round(parseFloat(String(sqliteQuery(`SELECT AVG(duration_ms) as avg_ms FROM llm_interaction_traces WHERE duration_ms IS NOT NULL AND ${where}`, [tenantId]).rows[0]?.avg_ms)) || 0);
-  const errorRow = sqliteQuery(`SELECT COUNT(CASE WHEN error_message IS NOT NULL OR stop_reason = 'error' THEN 1 END) as err, COUNT(*) as total FROM llm_interaction_traces WHERE ${where}`, [tenantId]).rows[0];
+  const turns = pInt(
+    sqliteQuery(`SELECT COUNT(DISTINCT turn_id) as c FROM llm_interaction_traces WHERE ${where}`, [
+      tenantId,
+    ]).rows[0]?.c,
+  );
+  const avgDurationMs = Math.round(
+    parseFloat(
+      String(
+        sqliteQuery(
+          `SELECT AVG(duration_ms) as avg_ms FROM llm_interaction_traces WHERE duration_ms IS NOT NULL AND ${where}`,
+          [tenantId],
+        ).rows[0]?.avg_ms,
+      ),
+    ) || 0,
+  );
+  const errorRow = sqliteQuery(
+    `SELECT COUNT(CASE WHEN error_message IS NOT NULL OR stop_reason = 'error' THEN 1 END) as err, COUNT(*) as total FROM llm_interaction_traces WHERE ${where}`,
+    [tenantId],
+  ).rows[0];
   const errCount = pInt(errorRow?.err);
   const totalCount = pInt(errorRow?.total);
-  const errorRate = totalCount > 0 ? Math.round(errCount / totalCount * 1000) / 10 : 0;
+  const errorRate = totalCount > 0 ? Math.round((errCount / totalCount) * 1000) / 10 : 0;
 
-  const modelRes = sqliteQuery(`SELECT model, COUNT(*) as count FROM llm_interaction_traces WHERE model IS NOT NULL AND ${where} GROUP BY model ORDER BY count DESC`, [tenantId]);
-  const modelTotalCount = modelRes.rows.reduce((s: number, r: any) => s + pInt(r.count), 0);
+  const modelRes = sqliteQuery(
+    `SELECT model, COUNT(*) as count FROM llm_interaction_traces WHERE model IS NOT NULL AND ${where} GROUP BY model ORDER BY count DESC`,
+    [tenantId],
+  );
+  const modelTotalCount = modelRes.rows.reduce(
+    (s: number, r: Record<string, unknown>) => s + pInt(r.count),
+    0,
+  );
 
   return {
-    turns, avgDurationMs, errorRate,
-    modelDistribution: modelRes.rows.map((r: any) => {
+    turns,
+    avgDurationMs,
+    errorRate,
+    modelDistribution: modelRes.rows.map((r: Record<string, unknown>) => {
       const count = pInt(r.count);
-      return { model: r.model as string, count, percent: modelTotalCount > 0 ? Math.round(count / modelTotalCount * 100) : 0 };
+      return {
+        model: r.model as string,
+        count,
+        percent: modelTotalCount > 0 ? Math.round((count / modelTotalCount) * 100) : 0,
+      };
     }),
   };
 }
@@ -163,7 +287,10 @@ export function getTenantChannelDistribution(tenantId: string) {
      GROUP BY tc.channel_type ORDER BY count DESC`,
     [tenantId],
   );
-  return result.rows.map((r: any) => ({ type: r.type as string, count: pInt(r.count) }));
+  return result.rows.map((r: Record<string, unknown>) => ({
+    type: r.type as string,
+    count: pInt(r.count),
+  }));
 }
 
 export function getTenantRecentTraces(tenantId: string, limit = 10) {
@@ -185,11 +312,14 @@ export function getTenantRecentTraces(tenantId: string, limit = 10) {
      ORDER BY t.created_at DESC LIMIT ?`,
     [tenantId, limit],
   );
-  return result.rows.map((r: any) => ({
+  return result.rows.map((r: Record<string, unknown>) => ({
     agentName: (r.agent_name as string) || "-",
-    userName: r.matched_user_id != null
-      ? (r.user_name as string) || "-"
-      : isCronSessionKey(r.session_key as string | null) ? "System" : (r.user_name as string) || "-",
+    userName:
+      r.matched_user_id != null
+        ? (r.user_name as string) || "-"
+        : isCronSessionKey(r.session_key as string | null)
+          ? "System"
+          : (r.user_name as string) || "-",
     model: (r.model as string) || "-",
     tokens: pInt(r.tokens),
     createdAt: r.created_at ? new Date(r.created_at as string).toISOString() : "",

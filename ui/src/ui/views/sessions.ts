@@ -1,6 +1,5 @@
 import { html, nothing } from "lit";
 import { t } from "../../i18n/index.ts";
-
 import { pathForTab } from "../navigation.ts";
 import { formatSessionTokens } from "../presenter.ts";
 import type { GatewaySessionRow, SessionsListResult } from "../types.ts";
@@ -69,15 +68,25 @@ function localizedLabel(value: string, map: Record<string, string>): string {
 }
 
 function localizedRelativeTime(epochMs: number | null | undefined): string {
-  if (epochMs == null || !Number.isFinite(epochMs)) {return "n/a";}
+  if (epochMs == null || !Number.isFinite(epochMs)) {
+    return "n/a";
+  }
   const diff = Date.now() - epochMs;
-  if (diff < 0) {return "n/a";}
+  if (diff < 0) {
+    return "n/a";
+  }
   const sec = Math.round(diff / 1000);
-  if (sec < 60) {return t("sessions.timeJustNow");}
+  if (sec < 60) {
+    return t("sessions.timeJustNow");
+  }
   const min = Math.round(sec / 60);
-  if (min < 60) {return t("sessions.timeMinAgo", { n: String(min) });}
+  if (min < 60) {
+    return t("sessions.timeMinAgo", { n: String(min) });
+  }
   const hr = Math.round(min / 60);
-  if (hr < 48) {return t("sessions.timeHourAgo", { n: String(hr) });}
+  if (hr < 48) {
+    return t("sessions.timeHourAgo", { n: String(hr) });
+  }
   const day = Math.round(hr / 24);
   return t("sessions.timeDayAgo", { n: String(day) });
 }
@@ -118,7 +127,7 @@ function withCurrentOption(options: readonly string[], current: string): string[
   return [...options, current];
 }
 
-function withCurrentLabeledOption(
+function _withCurrentLabeledOption(
   options: readonly { value: string; label: string }[],
   current: string,
 ): Array<{ value: string; label: string }> {
@@ -267,24 +276,30 @@ function renderRow(
     typeof row.displayName === "string" && row.displayName.trim().length > 0
       ? row.displayName.trim()
       : null;
-  const label = typeof row.label === "string" ? row.label.trim() : "";
+  const _label = typeof row.label === "string" ? row.label.trim() : "";
   // userRole=owner means the session belongs to a webchat user (owner account);
   // anything else is an external channel session — use row.channel for the badge.
   const isWebChat = row.userRole === "owner";
   const rawChannel = row.channel || "unknown";
-  const resolvedChannel = isWebChat ? "WebChat" : (SYSTEM_CHANNELS.has(rawChannel) ? "System" : rawChannel);
+  const resolvedChannel = isWebChat
+    ? "WebChat"
+    : SYSTEM_CHANNELS.has(rawChannel)
+      ? "System"
+      : rawChannel;
   const canLink = row.kind !== "global" && isWebChat;
   const chatUrl = canLink
     ? `${pathForTab("chat", basePath)}?session=${encodeURIComponent(row.key)}`
     : null;
   const titleText = displayName ?? (row.key.length > 25 ? `${row.key.slice(0, 25)}…` : row.key);
   const channelBadge = isWebChat
-    ? html`<span class="session-channel-badge session-channel-badge--web">WebChat</span>`
+    ? html`
+        <span class="session-channel-badge session-channel-badge--web">WebChat</span>
+      `
     : html`<span class="session-channel-badge session-channel-badge--${resolvedChannel}" title=${resolvedChannel}>${resolvedChannel}</span>`;
 
   const kindLabel = KIND_LABEL_MAP[row.kind] ? t(KIND_LABEL_MAP[row.kind]) : row.kind;
   const tokens = formatSessionTokens(row);
-  const modelDisplay = row.model ? row.model.split("/").pop() ?? row.model : "";
+  const modelDisplay = row.model ? (row.model.split("/").pop() ?? row.model) : "";
 
   return html`
     <div class="session-card">
@@ -292,12 +307,27 @@ function renderRow(
         <div class="session-card__left">
           <div class="session-card__title-line">
             ${channelBadge}
-            ${canLink ? html`<a href=${chatUrl} class="session-link" title=${displayName ? "" : row.key} @click=${(e: MouseEvent) => {
-              if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {return;}
-              e.preventDefault();
-              window.history.pushState({}, "", chatUrl);
-              window.dispatchEvent(new PopStateEvent("popstate"));
-            }}>${titleText}</a>` : html`<span class="session-card__key" title=${displayName ? "" : row.key}>${titleText}</span>`}
+            ${
+              canLink
+                ? html`<a href=${chatUrl} class="session-link" title=${displayName ? "" : row.key} @click=${(
+                    e: MouseEvent,
+                  ) => {
+                    if (
+                      e.defaultPrevented ||
+                      e.button !== 0 ||
+                      e.metaKey ||
+                      e.ctrlKey ||
+                      e.shiftKey ||
+                      e.altKey
+                    ) {
+                      return;
+                    }
+                    e.preventDefault();
+                    window.history.pushState({}, "", chatUrl);
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  }}>${titleText}</a>`
+                : html`<span class="session-card__key" title=${displayName ? "" : row.key}>${titleText}</span>`
+            }
           </div>
           <div class="session-card__meta">
             <span>${kindLabel}</span>

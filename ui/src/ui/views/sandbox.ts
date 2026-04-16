@@ -204,7 +204,9 @@ function renderTimeline(rows: GatewaySessionRow[]) {
 
   // Helper to render a group of events
   const renderGroup = (title: string, groupEvents: GatewaySessionRow[]) => {
-    if (groupEvents.length === 0) {return nothing;}
+    if (groupEvents.length === 0) {
+      return nothing;
+    }
     return html`
       <div class="timeline-group">
         <div class="timeline-group__title">${title}</div>
@@ -268,7 +270,7 @@ function renderTaskPlanPanel(
   }
 
   return html`
-    <div class="task-plan ${allDone ? 'task-plan--complete' : ''}">
+    <div class="task-plan ${allDone ? "task-plan--complete" : ""}">
       ${plan.description ? html`<div class="task-plan__desc">${plan.description}</div>` : nothing}
       <div class="task-plan__progress-row">
         <span>${t("sandbox.plan.tasksProgress", { done: String(done), total: String(total) })}</span>
@@ -277,7 +279,7 @@ function renderTaskPlanPanel(
       <div class="task-plan__bar">
         <div
           class="task-plan__fill"
-          style="width: ${pct}%; background: ${allDone ? '#10b981' : '#818cf8'};"
+          style="width: ${pct}%; background: ${allDone ? "#10b981" : "#818cf8"};"
         ></div>
       </div>
       <div class="task-plan__list">
@@ -292,9 +294,11 @@ function renderTaskPlanPanel(
           const linked = findLinkedWorker(t.title);
           return html`<div class="${cls}">
             ${icon} ${t.title}
-            ${linked
-              ? html`<span class="task-plan__worker-link" title="Linked: ${linked.label || linked.key}">🔗</span>`
-              : nothing}
+            ${
+              linked
+                ? html`<span class="task-plan__worker-link" title="Linked: ${linked.label || linked.key}">🔗</span>`
+                : nothing
+            }
           </div>`;
         })}
       </div>
@@ -307,8 +311,10 @@ function renderTaskPlanPanel(
                 <span class="task-plan__celebrate">🎉</span>
               </div>
               <div class="task-plan__confetti">
-                ${Array.from({ length: 20 }, (_, i) =>
-                  html`<span class="confetti-piece" style="--i:${i}; --x:${Math.random() * 100}; --delay:${Math.random() * 2}s; --color:${['#818cf8','#10b981','#f59e0b','#ef4444','#ec4899','#06b6d4'][i % 6]}"></span>`,
+                ${Array.from(
+                  { length: 20 },
+                  (_, i) =>
+                    html`<span class="confetti-piece" style="--i:${i}; --x:${Math.random() * 100}; --delay:${Math.random() * 2}s; --color:${["#818cf8", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#06b6d4"][i % 6]}"></span>`,
                 )}
               </div>
             `
@@ -366,21 +372,33 @@ const prevPositions: Record<string, { cx: number; cy: number; facingLeft: boolea
 export function renderSandbox(props: SandboxProps) {
   const rows = props.result?.sessions ?? [];
   const globalSession = rows.find((r) => r.kind === "global");
-  
+
   // Only show active sessions that belong to the current session tree
   const activeSessions = rows.filter(
     (row) => row.kind !== "global" && !row.systemSent && row.key.startsWith(props.sessionKey),
   );
-  
+
   const totalBusy = activeSessions.filter((r) => r.outputTokens && r.outputTokens > 0).length;
   const totalIdle = activeSessions.length - totalBusy;
   const totalTokens = activeSessions.reduce((sum, r) => sum + (r.totalTokens ?? 0), 0);
-  
+
   // Health computation
   const healthAborted = activeSessions.filter((r) => r.abortedLastRun).length;
-  const healthPercent = activeSessions.length === 0 ? 100 : Math.max(0, Math.round(((activeSessions.length - healthAborted) / activeSessions.length) * 100));
-  const healthStatus = healthPercent === 100 ? String(t("sandbox.health.excellent")) : healthPercent > 50 ? String(t("sandbox.health.degraded")) : String(t("sandbox.health.critical"));
-  const healthColor = healthPercent === 100 ? "#10b981" : healthPercent > 50 ? "#f59e0b" : "#ef4444";
+  const healthPercent =
+    activeSessions.length === 0
+      ? 100
+      : Math.max(
+          0,
+          Math.round(((activeSessions.length - healthAborted) / activeSessions.length) * 100),
+        );
+  const healthStatus =
+    healthPercent === 100
+      ? String(t("sandbox.health.excellent"))
+      : healthPercent > 50
+        ? String(t("sandbox.health.degraded"))
+        : String(t("sandbox.health.critical"));
+  const healthColor =
+    healthPercent === 100 ? "#10b981" : healthPercent > 50 ? "#f59e0b" : "#ef4444";
 
   // Calculate Time of Day
   const hour = new Date().getHours();
@@ -2082,7 +2100,7 @@ export function renderSandbox(props: SandboxProps) {
         </div>
         <div class="sandbox-header__stats">
           <div class="stat-chip" style="border-color: ${healthColor}40;">
-            <div class="stat-chip__dot" style="background: ${healthColor}; box-shadow: 0 0 6px ${healthColor}; animation: ${healthPercent < 100 ? 'pulse-dot 1s infinite' : 'none'};"></div>
+            <div class="stat-chip__dot" style="background: ${healthColor}; box-shadow: 0 0 6px ${healthColor}; animation: ${healthPercent < 100 ? "pulse-dot 1s infinite" : "none"};"></div>
             ${t("sandbox.header.health", { percent: String(healthPercent), status: healthStatus })}
           </div>
           <div class="stat-chip">
@@ -2100,9 +2118,11 @@ export function renderSandbox(props: SandboxProps) {
           <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
             ${props.loading ? "⟳" : "↺"}
           </button>
-          ${props.onForceRestart 
-            ? html`<button class="btn" style="border-color: rgba(239, 68, 68, 0.4); color: #ef4444;" @click=${props.onForceRestart} title="${t("sandbox.header.forceRestartTitle")}">${t("sandbox.header.forceRestart")}</button>` 
-            : nothing}
+          ${
+            props.onForceRestart
+              ? html`<button class="btn" style="border-color: rgba(239, 68, 68, 0.4); color: #ef4444;" @click=${props.onForceRestart} title="${t("sandbox.header.forceRestartTitle")}">${t("sandbox.header.forceRestart")}</button>`
+              : nothing
+          }
         </div>
       </div>
 
@@ -2216,36 +2236,40 @@ export function renderSandbox(props: SandboxProps) {
           <div class="pipeline">
             <div class="pipeline__belt"></div>
             ${(props.taskPlan?.todos || []).map((todo, idx, arr) => {
-              const total = arr.length;
+              const _total = arr.length;
               const isDone = todo.status === "done";
               const isActive = todo.status === "in_progress";
               const isTodo = todo.status === "todo";
-              
+
               // Calculate horizontal position on the belt
               let leftPos = "10%";
-              
+
               if (isTodo) {
                 // Stack on the left (0% to 30%)
-                const todoItems = arr.filter(t => t.status === "todo");
-                const myTodoIdx = todoItems.findIndex(t => t.id === todo.id);
-                leftPos = `${5 + (myTodoIdx * (30 / Math.max(1, todoItems.length)))}%`;
+                const todoItems = arr.filter((t) => t.status === "todo");
+                const myTodoIdx = todoItems.findIndex((t) => t.id === todo.id);
+                leftPos = `${5 + myTodoIdx * (30 / Math.max(1, todoItems.length))}%`;
               } else if (isActive) {
                 // Active items near the center (45% to 55%)
                 leftPos = "50%";
               } else if (isDone) {
                 // Stack on the right (70% to 95%)
-                const doneItems = arr.filter(t => t.status === "done");
-                const myDoneIdx = doneItems.findIndex(t => t.id === todo.id);
-                leftPos = `${70 + (myDoneIdx * (25 / Math.max(1, doneItems.length)))}%`;
+                const doneItems = arr.filter((t) => t.status === "done");
+                const myDoneIdx = doneItems.findIndex((t) => t.id === todo.id);
+                leftPos = `${70 + myDoneIdx * (25 / Math.max(1, doneItems.length))}%`;
               }
 
-              const cls = isDone ? "pipeline-task--done" : isActive ? "pipeline-task--active" : "pipeline-task--todo";
+              const cls = isDone
+                ? "pipeline-task--done"
+                : isActive
+                  ? "pipeline-task--active"
+                  : "pipeline-task--todo";
               const icon = isDone ? "✅" : isActive ? "🔥" : "📦";
-              
+
               return html`
                 <div class="pipeline-task ${cls}" style="left: ${leftPos}; z-index: ${100 - idx};">
                   ${icon}
-                  <div class="pipeline-task__label">${todo.title.slice(0, 20)}${todo.title.length > 20 ? '...' : ''}</div>
+                  <div class="pipeline-task__label">${todo.title.slice(0, 20)}${todo.title.length > 20 ? "..." : ""}</div>
                 </div>
               `;
             })}
@@ -2287,12 +2311,16 @@ export function renderSandbox(props: SandboxProps) {
                     <div class="empty-sandbox__sub">${t("sandbox.stage.runComplex")}</div>
                   </div>
                 `
-              : activeSessions.map((row, i) => {
+              : activeSessions.map((row, _i) => {
                   const isWorking = Boolean(row.outputTokens && row.outputTokens > 0);
 
                   // Count workers in each state for even distribution
-                  const workingRows = activeSessions.filter((r) => Boolean(r.outputTokens && r.outputTokens > 0));
-                  const idleRows = activeSessions.filter((r) => !r.outputTokens || r.outputTokens === 0);
+                  const workingRows = activeSessions.filter((r) =>
+                    Boolean(r.outputTokens && r.outputTokens > 0),
+                  );
+                  const idleRows = activeSessions.filter(
+                    (r) => !r.outputTokens || r.outputTokens === 0,
+                  );
                   const myGroup = isWorking ? workingRows : idleRows;
                   const myIndexInGroup = myGroup.indexOf(row);
                   const groupSize = myGroup.length;
@@ -2310,22 +2338,21 @@ export function renderSandbox(props: SandboxProps) {
                   }
 
                   // Index-based even angular distribution instead of hash collision
-                  const hashOffset = String(row.key)
-                    .split("")
-                    .reduce((acc, char) => acc + char.charCodeAt(0), 0) * 0.01;
+                  const hashOffset =
+                    String(row.key)
+                      .split("")
+                      .reduce((acc, char) => acc + char.charCodeAt(0), 0) * 0.01;
                   const sameZoneCount = isWorking
                     ? Math.ceil(groupSize / 2) // Split across 2 zones
                     : groupSize;
-                  const sameZoneIndex = isWorking
-                    ? Math.floor(myIndexInGroup / 2)
-                    : myIndexInGroup;
+                  const sameZoneIndex = isWorking ? Math.floor(myIndexInGroup / 2) : myIndexInGroup;
                   const angle =
                     sameZoneCount > 0
                       ? (sameZoneIndex / sameZoneCount) * 2 * Math.PI + hashOffset
                       : hashOffset;
 
                   // More varied radius to prevent ring clusters
-                  const varyRadius = 0.55 + ((sameZoneIndex % 3) * 0.2); // 0.55, 0.75, 0.95
+                  const varyRadius = 0.55 + (sameZoneIndex % 3) * 0.2; // 0.55, 0.75, 0.95
 
                   const finalCx =
                     targetZone.cx + Math.cos(angle) * (targetZone.radiusX * varyRadius);
