@@ -1,5 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import { loadConfig } from "../../config/config.js";
+import { loadSessionStore } from "../../config/sessions.js";
+import { resolveTenantSessionStorePath } from "../../config/sessions/tenant-paths.js";
 import { normalizeCronJobCreate, normalizeCronJobPatch } from "../../cron/normalize.js";
 import type { CronDelivery, CronMessageChannel } from "../../cron/types.js";
 import { normalizeHttpWebhookUrl } from "../../cron/webhook-url.js";
@@ -11,15 +13,24 @@ import { optionalStringEnum, stringEnum } from "../schema/typebox.js";
 import { type AnyAgentTool, jsonResult, readStringParam } from "./common.js";
 import { callGatewayTool, readGatewayCallOptions, type GatewayCallOptions } from "./gateway.js";
 import { resolveInternalSessionKey, resolveMainSessionAlias } from "./sessions-helpers.js";
-import { loadSessionStore } from "../../config/sessions.js";
-import { resolveTenantSessionStorePath } from "../../config/sessions/tenant-paths.js";
 
 // NOTE: We use Type.Object({}, { additionalProperties: true }) for job/patch
 // instead of CronAddParamsSchema/CronJobPatchSchema because the gateway schemas
 // contain nested unions. Tool schemas need to stay provider-friendly, so we
 // accept "any object" here and validate at runtime.
 
-const CRON_ACTIONS = ["status", "list", "add", "update", "remove", "stop", "start", "run", "runs", "wake"] as const;
+const CRON_ACTIONS = [
+  "status",
+  "list",
+  "add",
+  "update",
+  "remove",
+  "stop",
+  "start",
+  "run",
+  "runs",
+  "wake",
+] as const;
 
 const CRON_WAKE_MODES = ["now", "next-heartbeat"] as const;
 const CRON_RUN_MODES = ["due", "force"] as const;
@@ -197,10 +208,7 @@ function stripThreadSuffixFromSessionKey(sessionKey: string): string {
  * Resolve a Feishu open_id (ou_xxx) from the tenant user's session store.
  * Scans session entries for a `lastTo` containing `user:ou_xxx`.
  */
-function resolveFeishuOpenIdFromTenantStore(
-  tenantId: string,
-  userId: string,
-): string | undefined {
+function resolveFeishuOpenIdFromTenantStore(tenantId: string, userId: string): string | undefined {
   try {
     const storePath = resolveTenantSessionStorePath(tenantId, undefined, userId);
     const store = loadSessionStore(storePath);
@@ -222,10 +230,7 @@ function resolveFeishuOpenIdFromTenantStore(
  * This is the most reliable source — it contains the exact ou_xxx / oc_xxx and
  * accountId that the user's current chat session uses.
  */
-function inferDeliveryFromSessionStore(
-  tenantId: string,
-  userId: string,
-): CronDelivery | null {
+function inferDeliveryFromSessionStore(tenantId: string, userId: string): CronDelivery | null {
   try {
     const storePath = resolveTenantSessionStorePath(tenantId, undefined, userId);
     const store = loadSessionStore(storePath);
@@ -233,19 +238,29 @@ function inferDeliveryFromSessionStore(
     let best: { channel?: string; to?: string; accountId?: string } | undefined;
     let bestUpdatedAt = 0;
     for (const entry of Object.values(store)) {
-      const dc = (entry as { deliveryContext?: { channel?: string; to?: string; accountId?: string } } | undefined)?.deliveryContext;
-      if (!dc?.channel || !dc?.to) continue;
+      const dc = (
+        entry as
+          | { deliveryContext?: { channel?: string; to?: string; accountId?: string } }
+          | undefined
+      )?.deliveryContext;
+      if (!dc?.channel || !dc?.to) {
+        continue;
+      }
       const updatedAt = (entry as { updatedAt?: number } | undefined)?.updatedAt ?? 0;
       if (updatedAt >= bestUpdatedAt) {
         bestUpdatedAt = updatedAt;
         best = dc;
       }
     }
-    if (!best?.to) return null;
+    if (!best?.to) {
+      return null;
+    }
     // Strip "user:" prefix from to (e.g. "user:ou_xxx" → "ou_xxx")
     const rawTo = best.to.trim();
     const to = rawTo.startsWith("user:") ? rawTo.slice(5) : rawTo;
-    if (!to) return null;
+    if (!to) {
+      return null;
+    }
     return {
       mode: "announce",
       to,
@@ -264,9 +279,13 @@ const SENDER_MARKER = ":sender:";
  * `agent:aaa:wecom:group:xxx:sender:liuyu` → `liuyu`
  */
 function extractSenderFromSessionKey(sessionKey?: string): string | undefined {
-  if (!sessionKey) return undefined;
+  if (!sessionKey) {
+    return undefined;
+  }
   const idx = sessionKey.lastIndexOf(SENDER_MARKER);
-  if (idx < 0) return undefined;
+  if (idx < 0) {
+    return undefined;
+  }
   const value = sessionKey.slice(idx + SENDER_MARKER.length).trim();
   return value || undefined;
 }
@@ -306,7 +325,12 @@ function inferDeliveryFromSessionKey(agentSessionKey?: string): CronDelivery | n
   // Threaded sessions append :thread:<id>, which we strip so delivery targets the parent peer.
   // NOTE: Telegram forum topics encode as <chatId>:topic:<topicId> and should be preserved.
   const markerIndex = parts.findIndex(
-    (part) => part === "direct" || part === "dm" || part === "group" || part === "channel" || part === "user",
+    (part) =>
+      part === "direct" ||
+      part === "dm" ||
+      part === "group" ||
+      part === "channel" ||
+      part === "user",
   );
   if (markerIndex === -1) {
     return null;
@@ -324,11 +348,13 @@ function inferDeliveryFromSessionKey(agentSessionKey?: string): CronDelivery | n
     channel = parts[0]?.trim().toLowerCase() as CronMessageChannel;
   }
 
-  // For Feishu/Lark group sessions, strip the ":sender:ou_xxx" suffix so that
-  // delivery targets the group chat (oc_xxx) rather than the composite string
-  // "oc_xxx:sender:ou_xxx" which is not a valid Feishu receive_id.
+  // For group sessions, strip the ":sender:<id>" suffix so that delivery
+  // targets the group chat ID rather than the composite string
+  // "<groupId>:sender:<userId>" which is not a valid receive_id for any channel.
+  // Previously this was Feishu/Lark-only; WeChat Work and DingTalk encode the
+  // same ":sender:" segment and need the same stripping.
   let peerId = rawPeerId;
-  if ((channel === "feishu" || channel === "lark") && parts[markerIndex] === "group") {
+  if (parts[markerIndex] === "group") {
     const senderIdx = rawPeerId.indexOf(":sender:");
     if (senderIdx > 0) {
       peerId = rawPeerId.slice(0, senderIdx);
@@ -443,19 +469,32 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
       // can resolve the correct tenant-scoped cron store, even when the internal
       // gateway connection does not carry a JWT.
       const tenantParams: Record<string, string> = {};
-      if (opts?.tenantId) tenantParams._tenantId = opts.tenantId;
-      if (opts?.tenantUserId) tenantParams._tenantUserId = opts.tenantUserId;
+      if (opts?.tenantId) {
+        tenantParams._tenantId = opts.tenantId;
+      }
+      if (opts?.tenantUserId) {
+        tenantParams._tenantUserId = opts.tenantUserId;
+      }
       // Extract sender name from session key (e.g. ":sender:liuyu") for createdBy.displayName.
       const senderName = extractSenderFromSessionKey(opts?.agentSessionKey);
-      if (senderName) tenantParams._tenantUserDisplayName = senderName;
+      if (senderName) {
+        tenantParams._tenantUserDisplayName = senderName;
+      }
       // Route to agent-scoped cron store so jobs follow the same execution path
       // (runIsolatedAgentJob with credential injection) as UI-created jobs.
       if (opts?.agentSessionKey) {
         const cfg = loadConfig();
-        const resolvedAgentId = resolveSessionAgentId({ sessionKey: opts.agentSessionKey, config: cfg });
-        if (resolvedAgentId) tenantParams._agentId = resolvedAgentId;
+        const resolvedAgentId = resolveSessionAgentId({
+          sessionKey: opts.agentSessionKey,
+          config: cfg,
+        });
+        if (resolvedAgentId) {
+          tenantParams._agentId = resolvedAgentId;
+        }
       }
-      process.stderr.write(`[cron-tool] execute: action=${action} tenantParams=${JSON.stringify(tenantParams)} opts.tenantId=${opts?.tenantId || "(empty)"} opts.tenantUserId=${opts?.tenantUserId || "(empty)"}\n`);
+      process.stderr.write(
+        `[cron-tool] execute: action=${action} tenantParams=${JSON.stringify(tenantParams)} opts.tenantId=${opts?.tenantId || "(empty)"} opts.tenantUserId=${opts?.tenantUserId || "(empty)"}\n`,
+      );
 
       switch (action) {
         case "status":
@@ -549,10 +588,7 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
                 opts?.tenantUserId &&
                 /:(feishu|lark):group:/.test(resolvedSessionKey)
               ) {
-                const openId = resolveFeishuOpenIdFromTenantStore(
-                  opts.tenantId,
-                  opts.tenantUserId,
-                );
+                const openId = resolveFeishuOpenIdFromTenantStore(opts.tenantId, opts.tenantUserId);
                 if (openId && !resolvedSessionKey.includes(`:sender:`)) {
                   enrichedSessionKey = `${resolvedSessionKey}:sender:${openId}`;
                 }
@@ -572,7 +608,9 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
             typeof job === "object" &&
             "payload" in job
           ) {
-            const jobPayload = (job as { payload?: { kind?: string; text?: string; message?: string } }).payload;
+            const jobPayload = (
+              job as { payload?: { kind?: string; text?: string; message?: string } }
+            ).payload;
             if (jobPayload?.kind === "systemEvent" && jobPayload.text) {
               jobPayload.kind = "agentTurn";
               jobPayload.message = jobPayload.text;
@@ -617,8 +655,7 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
               const inferred =
                 (opts?.tenantId && opts?.tenantUserId
                   ? inferDeliveryFromSessionStore(opts.tenantId, opts.tenantUserId)
-                  : null) ??
-                inferDeliveryFromSessionKey(opts?.agentSessionKey);
+                  : null) ?? inferDeliveryFromSessionKey(opts?.agentSessionKey);
               if (inferred) {
                 (job as { delivery?: unknown }).delivery = {
                   ...delivery,
@@ -627,7 +664,6 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
               }
             }
           }
-
 
           const contextMessages =
             typeof params.contextMessages === "number" && Number.isFinite(params.contextMessages)
@@ -653,7 +689,12 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
               }
             }
           }
-          return jsonResult(await callGateway("cron.add", gatewayOpts, { ...job as Record<string, unknown>, ...tenantParams }));
+          return jsonResult(
+            await callGateway("cron.add", gatewayOpts, {
+              ...(job as Record<string, unknown>),
+              ...tenantParams,
+            }),
+          );
         }
         case "update": {
           const id = readStringParam(params, "jobId") ?? readStringParam(params, "id");
@@ -712,7 +753,9 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
           }
           const runMode =
             params.runMode === "due" || params.runMode === "force" ? params.runMode : "force";
-          return jsonResult(await callGateway("cron.run", gatewayOpts, { id, mode: runMode, ...tenantParams }));
+          return jsonResult(
+            await callGateway("cron.run", gatewayOpts, { id, mode: runMode, ...tenantParams }),
+          );
         }
         case "runs": {
           const id = readStringParam(params, "jobId") ?? readStringParam(params, "id");
@@ -728,7 +771,12 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
               ? params.mode
               : "next-heartbeat";
           return jsonResult(
-            await callGateway("wake", gatewayOpts, { mode, text, ...tenantParams }, { expectFinal: false }),
+            await callGateway(
+              "wake",
+              gatewayOpts,
+              { mode, text, ...tenantParams },
+              { expectFinal: false },
+            ),
           );
         }
         default:

@@ -27,12 +27,6 @@ import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { deriveSessionTotalTokens, hasNonzeroUsage } from "../../agents/usage.js";
 import { ensureAgentWorkspace } from "../../agents/workspace.js";
 import {
-  resolveTenantAgentWorkspaceDir,
-  resolveTenantAgentDir,
-  resolveTenantSessionStorePath,
-  resolveTenantSessionTranscriptPath,
-} from "../../config/sessions/tenant-paths.js";
-import {
   normalizeThinkLevel,
   normalizeVerboseLevel,
   supportsXHighThinking,
@@ -45,6 +39,12 @@ import {
   setSessionRuntimeModel,
   updateSessionStore,
 } from "../../config/sessions.js";
+import {
+  resolveTenantAgentWorkspaceDir,
+  resolveTenantAgentDir,
+  resolveTenantSessionStorePath,
+  resolveTenantSessionTranscriptPath,
+} from "../../config/sessions/tenant-paths.js";
 import type { AgentDefaultsConfig } from "../../config/types.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
 import { logWarn } from "../../logger.js";
@@ -387,9 +387,7 @@ export async function runCronIsolatedAgentTurn(params: {
   let tenantFeishuOpenId: string | undefined;
 
   if (params.tenantId && params.userId) {
-    const tenantStorePath = resolveTenantSessionStorePath(
-      params.tenantId, agentId, params.userId,
-    );
+    const tenantStorePath = resolveTenantSessionStorePath(params.tenantId, agentId, params.userId);
     const sStore = loadSessionStore(tenantStorePath);
 
     // Session keys in multi-tenant mode carry a tenant prefix
@@ -400,7 +398,9 @@ export async function runCronIsolatedAgentTurn(params: {
     let lastTo: string | undefined;
     let latestUpdatedAt = 0;
     for (const [key, entry] of Object.entries(sStore)) {
-      if (!entry?.lastChannel) continue;
+      if (!entry?.lastChannel) {
+        continue;
+      }
       const updatedAt = entry.updatedAt ?? 0;
       if (updatedAt >= latestUpdatedAt) {
         latestUpdatedAt = updatedAt;
@@ -427,9 +427,9 @@ export async function runCronIsolatedAgentTurn(params: {
         // User's last interaction was via the web UI — mark for webchat
         // delivery so we bypass resolveDeliveryTarget entirely below.
         tenantWebchatDelivery = true;
-      } else if ((lastChannel === "feishu" || lastChannel === "lark") && lastTo) {
-        // User's last interaction was via Feishu — deliver to the Feishu target
-        // recorded in the session (e.g. "user:ou_xxx" or "chat:oc_xxx").
+      } else if (lastChannel && lastTo) {
+        // User's last interaction was via an external channel (feishu, wecom,
+        // dingtalk, etc.) — deliver to the target recorded in the session.
         deliveryTo = lastTo;
         deliveryChannel = lastChannel;
         deliveryRequested = true;
@@ -449,21 +449,39 @@ export async function runCronIsolatedAgentTurn(params: {
     // it from the job's sessionKey (e.g. "agent:my-agent:main:user:on_xxx").
     if (!deliveryTo && !tenantWebchatDelivery && params.job.sessionKey) {
       const skParts = params.job.sessionKey.split(":").filter(Boolean);
+
+      // Helper: infer channel name from the part immediately preceding a
+      // peer-kind marker ("user"/"direct"/"dm"/"group").  Session keys are
+      // encoded as "agent:<id>:<channel>:<peerKind>:<peerId>".
+      const PEER_KIND_MARKERS = new Set(["user", "direct", "dm", "group"]);
+      const inferChannelFromSessionKeyParts = (markerIdx: number): string | undefined => {
+        if (markerIdx >= 1) {
+          const candidate = skParts[markerIdx - 1]?.trim().toLowerCase();
+          if (candidate && !PEER_KIND_MARKERS.has(candidate)) {
+            return candidate;
+          }
+        }
+        return undefined;
+      };
+
       // Look for "user" marker (direct/private message peer)
-      const userIdx = skParts.findIndex(
-        (p) => p === "user" || p === "direct" || p === "dm",
-      );
+      const userIdx = skParts.findIndex((p) => p === "user" || p === "direct" || p === "dm");
       if (userIdx >= 0 && userIdx < skParts.length - 1) {
         const peerId = skParts.slice(userIdx + 1).join(":");
         if (peerId) {
           deliveryTo = peerId;
           deliveryRequested = true;
-          // Infer channel from peer ID format
-          const pid = peerId.trim().toLowerCase();
-          if (/^(ou_|on_|oc_)/.test(pid)) {
-            deliveryChannel = "feishu";
+          // Infer channel from session key structure, then peer ID format
+          const skChannel = inferChannelFromSessionKeyParts(userIdx);
+          if (skChannel) {
+            deliveryChannel = skChannel;
+          } else {
+            const pid = peerId.trim().toLowerCase();
+            if (/^(ou_|on_|oc_)/.test(pid)) {
+              deliveryChannel = "feishu";
+            }
           }
-          if (!tenantFeishuOpenId && /^(ou_|on_)/.test(pid)) {
+          if (!tenantFeishuOpenId && /^(ou_|on_)/.test(peerId.trim().toLowerCase())) {
             tenantFeishuOpenId = peerId;
           }
         }
@@ -473,21 +491,27 @@ export async function runCronIsolatedAgentTurn(params: {
         const groupIdx = skParts.findIndex((p) => p === "group");
         if (groupIdx >= 0 && groupIdx < skParts.length - 1) {
           const rawGroupId = skParts.slice(groupIdx + 1).join(":");
-          // Strip ":sender:ou_xxx" suffix
+          // Strip ":sender:<id>" suffix (all channels use this pattern)
           const senderIdx = rawGroupId.indexOf(":sender:");
           const groupId = senderIdx > 0 ? rawGroupId.slice(0, senderIdx) : rawGroupId;
           if (groupId) {
             deliveryTo = groupId;
             deliveryRequested = true;
-            const gid = groupId.trim().toLowerCase();
-            if (/^oc_/.test(gid)) {
-              deliveryChannel = "feishu";
+            // Infer channel from session key structure, then ID format
+            const skChannel = inferChannelFromSessionKeyParts(groupIdx);
+            if (skChannel) {
+              deliveryChannel = skChannel;
+            } else {
+              const gid = groupId.trim().toLowerCase();
+              if (gid.startsWith("oc_")) {
+                deliveryChannel = "feishu";
+              }
             }
           }
-          // Extract sender for @mention
+          // Extract sender for @mention (Feishu open_id)
           if (senderIdx > 0) {
             const sender = rawGroupId.slice(senderIdx + ":sender:".length);
-            if (sender && /^ou_/.test(sender.toLowerCase())) {
+            if (sender && sender.toLowerCase().startsWith("ou_")) {
               tenantFeishuOpenId = sender;
             }
           }
@@ -500,7 +524,13 @@ export async function runCronIsolatedAgentTurn(params: {
     if (deliveryTo?.startsWith("on_") && params.tenantId) {
       try {
         const { findOrCreateUserByOpenId } = await import("../../db/models/user.js");
-        const { user } = await findOrCreateUserByOpenId(params.tenantId, "", undefined, deliveryTo, undefined);
+        const { user } = await findOrCreateUserByOpenId(
+          params.tenantId,
+          "",
+          undefined,
+          deliveryTo,
+          undefined,
+        );
         const ouIds = user.openIds.filter((id: string) => id.startsWith("ou_"));
         const openId = ouIds.length > 0 ? ouIds[ouIds.length - 1] : undefined;
         if (openId) {
@@ -524,7 +554,9 @@ export async function runCronIsolatedAgentTurn(params: {
     ? {
         ok: false,
         mode: "implicit" as const,
-        error: new Error("Tenant user last channel is webchat; delivery via announceToMainSession."),
+        error: new Error(
+          "Tenant user last channel is webchat; delivery via announceToMainSession.",
+        ),
       }
     : await resolveDeliveryTarget(cfgWithAgentDefaults, agentId, {
         channel: deliveryChannel,
@@ -572,7 +604,7 @@ export async function runCronIsolatedAgentTurn(params: {
     // Internal/trusted source - use original format
     commandBody = `${base}\n${timeLine}`.trim();
   }
-  
+
   // Inject proactive AI employee role and memory instructions
   const memoryPreamble = [
     `[Scheduled Task Context]`,
@@ -580,9 +612,9 @@ export async function runCronIsolatedAgentTurn(params: {
     `- Memory-First: If you need state/context to complete this task (e.g. "what was the last id I processed?"), use 'memory_search' or 'memory_get' to retrieve your notes.`,
     `- Learning: If you discover new configurations, solve a problem, or reach a milestone, use 'write' to save those findings to the memory/ directory so your future scheduled runs can succeed.`,
   ].join("\n");
-  
+
   commandBody = `${memoryPreamble}\n\n${commandBody}`;
-  
+
   if (deliveryRequested) {
     commandBody =
       `${commandBody}\n\n[Delivery Instructions]\nYour response will be sent directly to the user as a message. Write ONLY the content you want the user to see — do NOT wrap it in a summary, do NOT prefix with NO_REPLY, and do NOT add meta-commentary about task execution. For simple reminders or notifications, just output the reminder text itself. If the task explicitly calls for messaging a specific external recipient, note who/where it should go instead of sending it yourself.`.trim();
@@ -640,7 +672,13 @@ export async function runCronIsolatedAgentTurn(params: {
   let runEndedAt = runStartedAt;
   try {
     const sessionFile = params.tenantId
-      ? resolveTenantSessionTranscriptPath(params.tenantId, cronSession.sessionEntry.sessionId, agentId, undefined, params.userId)
+      ? resolveTenantSessionTranscriptPath(
+          params.tenantId,
+          cronSession.sessionEntry.sessionId,
+          agentId,
+          undefined,
+          params.userId,
+        )
       : resolveSessionTranscriptPath(cronSession.sessionEntry.sessionId, agentId);
     const resolvedVerboseLevel =
       normalizeVerboseLevel(cronSession.sessionEntry.verboseLevel) ??
@@ -828,6 +866,35 @@ export async function runCronIsolatedAgentTurn(params: {
     deliveryPayloads = deliveryPayloads.map((p) => ({
       ...p,
       text: p.text ? `<at id=${feishuSenderOpenId}></at> ${p.text}`.trim() : p.text,
+    }));
+  }
+
+  // For non-Feishu group sessions (WeChat Work, DingTalk, etc.), use the
+  // job's createdBy.userId for @mention.  The sessionKey is lowercased by
+  // buildAgentSessionKey so it cannot be used as the authoritative user ID.
+  const cronCreatorUserId = params.job.createdBy?.userId;
+  const isGroupSession = /:group:/.test(params.job.sessionKey ?? "");
+
+  // WeChat Work: plain "@userid" in markdown (WeCom has no interactive mention
+  // syntax in markdown messages).
+  const deliveryIsWecom = resolvedDelivery.channel === "wecom" || deliveryChannel === "wecom";
+  if (cronCreatorUserId && deliveryIsWecom && isGroupSession) {
+    deliveryPayloads = deliveryPayloads.map((p) => ({
+      ...p,
+      text: p.text ? `@${cronCreatorUserId} ${p.text}`.trim() : p.text,
+    }));
+  }
+
+  // DingTalk: plain "@displayName" as a visible indicator.  DingTalk's
+  // proactive group message API (/v1.0/robot/groupMessages/send) does not
+  // support the `at` field, so an interactive @mention is not possible here.
+  const deliveryIsDingtalk =
+    resolvedDelivery.channel === "dingtalk" || deliveryChannel === "dingtalk";
+  if (cronCreatorUserId && deliveryIsDingtalk && isGroupSession) {
+    const mentionName = params.job.createdBy?.displayName ?? cronCreatorUserId;
+    deliveryPayloads = deliveryPayloads.map((p) => ({
+      ...p,
+      text: p.text ? `@${mentionName} ${p.text}`.trim() : p.text,
     }));
   }
 

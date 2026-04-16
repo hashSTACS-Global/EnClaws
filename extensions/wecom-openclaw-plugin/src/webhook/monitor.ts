@@ -5,25 +5,19 @@
  * 负责：入站消息解析、防抖聚合、Agent 调度、流式输出、超时兜底。
  */
 
-import { pathToFileURL } from "node:url";
 import os from "node:os";
-import type {
-  WecomWebhookTarget,
-  WebhookInboundMessage,
-} from "./types.js";
+import { pathToFileURL } from "node:url";
+import {
+  sendText as sendAgentText,
+  uploadMedia,
+  sendMedia as sendAgentMedia,
+} from "../agent/api-client.js";
+import { processDynamicRouting } from "../dynamic-routing.js";
 import {
   resolveWecomCommandAuthorization,
   buildWecomUnauthorizedCommandPrompt,
 } from "./command-auth.js";
-import {
-  STREAM_MAX_BYTES,
-  BOT_WINDOW_MS,
-  BOT_SWITCH_MARGIN_MS,
-  REQUEST_TIMEOUT_MS,
-} from "./types.js";
 import { getMonitorState } from "./gateway.js";
-import { sendText as sendAgentText, uploadMedia, sendMedia as sendAgentMedia } from "../agent/api-client.js";
-import { wecomFetch } from "./http.js";
 import {
   truncateUtf8Bytes,
   appendDmContent,
@@ -47,7 +41,14 @@ import {
   buildStreamPlaceholderReply,
   buildStreamTextPlaceholderReply,
 } from "./helpers.js";
-import { processDynamicRouting } from "../dynamic-routing.js";
+import { wecomFetch } from "./http.js";
+import type { WecomWebhookTarget, WebhookInboundMessage } from "./types.js";
+import {
+  STREAM_MAX_BYTES,
+  BOT_WINDOW_MS,
+  BOT_SWITCH_MARGIN_MS,
+  REQUEST_TIMEOUT_MS,
+} from "./types.js";
 // ============================================================================
 // 入站消息处理
 // ============================================================================
@@ -66,7 +67,7 @@ export async function handleInboundMessage(
   msgFilterData?: {
     senderUserId?: string;
     chatId?: string;
-  }
+  },
 ): Promise<Record<string, unknown> | null> {
   const state = getMonitorState();
 
@@ -95,7 +96,9 @@ export async function handleInboundMessage(
   }
 
   const userid = msgFilterData?.senderUserId ?? "";
-  const chatType = String(message.chattype ?? "").trim().toLowerCase();
+  const chatType = String(message.chattype ?? "")
+    .trim()
+    .toLowerCase();
   const chatId = msgFilterData?.chatId ?? message.chatid ?? "";
   // 原版 conversationKey 格式：wecom:{accountId}:{userid}:{chatId}
   // 单聊时 chatId 等于 userid
@@ -110,7 +113,7 @@ export async function handleInboundMessage(
     msgContent: msgContent ?? "",
     nonce,
     timestamp,
-    debounceMs: (target.account.config as any)?.debounceMs
+    debounceMs: (target.account.config as any)?.debounceMs,
   });
 
   const { streamId, status } = result;
@@ -121,11 +124,7 @@ export async function handleInboundMessage(
 
   // 存储 response_url（对齐原版：同时保存 proxyUrl 用于后续出站请求的代理）
   if (message.response_url) {
-    activeReplyStore.store(
-      streamId,
-      message.response_url,
-      proxyUrl,
-    );
+    activeReplyStore.store(streamId, message.response_url, proxyUrl);
   }
 
   // 更新 stream 的元数据
@@ -148,13 +147,17 @@ export async function handleInboundMessage(
 
   if (status === "queued_new") {
     // 进入排队批次，返回排队提示
-    target.runtime.log?.(`[webhook] queue: 已进入下一批次 streamId=${streamId} msgid=${String(message.msgid ?? "")}`);
+    target.runtime.log?.(
+      `[webhook] queue: 已进入下一批次 streamId=${streamId} msgid=${String(message.msgid ?? "")}`,
+    );
     return buildStreamPlaceholderReply(streamId, queuedPlaceholder);
   }
 
   // active_merged / queued_merged：合并进某个批次
   // 为本条 msgid 创建一个"回执 stream"，先显示"已合并排队"，并在批次结束时自动更新为"已合并处理完成"
-  const ackStreamId = streamStore.createStream({ msgid: message.msgid ? String(message.msgid) : undefined });
+  const ackStreamId = streamStore.createStream({
+    msgid: message.msgid ? String(message.msgid) : undefined,
+  });
   streamStore.updateStream(ackStreamId, (s) => {
     s.finished = false;
     s.started = true;
@@ -280,7 +283,9 @@ export async function handleTemplateCardEvent(
 
   // 解析选择项（selected_items.selected_item）
   const selectedItems = cardEvent?.selected_items as Record<string, unknown> | undefined;
-  const selectedItemList = selectedItems?.selected_item as Array<Record<string, unknown>> | undefined;
+  const selectedItemList = selectedItems?.selected_item as
+    | Array<Record<string, unknown>>
+    | undefined;
   if (Array.isArray(selectedItemList) && selectedItemList.length > 0) {
     const selects = selectedItemList.map((i) => {
       const questionKey = String(i.question_key ?? "");
@@ -374,7 +379,7 @@ export async function startAgentForStream(params: {
 
   const userid = resolveWecomSenderUserId(msg) || "unknown";
   const chatType = msg.chattype === "group" ? "group" : "direct";
-  const chatId = msg.chattype === "group" ? (msg.chatid?.trim() || "unknown") : userid;
+  const chatId = msg.chattype === "group" ? msg.chatid?.trim() || "unknown" : userid;
   const taskKey = computeTaskKey(target, msg);
   const aibotid = String(msg.aibotid ?? "").trim() || undefined;
 
@@ -441,9 +446,10 @@ export async function startAgentForStream(params: {
       if (loaded.length > 0) {
         streamStore.updateStream(streamId, (s) => {
           s.images = loaded.map(({ base64, md5 }) => ({ base64, md5 }));
-          s.content = loaded.length === 1
-            ? `已发送图片（${pathModule.basename(loaded[0]!.path)}）`
-            : `已发送 ${loaded.length} 张图片`;
+          s.content =
+            loaded.length === 1
+              ? `已发送图片（${pathModule.basename(loaded[0]!.path)}）`
+              : `已发送 ${loaded.length} 张图片`;
           s.finished = true;
         });
 
@@ -451,7 +457,10 @@ export async function startAgentForStream(params: {
         const responseUrl = getActiveReplyUrl(streamId);
         if (responseUrl) {
           try {
-            const finalReply = buildStreamReplyFromState(streamStore.getStream(streamId)!, STREAM_MAX_BYTES) as unknown as Record<string, unknown>;
+            const finalReply = buildStreamReplyFromState(
+              streamStore.getStream(streamId)!,
+              STREAM_MAX_BYTES,
+            ) as unknown as Record<string, unknown>;
             await useActiveReplyOnce(streamId, async ({ responseUrl, proxyUrl }) => {
               const res = await wecomFetch(
                 responseUrl,
@@ -464,12 +473,18 @@ export async function startAgentForStream(params: {
               );
               if (!res.ok) throw new Error(`local-path image push failed: ${res.status}`);
             });
-            target.runtime.log?.(`[webhook] local-path: 已通过 Bot response_url 推送图片 frames=final images=${loaded.length}`);
+            target.runtime.log?.(
+              `[webhook] local-path: 已通过 Bot response_url 推送图片 frames=final images=${loaded.length}`,
+            );
           } catch (err) {
-            target.runtime.error?.(`[webhook] local-path: Bot 主动推送图片失败（将依赖 stream_refresh 拉取）: ${String(err)}`);
+            target.runtime.error?.(
+              `[webhook] local-path: Bot 主动推送图片失败（将依赖 stream_refresh 拉取）: ${String(err)}`,
+            );
           }
         } else {
-          target.runtime.log?.(`[webhook] local-path: 无 response_url，等待 stream_refresh 拉取最终图片`);
+          target.runtime.log?.(
+            `[webhook] local-path: 无 response_url，等待 stream_refresh 拉取最终图片`,
+          );
         }
         // 该消息已完成，推进队列处理下一批
         streamStore.onStreamFinished(streamId);
@@ -478,9 +493,10 @@ export async function startAgentForStream(params: {
 
       // 图片路径都读取失败时的兜底处理（对齐 lh 版 Webhook 模式）
       const agentOk = isAgentConfigured(target);
-      const fallbackName = imagePaths.length === 1
-        ? (imagePaths[0]!.split("/").pop() || "image")
-        : `${imagePaths.length} 张图片`;
+      const fallbackName =
+        imagePaths.length === 1
+          ? imagePaths[0]!.split("/").pop() || "image"
+          : `${imagePaths.length} 张图片`;
       const prompt = buildFallbackPrompt({
         kind: "media",
         agentConfigured: agentOk,
@@ -500,7 +516,9 @@ export async function startAgentForStream(params: {
         await sendBotFallbackPromptNow({ streamId, text: prompt });
         target.runtime.log?.(`[webhook] local-path: 图片读取失败后已推送兜底提示`);
       } catch (err) {
-        target.runtime.error?.(`[webhook] local-path: 图片读取失败后的兜底提示推送失败: ${String(err)}`);
+        target.runtime.error?.(
+          `[webhook] local-path: 图片读取失败后的兜底提示推送失败: ${String(err)}`,
+        );
       }
       // TODO: agent兜底这里需要有agent对象，待对齐lh版本
       if (agentOk && userid && userid !== "unknown") {
@@ -521,7 +539,9 @@ export async function startAgentForStream(params: {
               `[webhook] local-path: 图片已通过 Agent 私信发送 user=${userid} path=${p} contentType=${guessedType ?? "unknown"}`,
             );
           } catch (err) {
-            target.runtime.error?.(`[webhook] local-path: 图片 Agent 私信兜底失败 path=${p}: ${String(err)}`);
+            target.runtime.error?.(
+              `[webhook] local-path: 图片 Agent 私信兜底失败 path=${p}: ${String(err)}`,
+            );
           }
         }
       }
@@ -533,7 +553,8 @@ export async function startAgentForStream(params: {
     if (otherPaths.length > 0) {
       const agentOk = isAgentConfigured(target);
 
-      const filename = otherPaths.length === 1 ? otherPaths[0]!.split("/").pop()! : `${otherPaths.length} 个文件`;
+      const filename =
+        otherPaths.length === 1 ? otherPaths[0]!.split("/").pop()! : `${otherPaths.length} 个文件`;
       const prompt = buildFallbackPrompt({
         kind: "media",
         agentConfigured: agentOk,
@@ -561,7 +582,9 @@ export async function startAgentForStream(params: {
         return;
       }
       if (!userid || userid === "unknown") {
-        target.runtime.error?.(`[webhook] local-path: 无法识别触发者 userId，无法 Agent 私信发送文件`);
+        target.runtime.error?.(
+          `[webhook] local-path: 无法识别触发者 userId，无法 Agent 私信发送文件`,
+        );
         streamStore.onStreamFinished(streamId);
         return;
       }
@@ -586,7 +609,9 @@ export async function startAgentForStream(params: {
             `[webhook] local-path: 文件已通过 Agent 私信发送 user=${userid} path=${p} contentType=${guessedType ?? "unknown"}`,
           );
         } catch (err) {
-          target.runtime.error?.(`[webhook] local-path: Agent 私信发送文件失败 path=${p}: ${String(err)}`);
+          target.runtime.error?.(
+            `[webhook] local-path: Agent 私信发送文件失败 path=${p}: ${String(err)}`,
+          );
         }
       }
       streamStore.onStreamFinished(streamId);
@@ -710,7 +735,9 @@ export async function startAgentForStream(params: {
       await sendBotFallbackPromptNow({ streamId, text: prompt });
       target.runtime.log?.(`[webhook] authz: 未授权命令已提示用户 streamId=${streamId}`);
     } catch (err) {
-      target.runtime.error?.(`[webhook] authz: 未授权命令提示推送失败 streamId=${streamId}: ${String(err)}`);
+      target.runtime.error?.(
+        `[webhook] authz: 未授权命令提示推送失败 streamId=${streamId}: ${String(err)}`,
+      );
     }
     streamStore.onStreamFinished(streamId);
     return;
@@ -721,17 +748,22 @@ export async function startAgentForStream(params: {
   // ──────────────────────────────────────────────────────────────────
   const rawBodyNormalized = rawBody.trim();
   const isResetCommand = /^\/(new|reset)(?:\s|$)/i.test(rawBodyNormalized);
-  const resetCommandKind = isResetCommand ? (rawBodyNormalized.match(/^\/(new|reset)/i)?.[1]?.toLowerCase() ?? "new") : null;
+  const resetCommandKind = isResetCommand
+    ? (rawBodyNormalized.match(/^\/(new|reset)/i)?.[1]?.toLowerCase() ?? "new")
+    : null;
 
   // ──────────────────────────────────────────────────────────────────
   // 7. 构造附件
   // ──────────────────────────────────────────────────────────────────
-  const attachments: Array<{ name: string; mimeType?: string; url: string }> | undefined =
-    mediaPath ? [{ 
-      name: media?.filename || "file",
-      mimeType: mediaType,
-      url: pathToFileURL(mediaPath).href
-    }] : undefined;
+  const attachments: Array<{ name: string; mimeType?: string; url: string }> | undefined = mediaPath
+    ? [
+        {
+          name: media?.filename || "file",
+          mimeType: mediaType,
+          url: pathToFileURL(mediaPath).href,
+        },
+      ]
+    : undefined;
 
   // 如果提取到了视频第一帧，追加为附件让 LLM 能看到视频画面
   if (videoFirstFramePath && attachments) {
@@ -739,7 +771,7 @@ export async function startAgentForStream(params: {
     attachments.push({
       name: pathModule.basename(videoFirstFramePath),
       mimeType: "image/jpeg",
-      url: pathToFileURL(videoFirstFramePath).href
+      url: pathToFileURL(videoFirstFramePath).href,
     });
   }
 
@@ -780,6 +812,12 @@ export async function startAgentForStream(params: {
     storePath,
     sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
     ctx: ctxPayload,
+    updateLastRoute: {
+      sessionKey: route.mainSessionKey,
+      channel: "wecom",
+      to: chatType === "group" ? `group:${chatId}` : `wecom:${chatId}`,
+      accountId: route.accountId,
+    },
     onRecordError: (err: unknown) => {
       target.runtime.error?.(`[webhook] session meta update failed: ${String(err)}`);
     },
@@ -815,7 +853,10 @@ export async function startAgentForStream(params: {
       disableBlockStreaming: false,
     },
     dispatcherOptions: {
-      deliver: async (payload: { text?: string; mediaUrl?: string; mediaUrls?: string[] }, info: { kind: string }) => {
+      deliver: async (
+        payload: { text?: string; mediaUrl?: string; mediaUrls?: string[] },
+        info: { kind: string },
+      ) => {
         let text = payload.text ?? "";
 
         // ── <think> 标签保护 ──
@@ -854,7 +895,9 @@ export async function startAgentForStream(params: {
                     throw new Error(`template_card send failed: ${res.status}`);
                   }
                 });
-                target.runtime.log?.(`[webhook] sent template_card: task_id=${parsed.template_card.task_id}`);
+                target.runtime.log?.(
+                  `[webhook] sent template_card: task_id=${parsed.template_card.task_id}`,
+                );
                 streamStore.updateStream(streamId, (s) => {
                   s.finished = true;
                   s.content = "[已发送交互卡片]";
@@ -863,14 +906,19 @@ export async function startAgentForStream(params: {
                 return;
               } else {
                 // 群聊 或 无 response_url：降级为文本描述
-                target.runtime.log?.(`[webhook] template_card fallback to text (group=${!isSingleChat}, hasUrl=${!!responseUrl})`);
+                target.runtime.log?.(
+                  `[webhook] template_card fallback to text (group=${!isSingleChat}, hasUrl=${!!responseUrl})`,
+                );
                 const cardTitle = parsed.template_card.main_title?.title || "交互卡片";
                 const cardDesc = parsed.template_card.main_title?.desc || "";
-                const buttons = parsed.template_card.button_list?.map((b: any) => b.text).join(" / ") || "";
+                const buttons =
+                  parsed.template_card.button_list?.map((b: any) => b.text).join(" / ") || "";
                 text = `📋 **${cardTitle}**${cardDesc ? `\n${cardDesc}` : ""}${buttons ? `\n\n选项: ${buttons}` : ""}`;
               }
             }
-          } catch { /* parse fail, use normal text */ }
+          } catch {
+            /* parse fail, use normal text */
+          }
         }
 
         // ── Markdown 表格转换 ──
@@ -891,7 +939,9 @@ export async function startAgentForStream(params: {
         if (!payload.mediaUrl && !(payload.mediaUrls?.length ?? 0) && text.includes("/")) {
           const candidates = extractLocalImagePathsFromText({ text, mustAlsoAppearIn: rawBody });
           if (candidates.length > 0) {
-            target.runtime.log?.(`media: 从输出文本推断到本机图片路径（来自用户原消息）count=${candidates.length}`);
+            target.runtime.log?.(
+              `media: 从输出文本推断到本机图片路径（来自用户原消息）count=${candidates.length}`,
+            );
             for (const p of candidates) {
               try {
                 const fs = await import("node:fs/promises");
@@ -914,7 +964,9 @@ export async function startAgentForStream(params: {
                 const md5 = computeMd5(buf);
                 current.images.push({ base64, md5 });
               } catch (err) {
-                target.runtime.error?.(`[webhook] media: 读取本机图片失败 path=${p}: ${String(err)}`);
+                target.runtime.error?.(
+                  `[webhook] media: 读取本机图片失败 path=${p}: ${String(err)}`,
+                );
               }
             }
           }
@@ -953,7 +1005,9 @@ export async function startAgentForStream(params: {
             await sendBotFallbackPromptNow({ streamId, text: prompt });
             target.runtime.log?.(`[webhook] fallback(timeout): 群内提示已推送`);
           } catch (err) {
-            target.runtime.error?.(`[webhook] fallback(timeout) prompt push failed streamId=${streamId}: ${String(err)}`);
+            target.runtime.error?.(
+              `[webhook] fallback(timeout) prompt push failed streamId=${streamId}: ${String(err)}`,
+            );
           }
           return;
         }
@@ -972,15 +1026,20 @@ export async function startAgentForStream(params: {
           if (!mediaDirectivePaths.includes(p)) mediaDirectivePaths.push(p);
         }
         if (mediaDirectivePaths.length > 0) {
-          text = text.replace(/^MEDIA:\s*`?[^\n`]+?`?\s*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+          text = text
+            .replace(/^MEDIA:\s*`?[^\n`]+?`?\s*$/gm, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
         }
 
         // ── 媒体处理（对齐 lh 版） ──
-        const mediaUrls = Array.from(new Set([
-          ...(payload.mediaUrls || []),
-          ...(payload.mediaUrl ? [payload.mediaUrl] : []),
-          ...mediaDirectivePaths,
-        ]));
+        const mediaUrls = Array.from(
+          new Set([
+            ...(payload.mediaUrls || []),
+            ...(payload.mediaUrl ? [payload.mediaUrl] : []),
+            ...mediaDirectivePaths,
+          ]),
+        );
         for (const mPath of mediaUrls) {
           let contentType: string | undefined;
           let filename = mPath.split("/").pop() || "attachment";
@@ -1008,7 +1067,9 @@ export async function startAgentForStream(params: {
               const base64 = buf.toString("base64");
               const md5 = computeMd5(buf);
               current.images.push({ base64, md5 });
-              target.runtime.log?.(`[webhook] media: 识别为图片 contentType=${contentType} filename=${filename}`);
+              target.runtime.log?.(
+                `[webhook] media: 识别为图片 contentType=${contentType} filename=${filename}`,
+              );
             } else {
               // Webhook 模式：统一切换到 Agent 私信兜底，并在 Bot 会话里提示用户。
               const agentOk = isAgentConfigured(target);
@@ -1027,7 +1088,9 @@ export async function startAgentForStream(params: {
                     contentType,
                     filename,
                   });
-                  target.runtime.log?.(`[webhook] fallback(media): 文件已通过 Agent 私信发送 user=${current.userId}`);
+                  target.runtime.log?.(
+                    `[webhook] fallback(media): 文件已通过 Agent 私信发送 user=${current.userId}`,
+                  );
                   streamStore.updateStream(streamId, (s) => {
                     s.agentMediaKeys = Array.from(new Set([...(s.agentMediaKeys ?? []), mPath]));
                   });
@@ -1054,7 +1117,9 @@ export async function startAgentForStream(params: {
                   await sendBotFallbackPromptNow({ streamId, text: prompt });
                   target.runtime.log?.(`[webhook] fallback(media): 群内提示已推送`);
                 } catch (err) {
-                  target.runtime.error?.(`[webhook] fallback(media) prompt push failed streamId=${streamId}: ${String(err)}`);
+                  target.runtime.error?.(
+                    `[webhook] fallback(media) prompt push failed streamId=${streamId}: ${String(err)}`,
+                  );
                 }
               }
               return;
@@ -1077,9 +1142,13 @@ export async function startAgentForStream(params: {
                 streamStore.updateStream(streamId, (s) => {
                   s.agentMediaKeys = Array.from(new Set([...(s.agentMediaKeys ?? []), mPath]));
                 });
-                target.runtime.log?.(`[webhook] fallback(error): 媒体处理失败后已通过 Agent 私信发送 user=${current.userId}`);
+                target.runtime.log?.(
+                  `[webhook] fallback(error): 媒体处理失败后已通过 Agent 私信发送 user=${current.userId}`,
+                );
               } catch (sendErr) {
-                target.runtime.error?.(`[webhook] fallback(error): 媒体处理失败后的 Agent 私信发送也失败: ${String(sendErr)}`);
+                target.runtime.error?.(
+                  `[webhook] fallback(error): 媒体处理失败后的 Agent 私信发送也失败: ${String(sendErr)}`,
+                );
               }
             }
             if (!current.fallbackMode) {
@@ -1100,7 +1169,9 @@ export async function startAgentForStream(params: {
                 await sendBotFallbackPromptNow({ streamId, text: prompt });
                 target.runtime.log?.(`[webhook] fallback(error): 群内提示已推送`);
               } catch (pushErr) {
-                target.runtime.error?.(`[webhook] fallback(error) prompt push failed streamId=${streamId}: ${String(pushErr)}`);
+                target.runtime.error?.(
+                  `[webhook] fallback(error) prompt push failed streamId=${streamId}: ${String(pushErr)}`,
+                );
               }
             }
             return;
@@ -1112,9 +1183,7 @@ export async function startAgentForStream(params: {
         if (mode) return;
 
         // ── 累积 content（段落分隔 \n\n，truncate 保护） ──
-        const nextText = current.content
-          ? `${current.content}\n\n${text}`.trim()
-          : text.trim();
+        const nextText = current.content ? `${current.content}\n\n${text}`.trim() : text.trim();
 
         streamStore.updateStream(streamId, (s) => {
           s.content = truncateUtf8Bytes(nextText, STREAM_MAX_BYTES);
@@ -1124,7 +1193,9 @@ export async function startAgentForStream(params: {
       },
 
       onError: (err: unknown) => {
-        target.runtime.error?.(`[webhook] Agent reply failed (streamId=${streamId}): ${String(err)}`);
+        target.runtime.error?.(
+          `[webhook] Agent reply failed (streamId=${streamId}): ${String(err)}`,
+        );
       },
     },
   });
@@ -1136,7 +1207,10 @@ export async function startAgentForStream(params: {
     const current = streamStore.getStream(streamId);
     if (current && !current.content?.trim()) {
       const ackText = resetCommandKind === "reset" ? "✅ 已重置会话。" : "✅ 已开启新会话。";
-      streamStore.updateStream(streamId, (s) => { s.content = ackText; s.finished = true; });
+      streamStore.updateStream(streamId, (s) => {
+        s.content = ackText;
+        s.finished = true;
+      });
     }
   }
 
@@ -1163,19 +1237,27 @@ export async function startAgentForStream(params: {
   if (finishedState?.fallbackMode === "timeout" && !finishedState.finalDeliveredAt) {
     if (!isAgentConfigured(target)) {
       // Agent not configured - group prompt already explains the situation.
-      streamStore.updateStream(streamId, (s) => { s.finalDeliveredAt = Date.now(); });
+      streamStore.updateStream(streamId, (s) => {
+        s.finalDeliveredAt = Date.now();
+      });
     } else if (finishedState.userId) {
       const dmText = (finishedState.dmContent ?? "").trim();
       if (dmText) {
         try {
-          target.runtime.log?.(`[webhook] fallback(timeout): 开始通过 Agent 私信发送剩余内容 user=${finishedState.userId} len=${dmText.length}`);
+          target.runtime.log?.(
+            `[webhook] fallback(timeout): 开始通过 Agent 私信发送剩余内容 user=${finishedState.userId} len=${dmText.length}`,
+          );
           await agentDmText({ target, userId: finishedState.userId, text: dmText });
-          target.runtime.log?.(`[webhook] fallback(timeout): Agent 私信发送完成 user=${finishedState.userId}`);
+          target.runtime.log?.(
+            `[webhook] fallback(timeout): Agent 私信发送完成 user=${finishedState.userId}`,
+          );
         } catch (err) {
           target.runtime.error?.(`[webhook] fallback(timeout): Agent 私信发送失败: ${String(err)}`);
         }
       }
-      streamStore.updateStream(streamId, (s) => { s.finalDeliveredAt = Date.now(); });
+      streamStore.updateStream(streamId, (s) => {
+        s.finalDeliveredAt = Date.now();
+      });
     }
   }
 
@@ -1191,7 +1273,9 @@ export async function startAgentForStream(params: {
         `[webhook] final stream pushed via response_url streamId=${streamId}, chatType=${chatType}, images=${stateAfterFinish.images?.length ?? 0}`,
       );
     } catch (err) {
-      target.runtime.error?.(`[webhook] final stream push via response_url failed streamId=${streamId}: ${String(err)}`);
+      target.runtime.error?.(
+        `[webhook] final stream push via response_url failed streamId=${streamId}: ${String(err)}`,
+      );
     }
   }
 
@@ -1204,9 +1288,14 @@ export async function startAgentForStream(params: {
   if (ackStreamIds.length > 0) {
     const mergedDoneHint = "✅ 已合并处理完成，请查看上一条回复。";
     for (const ackId of ackStreamIds) {
-      streamStore.updateStream(ackId, (s) => { s.content = mergedDoneHint; s.finished = true; });
+      streamStore.updateStream(ackId, (s) => {
+        s.content = mergedDoneHint;
+        s.finished = true;
+      });
     }
-    target.runtime.log?.(`[webhook] queue: 已更新回执流 count=${ackStreamIds.length} batchStreamId=${streamId}`);
+    target.runtime.log?.(
+      `[webhook] queue: 已更新回执流 count=${ackStreamIds.length} batchStreamId=${streamId}`,
+    );
   }
 
   streamStore.onStreamFinished(streamId);
@@ -1276,7 +1365,10 @@ async function pushFinalStreamReplyNow(streamId: string): Promise<void> {
   const state = getMonitorState().streamStore.getStream(streamId);
   const responseUrl = getActiveReplyUrl(streamId);
   if (!state || !responseUrl) return;
-  const finalReply = buildStreamReplyFromState(state, STREAM_MAX_BYTES) as unknown as Record<string, unknown>;
+  const finalReply = buildStreamReplyFromState(state, STREAM_MAX_BYTES) as unknown as Record<
+    string,
+    unknown
+  >;
   await useActiveReplyOnce(streamId, async ({ responseUrl, proxyUrl }) => {
     const res = await wecomFetch(
       responseUrl,
@@ -1313,7 +1405,7 @@ async function agentDmText(params: {
     const trimmed = chunk.trim();
     if (!trimmed) continue;
     await sendAgentText({
-      agent, 
+      agent,
       toUser: userId,
       text: trimmed,
     });
@@ -1345,7 +1437,8 @@ async function agentDmMedia(params: {
     const res = await fetch(mediaUrlOrPath, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) throw new Error(`media download failed: ${res.status}`);
     buffer = Buffer.from(await res.arrayBuffer());
-    inferredContentType = inferredContentType || res.headers.get("content-type") || "application/octet-stream";
+    inferredContentType =
+      inferredContentType || res.headers.get("content-type") || "application/octet-stream";
   } else {
     const fs = await import("node:fs/promises");
     buffer = await fs.readFile(mediaUrlOrPath);
@@ -1358,12 +1451,12 @@ async function agentDmMedia(params: {
   else if (ct.startsWith("video/")) mediaType = "video";
 
   const mediaId = await uploadMedia({ agent, type: mediaType, buffer, filename });
-  
-    await sendAgentMedia({
-        agent,
-        toUser: userId,
-        mediaId,
-        mediaType,
-        ...(mediaType === "video" ? { title: filename, description: "" } : {}),
-    });
+
+  await sendAgentMedia({
+    agent,
+    toUser: userId,
+    mediaId,
+    mediaType,
+    ...(mediaType === "video" ? { title: filename, description: "" } : {}),
+  });
 }

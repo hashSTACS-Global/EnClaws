@@ -18,13 +18,15 @@
 
 import * as os from "os";
 import * as path from "path";
+import {
+  WSClient,
+  generateReqId,
+  WSAuthFailureError,
+  WSReconnectExhaustedError,
+} from "@wecom/aibot-node-sdk";
+import type { WsFrame, Logger } from "@wecom/aibot-node-sdk";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/core";
 import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
-import { WSClient, generateReqId, WSAuthFailureError, WSReconnectExhaustedError } from "@wecom/aibot-node-sdk";
-import type { WsFrame, Logger } from "@wecom/aibot-node-sdk";
-import { getWeComRuntime } from "./runtime.js";
-import { getDefaultMediaLocalRoots, resolveStateDir } from "./openclaw-compat.js";
-import type { ResolvedWeComAccount, WeComConfig } from "./utils.js";
 import {
   CHANNEL_ID,
   THINKING_MESSAGE,
@@ -37,18 +39,16 @@ import {
   CMD_ENTER_EVENT_REPLY,
   SCENE_WECOM_OPENCLAW,
 } from "./const.js";
+import { checkDmPolicy } from "./dm-policy.js";
+import { processDynamicRouting } from "./dynamic-routing.js";
+import { checkGroupPolicy } from "./group-policy.js";
 import type { WeComMonitorOptions, MessageState } from "./interface.js";
-import { parseMessageContent, type MessageBody } from "./message-parser.js";
-import { sendWeComReply, sendWeComReplyNonBlocking, StreamExpiredError } from "./message-sender.js";
 import { downloadAndSaveImages, downloadAndSaveFiles } from "./media-handler.js";
 import { uploadAndSendMedia } from "./media-uploader.js";
-import { maskTemplateCardBlocks } from "./template-card-parser.js";
-import {
-  updateTemplateCardOnEvent,
-  processTemplateCardsIfNeeded,
-} from "./template-card-manager.js";
-import { checkGroupPolicy } from "./group-policy.js";
-import { checkDmPolicy } from "./dm-policy.js";
+import { parseMessageContent, type MessageBody } from "./message-parser.js";
+import { sendWeComReply, sendWeComReplyNonBlocking, StreamExpiredError } from "./message-sender.js";
+import { getDefaultMediaLocalRoots, resolveStateDir } from "./openclaw-compat.js";
+import { getWeComRuntime } from "./runtime.js";
 import {
   setWeComWebSocket,
   setMessageState,
@@ -59,9 +59,13 @@ import {
   stopMessageStateCleanup,
   cleanupAccount,
 } from "./state-manager.js";
-
+import {
+  updateTemplateCardOnEvent,
+  processTemplateCardsIfNeeded,
+} from "./template-card-manager.js";
+import { maskTemplateCardBlocks } from "./template-card-parser.js";
+import type { ResolvedWeComAccount, WeComConfig } from "./utils.js";
 import { PLUGIN_VERSION } from "./version.js";
-import { processDynamicRouting } from "./dynamic-routing.js";
 
 // ============================================================================
 // 消息条目类型
@@ -230,13 +234,20 @@ function buildMessageContext(
 
   // 当只有媒体没有文本时，使用占位符标识媒体类型
   const hasImages = mediaList.some((m) => m.contentType?.startsWith("image/"));
-  const messageBody = text || (mediaList.length > 0 ? (hasImages ? MEDIA_IMAGE_PLACEHOLDER : MEDIA_DOCUMENT_PLACEHOLDER) : "");
+  const messageBody =
+    text ||
+    (mediaList.length > 0
+      ? hasImages
+        ? MEDIA_IMAGE_PLACEHOLDER
+        : MEDIA_DOCUMENT_PLACEHOLDER
+      : "");
 
   // 构建多媒体数组
   const mediaPaths = mediaList.length > 0 ? mediaList.map((m) => m.path) : undefined;
-  const mediaTypes = mediaList.length > 0
-    ? (mediaList.map((m) => m.contentType).filter(Boolean) as string[])
-    : undefined;
+  const mediaTypes =
+    mediaList.length > 0
+      ? (mediaList.map((m) => m.contentType).filter(Boolean) as string[])
+      : undefined;
 
   // 使用 route.agentId 解析 storePath（多 agent 场景下 session 路径隔离）
   const storePath = core.channel.session.resolveStorePath(config.session?.store, {
@@ -251,16 +262,16 @@ function buildMessageContext(
 
     MessageSid: body.msgid,
 
-    From: chatType === "group"
-      ? `${CHANNEL_ID}:group:${chatId}:sender:${body.from.userid}`
-      : `${CHANNEL_ID}:${body.from.userid}`,
+    From:
+      chatType === "group"
+        ? `${CHANNEL_ID}:group:${chatId}:sender:${body.from.userid}`
+        : `${CHANNEL_ID}:${body.from.userid}`,
     To: `${CHANNEL_ID}:${chatId}`,
     SenderId: body.from.userid,
 
     // In a group, different senders must land on different sessions (see matching comment in webhook/monitor.ts).
-    SessionKey: chatType === "group"
-      ? `${route.sessionKey}:sender:${body.from.userid}`
-      : route.sessionKey,
+    SessionKey:
+      chatType === "group" ? `${route.sessionKey}:sender:${body.from.userid}` : route.sessionKey,
     AccountId: route.accountId,
 
     ChatType: chatType,
@@ -328,7 +339,9 @@ async function sendThinkingReply(params: {
   } catch (err) {
     if (err instanceof StreamExpiredError && state) {
       state.streamExpired = true;
-      runtime.log?.(`[wecom] Stream expired during thinking reply, will fallback to proactive send`);
+      runtime.log?.(
+        `[wecom] Stream expired during thinking reply, will fallback to proactive send`,
+      );
     } else {
       runtime.error?.(`[wecom] Failed to send thinking message: ${String(err)}`);
     }
@@ -341,16 +354,15 @@ async function sendThinkingReply(params: {
  * replyMedia（被动回复）无法覆盖 replyStream 发出的 thinking 流式消息，
  * 因此所有媒体统一走 aibot_send_msg 主动发送。
  */
-async function sendMediaBatch(
-  ctx: DeliverContext,
-  mediaUrls: string[],
-): Promise<void> {
+async function sendMediaBatch(ctx: DeliverContext, mediaUrls: string[]): Promise<void> {
   const { wsClient, frame, state, account, runtime } = ctx;
   const body = frame.body as MessageBody;
   const chatId = body.chatid || body.from.userid;
   const mediaLocalRoots = await getExtendedMediaLocalRoots(account.config);
 
-  runtime.log?.(`[wecom][debug] mediaLocalRoots=${JSON.stringify(mediaLocalRoots)}, mediaUrls=${JSON.stringify(mediaUrls)}`);
+  runtime.log?.(
+    `[wecom][debug] mediaLocalRoots=${JSON.stringify(mediaLocalRoots)}, mediaUrls=${JSON.stringify(mediaUrls)}`,
+  );
 
   for (const mediaUrl of mediaUrls) {
     const result = await uploadAndSendMedia({
@@ -366,7 +378,9 @@ async function sendMediaBatch(
       state.hasMedia = true;
     } else {
       state.hasMediaFailed = true;
-      runtime.error?.(`[wecom] Media send failed: url=${mediaUrl}, reason=${result.rejectReason || result.error}`);
+      runtime.error?.(
+        `[wecom] Media send failed: url=${mediaUrl}, reason=${result.rejectReason || result.error}`,
+      );
       // 收集错误摘要，后续在 finishThinkingStream 中直接替换 thinking 流展示给用户
       const summary = buildMediaErrorSummary(mediaUrl, result);
       state.mediaErrorSummary = state.mediaErrorSummary
@@ -411,7 +425,9 @@ async function finishThinkingStream(ctx: DeliverContext): Promise<void> {
     finishText = "📋 卡片消息已发送。";
   } else if (state.hasMedia) {
     if (state.hasMediaFailed && state.mediaErrorSummary) {
-      finishText = finishText ? `${finishText}\n\n${state.mediaErrorSummary}` : state.mediaErrorSummary;
+      finishText = finishText
+        ? `${finishText}\n\n${state.mediaErrorSummary}`
+        : state.mediaErrorSummary;
     } else if (!finishText) {
       finishText = "📎 文件已发送，请查收。";
     }
@@ -422,7 +438,14 @@ async function finishThinkingStream(ctx: DeliverContext): Promise<void> {
     let expired = state.streamExpired;
     if (!expired) {
       try {
-        await sendWeComReply({wsClient, frame, text: finishText, runtime, finish: true, streamId: state.streamId});
+        await sendWeComReply({
+          wsClient,
+          frame,
+          text: finishText,
+          runtime,
+          finish: true,
+          streamId: state.streamId,
+        });
       } catch (err) {
         if (err instanceof StreamExpiredError) {
           expired = true;
@@ -458,14 +481,30 @@ async function routeAndDispatchMessage(params: {
   runtime: RuntimeEnv;
   onCleanup: () => void;
 }): Promise<void> {
-  const { ctxPayload, route, storePath, chatId, chatType, config, account, wsClient, frame, state, runtime, onCleanup } = params;
+  const {
+    ctxPayload,
+    route,
+    storePath,
+    chatId,
+    chatType,
+    config,
+    account,
+    wsClient,
+    frame,
+    state,
+    runtime,
+    onCleanup,
+  } = params;
   const core = getWeComRuntime();
   const ctx: DeliverContext = { wsClient, frame, state, account, runtime };
 
   // 防止 onCleanup 被多次调用（onError 回调与 catch 块可能重复触发）
   let cleanedUp = false;
   const safeCleanup = () => {
-    if (!cleanedUp) { cleanedUp = true; onCleanup(); }
+    if (!cleanedUp) {
+      cleanedUp = true;
+      onCleanup();
+    }
   };
 
   let isShowThink = !(account.sendThinkingMessage ?? true);
@@ -476,14 +515,12 @@ async function routeAndDispatchMessage(params: {
       storePath,
       sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
       ctx: ctxPayload,
-      updateLastRoute: chatType !== "group"
-        ? {
-            sessionKey: route.mainSessionKey,
-            channel: CHANNEL_ID,
-            to: `${CHANNEL_ID}:${chatId}`,
-            accountId: route.accountId,
-          }
-        : undefined,
+      updateLastRoute: {
+        sessionKey: route.mainSessionKey,
+        channel: CHANNEL_ID,
+        to: chatType === "group" ? `group:${chatId}` : `${CHANNEL_ID}:${chatId}`,
+        accountId: route.accountId,
+      },
       onRecordError: (err) => {
         runtime.error?.(`[wecom] failed updating session meta: ${String(err)}`);
       },
@@ -496,7 +533,13 @@ async function routeAndDispatchMessage(params: {
         onReplyStart: async () => {
           if (!isShowThink && state.streamId && !state.accumulatedText) {
             try {
-              await sendThinkingReply({wsClient, frame, streamId: state.streamId, runtime, state})
+              await sendThinkingReply({
+                wsClient,
+                frame,
+                streamId: state.streamId,
+                runtime,
+                state,
+              });
             } catch (e) {
               runtime.error?.(`[wecom] sendThinkingReply threw err: ${String(e)}`);
             }
@@ -504,15 +547,21 @@ async function routeAndDispatchMessage(params: {
           }
         },
         deliver: async (payload, info) => {
-          runtime.log?.(`[openclaw -> plugin] kind=${info.kind}, text=${JSON.stringify(payload.text ?? '')}, mediaUrl=${payload.mediaUrl ?? ''}, mediaUrls=${JSON.stringify(payload.mediaUrls ?? [])}`);
+          runtime.log?.(
+            `[openclaw -> plugin] kind=${info.kind}, text=${JSON.stringify(payload.text ?? "")}, mediaUrl=${payload.mediaUrl ?? ""}, mediaUrls=${JSON.stringify(payload.mediaUrls ?? [])}`,
+          );
 
           // 累积文本
           if (payload.text) {
-            state.accumulatedText += `${payload.text || ''}`;
+            state.accumulatedText += `${payload.text || ""}`;
           }
 
           // 发送媒体（统一走主动发送）
-          const mediaUrls = payload.mediaUrls?.length ? payload.mediaUrls : payload.mediaUrl ? [payload.mediaUrl] : [];
+          const mediaUrls = payload.mediaUrls?.length
+            ? payload.mediaUrls
+            : payload.mediaUrl
+              ? [payload.mediaUrl]
+              : [];
           if (mediaUrls.length > 0) {
             try {
               await sendMediaBatch(ctx, mediaUrls);
@@ -534,15 +583,26 @@ async function routeAndDispatchMessage(params: {
           // 避免 JSON 源码在流式输出过程中暴露给终端用户
           if (state.accumulatedText && !state.streamExpired) {
             try {
-              const displayText = maskTemplateCardBlocks(state.accumulatedText, (...args: any[]) => runtime.log?.(...args));
+              const displayText = maskTemplateCardBlocks(state.accumulatedText, (...args: any[]) =>
+                runtime.log?.(...args),
+              );
               // if (displayText !== state.accumulatedText) {
               //   runtime.log?.(`[wecom][template-card] Mid-frame masked: original=${state.accumulatedText.length}chars, masked=${displayText.length}chars`);
               // }
-              await sendWeComReply({ wsClient, frame, text: displayText, runtime, finish: false, streamId: state.streamId });
+              await sendWeComReply({
+                wsClient,
+                frame,
+                text: displayText,
+                runtime,
+                finish: false,
+                streamId: state.streamId,
+              });
             } catch (err) {
               if (err instanceof StreamExpiredError) {
                 state.streamExpired = true;
-                runtime.log?.(`[wecom] Stream expired during intermediate reply, will fallback to proactive send`);
+                runtime.log?.(
+                  `[wecom] Stream expired during intermediate reply, will fallback to proactive send`,
+                );
               } else {
                 throw err;
               }
@@ -556,7 +616,13 @@ async function routeAndDispatchMessage(params: {
     });
 
     // 模板卡片检测与发送（在关闭 thinking 流之前独立处理）
-    const cardResult = await processTemplateCardsIfNeeded({ wsClient, frame, state, account, runtime });
+    const cardResult = await processTemplateCardsIfNeeded({
+      wsClient,
+      frame,
+      state,
+      account,
+      runtime,
+    });
     if (cardResult) {
       // 卡片已发送，用剩余文本替换累积文本
       state.accumulatedText = cardResult.remainingText;
@@ -569,13 +635,21 @@ async function routeAndDispatchMessage(params: {
     runtime.error?.(`[wecom][plugin] Failed to process message: ${String(err)}`);
     // 即使 dispatch 抛异常，也需要处理卡片和关闭 thinking 流
     try {
-      const cardResult = await processTemplateCardsIfNeeded({ wsClient, frame, state, account, runtime });
+      const cardResult = await processTemplateCardsIfNeeded({
+        wsClient,
+        frame,
+        state,
+        account,
+        runtime,
+      });
       if (cardResult) {
         state.accumulatedText = cardResult.remainingText;
       }
       await finishThinkingStream(ctx);
     } catch (finishErr) {
-      runtime.error?.(`[wecom] Failed to finish thinking stream after dispatch error: ${String(finishErr)}`);
+      runtime.error?.(
+        `[wecom] Failed to finish thinking stream after dispatch error: ${String(finishErr)}`,
+      );
     }
     safeCleanup();
   }
@@ -602,7 +676,8 @@ async function prepareWeComMessage(params: {
   const reqId = frame.headers.req_id;
 
   // Step 1: 解析消息内容
-  const { textParts, imageUrls, imageAesKeys, fileUrls, fileAesKeys, quoteContent } = parseMessageContent(body);
+  const { textParts, imageUrls, imageAesKeys, fileUrls, fileAesKeys, quoteContent } =
+    parseMessageContent(body);
   let text = textParts.join("\n").trim();
 
   // // 群聊中移除 @机器人 的提及标记
@@ -694,7 +769,19 @@ async function prepareWeComMessage(params: {
  * 同一会话中的消息通过串行队列保证按序执行。
  */
 async function processWeComMessageNow(entry: WeComMessageEntry): Promise<void> {
-  const { frame, account, config, runtime, wsClient, text, mediaList, quoteContent, messageId, chatId, reqId } = entry;
+  const {
+    frame,
+    account,
+    config,
+    runtime,
+    wsClient,
+    text,
+    mediaList,
+    quoteContent,
+    messageId,
+    chatId,
+    reqId,
+  } = entry;
 
   // Step 5: 初始化消息状态
   setReqIdForChat(chatId, reqId, account.accountId);
@@ -714,15 +801,13 @@ async function processWeComMessageNow(entry: WeComMessageEntry): Promise<void> {
   // }
 
   // Step 7: 构建上下文并路由到核心处理流程（带整体超时保护）
-  const { ctxPayload, route, storePath, chatId: resolvedChatId, chatType } = buildMessageContext(
-    frame,
-    account,
-    config,
-    text,
-    mediaList,
-    quoteContent,
-    runtime,
-  );
+  const {
+    ctxPayload,
+    route,
+    storePath,
+    chatId: resolvedChatId,
+    chatType,
+  } = buildMessageContext(frame, account, config, text, mediaList, quoteContent, runtime);
   // runtime.log?.(`[plugin -> openclaw] body=${text}, mediaPaths=${JSON.stringify(mediaList.map(m => m.path))}${quoteContent ? `, quote=${quoteContent}` : ''}`);
 
   try {
@@ -745,9 +830,6 @@ async function processWeComMessageNow(entry: WeComMessageEntry): Promise<void> {
     cleanupState();
   }
 }
-
-
-
 
 // ============================================================================
 // 创建 SDK Logger 适配器
@@ -850,7 +932,6 @@ export async function monitorWeComProvider(options: WeComMonitorOptions): Promis
         connected: false,
       });
     });
-
 
     // 监听被踢下线事件（服务端因新连接建立而主动断开旧连接）
     //
@@ -1018,11 +1099,15 @@ export async function monitorWeComProvider(options: WeComMonitorOptions): Promis
           await processWeComMessageNow(entry);
         }
       } catch (err) {
-        runtime.error?.(`[${account.accountId}] Failed to process template_card_event: ${String(err)}`);
+        runtime.error?.(
+          `[${account.accountId}] Failed to process template_card_event: ${String(err)}`,
+        );
       }
     });
 
-    runtime.log?.(`[${account.accountId}] Event listeners attached: message + event(template_card_event)`);
+    runtime.log?.(
+      `[${account.accountId}] Event listeners attached: message + event(template_card_event)`,
+    );
 
     // 启动前预热 reqId 缓存，确保完成后再建立连接，避免 getSync 在预热完成前返回 undefined
     warmupReqIdStore(account.accountId, (...args) => runtime.log?.(...args))

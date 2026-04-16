@@ -1,6 +1,6 @@
 /**
  * 钉钉消息业务处理器
- * 
+ *
  * 职责：
  * - 处理钉钉消息的业务逻辑
  * - 支持多种消息类型：text、richText、picture、audio、video、file
@@ -8,7 +8,7 @@
  * - 会话上下文构建和管理
  * - 消息分发（AI Card、命令处理、主动消息）
  * - Policy 检查（DM 白名单、群聊策略）
- * 
+ *
  * 核心功能：
  * - 消息内容提取和归一化
  * - 媒体文件本地缓存管理
@@ -34,8 +34,30 @@ interface HistoryEntry {
   content: string;
   [key: string]: any;
 }
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { createDingtalkReplyDispatcher } from "../reply-dispatcher.ts";
+import { getDingtalkRuntime } from "../runtime.ts";
+import {
+  processLocalImages,
+  processVideoMarkers,
+  processAudioMarkers,
+  uploadAndReplaceFileMarkers,
+} from "../services/media/index.ts";
+import {
+  createAICardForTarget,
+  streamAICard,
+  type AICardInstance,
+} from "../services/messaging/card.ts";
+import { sendProactive, type AICardTarget } from "../services/messaging/index.ts";
 import type { ResolvedDingtalkAccount, DingtalkConfig } from "../types/index.ts";
-import { 
+import { resolveAgentWorkspaceDir } from "../utils/agent.ts";
+import { QUEUE_BUSY_ACK_PHRASES } from "../utils/constants.ts";
+import { dingtalkHttp } from "../utils/http-client.ts";
+import { createLoggerFromConfig } from "../utils/index.ts";
+import { normalizeSlashCommand } from "../utils/session.ts";
+import {
   buildSessionContext,
   getAccessToken,
   getOapiAccessToken,
@@ -44,35 +66,17 @@ import {
   addEmotionReply,
   recallEmotionReply,
 } from "../utils/utils-legacy.ts";
-import { resolveAgentWorkspaceDir } from "../utils/agent.ts";
-import { 
-  processLocalImages, 
-  processVideoMarkers, 
-  processAudioMarkers, 
-  uploadAndReplaceFileMarkers
-} from "../services/media/index.ts";
-import { sendProactive, type AICardTarget } from "../services/messaging/index.ts";
-import { createAICardForTarget, streamAICard, type AICardInstance } from "../services/messaging/card.ts";
-import { QUEUE_BUSY_ACK_PHRASES } from "../utils/constants.ts";
-import { createDingtalkReplyDispatcher } from "../reply-dispatcher.ts";
-import { normalizeSlashCommand } from "../utils/session.ts";
-import { getDingtalkRuntime } from "../runtime.ts";
-import { dingtalkHttp } from '../utils/http-client.ts';
-import { createLoggerFromConfig } from '../utils/index.ts';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 
 // ============ 常量 ============
 
-const AI_CARD_TEMPLATE_ID = '02fcf2f4-5e02-4a85-b672-46d1f715543e.schema';
+const AI_CARD_TEMPLATE_ID = "02fcf2f4-5e02-4a85-b672-46d1f715543e.schema";
 
 const AICardStatus = {
-  PROCESSING: '1',
-  INPUTING: '2',
-  FINISHED: '3',
-  EXECUTING: '4',
-  FAILED: '5',
+  PROCESSING: "1",
+  INPUTING: "2",
+  FINISHED: "3",
+  EXECUTING: "4",
+  FAILED: "5",
 } as const;
 
 // ============ 会话级别消息队列 ============
@@ -147,11 +151,11 @@ interface ExtractedMessage {
 function resolveContent(data: any): any | null {
   const raw = data?.content;
   if (raw == null) return null;
-  if (typeof raw === 'object') return raw;
-  if (typeof raw === 'string') {
+  if (typeof raw === "object") return raw;
+  if (typeof raw === "string") {
     try {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') return parsed;
+      if (parsed && typeof parsed === "object") return parsed;
     } catch {
       // 非 JSON 字符串，忽略
     }
@@ -173,27 +177,27 @@ function extractQuotedMsgText(container: any, maxDepth: number): string | null {
   const repliedMsg = container.repliedMsg;
   if (!repliedMsg) return null;
 
-  const msgType = repliedMsg.msgType || 'text';
+  const msgType = repliedMsg.msgType || "text";
 
   // 解析 repliedMsg.content（可能是对象或 JSON 字符串）
   let contentObj: any = null;
   const rawContent = repliedMsg.content;
-  if (rawContent && typeof rawContent === 'object') {
+  if (rawContent && typeof rawContent === "object") {
     contentObj = rawContent;
-  } else if (typeof rawContent === 'string') {
+  } else if (typeof rawContent === "string") {
     try {
       const parsed = JSON.parse(rawContent);
-      if (parsed && typeof parsed === 'object') contentObj = parsed;
+      if (parsed && typeof parsed === "object") contentObj = parsed;
     } catch {
       // 忽略
     }
   }
 
-  let bodyText = '';
+  let bodyText = "";
   switch (msgType) {
-    case 'text': {
+    case "text": {
       // repliedMsg.content.text 存放正文
-      bodyText = contentObj?.text?.trim() || repliedMsg.text?.trim() || '';
+      bodyText = contentObj?.text?.trim() || repliedMsg.text?.trim() || "";
       // 嵌套引用：content 中可能还有 isReplyMsg/repliedMsg
       if (contentObj?.isReplyMsg) {
         const nested = extractQuotedMsgText(contentObj, maxDepth - 1);
@@ -201,34 +205,34 @@ function extractQuotedMsgText(container: any, maxDepth: number): string | null {
       }
       break;
     }
-    case 'richText': {
+    case "richText": {
       const richList: any[] = contentObj?.richText || [];
       const textParts = richList
-        .filter((item: any) => item.text && item.msgType !== 'skill' && !item.skillData)
+        .filter((item: any) => item.text && item.msgType !== "skill" && !item.skillData)
         .map((item: any) => item.text as string);
-      bodyText = textParts.join('');
+      bodyText = textParts.join("");
       break;
     }
-    case 'picture':
-      bodyText = '[图片]';
+    case "picture":
+      bodyText = "[图片]";
       break;
-    case 'video':
-      bodyText = '[视频]';
+    case "video":
+      bodyText = "[视频]";
       break;
-    case 'audio':
-      bodyText = contentObj?.recognition || '[语音消息]';
+    case "audio":
+      bodyText = contentObj?.recognition || "[语音消息]";
       break;
-    case 'file': {
-      const fileName = contentObj?.fileName || 'unknown';
+    case "file": {
+      const fileName = contentObj?.fileName || "unknown";
       bodyText = `[文件: ${fileName}]`;
       break;
     }
-    case 'markdown':
-      bodyText = contentObj?.text?.trim() || '[markdown消息]';
+    case "markdown":
+      bodyText = contentObj?.text?.trim() || "[markdown消息]";
       break;
-    case 'interactiveCard': {
-      const cardUrl = contentObj?.biz_custom_action_url || repliedMsg.biz_custom_action_url || '';
-      bodyText = cardUrl ? `收到交互式卡片链接：${cardUrl}` : '[interactiveCard消息]';
+    case "interactiveCard": {
+      const cardUrl = contentObj?.biz_custom_action_url || repliedMsg.biz_custom_action_url || "";
+      bodyText = cardUrl ? `收到交互式卡片链接：${cardUrl}` : "[interactiveCard消息]";
       break;
     }
     default:
@@ -252,28 +256,25 @@ function extractRichTextMediaAttachments(
   const fileNames: string[] = [];
 
   // 兼容新结构 content.richText 和旧结构 richText.richTextList
-  const richList: any[] =
-    content?.richText ||
-    data?.richText?.richTextList ||
-    [];
+  const richList: any[] = content?.richText || data?.richText?.richTextList || [];
 
   for (const item of richList) {
     if (item.pictureUrl) {
       imageUrls.push(item.pictureUrl);
     }
     if (item.downloadCode) {
-      const itemType: string = item.type || '';
-      if (itemType === 'picture' || !itemType) {
+      const itemType: string = item.type || "";
+      if (itemType === "picture" || !itemType) {
         imageUrls.push(`downloadCode:${item.downloadCode}`);
-      } else if (itemType === 'video') {
+      } else if (itemType === "video") {
         downloadCodes.push(item.downloadCode);
-        fileNames.push(item.fileName || 'video.mp4');
-      } else if (itemType === 'audio') {
+        fileNames.push(item.fileName || "video.mp4");
+      } else if (itemType === "audio") {
         downloadCodes.push(item.downloadCode);
-        fileNames.push(item.fileName || 'audio.amr');
-      } else if (itemType === 'file') {
+        fileNames.push(item.fileName || "audio.amr");
+      } else if (itemType === "file") {
         downloadCodes.push(item.downloadCode);
-        fileNames.push(item.fileName || '文件');
+        fileNames.push(item.fileName || "文件");
       }
     }
   }
@@ -284,54 +285,56 @@ function extractRichTextMediaAttachments(
 /**
  * 从 repliedMsg 中提取媒体附件（用于 reply 类型消息）。
  */
-function extractRepliedMsgMediaAttachments(
-  repliedMsg: any,
-): { imageUrls: string[]; downloadCodes: string[]; fileNames: string[] } {
+function extractRepliedMsgMediaAttachments(repliedMsg: any): {
+  imageUrls: string[];
+  downloadCodes: string[];
+  fileNames: string[];
+} {
   const imageUrls: string[] = [];
   const downloadCodes: string[] = [];
   const fileNames: string[] = [];
 
   if (!repliedMsg) return { imageUrls, downloadCodes, fileNames };
 
-  const msgType = repliedMsg.msgType || 'text';
+  const msgType = repliedMsg.msgType || "text";
 
   let contentObj: any = null;
   const rawContent = repliedMsg.content;
-  if (rawContent && typeof rawContent === 'object') {
+  if (rawContent && typeof rawContent === "object") {
     contentObj = rawContent;
-  } else if (typeof rawContent === 'string') {
+  } else if (typeof rawContent === "string") {
     try {
       const parsed = JSON.parse(rawContent);
-      if (parsed && typeof parsed === 'object') contentObj = parsed;
+      if (parsed && typeof parsed === "object") contentObj = parsed;
     } catch {
       // 忽略
     }
   }
 
   switch (msgType) {
-    case 'picture':
-    case 'video':
-    case 'audio': {
+    case "picture":
+    case "video":
+    case "audio": {
       const code = contentObj?.downloadCode;
       if (code) {
-        if (msgType === 'picture') {
+        if (msgType === "picture") {
           imageUrls.push(`downloadCode:${code}`);
         } else {
           downloadCodes.push(code);
-          fileNames.push(contentObj?.fileName || (msgType === 'video' ? 'video.mp4' : 'audio.amr'));
+          fileNames.push(contentObj?.fileName || (msgType === "video" ? "video.mp4" : "audio.amr"));
         }
       }
       break;
     }
-    case 'file': {
+    case "file": {
       const code = contentObj?.downloadCode;
       if (code) {
         downloadCodes.push(code);
-        fileNames.push(contentObj?.fileName || '文件');
+        fileNames.push(contentObj?.fileName || "文件");
       }
       break;
     }
-    case 'richText': {
+    case "richText": {
       const richList: any[] = contentObj?.richText || [];
       for (const item of richList) {
         if (item.downloadCode) {
@@ -348,13 +351,13 @@ function extractRepliedMsgMediaAttachments(
 }
 
 export function extractMessageContent(data: any): ExtractedMessage {
-  const msgtype = data.msgtype || 'text';
+  const msgtype = data.msgtype || "text";
   switch (msgtype) {
-    case 'text': {
+    case "text": {
       const atDingtalkIds = data.text?.at?.atDingtalkIds || [];
       const atMobiles = data.text?.at?.atMobiles || [];
 
-      const bodyText = data.text?.content?.trim() || '';
+      const bodyText = data.text?.content?.trim() || "";
 
       // 检测引用消息（isReplyMsg + repliedMsg 在 data.text 对象内）
       const hasReply = !!data.text?.isReplyMsg;
@@ -363,16 +366,24 @@ export function extractMessageContent(data: any): ExtractedMessage {
 
       // 提取引用消息中的媒体附件（图片/视频/音频/文件）
       const repliedMsgInText = data.text?.repliedMsg;
-      const { imageUrls, downloadCodes, fileNames } = extractRepliedMsgMediaAttachments(repliedMsgInText);
+      const { imageUrls, downloadCodes, fileNames } =
+        extractRepliedMsgMediaAttachments(repliedMsgInText);
 
       // 从引用消息的文本内容中提取 URL，触发链接路由（如 alidocs 文档链接）
       // 场景：用户引用了一条含链接的文本消息，并追问"这个文档内容是什么"
       let interactiveCardUrl: string | undefined;
       if (hasReply && repliedMsgInText) {
-        const repliedContentObj = typeof repliedMsgInText.content === 'object'
-          ? repliedMsgInText.content
-          : (() => { try { return JSON.parse(repliedMsgInText.content); } catch { return null; } })();
-        const repliedText = repliedContentObj?.text || repliedMsgInText.text || '';
+        const repliedContentObj =
+          typeof repliedMsgInText.content === "object"
+            ? repliedMsgInText.content
+            : (() => {
+                try {
+                  return JSON.parse(repliedMsgInText.content);
+                } catch {
+                  return null;
+                }
+              })();
+        const repliedText = repliedContentObj?.text || repliedMsgInText.text || "";
         const extractedUrl = extractFirstUrlFromText(repliedText);
         if (extractedUrl) {
           interactiveCardUrl = extractedUrl;
@@ -381,7 +392,7 @@ export function extractMessageContent(data: any): ExtractedMessage {
 
       return {
         text,
-        messageType: hasReply ? 'reply' : 'text',
+        messageType: hasReply ? "reply" : "text",
         imageUrls,
         downloadCodes,
         fileNames,
@@ -390,19 +401,16 @@ export function extractMessageContent(data: any): ExtractedMessage {
         interactiveCardUrl,
       };
     }
-    case 'richText': {
+    case "richText": {
       // 兼容 content 为 JSON 字符串的情况
       const content = resolveContent(data);
       const textParts: string[] = [];
 
       // 兼容新结构 content.richText 和旧结构 richText.richTextList
-      const richList: any[] =
-        content?.richText ||
-        data?.richText?.richTextList ||
-        [];
+      const richList: any[] = content?.richText || data?.richText?.richTextList || [];
 
       for (const item of richList) {
-        const isSkillItem = item.type === 'skill' || !!item.skillData;
+        const isSkillItem = item.type === "skill" || !!item.skillData;
 
         if (item.text && !isSkillItem) {
           textParts.push(item.text);
@@ -410,9 +418,9 @@ export function extractMessageContent(data: any): ExtractedMessage {
 
         if (isSkillItem && item.skillData) {
           // 将 skillData 转换为 <skill> 标签，供下游识别斜杠命令
-          const skillId = item.skillData.skillId || '';
-          const displayName = item.skillData.displayName || '';
-          const iconUrl = item.skillData.iconUrl || '';
+          const skillId = item.skillData.skillId || "";
+          const displayName = item.skillData.displayName || "";
+          const iconUrl = item.skillData.iconUrl || "";
           const skillTag = iconUrl
             ? `<skill data-id="${skillId}" data-name="${displayName}" icon="${iconUrl}">`
             : `<skill data-id="${skillId}" data-name="${displayName}">`;
@@ -440,12 +448,16 @@ export function extractMessageContent(data: any): ExtractedMessage {
       const fileNames = [...richTextMedia.fileNames, ...repliedMedia.fileNames];
 
       const text =
-        textParts.join('') ||
-        (imageUrls.length > 0 ? '[图片]' : downloadCodes.length > 0 ? '[媒体文件]' : '[富文本消息]');
+        textParts.join("") ||
+        (imageUrls.length > 0
+          ? "[图片]"
+          : downloadCodes.length > 0
+            ? "[媒体文件]"
+            : "[富文本消息]");
 
       return {
         text,
-        messageType: hasReply ? 'reply' : 'richText',
+        messageType: hasReply ? "reply" : "richText",
         imageUrls,
         downloadCodes,
         fileNames,
@@ -453,10 +465,10 @@ export function extractMessageContent(data: any): ExtractedMessage {
         atMobiles: [],
       };
     }
-    case 'picture': {
+    case "picture": {
       const content = resolveContent(data);
-      const downloadCode = content?.downloadCode || '';
-      const pictureUrl = content?.pictureUrl || '';
+      const downloadCode = content?.downloadCode || "";
+      const pictureUrl = content?.pictureUrl || "";
       const imageUrls: string[] = [];
       const downloadCodes: string[] = [];
 
@@ -467,17 +479,22 @@ export function extractMessageContent(data: any): ExtractedMessage {
         downloadCodes.push(downloadCode);
       }
 
-      return { text: '[图片]', messageType: 'picture', imageUrls, downloadCodes, fileNames: [], atDingtalkIds: [], atMobiles: [] };
+      return {
+        text: "[图片]",
+        messageType: "picture",
+        imageUrls,
+        downloadCodes,
+        fileNames: [],
+        atDingtalkIds: [],
+        atMobiles: [],
+      };
     }
-    case 'audio': {
+    case "audio": {
       const content = resolveContent(data);
       // 兼容旧结构 /audio/recognition
-      const recognition =
-        content?.recognition ||
-        data?.audio?.recognition ||
-        '[语音消息]';
-      const audioDownloadCode = content?.downloadCode || '';
-      const audioFileName = content?.fileName || 'audio.amr';
+      const recognition = content?.recognition || data?.audio?.recognition || "[语音消息]";
+      const audioDownloadCode = content?.downloadCode || "";
+      const audioFileName = content?.fileName || "audio.amr";
       const downloadCodes: string[] = [];
       const fileNames: string[] = [];
       if (audioDownloadCode) {
@@ -486,7 +503,7 @@ export function extractMessageContent(data: any): ExtractedMessage {
       }
       return {
         text: recognition,
-        messageType: 'audio',
+        messageType: "audio",
         imageUrls: [],
         downloadCodes,
         fileNames,
@@ -494,10 +511,10 @@ export function extractMessageContent(data: any): ExtractedMessage {
         atMobiles: [],
       };
     }
-    case 'video': {
+    case "video": {
       const content = resolveContent(data);
-      const videoDownloadCode = content?.downloadCode || '';
-      const videoFileName = content?.fileName || 'video.mp4';
+      const videoDownloadCode = content?.downloadCode || "";
+      const videoFileName = content?.fileName || "video.mp4";
       const downloadCodes: string[] = [];
       const fileNames: string[] = [];
       if (videoDownloadCode) {
@@ -505,8 +522,8 @@ export function extractMessageContent(data: any): ExtractedMessage {
         fileNames.push(videoFileName);
       }
       return {
-        text: '[视频]',
-        messageType: 'video',
+        text: "[视频]",
+        messageType: "video",
         imageUrls: [],
         downloadCodes,
         fileNames,
@@ -514,28 +531,45 @@ export function extractMessageContent(data: any): ExtractedMessage {
         atMobiles: [],
       };
     }
-    case 'file': {
+    case "file": {
       const content = resolveContent(data);
       // 兼容旧结构 /file/fileName
-      const fileName = content?.fileName || data?.file?.fileName || '文件';
-      const downloadCode = content?.downloadCode || '';
+      const fileName = content?.fileName || data?.file?.fileName || "文件";
+      const downloadCode = content?.downloadCode || "";
       const downloadCodes: string[] = [];
       const fileNames: string[] = [];
       if (downloadCode) {
         downloadCodes.push(downloadCode);
         fileNames.push(fileName);
       }
-      return { text: `[文件: ${fileName}]`, messageType: 'file', imageUrls: [], downloadCodes, fileNames, atDingtalkIds: [], atMobiles: [] };
+      return {
+        text: `[文件: ${fileName}]`,
+        messageType: "file",
+        imageUrls: [],
+        downloadCodes,
+        fileNames,
+        atDingtalkIds: [],
+        atMobiles: [],
+      };
     }
-    case 'markdown': {
+    case "markdown": {
       // 钉钉 markdown 消息内容在 data.text.content（与 text 类型一致），不在 data.content
-      const text = data.text?.content?.trim() || resolveContent(data)?.text?.trim() || '[markdown消息]';
-      return { text, messageType: 'markdown', imageUrls: [], downloadCodes: [], fileNames: [], atDingtalkIds: [], atMobiles: [] };
+      const text =
+        data.text?.content?.trim() || resolveContent(data)?.text?.trim() || "[markdown消息]";
+      return {
+        text,
+        messageType: "markdown",
+        imageUrls: [],
+        downloadCodes: [],
+        fileNames: [],
+        atDingtalkIds: [],
+        atMobiles: [],
+      };
     }
-    case 'actionCard': {
+    case "actionCard": {
       const content = resolveContent(data);
-      const title = content?.title?.trim() || '';
-      const body = content?.text?.trim() || '';
+      const title = content?.title?.trim() || "";
+      const body = content?.text?.trim() || "";
       // 提取操作链接列表
       const actionUrlItems: any[] = content?.actionUrlItemList || [];
       const actionUrls = actionUrlItems
@@ -549,40 +583,74 @@ export function extractMessageContent(data: any): ExtractedMessage {
         const linkSection =
           actionUrls.length === 1
             ? `操作链接：${actionUrls[0]}`
-            : `操作链接：\n- ${actionUrls.join('\n- ')}`;
+            : `操作链接：\n- ${actionUrls.join("\n- ")}`;
         sections.push(linkSection);
       }
 
-      const text = sections.length > 0 ? sections.join('\n\n') : '[actionCard消息]';
+      const text = sections.length > 0 ? sections.join("\n\n") : "[actionCard消息]";
       // 单个操作链接时作为 actionCardUrl 传给下游做 URL 路由
       const actionCardUrl = actionUrls.length === 1 ? actionUrls[0] : undefined;
-      return { text, messageType: 'actionCard', imageUrls: [], downloadCodes: [], fileNames: [], atDingtalkIds: [], atMobiles: [], actionCardUrl };
+      return {
+        text,
+        messageType: "actionCard",
+        imageUrls: [],
+        downloadCodes: [],
+        fileNames: [],
+        atDingtalkIds: [],
+        atMobiles: [],
+        actionCardUrl,
+      };
     }
-    case 'interactiveCard': {
+    case "interactiveCard": {
       // 交互式卡片消息（通常是文档分享）
       const content = resolveContent(data);
       // 兼容 content 字段不存在时直接从顶层取（repliedMsg 透传场景）
       const interactiveCardUrl =
-        (content?.biz_custom_action_url || data?.biz_custom_action_url || '').trim() || undefined;
+        (content?.biz_custom_action_url || data?.biz_custom_action_url || "").trim() || undefined;
       if (interactiveCardUrl) {
         const text = `收到交互式卡片链接：${interactiveCardUrl}`;
-        return { text, messageType: 'interactiveCard', imageUrls: [], downloadCodes: [], fileNames: [], atDingtalkIds: [], atMobiles: [], interactiveCardUrl };
+        return {
+          text,
+          messageType: "interactiveCard",
+          imageUrls: [],
+          downloadCodes: [],
+          fileNames: [],
+          atDingtalkIds: [],
+          atMobiles: [],
+          interactiveCardUrl,
+        };
       }
-      return { text: '[interactiveCard消息]', messageType: 'interactiveCard', imageUrls: [], downloadCodes: [], fileNames: [], atDingtalkIds: [], atMobiles: [] };
+      return {
+        text: "[interactiveCard消息]",
+        messageType: "interactiveCard",
+        imageUrls: [],
+        downloadCodes: [],
+        fileNames: [],
+        atDingtalkIds: [],
+        atMobiles: [],
+      };
     }
-    case 'reply': {
+    case "reply": {
       // 显式 reply 类型（部分钉钉版本直接发 msgtype=reply）
       // 优先从 data.text 取引用容器，取不到再从 content 取
       const replyContainer = data.text || resolveContent(data);
-      const bodyText = data.text?.content?.trim() || '';
+      const bodyText = data.text?.content?.trim() || "";
       const quotedText = extractQuotedMsgText(replyContainer, 3);
-      const text = quotedText ? `${bodyText}\n${quotedText}` : bodyText || '[引用消息]';
+      const text = quotedText ? `${bodyText}\n${quotedText}` : bodyText || "[引用消息]";
 
       // 提取引用中的媒体附件
       const repliedMsg = data.text?.repliedMsg || resolveContent(data)?.repliedMsg;
       const { imageUrls, downloadCodes, fileNames } = extractRepliedMsgMediaAttachments(repliedMsg);
 
-      return { text, messageType: 'reply', imageUrls, downloadCodes, fileNames, atDingtalkIds: [], atMobiles: [] };
+      return {
+        text,
+        messageType: "reply",
+        imageUrls,
+        downloadCodes,
+        fileNames,
+        atDingtalkIds: [],
+        atMobiles: [],
+      };
     }
     default:
       return {
@@ -622,7 +690,7 @@ function buildLinkRoutingPrompt(content: ExtractedMessage): string | null {
   const linkUrl = interactiveCardUrl || actionCardUrl;
   if (!linkUrl) return null;
 
-  const cardKind = interactiveCardUrl ? 'interactive card' : 'action card';
+  const cardKind = interactiveCardUrl ? "interactive card" : "action card";
 
   let host: string | null = null;
   try {
@@ -631,7 +699,7 @@ function buildLinkRoutingPrompt(content: ExtractedMessage): string | null {
     // URL 解析失败，当作普通链接处理
   }
 
-  if (host === 'alidocs.dingtalk.com') {
+  if (host === "alidocs.dingtalk.com") {
     return [
       `The inbound DingTalk message is an ${cardKind} with a document link.`,
       `Linked URL: ${linkUrl}`,
@@ -641,7 +709,7 @@ function buildLinkRoutingPrompt(content: ExtractedMessage): string | null {
       `Never switch to browser-based reading for this link. Browser incompatibility or markdown export limitations are not final answers.`,
       `Do not use \`read_url\` for this link.`,
       `Reply to the DingTalk user with a concise summary of the linked document content.`,
-    ].join('\n');
+    ].join("\n");
   }
 
   return [
@@ -650,7 +718,7 @@ function buildLinkRoutingPrompt(content: ExtractedMessage): string | null {
     `For this URL, you MUST use \`read_url\` to inspect the linked content before answering.`,
     `Do not use the \`dws\` skill for this link.`,
     `Reply to the DingTalk user with a concise summary of the linked content.`,
-  ].join('\n');
+  ].join("\n");
 }
 
 // ============ 图片下载 ============
@@ -666,19 +734,28 @@ export async function downloadImageToFile(
       proxy: false, // 禁用代理，避免 PAC 文件影响
 
       headers: {
-        'Content-Type': undefined, // 删除默认的 Content-Type 请求头，让 OSS 签名验证通过
+        "Content-Type": undefined, // 删除默认的 Content-Type 请求头，让 OSS 签名验证通过
       },
-      responseType: 'arraybuffer',
+      responseType: "arraybuffer",
       timeout: 30_000,
     });
 
     const buffer = Buffer.from(resp.data);
-    const contentType = resp.headers['content-type'] || 'image/jpeg';
-    const ext = contentType.includes('png') ? '.png' : contentType.includes('gif') ? '.gif' : contentType.includes('webp') ? '.webp' : '.jpg';
+    const contentType = resp.headers["content-type"] || "image/jpeg";
+    const ext = contentType.includes("png")
+      ? ".png"
+      : contentType.includes("gif")
+        ? ".gif"
+        : contentType.includes("webp")
+          ? ".webp"
+          : ".jpg";
     // 使用 Agent 工作空间路径
-    const mediaDir = path.join(agentWorkspaceDir, 'media', 'inbound');
+    const mediaDir = path.join(agentWorkspaceDir, "media", "inbound");
     fs.mkdirSync(mediaDir, { recursive: true });
-    const tmpFile = path.join(mediaDir, `openclaw-media-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
+    const tmpFile = path.join(
+      mediaDir,
+      `openclaw-media-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`,
+    );
     fs.writeFileSync(tmpFile, buffer);
 
     log?.info?.(`图片下载成功: size=${buffer.length} bytes, type=${contentType}, path=${tmpFile}`);
@@ -703,7 +780,7 @@ export async function downloadMediaByCode(
       `${DINGTALK_API}/v1.0/robot/messageFiles/download`,
       { downloadCode, robotCode: String(config.clientId) },
       {
-        headers: { 'x-acs-dingtalk-access-token': token, 'Content-Type': 'application/json' },
+        headers: { "x-acs-dingtalk-access-token": token, "Content-Type": "application/json" },
         timeout: 30_000,
       },
     );
@@ -735,7 +812,7 @@ export async function getFileDownloadUrl(
       `${DINGTALK_API}/v1.0/robot/messageFiles/download`,
       { downloadCode, robotCode: String(config.clientId) },
       {
-        headers: { 'x-acs-dingtalk-access-token': token, 'Content-Type': 'application/json' },
+        headers: { "x-acs-dingtalk-access-token": token, "Content-Type": "application/json" },
         timeout: 30_000,
       },
     );
@@ -770,24 +847,24 @@ export async function downloadFileToLocal(
     const resp = await dingtalkHttp.get(downloadUrl, {
       proxy: false, // 禁用代理，避免 PAC 文件影响
       headers: {
-        'Content-Type': undefined, // 删除默认的 Content-Type 请求头，让 OSS 签名验证通过
+        "Content-Type": undefined, // 删除默认的 Content-Type 请求头，让 OSS 签名验证通过
       },
-      responseType: 'arraybuffer',
+      responseType: "arraybuffer",
       timeout: 60_000, // 文件可能较大，增加超时时间
     });
 
     const buffer = Buffer.from(resp.data);
-    const mediaDir = path.join(agentWorkspaceDir, 'media', 'inbound');
+    const mediaDir = path.join(agentWorkspaceDir, "media", "inbound");
     fs.mkdirSync(mediaDir, { recursive: true });
-    
+
     // 安全过滤文件名
     const sanitizeFileName = (name: string): string => {
       // 移除路径分隔符，防止目录遍历攻击
-      let safe = name.replace(/[/\\]/g, '_');
+      let safe = name.replace(/[/\\]/g, "_");
       // 移除或替换危险字符
-      safe = safe.replace(/[<>:"|?*\x00-\x1f]/g, '_');
+      safe = safe.replace(/[<>:"|?*\x00-\x1f]/g, "_");
       // 移除开头的点，防止隐藏文件
-      safe = safe.replace(/^\.+/, '');
+      safe = safe.replace(/^\.+/, "");
       // 限制长度
       if (safe.length > 200) {
         const ext = path.extname(safe);
@@ -796,11 +873,11 @@ export async function downloadFileToLocal(
       }
       // 如果处理后为空，使用默认名称
       if (!safe) {
-        safe = 'unnamed_file';
+        safe = "unnamed_file";
       }
       return safe;
     };
-    
+
     // 保留原始文件名，但添加时间戳避免冲突
     const ext = path.extname(fileName);
     const baseName = path.basename(fileName, ext);
@@ -808,7 +885,7 @@ export async function downloadFileToLocal(
     const safeBaseName = sanitizeFileName(baseName);
     const safeFileName = `${safeBaseName}-${timestamp}${ext}`;
     const localPath = path.join(mediaDir, safeFileName);
-    
+
     fs.writeFileSync(localPath, buffer);
     log?.info?.(`文件下载成功: ${fileName}, size=${buffer.length} bytes, path=${localPath}`);
     return localPath;
@@ -827,16 +904,16 @@ async function parseDocxFile(filePath: string, log?: any): Promise<string | null
 
     let mammoth: any;
     try {
-      mammoth = (await import('mammoth')).default;
+      mammoth = (await import("mammoth")).default;
     } catch {
-      log?.warn?.('mammoth 库未安装，无法解析 .docx 文件。请运行: npm install mammoth');
+      log?.warn?.("mammoth 库未安装，无法解析 .docx 文件。请运行: npm install mammoth");
       return null;
     }
 
     const buffer = fs.readFileSync(filePath);
     const result = await mammoth.extractRawText({ buffer });
     const text = result.value.trim();
-    
+
     if (text) {
       log?.info?.(`Word 文档解析成功: ${filePath}, 文本长度=${text.length}`);
       return text;
@@ -860,16 +937,16 @@ async function parsePdfFile(filePath: string, log?: any): Promise<string | null>
     let pdfParseV1: any;
     let pdfParseV2: any;
     try {
-      const mod = await import('pdf-parse');
+      const mod = await import("pdf-parse");
       if (mod.PDFParse) {
         pdfParseV2 = mod.PDFParse; // v2.x API
       } else if (mod.default) {
         pdfParseV1 = mod.default; // v1.x API
       } else {
-        throw new Error('pdf-parse module format not recognized');
+        throw new Error("pdf-parse module format not recognized");
       }
     } catch {
-      log?.warn?.('pdf-parse 库未安装，无法解析 .pdf 文件。请运行: npm install pdf-parse');
+      log?.warn?.("pdf-parse 库未安装，无法解析 .pdf 文件。请运行: npm install pdf-parse");
       return null;
     }
 
@@ -880,12 +957,12 @@ async function parsePdfFile(filePath: string, log?: any): Promise<string | null>
     if (pdfParseV2) {
       const parser = new pdfParseV2({ data: buffer });
       const result = await parser.getText();
-      text = (result.text ?? '').trim();
+      text = (result.text ?? "").trim();
       numPages = result.total;
       parser.destroy?.();
     } else {
       const data = await pdfParseV1(buffer);
-      text = (data.text ?? '').trim();
+      text = (data.text ?? "").trim();
       numPages = data.numpages;
     }
 
@@ -908,8 +985,8 @@ async function parsePdfFile(filePath: string, log?: any): Promise<string | null>
 async function readTextFile(filePath: string, log?: any): Promise<string | null> {
   try {
     log?.info?.(`开始读取文本文件: ${filePath}`);
-    const text = fs.readFileSync(filePath, 'utf-8').trim();
-    
+    const text = fs.readFileSync(filePath, "utf-8").trim();
+
     if (text) {
       log?.info?.(`文本文件读取成功: ${filePath}, 文本长度=${text.length}`);
       return text;
@@ -930,29 +1007,49 @@ async function parseFileContent(
   filePath: string,
   fileName: string,
   log?: any,
-): Promise<{ content: string | null; type: 'text' | 'binary' }> {
+): Promise<{ content: string | null; type: "text" | "binary" }> {
   const ext = path.extname(fileName).toLowerCase();
-  
+
   // Word 文档
-  if (['.docx', '.doc'].includes(ext)) {
+  if ([".docx", ".doc"].includes(ext)) {
     const content = await parseDocxFile(filePath, log);
-    return { content, type: 'text' };
+    return { content, type: "text" };
   }
-  
+
   // PDF 文档
-  if (ext === '.pdf') {
+  if (ext === ".pdf") {
     const content = await parsePdfFile(filePath, log);
-    return { content, type: 'text' };
+    return { content, type: "text" };
   }
-  
+
   // 纯文本文件
-  if (['.txt', '.md', '.json', '.xml', '.yaml', '.yml', '.csv', '.log', '.js', '.ts', '.py', '.java', '.c', '.cpp', '.h', '.sh', '.bat'].includes(ext)) {
+  if (
+    [
+      ".txt",
+      ".md",
+      ".json",
+      ".xml",
+      ".yaml",
+      ".yml",
+      ".csv",
+      ".log",
+      ".js",
+      ".ts",
+      ".py",
+      ".java",
+      ".c",
+      ".cpp",
+      ".h",
+      ".sh",
+      ".bat",
+    ].includes(ext)
+  ) {
     const content = await readTextFile(filePath, log);
-    return { content, type: 'text' };
+    return { content, type: "text" };
   }
-  
+
   // 二进制文件（不解析）
-  return { content: null, type: 'binary' };
+  return { content: null, type: "binary" };
 }
 
 // ============ 消息处理 ============
@@ -982,64 +1079,70 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
   const content = extractMessageContent(data);
   if (!content.text && content.imageUrls.length === 0 && content.downloadCodes.length === 0) return;
 
-  const isDirect = data.conversationType === '1';
+  const isDirect = data.conversationType === "1";
   const senderId = data.senderStaffId || data.senderId;
-  const senderName = data.senderNick || 'Unknown';
-
-
-
-
+  const senderName = data.senderNick || "Unknown";
 
   // ===== DM Policy 检查 =====
   if (isDirect) {
-    const dmPolicy = config.dmPolicy || 'open';
+    const dmPolicy = config.dmPolicy || "open";
     const allowFrom: (string | number)[] = config.allowFrom || [];
-    
+
     // 处理 pairing 策略（暂不支持，当作 open 处理并记录警告）
-    if (dmPolicy === 'pairing') {
+    if (dmPolicy === "pairing") {
       log?.warn?.(`dmPolicy="pairing" 暂不支持，将按 "open" 策略处理`);
       // 继续执行，不拦截
     }
-    
+
     // 处理 allowlist 策略
-    if (dmPolicy === 'allowlist') {
+    if (dmPolicy === "allowlist") {
       if (!senderId) {
         log?.warn?.(`DM 被拦截: senderId 为空`);
         return;
       }
-      
+
       // 规范化 senderId 和 allowFrom 进行比较（支持 string 和 number 类型）
       const normalizedSenderId = String(senderId);
-      const normalizedAllowFrom = allowFrom.map(id => String(id));
-      
+      const normalizedAllowFrom = allowFrom.map((id) => String(id));
+
       // 白名单为空时拦截所有（虽然 Schema 验证会阻止这种情况，但代码层面也要防御）
       if (normalizedAllowFrom.length === 0) {
         log?.warn?.(`[DingTalk] DM 被拦截: allowFrom 白名单为空，拒绝所有请求`);
-        
+
         try {
-          await sendProactive(config, { userId: senderId }, '抱歉，此机器人的访问白名单配置有误。请联系管理员检查配置。', {
-            msgType: 'text',
-            useAICard: false,
-            fallbackToNormal: true,
-            log,
-          });
+          await sendProactive(
+            config,
+            { userId: senderId },
+            "抱歉，此机器人的访问白名单配置有误。请联系管理员检查配置。",
+            {
+              msgType: "text",
+              useAICard: false,
+              fallbackToNormal: true,
+              log,
+            },
+          );
         } catch (err: any) {
           log?.error?.(`[DingTalk] 发送 DM 配置错误提示失败: ${err.message}`);
         }
         return;
       }
-      
+
       // 检查是否在白名单中
       if (!normalizedAllowFrom.includes(normalizedSenderId)) {
         log?.warn?.(`DM 被拦截: senderId=${senderId} (${senderName}) 不在白名单中`);
-        
+
         try {
-          await sendProactive(config, { userId: senderId }, '抱歉，您暂无权限使用此机器人。如需开通权限，请联系管理员。', {
-            msgType: 'text',
-            useAICard: false,
-            fallbackToNormal: true,
-            log,
-          });
+          await sendProactive(
+            config,
+            { userId: senderId },
+            "抱歉，您暂无权限使用此机器人。如需开通权限，请联系管理员。",
+            {
+              msgType: "text",
+              useAICard: false,
+              fallbackToNormal: true,
+              log,
+            },
+          );
         } catch (err: any) {
           log?.error?.(`发送 DM 拦截提示失败: ${err.message}`);
         }
@@ -1050,21 +1153,26 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
 
   // ===== 群聊 Policy 检查 =====
   if (!isDirect) {
-    const groupPolicy = config.groupPolicy || 'open';
+    const groupPolicy = config.groupPolicy || "open";
     const conversationId = data.conversationId;
     const groupAllowFrom: (string | number)[] = config.groupAllowFrom || [];
 
     // 处理 disabled 策略
-    if (groupPolicy === 'disabled') {
+    if (groupPolicy === "disabled") {
       log?.warn?.(`群聊被拦截: groupPolicy=disabled`);
-      
+
       try {
-        await sendProactive(config, { openConversationId: conversationId }, '抱歉，此机器人暂不支持群聊功能。', {
-          msgType: 'text',
-          useAICard: false,
-          fallbackToNormal: true,
-          log,
-        });
+        await sendProactive(
+          config,
+          { openConversationId: conversationId },
+          "抱歉，此机器人暂不支持群聊功能。",
+          {
+            msgType: "text",
+            useAICard: false,
+            fallbackToNormal: true,
+            log,
+          },
+        );
       } catch (err: any) {
         log?.error?.(`发送群聊 disabled 提示失败: ${err.message}`);
       }
@@ -1072,44 +1180,54 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
     }
 
     // 处理 allowlist 策略
-    if (groupPolicy === 'allowlist') {
+    if (groupPolicy === "allowlist") {
       if (!conversationId) {
         log?.warn?.(`群聊被拦截: conversationId 为空`);
         return;
       }
-      
+
       // 规范化 conversationId 和 groupAllowFrom 进行比较（支持 string 和 number 类型）
       const normalizedConversationId = String(conversationId);
-      const normalizedGroupAllowFrom = groupAllowFrom.map(id => String(id));
-      
+      const normalizedGroupAllowFrom = groupAllowFrom.map((id) => String(id));
+
       // 白名单为空时拦截所有（虽然 Schema 验证会阻止这种情况，但代码层面也要防御）
       if (normalizedGroupAllowFrom.length === 0) {
         log?.warn?.(`群聊被拦截: groupAllowFrom 白名单为空，拒绝所有请求`);
-        
+
         try {
-          await sendProactive(config, { openConversationId: conversationId }, '抱歉，此机器人的群组访问白名单配置有误。请联系管理员检查配置。', {
-            msgType: 'text',
-            useAICard: false,
-            fallbackToNormal: true,
-            log,
-          });
+          await sendProactive(
+            config,
+            { openConversationId: conversationId },
+            "抱歉，此机器人的群组访问白名单配置有误。请联系管理员检查配置。",
+            {
+              msgType: "text",
+              useAICard: false,
+              fallbackToNormal: true,
+              log,
+            },
+          );
         } catch (err: any) {
           log?.error?.(`发送群聊配置错误提示失败: ${err.message}`);
         }
         return;
       }
-      
+
       // 检查是否在白名单中
       if (!normalizedGroupAllowFrom.includes(normalizedConversationId)) {
         log?.warn?.(`群聊被拦截: conversationId=${conversationId} 不在 groupAllowFrom 白名单中`);
-        
+
         try {
-          await sendProactive(config, { openConversationId: conversationId }, '抱歉，此群组暂无权限使用此机器人。如需开通权限，请联系管理员。', {
-            msgType: 'text',
-            useAICard: false,
-            fallbackToNormal: true,
-            log,
-          });
+          await sendProactive(
+            config,
+            { openConversationId: conversationId },
+            "抱歉，此群组暂无权限使用此机器人。如需开通权限，请联系管理员。",
+            {
+              msgType: "text",
+              useAICard: false,
+              fallbackToNormal: true,
+              log,
+            },
+          );
         } catch (err: any) {
           log?.error?.(`发送群聊 allowlist 提示失败: ${err.message}`);
         }
@@ -1143,14 +1261,15 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
       if (match.accountId && match.accountId !== accountId) continue;
       if (match.peer) {
         if (match.peer.kind && match.peer.kind !== sessionContext.chatType) continue;
-        if (match.peer.id && match.peer.id !== '*' && match.peer.id !== sessionContext.peerId) continue;
+        if (match.peer.id && match.peer.id !== "*" && match.peer.id !== sessionContext.peerId)
+          continue;
       }
       matchedAgentId = binding.agentId;
       break;
     }
   }
   if (!matchedAgentId) {
-    matchedAgentId = cfg.defaultAgent || 'main';
+    matchedAgentId = cfg.defaultAgent || "main";
   }
 
   // 获取 Agent 工作空间路径
@@ -1159,25 +1278,27 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
 
   // 构建消息内容
   // ✅ 使用 normalizeSlashCommand 归一化新会话命令
-  const rawText = content.text || '';
-  
+  const rawText = content.text || "";
+
   // 归一化命令（将 /reset、/clear、新会话 等别名统一为 /new）
   const normalizedText = normalizeSlashCommand(rawText);
-  let userContent = normalizedText || (content.imageUrls.length > 0 ? '请描述这张图片' : '');
+  let userContent = normalizedText || (content.imageUrls.length > 0 ? "请描述这张图片" : "");
 
   // ===== 图片下载到本地文件 =====
   const imageLocalPaths: string[] = [];
-  
-  log?.info?.(`处理消息: accountId=${accountId}, data= ${JSON.stringify(data, null, 2)}, sender=${senderName}, text=${content.text.slice(0, 50)}...`);
-  
+
+  log?.info?.(
+    `处理消息: accountId=${accountId}, data= ${JSON.stringify(data, null, 2)}, sender=${senderName}, text=${content.text.slice(0, 50)}...`,
+  );
+
   // 处理 imageUrls（来自富文本消息）
   for (let i = 0; i < content.imageUrls.length; i++) {
     const url = content.imageUrls[i];
     try {
       log?.info?.(`处理图片 ${i + 1}/${content.imageUrls.length}: ${url.slice(0, 50)}...`);
-      
-      if (url.startsWith('downloadCode:')) {
-        const code = url.slice('downloadCode:'.length);
+
+      if (url.startsWith("downloadCode:")) {
+        const code = url.slice("downloadCode:".length);
         const localPath = await downloadMediaByCode(code, config, agentWorkspaceDir, log);
         if (localPath) {
           imageLocalPaths.push(localPath);
@@ -1214,14 +1335,16 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
           log?.warn?.(`downloadCode 图片下载失败 ${i + 1}/${content.downloadCodes.length}`);
         }
       } catch (err: any) {
-        log?.error?.(`downloadCode 图片下载异常 ${i + 1}/${content.downloadCodes.length}: ${err.message}`);
+        log?.error?.(
+          `downloadCode 图片下载异常 ${i + 1}/${content.downloadCodes.length}: ${err.message}`,
+        );
       }
     }
   }
-  
-  log?.info?.(`图片下载完成: 成功=${imageLocalPaths.length}, 总数=${content.imageUrls.length + content.downloadCodes.filter((_, i) => !content.fileNames[i]).length}`);
 
-
+  log?.info?.(
+    `图片下载完成: 成功=${imageLocalPaths.length}, 总数=${content.imageUrls.length + content.downloadCodes.filter((_, i) => !content.fileNames[i]).length}`,
+  );
 
   // ===== 文件附件处理：自动下载并解析内容 =====
   const fileContentParts: string[] = [];
@@ -1232,7 +1355,7 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
 
     try {
       log?.info?.(`处理文件附件 ${i + 1}/${content.downloadCodes.length}: ${fileName}`);
-      
+
       // 获取下载链接
       const downloadUrl = await getFileDownloadUrl(code, fileName, config, log);
       if (!downloadUrl) {
@@ -1249,69 +1372,90 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
 
       // 识别文件类型
       const ext = path.extname(fileName).toLowerCase();
-      let fileType = '文件';
-      
-      if (['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm'].includes(ext)) {
-        fileType = '视频';
-      } else if (['.mp3', '.wav', '.aac', '.ogg', '.m4a', '.flac', '.wma'].includes(ext)) {
-        fileType = '音频';
-      } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].includes(ext)) {
-        fileType = '图片';
-      } else if (['.txt', '.md', '.json', '.xml', '.yaml', '.yml', '.csv', '.log', '.js', '.ts', '.py', '.java', '.c', '.cpp', '.h', '.sh', '.bat'].includes(ext)) {
-        fileType = '文本文件';
-      } else if (['.docx', '.doc'].includes(ext)) {
-        fileType = 'Word 文档';
-      } else if (ext === '.pdf') {
-        fileType = 'PDF 文档';
-      } else if (['.xlsx', '.xls'].includes(ext)) {
-        fileType = 'Excel 表格';
-      } else if (['.pptx', '.ppt'].includes(ext)) {
-        fileType = 'PPT 演示文稿';
-      } else if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext)) {
-        fileType = '压缩包';
+      let fileType = "文件";
+
+      if ([".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".webm"].includes(ext)) {
+        fileType = "视频";
+      } else if ([".mp3", ".wav", ".aac", ".ogg", ".m4a", ".flac", ".wma"].includes(ext)) {
+        fileType = "音频";
+      } else if ([".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].includes(ext)) {
+        fileType = "图片";
+      } else if (
+        [
+          ".txt",
+          ".md",
+          ".json",
+          ".xml",
+          ".yaml",
+          ".yml",
+          ".csv",
+          ".log",
+          ".js",
+          ".ts",
+          ".py",
+          ".java",
+          ".c",
+          ".cpp",
+          ".h",
+          ".sh",
+          ".bat",
+        ].includes(ext)
+      ) {
+        fileType = "文本文件";
+      } else if ([".docx", ".doc"].includes(ext)) {
+        fileType = "Word 文档";
+      } else if (ext === ".pdf") {
+        fileType = "PDF 文档";
+      } else if ([".xlsx", ".xls"].includes(ext)) {
+        fileType = "Excel 表格";
+      } else if ([".pptx", ".ppt"].includes(ext)) {
+        fileType = "PPT 演示文稿";
+      } else if ([".zip", ".rar", ".7z", ".tar", ".gz"].includes(ext)) {
+        fileType = "压缩包";
       }
 
       // 解析文件内容
       const parseResult = await parseFileContent(localPath, fileName, log);
-      
-      if (parseResult.type === 'text' && parseResult.content) {
+
+      if (parseResult.type === "text" && parseResult.content) {
         // 文本类文件：将内容注入到上下文（即使解析成功也给出文件路径）
-        const contentPreview = parseResult.content.length > 200 
-          ? parseResult.content.slice(0, 200) + '...' 
-          : parseResult.content;
-        
+        const contentPreview =
+          parseResult.content.length > 200
+            ? parseResult.content.slice(0, 200) + "..."
+            : parseResult.content;
+
         fileContentParts.push(
           `📄 **${fileType}**: ${fileName}\n` +
-          `✅ 已解析文件内容（${parseResult.content.length} 字符）\n` +
-          `💾 已保存到本地: ${localPath}\n` +
-          `📝 内容预览:\n\`\`\`\n${contentPreview}\n\`\`\`\n\n` +
-          `📋 完整内容:\n${parseResult.content}`
+            `✅ 已解析文件内容（${parseResult.content.length} 字符）\n` +
+            `💾 已保存到本地: ${localPath}\n` +
+            `📝 内容预览:\n\`\`\`\n${contentPreview}\n\`\`\`\n\n` +
+            `📋 完整内容:\n${parseResult.content}`,
         );
         log?.info?.(`文件解析成功: ${fileName}, 内容长度=${parseResult.content.length}`);
-      } else if (parseResult.type === 'text' && !parseResult.content) {
+      } else if (parseResult.type === "text" && !parseResult.content) {
         // 文本类文件但解析失败
         fileContentParts.push(
           `📄 **${fileType}**: ${fileName}\n` +
-          `⚠️ 文件解析失败，已保存到本地\n` +
-          `💾 本地路径: ${localPath}\n` +
-          `🔗 [点击下载](${downloadUrl})`
+            `⚠️ 文件解析失败，已保存到本地\n` +
+            `💾 本地路径: ${localPath}\n` +
+            `🔗 [点击下载](${downloadUrl})`,
         );
         log?.warn?.(`文件解析失败: ${fileName}`);
       } else {
         // 二进制文件：只保存到磁盘
         // 特殊处理音频文件的语音识别文本
-        if (fileType === '音频' && content.text && content.text !== '[语音消息]') {
+        if (fileType === "音频" && content.text && content.text !== "[语音消息]") {
           fileContentParts.push(
             `🎤 **${fileType}**: ${fileName}\n` +
-            `📝 语音识别: ${content.text}\n` +
-            `💾 已保存到本地: ${localPath}\n` +
-            `🔗 [点击下载](${downloadUrl})`
+              `📝 语音识别: ${content.text}\n` +
+              `💾 已保存到本地: ${localPath}\n` +
+              `🔗 [点击下载](${downloadUrl})`,
           );
         } else {
           fileContentParts.push(
             `📎 **${fileType}**: ${fileName}\n` +
-            `💾 已保存到本地: ${localPath}\n` +
-            `🔗 [点击下载](${downloadUrl})`
+              `💾 已保存到本地: ${localPath}\n` +
+              `🔗 [点击下载](${downloadUrl})`,
           );
         }
         log?.info?.(`二进制文件已保存: ${fileName}, path=${localPath}`);
@@ -1323,7 +1467,7 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
   }
 
   if (fileContentParts.length > 0) {
-    const fileText = fileContentParts.join('\n\n');
+    const fileText = fileContentParts.join("\n\n");
     userContent = userContent ? `${userContent}\n\n${fileText}` : fileText;
   }
 
@@ -1332,7 +1476,7 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
   // ===== 贴处理中表情 =====
   // 若队列繁忙时已在入队阶段提前贴过表情，此处跳过，避免重复贴
   if (!params.emotionAlreadyAdded) {
-    addEmotionReply(config, data, log).catch(err => {
+    addEmotionReply(config, data, log).catch((err) => {
       log?.warn?.(`贴表情失败: ${err.message}`);
     });
   }
@@ -1340,17 +1484,17 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
   // ===== 异步模式：立即回执 + 后台执行 + 主动推送结果 =====
   const asyncMode = config.asyncMode === true;
   log?.info?.(`asyncMode 检测: config.asyncMode=${config.asyncMode}, asyncMode=${asyncMode}`);
-  
+
   const proactiveTarget = isDirect
     ? { userId: senderId }
     : { openConversationId: data.conversationId };
 
   if (asyncMode) {
     log?.info?.(`进入异步模式分支`);
-    const ackText = config.ackText || '🫡 任务已接收，处理中...';
+    const ackText = config.ackText || "🫡 任务已接收，处理中...";
     try {
       await sendProactive(config, proactiveTarget, ackText, {
-        msgType: 'text',
+        msgType: "text",
         useAICard: false,
         fallbackToNormal: true,
         log,
@@ -1363,18 +1507,18 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
   // ===== 使用 SDK 的 dispatchReplyFromConfig =====
   try {
     const core = getDingtalkRuntime();
-    
+
     // 构建消息体（添加图片）
     let finalContent = userContent;
     if (imageLocalPaths.length > 0) {
-      const imageMarkdown = imageLocalPaths.map(p => `![image](file://${p})`).join('\n');
+      const imageMarkdown = imageLocalPaths.map((p) => `![image](file://${p})`).join("\n");
       finalContent = finalContent ? `${finalContent}\n\n${imageMarkdown}` : imageMarkdown;
     }
 
     // 构建 envelope 格式的消息
     const envelopeOptions = core.channel.reply.resolveEnvelopeFormatOptions(cfg);
     const envelopeFrom = isDirect ? senderId : `${data.conversationId}:${senderId}`;
-    
+
     const body = core.channel.reply.formatAgentEnvelope({
       channel: "DingTalk",
       from: envelopeFrom,
@@ -1384,41 +1528,49 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
     });
 
     // matchedAgentId 已在 sessionContext 构建之后通过 bindings 匹配确定，此处直接使用
-    const matchedBy = matchedAgentId !== (cfg.defaultAgent || 'main') ? 'binding' : 'default';
-    
+    const matchedBy = matchedAgentId !== (cfg.defaultAgent || "main") ? "binding" : "default";
+
     // ✅ 使用 SDK 标准方法构建 sessionKey，符合 OpenClaw 规范
     // 格式：agent:{agentId}:{channel}:{peerKind}:{sessionPeerId}
     // ✅ 使用 sessionContext.sessionPeerId 构建 sessionKey，确保会话隔离配置生效
     // ✅ 关键修复：传递 dmScope 参数，让 SDK 使用配置文件中的 session.dmScope 设置
-    const dmScope = cfg.session?.dmScope || 'per-channel-peer';
-    log?.info?.(`🔍 构建 sessionKey 前的参数: agentId=${matchedAgentId}, channel=dingtalk, accountId=${accountId}, chatType=${sessionContext.chatType}, sessionPeerId=${sessionContext.sessionPeerId}, dmScope=${dmScope}`);
+    const dmScope = cfg.session?.dmScope || "per-channel-peer";
+    log?.info?.(
+      `🔍 构建 sessionKey 前的参数: agentId=${matchedAgentId}, channel=dingtalk, accountId=${accountId}, chatType=${sessionContext.chatType}, sessionPeerId=${sessionContext.sessionPeerId}, dmScope=${dmScope}`,
+    );
     const sessionKey = core.channel.routing.buildAgentSessionKey({
       agentId: matchedAgentId,
-      channel: 'dingtalk',  // ✅ 使用 'dingtalk' 而不是 'dingtalk'
+      channel: "dingtalk", // ✅ 使用 'dingtalk' 而不是 'dingtalk'
       accountId: accountId,
       peer: {
-        kind: sessionContext.chatType,       // ✅ 使用 sessionContext.chatType
-        id: sessionContext.sessionPeerId,    // ✅ 使用 sessionContext.sessionPeerId（包含会话隔离逻辑）
+        kind: sessionContext.chatType, // ✅ 使用 sessionContext.chatType
+        id: sessionContext.sessionPeerId, // ✅ 使用 sessionContext.sessionPeerId（包含会话隔离逻辑）
       },
-      dmScope: dmScope,  // ✅ 传递 dmScope 参数，确保生成完整格式的 sessionKey
+      dmScope: dmScope, // ✅ 传递 dmScope 参数，确保生成完整格式的 sessionKey
     });
-    log?.info?.(`路由解析完成: agentId=${matchedAgentId}, sessionKey=${sessionKey}, matchedBy=${matchedBy}`);
-    
+    log?.info?.(
+      `路由解析完成: agentId=${matchedAgentId}, sessionKey=${sessionKey}, matchedBy=${matchedBy}`,
+    );
+
     // 构建 inbound context，使用解析后的 sessionKey
     log?.info?.(`开始构建 inbound context...`);
-    
+
     // ✅ 计算正确的 To 字段
     const toField = isDirect ? senderId : data.conversationId;
-    log?.info?.(`构建 inbound context: isDirect=${isDirect}, senderId=${senderId}, conversationId=${data.conversationId}, To=${toField}`);
+    log?.info?.(
+      `构建 inbound context: isDirect=${isDirect}, senderId=${senderId}, conversationId=${data.conversationId}, To=${toField}`,
+    );
 
     const ctxPayload = core.channel.reply.finalizeInboundContext({
       Body: body,
       BodyForAgent: finalContent,
       RawBody: userContent,
       CommandBody: userContent,
-      From: isDirect ? `dingtalk:${senderId}` : `dingtalk:group:${data.conversationId}:sender:${senderId}`,
-      To: toField,  // ✅ 修复：单聊用 senderId，群聊用 conversationId
-      SessionKey: sessionKey,  // ✅ 使用手动匹配的 sessionKey
+      From: isDirect
+        ? `dingtalk:${senderId}`
+        : `dingtalk:group:${data.conversationId}:sender:${senderId}`,
+      To: toField, // ✅ 修复：单聊用 senderId，群聊用 conversationId
+      SessionKey: sessionKey, // ✅ 使用手动匹配的 sessionKey
       AccountId: accountId,
       ChatType: sessionContext.chatType,
       GroupSubject: isDirect ? undefined : data.conversationTitle,
@@ -1430,23 +1582,56 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
       Timestamp: Date.now(),
       CommandAuthorized: true,
       OriginatingChannel: "dingtalk" as const,
-      OriginatingTo: toField,  // ✅ 修复：应该使用 toField，而不是 accountId
+      OriginatingTo: toField, // ✅ 修复：应该使用 toField，而不是 accountId
     });
 
+    // 记录 inbound session 元数据（session 追踪），使 cron 定时任务能找到投递目标
+    try {
+      const route = core.channel.routing.resolveAgentRoute({
+        cfg,
+        channel: "dingtalk",
+        accountId,
+        peer: {
+          kind: sessionContext.chatType,
+          id: sessionContext.peerId,
+        },
+      });
+      const storePath = core.channel.session.resolveStorePath(cfg.session?.store, {
+        agentId: route.agentId,
+      });
+      await core.channel.session.recordInboundSession({
+        storePath,
+        sessionKey: ctxPayload.SessionKey ?? sessionKey,
+        ctx: ctxPayload,
+        updateLastRoute: {
+          sessionKey: route.mainSessionKey,
+          channel: "dingtalk",
+          to: isDirect ? `user:${senderId}` : `group:${data.conversationId}`,
+          accountId,
+        },
+        onRecordError: (err: unknown) => {
+          log?.error?.(`[dingtalk] failed updating session meta: ${String(err)}`);
+        },
+      });
+    } catch (sessionErr: unknown) {
+      log?.warn?.(`[dingtalk] recordInboundSession failed (non-fatal): ${String(sessionErr)}`);
+    }
+
     // 创建 reply dispatcher，使用解析后的 agentId
-    const { dispatcher, replyOptions, markDispatchIdle, getAsyncModeResponse } = createDingtalkReplyDispatcher({
-      cfg,
-      agentId: matchedAgentId,  // ✅ 使用手动匹配的 agentId
-      runtime: runtime as RuntimeEnv,
-      conversationId: data.conversationId,
-      senderId,
-      isDirect,
-      accountId,
-      messageCreateTimeMs: Date.now(),
-      sessionWebhook: data.sessionWebhook,
-      asyncMode,
-      preCreatedCard: params.preCreatedCard,
-    });
+    const { dispatcher, replyOptions, markDispatchIdle, getAsyncModeResponse } =
+      createDingtalkReplyDispatcher({
+        cfg,
+        agentId: matchedAgentId, // ✅ 使用手动匹配的 agentId
+        runtime: runtime as RuntimeEnv,
+        conversationId: data.conversationId,
+        senderId,
+        isDirect,
+        accountId,
+        messageCreateTimeMs: Date.now(),
+        sessionWebhook: data.sessionWebhook,
+        asyncMode,
+        preCreatedCard: params.preCreatedCard,
+      });
 
     // ===== 构建卡片链接路由指令（对齐 Rust agent_support.rs build_link_routing_prompt）=====
     // 识别 interactiveCard / actionCard 消息中的 URL，根据 host 注入不同的 AI 指令：
@@ -1455,9 +1640,7 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
     // 注：SDK 的 replyOptions 不支持 extraSystemPrompt，改为追加到消息内容中传递给 AI
     const linkRoutingPrompt = buildLinkRoutingPrompt(content);
     if (linkRoutingPrompt) {
-      finalContent = finalContent
-        ? `${finalContent}\n\n${linkRoutingPrompt}`
-        : linkRoutingPrompt;
+      finalContent = finalContent ? `${finalContent}\n\n${linkRoutingPrompt}` : linkRoutingPrompt;
       log?.info?.(`注入卡片链接路由指令: ${linkRoutingPrompt.slice(0, 100)}...`);
     }
 
@@ -1491,54 +1674,51 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
           finalText = await processLocalImages(finalText, oapiToken, log);
 
           const mediaTarget: AICardTarget = isDirect
-            ? { type: 'user', userId: senderId }
-            : { type: 'group', openConversationId: data.conversationId };
-          
+            ? { type: "user", userId: senderId }
+            : { type: "group", openConversationId: data.conversationId };
+
           // ✅ 处理 Markdown 标记格式的媒体文件
           finalText = await processVideoMarkers(
             finalText,
-            '',
+            "",
             config,
             oapiToken,
             log,
-            true,  // ✅ 使用主动 API 模式
-            mediaTarget
+            true, // ✅ 使用主动 API 模式
+            mediaTarget,
           );
           finalText = await processAudioMarkers(
             finalText,
-            '',
+            "",
             config,
             oapiToken,
             log,
-            true,  // ✅ 使用主动 API 模式
-            mediaTarget
+            true, // ✅ 使用主动 API 模式
+            mediaTarget,
           );
           finalText = await uploadAndReplaceFileMarkers(
             finalText,
-            '',
+            "",
             config,
             oapiToken,
             log,
-            true,  // ✅ 使用主动 API 模式
-            mediaTarget
+            true, // ✅ 使用主动 API 模式
+            mediaTarget,
           );
 
           // ✅ 处理裸露的本地文件路径（绕过 OpenClaw SDK 的 bug）
-          const { processRawMediaPaths } = await import('../services/media');
-          finalText = await processRawMediaPaths(
-            finalText,
-            config,
-            oapiToken,
-            log,
-            mediaTarget
-          );
+          const { processRawMediaPaths } = await import("../services/media");
+          finalText = await processRawMediaPaths(finalText, config, oapiToken, log, mediaTarget);
         }
 
-        const textToSend = finalText.trim() || '✅ 任务执行完成（无文本输出）';
+        const textToSend = finalText.trim() || "✅ 任务执行完成（无文本输出）";
         const title =
-          textToSend.split('\n')[0]?.replace(/^[#*\s\->]+/, '').trim() || '消息';
+          textToSend
+            .split("\n")[0]
+            ?.replace(/^[#*\s\->]+/, "")
+            .trim() || "消息";
         await sendProactive(config, proactiveTarget, textToSend, {
-          msgType: 'markdown',
+          msgType: "markdown",
           title,
           useAICard: false,
           fallbackToNormal: true,
@@ -1548,7 +1728,7 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
         const errMsg = `⚠️ 任务执行失败: ${asyncErr?.message || asyncErr}`;
         try {
           await sendProactive(config, proactiveTarget, errMsg, {
-            msgType: 'text',
+            msgType: "text",
             useAICard: false,
             fallbackToNormal: true,
             log,
@@ -1558,21 +1738,20 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
         }
       }
     }
-
   } catch (err: any) {
     log?.error?.(`SDK dispatch 失败: ${err.message}`);
-    
+
     // 降级：发送错误消息
     try {
       const token = await getAccessToken(config);
-      const body: any = { 
-        msgtype: 'text', 
-        text: { content: `抱歉，处理请求时出错: ${err.message}` } 
+      const body: any = {
+        msgtype: "text",
+        text: { content: `抱歉，处理请求时出错: ${err.message}` },
       };
       if (!isDirect) body.at = { atUserIds: [senderId], isAtAll: false };
-      
+
       await dingtalkHttp.post(sessionWebhook, body, {
-        headers: { 'x-acs-dingtalk-access-token': token, 'Content-Type': 'application/json' },
+        headers: { "x-acs-dingtalk-access-token": token, "Content-Type": "application/json" },
       });
     } catch (fallbackErr: any) {
       log?.error?.(`错误消息发送也失败: ${fallbackErr.message}`);
@@ -1597,7 +1776,7 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
 
   // 使用 buildSessionContext 构建会话标识，与 handleDingTalkMessageInternal 保持一致
   // 确保 queueKey 的隔离策略（groupSessionScope、sharedMemoryAcrossConversations）与 sessionKey 一致
-  const isDirect = data.conversationType === '1';
+  const isDirect = data.conversationType === "1";
   const senderId = data.senderStaffId || data.senderId;
   const conversationId = data.conversationId;
 
@@ -1614,7 +1793,7 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
   const baseSessionId = queueSessionContext.sessionPeerId;
 
   if (!baseSessionId) {
-    log?.warn?.('无法构建会话标识，跳过队列管理');
+    log?.warn?.("无法构建会话标识，跳过队列管理");
     return handleDingTalkMessageInternal(params);
   }
 
@@ -1630,14 +1809,15 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
       if (match.accountId && match.accountId !== accountId) continue;
       if (match.peer) {
         if (match.peer.kind && match.peer.kind !== queueSessionContext.chatType) continue;
-        if (match.peer.id && match.peer.id !== '*' && match.peer.id !== queueSessionContext.peerId) continue;
+        if (match.peer.id && match.peer.id !== "*" && match.peer.id !== queueSessionContext.peerId)
+          continue;
       }
       matchedAgentId = binding.agentId;
       break;
     }
   }
   if (!matchedAgentId) {
-    matchedAgentId = cfg.defaultAgent || 'main';
+    matchedAgentId = cfg.defaultAgent || "main";
   }
 
   // 构建队列标识：会话 peerId + agentId
@@ -1647,7 +1827,6 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
   const queueKey = `${baseSessionId}:${matchedAgentId}`;
 
   try {
-
     // 更新会话活跃时间
     sessionLastActivity.set(queueKey, Date.now());
 
@@ -1664,8 +1843,8 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
       const ackPhrases = QUEUE_BUSY_ACK_PHRASES;
       const ackText = ackPhrases[Math.floor(Math.random() * ackPhrases.length)];
       const cardTarget: AICardTarget = isDirect
-        ? { type: 'user', userId: senderId }
-        : { type: 'group', openConversationId: data.conversationId };
+        ? { type: "user", userId: senderId }
+        : { type: "group", openConversationId: data.conversationId };
 
       try {
         const card = await createAICardForTarget(config, cardTarget, log);
@@ -1673,12 +1852,14 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
           // 用 streamAICard 把 ACK 文案写入 Card（INPUTING 状态，表示正在处理中）
           await streamAICard(card, ackText, false, config, log);
           preCreatedCard = card;
-          log?.info?.(`[队列] 队列繁忙，已创建排队 ACK Card，cardInstanceId=${card.cardInstanceId}`);
+          log?.info?.(
+            `[队列] 队列繁忙，已创建排队 ACK Card，cardInstanceId=${card.cardInstanceId}`,
+          );
         } else {
           log?.warn?.(`[队列] 创建排队 ACK Card 失败（返回 null），跳过 ACK`);
         }
         // 在发送 ACK 的同时立即贴上思考中表情，让用户知道消息已被接收
-        addEmotionReply(config, data, log).catch(err => {
+        addEmotionReply(config, data, log).catch((err) => {
           log?.warn?.(`[队列] 贴排队表情失败: ${err.message}`);
         });
       } catch (ackErr: any) {
@@ -1690,7 +1871,11 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
     const currentTask = previousTask
       .then(async () => {
         log?.info?.(`[队列] 开始处理消息，queueKey=${queueKey}`);
-        await handleDingTalkMessageInternal({ ...params, preCreatedCard, emotionAlreadyAdded: isQueueBusy });
+        await handleDingTalkMessageInternal({
+          ...params,
+          preCreatedCard,
+          emotionAlreadyAdded: isQueueBusy,
+        });
         log?.info?.(`[队列] 消息处理完成，queueKey=${queueKey}`);
       })
       .catch((err: any) => {
@@ -1704,7 +1889,7 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
           log?.info?.(`[队列] 队列已清空，queueKey=${queueKey}`);
         }
       });
-    
+
     // 更新队列
     sessionQueues.set(queueKey, currentTask);
 

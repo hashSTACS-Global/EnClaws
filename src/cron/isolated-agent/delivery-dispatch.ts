@@ -1,5 +1,4 @@
 import { runSubagentAnnounceFlow } from "../../agents/subagent-announce.js";
-import { randomUUID } from "node:crypto";
 import { callGateway } from "../../gateway/call.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 
@@ -158,7 +157,15 @@ export async function dispatchCronDelivery(
         synthesizedText = remainder;
         if (deliveryPayloads.length > 0) {
           deliveryPayloads = deliveryPayloads.map((p) =>
-            p.text ? { ...p, text: p.text.replace(new RegExp(`^\\s*${SILENT_REPLY_TOKEN}\\s*\\n+`, "i"), "").trim() || p.text } : p,
+            p.text
+              ? {
+                  ...p,
+                  text:
+                    p.text
+                      .replace(new RegExp(`^\\s*${SILENT_REPLY_TOKEN}\\s*\\n+`, "i"), "")
+                      .trim() || p.text,
+                }
+              : p,
           );
         }
       }
@@ -208,7 +215,9 @@ export async function dispatchCronDelivery(
         agentId: params.agentId,
         sessionKey: params.agentSessionKey,
       });
-      const hasCfgChannelCreds = !!(params.cfgWithAgentDefaults.channels as Record<string, Record<string, unknown>> | undefined)?.feishu?.appId;
+      const hasCfgChannelCreds = !!(
+        params.cfgWithAgentDefaults.channels as Record<string, Record<string, unknown>> | undefined
+      )?.feishu?.appId;
       log.info(
         `[cron-delivery] deliverViaDirect: channel=${delivery.channel} to=${delivery.to} accountId=${delivery.accountId ?? "(none)"} hasCfgChannelCreds=${hasCfgChannelCreds} bestEffort=${params.deliveryBestEffort}`,
       );
@@ -226,7 +235,9 @@ export async function dispatchCronDelivery(
         abortSignal: params.abortSignal,
       });
       delivered = deliveryResults.length > 0;
-      log.info(`[cron-delivery] deliverViaDirect: delivered=${delivered} results=${deliveryResults.length}`);
+      log.info(
+        `[cron-delivery] deliverViaDirect: delivered=${delivered} results=${deliveryResults.length}`,
+      );
       return null;
     } catch (err) {
       log.warn(`[cron-delivery] deliverViaDirect error: ${String(err)}`);
@@ -405,10 +416,12 @@ export async function dispatchCronDelivery(
     if (!synthesizedText) {
       return null;
     }
-    let announceMainSessionKey = params.tenantAnnounceSessionKey ?? resolveAgentMainSessionKey({
-      cfg: params.cfg,
-      agentId: params.agentId,
-    });
+    let announceMainSessionKey =
+      params.tenantAnnounceSessionKey ??
+      resolveAgentMainSessionKey({
+        cfg: params.cfg,
+        agentId: params.agentId,
+      });
     if (!params.tenantAnnounceSessionKey && params.tenantId) {
       announceMainSessionKey = `t:${params.tenantId}:${announceMainSessionKey}`;
     }
@@ -446,8 +459,7 @@ export async function dispatchCronDelivery(
         timeoutMs: params.timeoutMs,
       });
       delivered = true;
-    } catch (err) {
-    }
+    } catch {}
     return null;
   };
 
@@ -515,24 +527,34 @@ export async function dispatchCronDelivery(
     // be swallowed by ANNOUNCE_SKIP/NO_REPLY in the target agent turn, which
     // silently drops cron output for topic-bound sessions.
     //
-    // Feishu/Lark group chat targets (to starts with "oc_") must use direct
-    // delivery: multi-tenant sessions are in tenant-scoped stores, not the
-    // global store that runSubagentAnnounceFlow reads from, so the announce
-    // path cannot find the correct session and silently drops the message.
+    // IM group chat targets must use direct delivery: multi-tenant sessions are
+    // in tenant-scoped stores, not the global store that runSubagentAnnounceFlow
+    // reads from, so the announce path cannot find the correct session and
+    // silently drops the message.  This applies to Feishu (oc_), DingTalk
+    // (group: or cid prefixed), and WeChat Work (group: prefixed) targets.
     const isFeishuGroupDelivery =
       (params.resolvedDelivery.channel === "feishu" ||
         params.resolvedDelivery.channel === "lark") &&
       (params.resolvedDelivery.to?.startsWith("oc_") ?? false);
+    const isDingtalkGroupDelivery =
+      params.resolvedDelivery.channel === "dingtalk" &&
+      (params.resolvedDelivery.to?.startsWith("group:") ||
+        params.resolvedDelivery.to?.startsWith("cid") ||
+        false);
+    const isWecomGroupDelivery =
+      params.resolvedDelivery.channel === "wecom" &&
+      (params.resolvedDelivery.to?.startsWith("group:") ?? false);
     // Agent-scoped cron (userId === agentId) must use direct delivery because:
     // 1. Tenant channel credentials are injected into cfgWithAgentDefaults but
     //    the announce flow calls callGateway which re-reads the global config.
     // 2. Agent has no real user session in the global store for announce to find.
-    const isAgentScopedCron =
-      params.tenantId && params.userId && params.userId === params.agentId;
+    const isAgentScopedCron = params.tenantId && params.userId && params.userId === params.agentId;
     const useDirectDelivery =
       params.deliveryPayloadHasStructuredContent ||
       params.resolvedDelivery.threadId != null ||
       isFeishuGroupDelivery ||
+      isDingtalkGroupDelivery ||
+      isWecomGroupDelivery ||
       isAgentScopedCron;
     if (useDirectDelivery) {
       const directResult = await deliverViaDirect(params.resolvedDelivery);
