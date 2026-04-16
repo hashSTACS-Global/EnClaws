@@ -26,6 +26,10 @@ interface TurnSummary {
   totalOutputTokens: number;
   totalDurationMs: number;
   createdAt: string;
+  /** Display name resolved from sessions.json (authoritative source). */
+  sessionDisplayName: string | null;
+  /** Channel resolved from sessions.json. */
+  sessionChannel: string | null;
 }
 
 interface InteractionTrace {
@@ -529,10 +533,10 @@ export class TenantTracesView extends LitElement {
     const totalTokens = turn.totalInputTokens + turn.totalOutputTokens;
     const parsed = this.parsePlatformMessage(turn.userInput);
 
-    // Platform: from channel field (reliable) with parsed header as fallback
-    const platform = this.resolvePlatform(turn.channel, parsed?.platform);
-    // Username: from parsed header; fall back to turn.userId
-    const userName = parsed?.userName ?? turn.userId ?? null;
+    // Platform: session channel (authoritative) > trace channel > parsed header
+    const platform = this.resolvePlatform(turn.sessionChannel ?? turn.channel, parsed?.platform);
+    // Username: session displayName (authoritative) > parsed header > turn.userId
+    const userName = turn.sessionDisplayName ?? parsed?.userName ?? turn.userId ?? null;
     const content = parsed?.content
       ? this.truncate(parsed.content, 120)
       : this.extractSystemEventLabel(turn.userInput ?? "");
