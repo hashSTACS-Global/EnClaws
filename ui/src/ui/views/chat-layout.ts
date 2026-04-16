@@ -743,7 +743,7 @@ export class ChatLayout extends LitElement {
 
   private _renderAgentSelector() {
     const agents = this.props?.tenantAgents;
-    if (!agents || agents.length === 0) return nothing;
+    if (!agents || agents.length === 0) {return nothing;}
 
     // Extract current agent from sessionKey (format: "agent:{agentId}:{session}")
     const keyMatch = this.props.sessionKey?.match(/^agent:([^:]+)/);
@@ -931,7 +931,7 @@ export class ChatLayout extends LitElement {
                 ${row.subject ? html`<div class="subagent-card__task">📋 ${row.subject}</div>` : nothing}
                 <div class="subagent-card__meta">
                   ${row.model ? html`<span class="subagent-card__chip">🤖 ${row.model}</span>` : nothing}
-                  ${row.outputTokens ? html`<span class="subagent-card__chip">⚡ ${tokens} tok</span>` : nothing}
+                  ${row.outputTokens ? html`<span class="subagent-card__chip">⚡ ${tokens} tokens</span>` : nothing}
                 </div>
                 ${isWorking ? html`<div class="subagent-card__pulse"></div>` : nothing}
               </div>

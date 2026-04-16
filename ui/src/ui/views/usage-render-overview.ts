@@ -387,7 +387,7 @@ function renderUsageInsights(
   const errorRatePct = stats.errorRate * 100;
   const throughputLabel =
     stats.throughputTokensPerMin !== undefined
-      ? `${formatTokens(Math.round(stats.throughputTokensPerMin))} tok/min`
+      ? `${formatTokens(Math.round(stats.throughputTokensPerMin))} tokens/min`
       : "—";
   const throughputCostLabel =
     stats.throughputCostPerMin !== undefined

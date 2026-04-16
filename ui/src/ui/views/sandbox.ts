@@ -344,7 +344,7 @@ function renderTaskCard(row: GatewaySessionRow, index: number) {
         </div>
         <div class="task-card__meta">
           ${row.model ? html`<span class="meta-chip">🤖 ${row.model}</span>` : nothing}
-          ${row.outputTokens ? html`<span class="meta-chip">⚡ ${totalTokens} tok</span>` : nothing}
+          ${row.outputTokens ? html`<span class="meta-chip">⚡ ${totalTokens} tokens</span>` : nothing}
           <span class="meta-chip">🕐 ${relativeTime(row.updatedAt)}</span>
         </div>
       </div>

@@ -1559,6 +1559,13 @@
   border-color: #0b2a4a;
 }
 
+/* System — neutral grey for automated/system sessions */
+.session-channel-badge--System {
+  background: var(--border, #e5e7eb);
+  color: var(--muted, #6b7280);
+  border-color: var(--border, #e5e7eb);
+}
+
 /* ===========================================
    Session Card List (matches traces card style)
    =========================================== */

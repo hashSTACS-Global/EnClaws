@@ -3,10 +3,11 @@
  */
 
 import { sqliteQuery } from "../index.js";
+import { isCronSessionKey } from "../../../sessions/session-key-utils.js";
 
 function periodCondition(column: string, period: "all" | "month" | "today"): string {
-  if (period === "month") return `${column} >= date('now', 'start of month')`;
-  if (period === "today") return `${column} >= date('now')`;
+  if (period === "month") {return `${column} >= date('now', 'start of month')`;}
+  if (period === "today") {return `${column} >= date('now')`;}
   return "1=1";
 }
 
@@ -33,7 +34,7 @@ export function getTenantSummary(tenantId: string) {
   for (const r of modelRows) {
     try {
       const arr = typeof r.models === "string" ? JSON.parse(r.models) : r.models;
-      if (Array.isArray(arr)) modelTotal += arr.length;
+      if (Array.isArray(arr)) {modelTotal += arr.length;}
     } catch { /* skip */ }
   }
   const providerCount = modelRows.length;
@@ -90,10 +91,13 @@ export function getTenantTokenRank(tenantId: string, period: "all" | "month" | "
   const condNoAlias = periodCondition("recorded_at", period);
 
   const usersRes = sqliteQuery(
-    `SELECT COALESCE(u.display_name, u.email, ur.user_id) AS name, SUM(ur.input_tokens + ur.output_tokens) AS tokens
+    `SELECT COALESCE(u.display_name, u.email, ur.user_id) AS name,
+            SUM(ur.input_tokens + ur.output_tokens) AS tokens,
+            MAX(ur.session_key) AS session_key,
+            u.id AS matched_user_id
      FROM usage_records ur LEFT JOIN users u ON u.tenant_id = ur.tenant_id AND (ur.user_id = u.id OR ur.user_id = u.union_id)
      WHERE ur.tenant_id = ? AND ${cond}
-     GROUP BY ur.user_id ORDER BY tokens DESC LIMIT ?`,
+     GROUP BY ur.user_id, u.id ORDER BY tokens DESC LIMIT ?`,
     [tenantId, limit],
   );
   const modelsRes = sqliteQuery(
@@ -113,7 +117,13 @@ export function getTenantTokenRank(tenantId: string, period: "all" | "month" | "
   const modelTotal = modelsRes.rows.reduce((s: number, r: any) => s + pInt(r.tokens), 0);
 
   return {
-    users: usersRes.rows.map((r: any) => ({ name: (r.name as string) || "-", tokens: pInt(r.tokens) })),
+    users: usersRes.rows.map((r: any) => {
+      const hasRealUser = r.matched_user_id != null;
+      const name = hasRealUser
+        ? (r.name as string) || "-"
+        : isCronSessionKey(r.session_key as string | null) ? "System" : (r.name as string) || "-";
+      return { name, tokens: pInt(r.tokens) };
+    }),
     models: modelsRes.rows.map((r: any) => {
       const tokens = pInt(r.tokens);
       return { model: r.model as string, tokens, percent: modelTotal > 0 ? Math.round(tokens / modelTotal * 1000) / 10 : 0 };
@@ -162,6 +172,10 @@ export function getTenantRecentTraces(tenantId: string, limit = 10) {
             COALESCE((SELECT display_name FROM users
                       WHERE tenant_id = t.tenant_id AND (id = t.user_id OR union_id = t.user_id)
                       LIMIT 1), t.user_id) AS user_name,
+            (SELECT id FROM users
+                    WHERE tenant_id = t.tenant_id AND (id = t.user_id OR union_id = t.user_id)
+                    LIMIT 1) AS matched_user_id,
+            t.session_key,
             t.model,
             (t.input_tokens + t.output_tokens) AS tokens,
             t.created_at
@@ -173,7 +187,9 @@ export function getTenantRecentTraces(tenantId: string, limit = 10) {
   );
   return result.rows.map((r: any) => ({
     agentName: (r.agent_name as string) || "-",
-    userName: (r.user_name as string) || "-",
+    userName: r.matched_user_id != null
+      ? (r.user_name as string) || "-"
+      : isCronSessionKey(r.session_key as string | null) ? "System" : (r.user_name as string) || "-",
     model: (r.model as string) || "-",
     tokens: pInt(r.tokens),
     createdAt: r.created_at ? new Date(r.created_at as string).toISOString() : "",

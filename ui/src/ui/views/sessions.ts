@@ -5,6 +5,9 @@ import { pathForTab } from "../navigation.ts";
 import { formatSessionTokens } from "../presenter.ts";
 import type { GatewaySessionRow, SessionsListResult } from "../types.ts";
 
+/** Channels that represent system-level automation (not a real user channel). */
+const SYSTEM_CHANNELS = new Set(["cron"]);
+
 export type SessionsProps = {
   loading: boolean;
   result: SessionsListResult | null;
@@ -66,15 +69,15 @@ function localizedLabel(value: string, map: Record<string, string>): string {
 }
 
 function localizedRelativeTime(epochMs: number | null | undefined): string {
-  if (epochMs == null || !Number.isFinite(epochMs)) return "n/a";
+  if (epochMs == null || !Number.isFinite(epochMs)) {return "n/a";}
   const diff = Date.now() - epochMs;
-  if (diff < 0) return "n/a";
+  if (diff < 0) {return "n/a";}
   const sec = Math.round(diff / 1000);
-  if (sec < 60) return t("sessions.timeJustNow");
+  if (sec < 60) {return t("sessions.timeJustNow");}
   const min = Math.round(sec / 60);
-  if (min < 60) return t("sessions.timeMinAgo", { n: String(min) });
+  if (min < 60) {return t("sessions.timeMinAgo", { n: String(min) });}
   const hr = Math.round(min / 60);
-  if (hr < 48) return t("sessions.timeHourAgo", { n: String(hr) });
+  if (hr < 48) {return t("sessions.timeHourAgo", { n: String(hr) });}
   const day = Math.round(hr / 24);
   return t("sessions.timeDayAgo", { n: String(day) });
 }
@@ -268,7 +271,8 @@ function renderRow(
   // userRole=owner means the session belongs to a webchat user (owner account);
   // anything else is an external channel session — use row.channel for the badge.
   const isWebChat = row.userRole === "owner";
-  const resolvedChannel = isWebChat ? "WebChat" : (row.channel || "unknown");
+  const rawChannel = row.channel || "unknown";
+  const resolvedChannel = isWebChat ? "WebChat" : (SYSTEM_CHANNELS.has(rawChannel) ? "System" : rawChannel);
   const canLink = row.kind !== "global" && isWebChat;
   const chatUrl = canLink
     ? `${pathForTab("chat", basePath)}?session=${encodeURIComponent(row.key)}`
@@ -289,7 +293,7 @@ function renderRow(
           <div class="session-card__title-line">
             ${channelBadge}
             ${canLink ? html`<a href=${chatUrl} class="session-link" title=${displayName ? "" : row.key} @click=${(e: MouseEvent) => {
-              if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {return;}
               e.preventDefault();
               window.history.pushState({}, "", chatUrl);
               window.dispatchEvent(new PopStateEvent("popstate"));

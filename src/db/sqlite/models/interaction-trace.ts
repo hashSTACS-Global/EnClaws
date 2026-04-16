@@ -187,6 +187,7 @@ export async function listInteractionTurns(
     turnId: string;
     userInput: string | null;
     agentId: string | null;
+    agentName: string | null;
     channel: string | null;
     userId: string | null;
     sessionKey: string | null;
@@ -236,24 +237,30 @@ export async function listInteractionTurns(
   const offset = opts?.offset ?? 0;
 
   const result = sqliteQuery(
-    `SELECT
-       turn_id,
-       MAX(CASE WHEN turn_index = 0 THEN user_input END) as user_input,
-       MAX(agent_id) as agent_id,
-       MAX(channel) as channel,
-       MAX(user_id) as user_id,
-       MAX(session_key) as session_key,
-       MAX(provider) as provider,
-       MAX(model) as model,
-       COUNT(*) as interaction_count,
-       COALESCE(SUM(input_tokens), 0) as total_input_tokens,
-       COALESCE(SUM(output_tokens), 0) as total_output_tokens,
-       COALESCE(SUM(duration_ms), 0) as total_duration_ms,
-       MIN(created_at) as created_at
-     FROM llm_interaction_traces ${where}
-     GROUP BY turn_id
-     ORDER BY MIN(created_at) DESC
-     LIMIT ? OFFSET ?`,
+    `SELECT g.*,
+            COALESCE(ta.name, g.agent_id) as agent_name
+     FROM (
+       SELECT
+         turn_id,
+         MAX(CASE WHEN turn_index = 0 THEN user_input END) as user_input,
+         MAX(agent_id) as agent_id,
+         MAX(channel) as channel,
+         MAX(user_id) as user_id,
+         MAX(session_key) as session_key,
+         MAX(provider) as provider,
+         MAX(model) as model,
+         COUNT(*) as interaction_count,
+         COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+         COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+         COALESCE(SUM(duration_ms), 0) as total_duration_ms,
+         MIN(created_at) as created_at,
+         MAX(tenant_id) as tenant_id
+       FROM llm_interaction_traces ${where}
+       GROUP BY turn_id
+       ORDER BY MIN(created_at) DESC
+       LIMIT ? OFFSET ?
+     ) g
+     LEFT JOIN tenant_agents ta ON ta.agent_id = g.agent_id AND ta.tenant_id = g.tenant_id`,
     [...values, limit, offset],
   );
 
@@ -262,6 +269,7 @@ export async function listInteractionTurns(
       turnId: row.turn_id as string,
       userInput: (row.user_input as string) ?? null,
       agentId: (row.agent_id as string) ?? null,
+      agentName: (row.agent_name as string) ?? null,
       channel: (row.channel as string) ?? null,
       userId: (row.user_id as string) ?? null,
       sessionKey: (row.session_key as string) ?? null,
