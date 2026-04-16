@@ -27,8 +27,6 @@ export function buildGroupDisplayName(params: {
   space?: string;
   id?: string;
   key: string;
-  /** When true and no human-readable detail is available, return "" instead of using the raw ID */
-  skipIdFallback?: boolean;
 }) {
   const providerKey = (params.provider?.trim().toLowerCase() || "group").trim();
   const groupChannel = params.groupChannel?.trim();
@@ -38,9 +36,6 @@ export function buildGroupDisplayName(params: {
     (groupChannel && space
       ? `${space}${groupChannel.startsWith("#") ? "" : "#"}${groupChannel}`
       : groupChannel || subject || space || "") || "";
-  if (!detail && params.skipIdFallback) {
-    return "";
-  }
   const fallbackId = params.id?.trim() || params.key;
   const rawLabel = detail || fallbackId;
   let token = normalizeGroupLabel(rawLabel);

@@ -105,9 +105,6 @@ export function deriveGroupSessionPatch(params: {
   }
 
   const channel = resolution.channel;
-  // GroupSubject explicitly set to "" means "group but no readable name available"
-  const groupSubjectExplicitlyEmpty =
-    "GroupSubject" in params.ctx && params.ctx.GroupSubject === "";
   const subject = params.ctx.GroupSubject?.trim();
   const space = params.ctx.GroupSpace?.trim();
   const explicitChannel = params.ctx.GroupChannel?.trim();
@@ -145,7 +142,6 @@ export function deriveGroupSessionPatch(params: {
     space: space ?? params.existing?.space,
     id: resolution.id,
     key: params.sessionKey,
-    skipIdFallback: groupSubjectExplicitlyEmpty,
   });
   if (groupName) {
     patch.groupName = groupName;

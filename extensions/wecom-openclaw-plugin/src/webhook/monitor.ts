@@ -759,9 +759,6 @@ export async function startAgentForStream(params: {
     SessionKey: chatType === "group" ? `${route.sessionKey}:sender:${userid}` : route.sessionKey,
     AccountId: route.accountId,
     ChatType: chatType,
-    // Explicitly mark group sessions with no readable name so the session
-    // metadata builder skips the raw chatId fallback in groupName derivation.
-    GroupSubject: chatType === "group" ? "" : undefined,
     ConversationLabel: fromLabel,
     SenderName: userid,
     SenderId: userid,
