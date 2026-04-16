@@ -124,6 +124,7 @@ export async function ensureSkillSnapshot(params: {
   cfg: OpenClawConfig;
   /** If provided, only load skills with these names (for per-channel skill filtering) */
   skillFilter?: string[];
+  disabledBundledSkills?: string[];
 }): Promise<{
   sessionEntry?: SessionEntry;
   skillsSnapshot?: SessionEntry["skillsSnapshot"];
@@ -149,6 +150,7 @@ export async function ensureSkillSnapshot(params: {
     workspaceDir,
     cfg,
     skillFilter,
+    disabledBundledSkills,
   } = params;
 
   let nextEntry = sessionEntry;
@@ -174,6 +176,7 @@ export async function ensureSkillSnapshot(params: {
         ? buildWorkspaceSkillSnapshot(workspaceDir, {
             config: cfg,
             skillFilter,
+            disabledBundledSkills,
             eligibility: { remote: remoteEligibility },
             snapshotVersion,
           })
@@ -198,6 +201,7 @@ export async function ensureSkillSnapshot(params: {
     ? buildWorkspaceSkillSnapshot(workspaceDir, {
         config: cfg,
         skillFilter,
+        disabledBundledSkills,
         eligibility: { remote: remoteEligibility },
         snapshotVersion,
       })
@@ -207,6 +211,7 @@ export async function ensureSkillSnapshot(params: {
         : buildWorkspaceSkillSnapshot(workspaceDir, {
             config: cfg,
             skillFilter,
+            disabledBundledSkills,
             eligibility: { remote: remoteEligibility },
             snapshotVersion,
           })));
