@@ -821,7 +821,6 @@ export function listSessionsFromStore(params: {
       const subject = entry?.subject;
       const groupChannel = entry?.groupChannel;
       const space = entry?.space;
-      const id = parsed?.id;
       const origin = entry?.origin;
       const originLabel = origin?.label;
       // Resolve display label using the new two-field semantics:

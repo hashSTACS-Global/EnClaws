@@ -78,9 +78,9 @@ type UserInfo = { displayName: string | null; role: string | null };
 
 async function enrichSessionDisplayNames(
   result: SessionsListResult,
-  tenantId: string,
+  _tenantId: string,
 ): Promise<void> {
-  if (!isDbInitialized() || !result.sessions?.length) return;
+  if (!isDbInitialized() || !result.sessions?.length) { return; }
 
   // Collect unique user UUIDs from webchat session keys (:user:{uuid})
   const userIdSet = new Set<string>();
@@ -91,7 +91,7 @@ async function enrichSessionDisplayNames(
     }
   }
 
-  if (userIdSet.size === 0) return;
+  if (userIdSet.size === 0) { return; }
 
   // Batch-fetch user info by UUID
   const userInfoMap = new Map<string, UserInfo>();
@@ -107,7 +107,7 @@ async function enrichSessionDisplayNames(
   // Apply resolved names and roles — only if not already present (write-time value wins)
   for (const session of result.sessions) {
     const userMatch = USER_SUFFIX_RE.exec(session.key);
-    if (!userMatch) continue;
+    if (!userMatch) { continue; }
     const info = userInfoMap.get(userMatch[1]);
     if (info?.displayName && !session.displayName) {
       session.displayName = info.displayName;
