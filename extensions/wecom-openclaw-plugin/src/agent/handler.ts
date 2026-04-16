@@ -512,6 +512,8 @@ async function processAgentMessage(params: {
         SessionKey: isGroup ? `${route.sessionKey}:sender:${fromUser}` : route.sessionKey,
         AccountId: route.accountId,
         ChatType: isGroup ? "group" : "direct",
+        // Explicitly mark group sessions with no readable name (see webhook/monitor.ts).
+        GroupSubject: isGroup ? "" : undefined,
         ConversationLabel: fromLabel,
         SenderName: fromUser,
         SenderId: fromUser,
