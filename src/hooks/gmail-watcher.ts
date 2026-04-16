@@ -232,10 +232,10 @@ export async function stopGmailWatcher(): Promise<void> {
     });
 
     watcherProcess = null;
+    log.info("gmail watcher stopped");
   }
 
   currentConfig = null;
-  log.info("gmail watcher stopped");
 }
 
 /**
