@@ -87,28 +87,31 @@ export async function getReplyFromConfig(
     config: cfg,
   });
   const agentSkillFilter = resolveAgentSkillsFilter(cfg, agentId);
-  // Multi-tenant: file config (cfg.agents[id]) doesn't contain tenant-managed
-  // agents — their skill enable list lives in the `tenant_agents.skills` DB
-  // column, written by the UI agent skill management. Fetch it here and
-  // merge as an additional filter source so UI changes take effect.
-  let tenantAgentSkillFilter: string[] | undefined;
+  // Multi-tenant: tenant_agents.skills is a denylist of bundled skills.
+  // Fetch it and pass as disabledBundledSkills so the skill prompt builder
+  // can exclude them without affecting enterprise/workspace skills.
+  let disabledBundledSkills: string[] | undefined;
   if (ctx.TenantId && isDbInitialized()) {
     try {
       const tenantAgentRecord = await getTenantAgent(ctx.TenantId, agentId);
       if (tenantAgentRecord?.skills && tenantAgentRecord.skills.length > 0) {
-        tenantAgentSkillFilter = tenantAgentRecord.skills;
+        disabledBundledSkills = tenantAgentRecord.skills;
       }
     } catch (err) {
       skillsLog.warn(`[skills-chain] failed to fetch tenant agent skill list: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+  // Channel-level skillFilter (allowlist) — only merge with file-config agent filter, not DB denylist
   const mergedSkillFilter = mergeSkillFilters(
     opts?.skillFilter,
-    agentSkillFilter ?? tenantAgentSkillFilter,
+    agentSkillFilter,
   );
-  skillsLog.info(`[skills-chain] get-reply: agentId=${agentId}, agentSkillFilter=${JSON.stringify(agentSkillFilter ?? null)}, tenantAgentSkillFilter=${JSON.stringify(tenantAgentSkillFilter ?? null)}, channelFilter=${JSON.stringify(opts?.skillFilter ?? null)}, merged=${JSON.stringify(mergedSkillFilter ?? null)}`);
-  const resolvedOpts =
-    mergedSkillFilter !== undefined ? { ...opts, skillFilter: mergedSkillFilter } : opts;
+  skillsLog.info(`[skills-chain] get-reply: agentId=${agentId}, agentSkillFilter=${JSON.stringify(agentSkillFilter ?? null)}, disabledBundledSkills=${JSON.stringify(disabledBundledSkills ?? null)}, channelFilter=${JSON.stringify(opts?.skillFilter ?? null)}, merged=${JSON.stringify(mergedSkillFilter ?? null)}`);
+  const resolvedOpts = {
+    ...opts,
+    ...(mergedSkillFilter !== undefined ? { skillFilter: mergedSkillFilter } : {}),
+    ...(disabledBundledSkills !== undefined ? { disabledBundledSkills } : {}),
+  };
   const agentCfg = cfg.agents?.defaults;
   const sessionCfg = cfg.session;
   const { defaultProvider, defaultModel, aliasIndex } = resolveDefaultModel({
@@ -355,6 +358,7 @@ export async function getReplyFromConfig(
     typing,
     opts: resolvedOpts,
     skillFilter: mergedSkillFilter,
+    disabledBundledSkills: resolvedOpts?.disabledBundledSkills,
   });
   if (directiveResult.kind === "reply") {
     return directiveResult.reply;
@@ -449,6 +453,7 @@ export async function getReplyFromConfig(
     directiveAck,
     abortedLastRun,
     skillFilter: mergedSkillFilter,
+    disabledBundledSkills: resolvedOpts?.disabledBundledSkills,
   });
   if (inlineActionResult.kind === "reply") {
     await maybeEmitMissingResetHooks();

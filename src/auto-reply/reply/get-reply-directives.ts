@@ -110,6 +110,7 @@ export async function resolveReplyDirectives(params: {
   typing: TypingController;
   opts?: GetReplyOptions;
   skillFilter?: string[];
+  disabledBundledSkills?: string[];
 }): Promise<ReplyDirectiveResult> {
   const {
     ctx,
@@ -136,6 +137,7 @@ export async function resolveReplyDirectives(params: {
     typing,
     opts,
     skillFilter,
+    disabledBundledSkills,
   } = params;
   let provider = initialProvider;
   let model = initialModel;
@@ -188,6 +190,7 @@ export async function resolveReplyDirectives(params: {
           workspaceDir,
           cfg,
           skillFilter,
+          disabledBundledSkills,
         })
       : [];
   for (const command of skillCommands) {
