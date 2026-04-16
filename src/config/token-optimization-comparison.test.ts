@@ -16,7 +16,17 @@ const TOGGLE_KEYS = [
   "ENCLAWS_TOKEN_OPT_WORKER",
   "ENCLAWS_TOKEN_OPT_COMPRESS",
   "ENCLAWS_TOKEN_OPT_DEDUP",
+  "ENCLAWS_TOKEN_OPT_TOOLSYNC",
+  "ENCLAWS_TOKEN_OPT_PROMPT",
+  "ENCLAWS_TOKEN_OPT_TOOLLIST",
 ] as const;
+
+/** Set all toggles to "false" to simulate the pre-optimization baseline. */
+function disableAllToggles() {
+  for (const key of TOGGLE_KEYS) {
+    process.env[key] = "false";
+  }
+}
 
 describe("Token Optimization Comparison Tests", () => {
   afterEach(() => {
@@ -40,9 +50,10 @@ describe("Token Optimization Comparison Tests", () => {
         ChatType: "direct",
       } as any;
 
+      disableAllToggles();
       const originalOutput = buildInboundMetaSystemPrompt(ctx);
 
-      process.env.ENCLAWS_TOKEN_OPT_P1 = "true";
+      delete process.env.ENCLAWS_TOKEN_OPT_P1;
       const optimizedOutput = buildInboundMetaSystemPrompt(ctx);
 
       const originalTokens = estimateTokens(originalOutput);
@@ -69,9 +80,10 @@ describe("Token Optimization Comparison Tests", () => {
         ThreadStarterBody: "Original thread message",
       } as any;
 
+      disableAllToggles();
       const originalOutput = buildInboundUserContextPrefix(ctx);
 
-      process.env.ENCLAWS_TOKEN_OPT_P1 = "true";
+      delete process.env.ENCLAWS_TOKEN_OPT_P1;
       const optimizedOutput = buildInboundUserContextPrefix(ctx);
 
       const originalTokens = estimateTokens(originalOutput);
@@ -88,9 +100,10 @@ describe("Token Optimization Comparison Tests", () => {
         toolNames: ["memory_search", "memory_get", "exec"],
       };
 
+      disableAllToggles();
       const originalPrompt = buildAgentSystemPrompt(baseParams);
 
-      process.env.ENCLAWS_TOKEN_OPT_P1 = "true";
+      delete process.env.ENCLAWS_TOKEN_OPT_P1;
       const optimizedPrompt = buildAgentSystemPrompt(baseParams);
 
       const originalTokens = estimateTokens(originalPrompt);
@@ -102,10 +115,11 @@ describe("Token Optimization Comparison Tests", () => {
     });
 
     it("OPT-6: softTrim thresholds are more aggressive with TRIM enabled", () => {
+      disableAllToggles();
       const defaultExec = getEffectiveSoftTrimSettings("exec");
       expect(defaultExec.maxChars).toBe(4_000);
 
-      process.env.ENCLAWS_TOKEN_OPT_TRIM = "true";
+      delete process.env.ENCLAWS_TOKEN_OPT_TRIM;
       const optimizedExec = getEffectiveSoftTrimSettings("exec");
       const optimizedWebFetch = getEffectiveSoftTrimSettings("web_fetch");
 
@@ -127,11 +141,12 @@ describe("Token Optimization Comparison Tests", () => {
         toolNames: ["memory_search", "memory_get"],
       };
 
+      disableAllToggles();
       const original = buildAgentSystemPrompt(params);
       expect(original).toContain("you MUST run `memory_search`");
       expect(original).not.toContain("Search memory ONLY when");
 
-      process.env.ENCLAWS_TOKEN_OPT_P1 = "true";
+      delete process.env.ENCLAWS_TOKEN_OPT_P1;
       const optimized = buildAgentSystemPrompt(params);
       expect(optimized).toContain("Search memory ONLY when");
       expect(optimized).not.toContain("you MUST run `memory_search`");
@@ -146,11 +161,12 @@ describe("Token Optimization Comparison Tests", () => {
         ChatType: "direct",
       } as any;
 
+      disableAllToggles();
       const original = buildInboundMetaSystemPrompt(ctx);
       expect(original).toContain("```json");
       expect(original).toContain('"schema": "enclaws.inbound_meta.v1"');
 
-      process.env.ENCLAWS_TOKEN_OPT_P1 = "true";
+      delete process.env.ENCLAWS_TOKEN_OPT_P1;
       const optimized = buildInboundMetaSystemPrompt(ctx);
       expect(optimized).not.toContain("```json");
       expect(optimized).toContain('"schema":"enclaws.inbound_meta.v1"');
@@ -166,10 +182,11 @@ describe("Token Optimization Comparison Tests", () => {
         ],
       } as any;
 
+      disableAllToggles();
       const original = buildInboundUserContextPrefix(ctx);
       expect(original).toContain("Chat history since last reply (untrusted, for context):");
 
-      process.env.ENCLAWS_TOKEN_OPT_P1 = "true";
+      delete process.env.ENCLAWS_TOKEN_OPT_P1;
       const optimized = buildInboundUserContextPrefix(ctx);
       expect(optimized).toContain("Chat history:");
       expect(optimized).not.toContain("untrusted");
@@ -183,10 +200,11 @@ describe("Token Optimization Comparison Tests", () => {
         Surface: "telegram",
       } as any;
 
+      disableAllToggles();
       const original = buildInboundMetaSystemPrompt(ctx);
       expect(original).toContain("## Inbound Context (trusted metadata)");
 
-      process.env.ENCLAWS_TOKEN_OPT_P1 = "true";
+      delete process.env.ENCLAWS_TOKEN_OPT_P1;
       const optimized = buildInboundMetaSystemPrompt(ctx);
       expect(optimized).toContain("## Inbound Context (trusted)");
       expect(optimized).not.toContain("trusted metadata");
@@ -199,13 +217,14 @@ describe("Token Optimization Comparison Tests", () => {
         extraSystemPrompt: marker,
       };
 
+      disableAllToggles();
       const original = buildAgentSystemPrompt(params);
       const originalMarkerIdx = original.indexOf(marker);
       const originalRuntimeIdx = original.indexOf("## Runtime");
       // In original, marker should be BEFORE Runtime section
       expect(originalMarkerIdx).toBeLessThan(originalRuntimeIdx);
 
-      process.env.ENCLAWS_TOKEN_OPT_CACHE = "true";
+      delete process.env.ENCLAWS_TOKEN_OPT_CACHE;
       const optimized = buildAgentSystemPrompt(params);
       const optimizedMarkerIdx = optimized.indexOf(marker);
       const optimizedSkillsReportIdx = optimized.indexOf("## Skills Reporting");
@@ -221,8 +240,7 @@ describe("Token Optimization Comparison Tests", () => {
     });
 
     it("OPT-6: different tools get different trim thresholds when TRIM is on", () => {
-      process.env.ENCLAWS_TOKEN_OPT_TRIM = "true";
-
+      // TRIM is on by default now, no need to set env var
       const exec = getEffectiveSoftTrimSettings("exec");
       const webFetch = getEffectiveSoftTrimSettings("web_fetch");
       const other = getEffectiveSoftTrimSettings("some_other_tool");
@@ -232,9 +250,10 @@ describe("Token Optimization Comparison Tests", () => {
       expect(other.maxChars).toBe(4_000); // default unchanged
     });
 
-    it("all toggles are independent — enabling one does not affect others", () => {
-      process.env.ENCLAWS_TOKEN_OPT_P1 = "true";
-      // CACHE and TRIM should still be off
+    it("all toggles are independent — disabling one does not affect others", () => {
+      // Disable only CACHE and TRIM, leave everything else at default (on)
+      process.env.ENCLAWS_TOKEN_OPT_CACHE = "false";
+      process.env.ENCLAWS_TOKEN_OPT_TRIM = "false";
 
       const params = {
         workspaceDir: "/tmp/test",
@@ -242,7 +261,7 @@ describe("Token Optimization Comparison Tests", () => {
       };
 
       const prompt = buildAgentSystemPrompt(params);
-      // With only P1 on, extraSystemPrompt should still be in original position (CACHE is off)
+      // With CACHE off, extraSystemPrompt should be in original position
       const markerIdx = prompt.indexOf("MARKER_CONTENT");
       const runtimeIdx = prompt.indexOf("## Runtime");
       expect(markerIdx).toBeLessThan(runtimeIdx);
@@ -282,14 +301,15 @@ describe("Token Optimization Comparison Tests", () => {
       } as any;
 
       // === Original (all off) ===
+      disableAllToggles();
       const origSystem = buildAgentSystemPrompt(systemParams);
       const origMeta = buildInboundMetaSystemPrompt(metaCtx);
       const origUserCtx = buildInboundUserContextPrefix(metaCtx);
 
-      // === Optimized (P1 + CACHE + TRIM all on) ===
-      process.env.ENCLAWS_TOKEN_OPT_P1 = "true";
-      process.env.ENCLAWS_TOKEN_OPT_CACHE = "true";
-      process.env.ENCLAWS_TOKEN_OPT_TRIM = "true";
+      // === Optimized (all on — default) ===
+      for (const key of TOGGLE_KEYS) {
+        delete process.env[key];
+      }
 
       const optSystem = buildAgentSystemPrompt(systemParams);
       const optMeta = buildInboundMetaSystemPrompt(metaCtx);
