@@ -53,4 +53,19 @@ describe("deriveGroupSessionPatch", () => {
     });
     expect(patch!.displayName).toBeUndefined();
   });
+
+  it("does not write displayName when SenderName equals SenderId (WeCom userId not yet resolved)", () => {
+    // WeCom sets SenderName=fromUser=SenderId — the name is not yet a real display name
+    const ctx = makeCtx({
+      From: "wecom:group:chatid123:sender:liuyu",
+      Provider: "wecom",
+      SenderName: "liuyu",
+      SenderId: "liuyu",
+    } as Partial<MsgContext>);
+    const patch = deriveGroupSessionPatch({
+      ctx,
+      sessionKey: "agent:aaa:wecom:group:chatid123:sender:liuyu",
+    });
+    expect(patch!.displayName).toBeUndefined();
+  });
 });

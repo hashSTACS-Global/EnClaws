@@ -150,10 +150,15 @@ export function deriveGroupSessionPatch(params: {
   // Per-sender group sessions embed ":sender:" in the key.
   // Write the sender's real name as displayName so the UI can show
   // "群名 · 用户名" without a read-time DB lookup.
+  // Guard: only write displayName when SenderName is a resolved human name,
+  // not a raw channel user ID. Channels that don't resolve names (e.g. WeCom)
+  // set SenderName === SenderId — treat that as "unresolved" and skip.
   const isPerSenderSession = params.sessionKey.includes(":sender:");
   if (isPerSenderSession) {
     const senderName = params.ctx.SenderName?.trim();
-    if (senderName && !isPlaceholderSenderName(senderName)) {
+    const senderId = params.ctx.SenderId?.trim();
+    const nameIsResolved = senderName && senderName !== senderId;
+    if (nameIsResolved && !isPlaceholderSenderName(senderName)) {
       patch.displayName = senderName;
     }
   }
