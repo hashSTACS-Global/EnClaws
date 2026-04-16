@@ -3,7 +3,7 @@
  *
  * Usage:
  *   node --import tsx src/auth/admin-reset-cli.ts --email admin@example.com
- *   node --import tsx src/auth/admin-reset-cli.ts --email owner@x.com --tenant my-tenant
+ *   node --import tsx src/auth/admin-reset-cli.ts --email owner@x.com --tenant-id <uuid>
  *
  * Reads ENCLAWS_DB_URL (or ENCLAWS_DB_HOST etc.) from the environment.
  *
@@ -23,7 +23,7 @@ loadDotEnv({ quiet: true });
 
 interface CliArgs {
   email?: string;
-  tenant?: string;
+  tenantId?: string;
   help?: boolean;
 }
 
@@ -33,22 +33,22 @@ function parseArgs(argv: string[]): CliArgs {
     const a = argv[i];
     if (a === "--help" || a === "-h") out.help = true;
     else if (a === "--email" || a === "-e") out.email = argv[++i];
-    else if (a === "--tenant" || a === "-t") out.tenant = argv[++i];
+    else if (a === "--tenant-id" || a === "-t") out.tenantId = argv[++i];
   }
   return out;
 }
 
 function printUsage(): void {
   process.stderr.write(
-    "Usage: enclaws admin-reset-password --email <email> [--tenant <slug>]\n" +
+    "Usage: enclaws admin-reset-password --email <email> [--tenant-id <uuid>]\n" +
     "\n" +
     "  Generates a new temporary password for a platform-admin or owner account\n" +
     "  and prints it to stdout. The user must change it on next login.\n" +
     "\n" +
     "Options:\n" +
-    "  --email, -e   Account email address (required)\n" +
-    "  --tenant, -t  Tenant slug (required when the same email exists in multiple tenants)\n" +
-    "  --help, -h    Show this help message\n",
+    "  --email, -e      Account email address (required)\n" +
+    "  --tenant-id, -t  Tenant id (required when the same email exists in multiple tenants)\n" +
+    "  --help, -h       Show this help message\n",
   );
 }
 
@@ -70,13 +70,12 @@ async function main(): Promise<void> {
   const email = args.email.toLowerCase().trim();
 
   let userRow: Record<string, unknown> | undefined;
-  if (args.tenant) {
+  if (args.tenantId) {
     const result = await query(
-      `SELECT u.id, u.tenant_id, u.email, u.role
-         FROM users u JOIN tenants t ON u.tenant_id = t.id
-        WHERE u.email = $1 AND t.slug = $2 AND u.status = 'active'
+      `SELECT id, tenant_id, email, role FROM users
+        WHERE email = $1 AND tenant_id = $2 AND status = 'active'
         LIMIT 1`,
-      [email, args.tenant],
+      [email, args.tenantId],
     );
     userRow = result.rows[0];
   } else {
@@ -89,7 +88,7 @@ async function main(): Promise<void> {
     );
     if (result.rows.length > 1) {
       console.error(
-        `admin-reset: email "${email}" is registered in multiple tenants; pass --tenant <slug> to disambiguate.`,
+        `admin-reset: email "${email}" is registered in multiple tenants; pass --tenant-id <uuid> to disambiguate.`,
       );
       await closeDb();
       process.exit(1);

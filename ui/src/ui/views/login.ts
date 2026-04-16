@@ -687,17 +687,14 @@ export class EnClawsLogin extends LitElement {
   // Login fields
   @state() private email = "";
   @state() private password = "";
-  @state() private tenantSlug = "";
 
   // Register fields
   @state() private regTenantName = "";
-  @state() private regTenantSlug = "";
   @state() private regEmail = "";
   @state() private regPassword = "";
   @state() private regDisplayName = "";
 
   // Focus tracking for inline hints
-  @state() private slugFocused = false;
   @state() private regPasswordFocused = false;
 
   private handleLocaleChange(e: CustomEvent<{ locale: string }>) {
@@ -717,7 +714,6 @@ export class EnClawsLogin extends LitElement {
   private translateServerError(raw: string): string {
     if (raw === "__rate_limited__") return t("login.rateLimited");
     if (raw.includes("Invalid credentials")) return t("login.invalidCredentials");
-    if (raw.includes("slug already in use")) return t("login.slugAlreadyInUse");
     if (raw.includes("已注册") || raw.includes("already registered") || raw.includes("duplicate key") || raw.includes("unique constraint")) return t("login.emailAlreadyRegistered");
     if (raw.includes("verify your email") || raw.includes("pendingVerification")) return t("login.pendingVerification");
     return raw;
@@ -748,8 +744,6 @@ export class EnClawsLogin extends LitElement {
   private validateRegisterForm(): FieldErrors {
     const errors: FieldErrors = {};
     if (!this.regTenantName) errors.tenantName = t("login.errRequired", { field: t("login.tenantName") });
-    if (!this.regTenantSlug) errors.tenantSlug = t("login.errRequired", { field: t("login.tenantSlug") });
-    else if (!/^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$/.test(this.regTenantSlug)) errors.tenantSlug = t("login.errSlugInvalid");
     if (!this.regEmail) errors.regEmail = t("login.errRequired", { field: t("login.email") });
     else if (!this.validateEmail(this.regEmail)) errors.regEmail = t("login.errEmailInvalid");
     if (!this.regPassword) errors.regPassword = t("login.errRequired", { field: t("login.password") });
@@ -832,7 +826,6 @@ export class EnClawsLogin extends LitElement {
         gatewayUrl: this.resolveGatewayUrl(),
         email: this.email,
         password: this.password,
-        tenantSlug: this.tenantSlug || undefined,
       });
       this.dispatchEvent(new CustomEvent("auth-success", {
         detail: { ...auth, forceChangePassword: auth.user.forceChangePassword === true },
@@ -870,7 +863,6 @@ export class EnClawsLogin extends LitElement {
       const auth = await register({
         gatewayUrl: this.resolveGatewayUrl(),
         tenantName: this.regTenantName,
-        tenantSlug: this.regTenantSlug,
         email: this.regEmail,
         password: this.regPassword,
         displayName: this.regDisplayName || undefined,
@@ -894,9 +886,7 @@ export class EnClawsLogin extends LitElement {
     this.fieldErrors = {};
     this.email = "";
     this.password = "";
-    this.tenantSlug = "";
     this.regTenantName = "";
-    this.regTenantSlug = "";
     this.regEmail = "";
     this.regPassword = "";
     this.regDisplayName = "";
@@ -910,15 +900,6 @@ export class EnClawsLogin extends LitElement {
     const root = document.documentElement;
     root.dataset.theme = resolved;
     root.style.colorScheme = resolved;
-  }
-
-  private autoSlug() {
-    if (!this.regTenantSlug && this.regTenantName) {
-      this.regTenantSlug = this.regTenantName
-        .replace(/[^a-zA-Z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 64);
-    }
   }
 
   render() {
@@ -1136,27 +1117,8 @@ export class EnClawsLogin extends LitElement {
             placeholder=${t("login.tenantNamePlaceholder")}
             .value=${this.regTenantName}
             @input=${(e: InputEvent) => { this.regTenantName = (e.target as HTMLInputElement).value; this.clearFieldError("tenantName"); }}
-            @blur=${this.autoSlug}
           />
           ${this.renderFieldError("tenantName")}
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">${t("login.tenantSlug")}</label>
-          <input
-            class="form-input ${this.hasError("tenantSlug") ? "has-error" : ""}"
-            type="text"
-            placeholder=${t("login.tenantSlugPlaceholder")}
-            .value=${this.regTenantSlug}
-            @input=${(e: InputEvent) => {
-              const raw = (e.target as HTMLInputElement).value;
-              this.regTenantSlug = raw.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 128);
-              this.clearFieldError("tenantSlug");
-            }}
-            @focus=${() => { this.slugFocused = true; }}
-            @blur=${() => { this.slugFocused = false; this.autoSlug(); }}
-          />
-          ${this.slugFocused ? html`<div class="form-hint">${t("login.tenantSlugHint")}</div>` : this.renderFieldError("tenantSlug")}
         </div>
 
         <div class="section-divider"><span>${t("login.adminAccount")}</span></div>

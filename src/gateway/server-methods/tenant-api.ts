@@ -71,7 +71,6 @@ export const tenantHandlers: GatewayRequestHandlers = {
     respond(true, {
       id: tenant.id,
       name: tenant.name,
-      slug: tenant.slug,
       plan: tenant.plan,
       status: tenant.status,
       settings: tenant.settings,

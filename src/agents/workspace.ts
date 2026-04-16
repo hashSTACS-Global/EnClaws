@@ -815,7 +815,6 @@ async function loadTenantBootstrapFiles(
       if (tenant) {
         const lines: string[] = ["# 企业身份", ""];
         if (tenant.name) {lines.push(`- 企业名称：${tenant.name}`);}
-        if (tenant.slug) {lines.push(`- 企业标识：${tenant.slug}`);}
         lines.push("");
         lines.push("当用户询问你的身份时，应主动说明你服务于该企业。");
         lines.push("当对话中出现重要的企业级信息时，主动使用 tenant_memory 工具保存。");

@@ -37,7 +37,6 @@ DROP TABLE IF EXISTS sys_tools_config CASCADE;
 CREATE TABLE tenants (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name        VARCHAR(255) NOT NULL,
-  slug        VARCHAR(128) NOT NULL UNIQUE,       -- URL-safe identifier
   plan        VARCHAR(64)  NOT NULL DEFAULT 'free', -- free | pro | enterprise
   status      VARCHAR(32)  NOT NULL DEFAULT 'active', -- active | suspended | deleted
   settings    JSONB        NOT NULL DEFAULT '{}',  -- tenant-level settings overrides
@@ -53,7 +52,6 @@ CREATE TABLE tenants (
   updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_tenants_slug ON tenants (slug);
 CREATE INDEX idx_tenants_status ON tenants (status);
 
 -- ============================================================
@@ -535,16 +533,15 @@ CREATE INDEX IF NOT EXISTS idx_traces_model_time ON llm_interaction_traces (mode
 -- ============================================================
 -- Seed: Platform admin tenant + user (password: Aa123456!, stored as bcrypt(sha256(password)))
 -- ============================================================
-INSERT INTO tenants (id, name, slug, plan, status, quotas)
+INSERT INTO tenants (id, name, plan, status, quotas)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
   'EnClaws Platform',
-  '_platform',
   'enterprise',
   'active',
   '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1}'
 )
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (id, tenant_id, email, password_hash, display_name, role, status)
 VALUES (

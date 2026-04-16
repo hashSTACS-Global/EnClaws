@@ -2,7 +2,7 @@
  * Tenant CRUD operations.
  */
 
-import { query, withTransaction, getDbType, DB_SQLITE } from "../index.js";
+import { query, getDbType, DB_SQLITE } from "../index.js";
 import * as sqliteTenant from "../sqlite/models/tenant.js";
 import type {
   Tenant,
@@ -17,7 +17,6 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
   return {
     id: row.id as string,
     name: row.name as string,
-    slug: row.slug as string,
     plan: row.plan as TenantPlan,
     status: row.status as TenantStatus,
     settings: (row.settings ?? {}) as TenantSettings,
@@ -76,12 +75,11 @@ export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
   const planQuotas = await getPlanQuotas(input.plan ?? "free");
   const quotas = { ...planQuotas, ...input.quotas };
   const result = await query(
-    `INSERT INTO tenants (name, slug, plan, settings, quotas)
-     VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)
+    `INSERT INTO tenants (name, plan, settings, quotas)
+     VALUES ($1, $2, $3::jsonb, $4::jsonb)
      RETURNING *`,
     [
       input.name,
-      input.slug,
       input.plan ?? "free",
       JSON.stringify(input.settings ?? {}),
       JSON.stringify(quotas),
@@ -93,12 +91,6 @@ export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
 export async function getTenantById(id: string): Promise<Tenant | null> {
   if (getDbType() === DB_SQLITE) return sqliteTenant.getTenantById(id);
   const result = await query("SELECT * FROM tenants WHERE id = $1", [id]);
-  return result.rows.length > 0 ? rowToTenant(result.rows[0]) : null;
-}
-
-export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
-  if (getDbType() === DB_SQLITE) return sqliteTenant.getTenantBySlug(slug);
-  const result = await query("SELECT * FROM tenants WHERE slug = $1", [slug]);
   return result.rows.length > 0 ? rowToTenant(result.rows[0]) : null;
 }
 
@@ -138,7 +130,7 @@ export async function listTenants(opts?: {
 
 export async function updateTenant(
   id: string,
-  updates: Partial<Pick<Tenant, "name" | "slug" | "plan" | "status" | "settings" | "quotas" | "traceEnabled" | "identityPrompt">>,
+  updates: Partial<Pick<Tenant, "name" | "plan" | "status" | "settings" | "quotas" | "traceEnabled" | "identityPrompt">>,
 ): Promise<Tenant | null> {
   if (getDbType() === DB_SQLITE) return sqliteTenant.updateTenant(id, updates);
   const sets: string[] = [];
@@ -148,10 +140,6 @@ export async function updateTenant(
   if (updates.name !== undefined) {
     sets.push(`name = $${idx++}`);
     values.push(updates.name);
-  }
-  if (updates.slug !== undefined) {
-    sets.push(`slug = $${idx++}`);
-    values.push(updates.slug);
   }
   if (updates.plan !== undefined) {
     sets.push(`plan = $${idx++}`);

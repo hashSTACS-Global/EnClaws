@@ -13,7 +13,6 @@ PRAGMA journal_mode = WAL;
 CREATE TABLE IF NOT EXISTS tenants (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
-  slug        TEXT NOT NULL UNIQUE,
   plan        TEXT NOT NULL DEFAULT 'free',
   status      TEXT NOT NULL DEFAULT 'active',
   settings    TEXT NOT NULL DEFAULT '{}',
@@ -23,7 +22,6 @@ CREATE TABLE IF NOT EXISTS tenants (
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants (slug);
 CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants (status);
 
 -- Plans (subscription plan dictionary). -1 = unlimited.
@@ -404,11 +402,10 @@ CREATE TRIGGER IF NOT EXISTS trg_channel_apps_updated_at AFTER UPDATE ON tenant_
   END;
 
 -- Seed: Platform admin tenant + user (password: Aa123456!, stored as bcrypt(sha256(password)))
-INSERT OR IGNORE INTO tenants (id, name, slug, plan, status, quotas)
+INSERT OR IGNORE INTO tenants (id, name, plan, status, quotas)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
   'EnClaws Platform',
-  '_platform',
   'enterprise',
   'active',
   '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1}'

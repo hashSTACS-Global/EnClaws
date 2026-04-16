@@ -16,7 +16,6 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
   return {
     id: row.id as string,
     name: row.name as string,
-    slug: row.slug as string,
     plan: row.plan as TenantPlan,
     status: row.status as TenantStatus,
     settings: (typeof row.settings === "string" ? JSON.parse(row.settings) : row.settings ?? {}) as TenantSettings,
@@ -72,12 +71,11 @@ export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
   const quotas = { ...planQuotas, ...input.quotas };
 
   sqliteQuery(
-    `INSERT INTO tenants (id, name, slug, plan, settings, quotas)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tenants (id, name, plan, settings, quotas)
+     VALUES (?, ?, ?, ?, ?)`,
     [
       id,
       input.name,
-      input.slug,
       input.plan ?? "free",
       JSON.stringify(input.settings ?? {}),
       JSON.stringify(quotas),
@@ -90,11 +88,6 @@ export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
 
 export async function getTenantById(id: string): Promise<Tenant | null> {
   const result = sqliteQuery("SELECT * FROM tenants WHERE id = ?", [id]);
-  return result.rows.length > 0 ? rowToTenant(result.rows[0]) : null;
-}
-
-export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
-  const result = sqliteQuery("SELECT * FROM tenants WHERE slug = ?", [slug]);
   return result.rows.length > 0 ? rowToTenant(result.rows[0]) : null;
 }
 
@@ -132,7 +125,7 @@ export async function listTenants(opts?: {
 
 export async function updateTenant(
   id: string,
-  updates: Partial<Pick<Tenant, "name" | "slug" | "plan" | "status" | "settings" | "quotas" | "traceEnabled" | "identityPrompt">>,
+  updates: Partial<Pick<Tenant, "name" | "plan" | "status" | "settings" | "quotas" | "traceEnabled" | "identityPrompt">>,
 ): Promise<Tenant | null> {
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -140,10 +133,6 @@ export async function updateTenant(
   if (updates.name !== undefined) {
     sets.push("name = ?");
     values.push(updates.name);
-  }
-  if (updates.slug !== undefined) {
-    sets.push("slug = ?");
-    values.push(updates.slug);
   }
   if (updates.plan !== undefined) {
     sets.push("plan = ?");

@@ -26,7 +26,6 @@ export interface TenantSettings {
 export interface Tenant {
   id: string;
   name: string;
-  slug: string;
   plan: TenantPlan;
   status: TenantStatus;
   settings: TenantSettings;
@@ -39,7 +38,6 @@ export interface Tenant {
 
 export interface CreateTenantInput {
   name: string;
-  slug: string;
   plan?: TenantPlan;
   settings?: TenantSettings;
   quotas?: Partial<TenantQuotas>;
@@ -116,7 +114,6 @@ export interface JwtPayload {
   tid: string;       // tenant ID
   email: string | null;
   role: UserRole;
-  tslug: string;     // tenant slug
   /** Force-change-password flag — when true, the client must redirect to change-password. */
   fcp?: boolean;
   /** Phase 2: password expiry timestamp (epoch ms). Absent when policy is disabled. */

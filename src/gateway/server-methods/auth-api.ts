@@ -26,7 +26,7 @@
 
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
-import { createTenant, getTenantBySlug, getTenantById } from "../../db/models/tenant.js";
+import { createTenant, getTenantById } from "../../db/models/tenant.js";
 import { ensureTenantDirFiles } from "../../agents/workspace.js";
 import { resolveTenantDir } from "../../config/sessions/tenant-paths.js";
 import { installSkillPack } from "../../agents/skill-pack-installer.js";
@@ -117,7 +117,6 @@ export const authHandlers: GatewayRequestHandlers = {
    *
    * Params:
    *   tenantName: string
-   *   tenantSlug: string
    *   email: string
    *   password: string
    *   displayName?: string
@@ -125,27 +124,17 @@ export const authHandlers: GatewayRequestHandlers = {
   "auth.register": async ({ params, respond }: GatewayRequestHandlerOptions) => {
     if (!requireDb(respond)) return;
 
-    const { tenantName, tenantSlug, email, password, displayName } = params as {
+    const { tenantName, email, password, displayName } = params as {
       tenantName: string;
-      tenantSlug: string;
       email: string;
       password: string;
       displayName?: string;
     };
 
-    if (!tenantName || !tenantSlug || !email || !password) {
+    if (!tenantName || !email || !password) {
       respond(false, undefined, errorShape(
         ErrorCodes.INVALID_PARAMS,
-        "Missing required fields: tenantName, tenantSlug, email, password",
-      ));
-      return;
-    }
-
-    // Validate slug format
-    if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,126}[a-zA-Z0-9])?$/.test(tenantSlug)) {
-      respond(false, undefined, errorShape(
-        ErrorCodes.INVALID_PARAMS,
-        "Slug must be alphanumeric with hyphens, 1-128 chars",
+        "Missing required fields: tenantName, email, password",
       ));
       return;
     }
@@ -156,16 +145,6 @@ export const authHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(
         ErrorCodes.INVALID_PARAMS,
         policy.message ?? "密码不符合安全策略",
-      ));
-      return;
-    }
-
-    // Check slug uniqueness
-    const existing = await getTenantBySlug(tenantSlug);
-    if (existing) {
-      respond(false, undefined, errorShape(
-        ErrorCodes.INVALID_REQUEST,
-        "Tenant slug already in use",
       ));
       return;
     }
@@ -184,7 +163,6 @@ export const authHandlers: GatewayRequestHandlers = {
       // Create tenant
       const tenant = await createTenant({
         name: tenantName,
-        slug: tenantSlug,
       });
 
       // Seed tenant-level directory files immediately after creation
@@ -238,12 +216,12 @@ export const authHandlers: GatewayRequestHandlers = {
           tenantId: tenant.id,
           userId: user.id,
           action: "tenant.register",
-          resource: `tenant:${tenant.slug}`,
+          resource: `tenant:${tenant.id}`,
           detail: { pendingVerification: true },
         });
 
         respond(true, {
-          tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
+          tenant: { id: tenant.id, name: tenant.name },
           user: { id: user.id, email: user.email, role: user.role, displayName: user.displayName },
           pendingVerification: true,
         });
@@ -256,7 +234,6 @@ export const authHandlers: GatewayRequestHandlers = {
         tid: tenant.id,
         email: user.email,
         role: "owner",
-        tslug: tenant.slug,
       };
       const tokens = await generateTokenPair(payload);
 
@@ -264,11 +241,11 @@ export const authHandlers: GatewayRequestHandlers = {
         tenantId: tenant.id,
         userId: user.id,
         action: "tenant.register",
-        resource: `tenant:${tenant.slug}`,
+        resource: `tenant:${tenant.id}`,
       });
 
       respond(true, {
-        tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
+        tenant: { id: tenant.id, name: tenant.name },
         user: { id: user.id, email: user.email, role: user.role, displayName: user.displayName },
         ...tokens,
       });
@@ -285,18 +262,19 @@ export const authHandlers: GatewayRequestHandlers = {
   /**
    * Login with email + password.
    *
+   * Email is globally unique across tenants, so no tenant disambiguation
+   * is needed.
+   *
    * Params:
    *   email: string
    *   password: string
-   *   tenantSlug?: string   (optional, for disambiguation)
    */
   "auth.login": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
     if (!requireDb(respond)) return;
 
-    const { email, password, tenantSlug } = params as {
+    const { email, password } = params as {
       email: string;
       password: string;
-      tenantSlug?: string;
     };
 
     if (!email || !password) {
@@ -325,51 +303,22 @@ export const authHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    let user;
-    let tenantSuspended = false;
-    if (tenantSlug) {
-      const tenant = await getTenantBySlug(tenantSlug);
-      if (tenant && tenant.status === "suspended") {
-        tenantSuspended = true;
-      }
-      if (!tenant || tenant.status !== "active") {
-        if (tenantSuspended) {
+    // findUserByEmail JOINs tenants WHERE t.status='active', so suspended
+    // tenant users get null. We need a separate check to distinguish
+    // "wrong password" from "tenant suspended".
+    let user = await findUserByEmail(email);
+    if (!user) {
+      // Try to find the user ignoring tenant status to detect suspension
+      const userAnyStatus = await findUserByEmailAnyTenant(email);
+      if (userAnyStatus) {
+        const tenant = await getTenantById(userAnyStatus.tenantId);
+        if (tenant && tenant.status === "suspended") {
           respond(
             false,
             undefined,
             errorShape(ErrorCodes.INVALID_REQUEST, "该企业账号已被禁用，请联系平台管理员"),
           );
           return;
-        }
-        const after = loginRateLimiter.recordFailure(clientIp, email);
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "Invalid credentials", {
-            retryAfterMs: after.retryAfterMs || undefined,
-          }),
-        );
-        return;
-      }
-      user = await getUserByEmail(tenant.id, email);
-    } else {
-      // findUserByEmail JOINs tenants WHERE t.status='active', so suspended
-      // tenant users get null. We need a separate check to distinguish
-      // "wrong password" from "tenant suspended".
-      user = await findUserByEmail(email);
-      if (!user) {
-        // Try to find the user ignoring tenant status to detect suspension
-        const userAnyStatus = await findUserByEmailAnyTenant(email);
-        if (userAnyStatus) {
-          const tenant = await getTenantById(userAnyStatus.tenantId);
-          if (tenant && tenant.status === "suspended") {
-            respond(
-              false,
-              undefined,
-              errorShape(ErrorCodes.INVALID_REQUEST, "该企业账号已被禁用，请联系平台管理员"),
-            );
-            return;
-          }
         }
       }
     }
@@ -462,7 +411,6 @@ export const authHandlers: GatewayRequestHandlers = {
       tid: user.tenantId,
       email: user.email,
       role: user.role,
-      tslug: "", // resolved below
     };
     if (mustChangePassword) {
       payload.fcp = true;
@@ -471,12 +419,6 @@ export const authHandlers: GatewayRequestHandlers = {
     const pwExp = computePasswordExpiresAt(user.passwordChangedAt);
     if (pwExp !== null) {
       payload.pwExp = pwExp;
-    }
-
-    // Resolve tenant slug
-    const tenant = await getTenantById(user.tenantId);
-    if (tenant) {
-      payload.tslug = tenant.slug;
     }
 
     // Phase 3: MFA two-phase flow — if user has MFA enabled, return a
@@ -488,7 +430,6 @@ export const authHandlers: GatewayRequestHandlers = {
         tenantId: user.tenantId,
         email: user.email,
         role: user.role,
-        tslug: payload.tslug,
       });
       await createAuditLog({
         tenantId: user.tenantId,
@@ -561,16 +502,11 @@ export const authHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const tenant = await import("../../db/models/tenant.js").then((m) =>
-      m.getTenantById(user.tenantId),
-    );
-
     const payload: JwtPayload = {
       sub: user.id,
       tid: user.tenantId,
       email: user.email,
       role: user.role,
-      tslug: tenant?.slug ?? "",
     };
     // Phase 3: bump last_used_at on the old session so the sessions UI
     // tracks recency even across access-token refreshes.
@@ -629,7 +565,7 @@ export const authHandlers: GatewayRequestHandlers = {
     respond(true, {
       user: toSafeUser(user),
       tenant: tenantInfo
-        ? { id: tenantInfo.id, name: tenantInfo.name, slug: tenantInfo.slug, plan: tenantInfo.plan }
+        ? { id: tenantInfo.id, name: tenantInfo.name, plan: tenantInfo.plan }
         : null,
       permissions: await import("../../auth/rbac.js").then((m) =>
         m.getPermissionsForRole(user.role),
@@ -1143,7 +1079,6 @@ export const authHandlers: GatewayRequestHandlers = {
       tid: challenge.tenantId,
       email: user.email,
       role: user.role,
-      tslug: challenge.tslug,
     };
     const pwExp = computePasswordExpiresAt(user.passwordChangedAt);
     if (pwExp !== null) payload.pwExp = pwExp;
