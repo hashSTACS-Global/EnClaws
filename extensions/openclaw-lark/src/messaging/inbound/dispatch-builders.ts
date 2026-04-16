@@ -131,7 +131,7 @@ export function buildInboundPayload(
     SessionKey: dc.threadSessionKey ?? dc.route.sessionKey,
     AccountId: dc.route.accountId,
     ChatType: dc.isGroup ? 'group' : 'direct',
-    GroupSubject: dc.isGroup ? dc.ctx.chatId : undefined,
+    GroupSubject: dc.isGroup ? (dc.chatName ?? dc.ctx.chatId) : undefined,
     SenderName: opts.senderName,
     SenderId: opts.senderId,
     Provider: 'feishu' as const,

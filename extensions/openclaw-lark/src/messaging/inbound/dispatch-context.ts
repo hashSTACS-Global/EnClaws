@@ -15,7 +15,7 @@ import type { MessageContext } from '../types';
 import type { LarkAccount } from '../../core/types';
 import { LarkClient } from '../../core/lark-client';
 import { larkLogger } from '../../core/lark-logger';
-import { isThreadCapableGroup } from '../../core/chat-info-cache';
+import { getChatInfo, isThreadCapableGroup } from '../../core/chat-info-cache';
 
 const log = larkLogger('inbound/dispatch-context');
 
@@ -41,6 +41,8 @@ export interface DispatchContext {
   route: ReturnType<typeof LarkClient.runtime.channel.routing.resolveAgentRoute>;
   threadSessionKey?: string;
   commandAuthorized?: boolean;
+  /** Human-readable group name, resolved from im.chat.get (cached). */
+  chatName?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -43,6 +43,8 @@ const log = larkLogger('core/chat-info-cache');
 export interface ChatInfo {
   chatMode: 'group' | 'topic' | 'p2p';
   groupMessageType?: 'chat' | 'thread';
+  /** Human-readable group/chat name, if available from im.chat.get */
+  chatName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,14 +176,16 @@ export async function getChatInfo(params: {
     const data = response?.data as Record<string, unknown> | undefined;
     const chatMode = (data?.chat_mode as string) ?? 'group';
     const groupMessageType = data?.group_message_type as string | undefined;
+    const chatName = (data?.name as string | undefined)?.trim() || undefined;
 
     const info: ChatInfo = {
       chatMode: chatMode as ChatInfo['chatMode'],
       groupMessageType: groupMessageType as ChatInfo['groupMessageType'],
+      chatName,
     };
 
     cache.set(chatId, info);
-    log.info(`resolved ${chatId} → chat_mode=${chatMode}, group_message_type=${groupMessageType ?? 'N/A'}`);
+    log.info(`resolved ${chatId} → chat_mode=${chatMode}, group_message_type=${groupMessageType ?? 'N/A'}, name=${chatName ?? 'N/A'}`);
     return info;
   } catch (err) {
     log.error(`failed to get chat info for ${chatId}: ${String(err)}`);
