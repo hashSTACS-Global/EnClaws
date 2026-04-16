@@ -20,6 +20,7 @@ import {
   resolveTenantSkillsDir,
   resolveTenantUserDir,
 } from "../config/sessions/tenant-paths.js";
+import { resolveStateDir } from "../config/paths.js";
 import { resolveWorkspaceRoot } from "../agents/workspace-dir.js";
 import { isPathInside } from "./path-guards.js";
 
@@ -124,12 +125,6 @@ export function buildPathPermissionPolicy(ctx: {
   const userRoot = resolveTenantUserDir(ctx.tenantId, ctx.userId);
   const skillsRoot = resolveTenantSkillsDir(ctx.tenantId);
   const workspace = ctx.workspaceDir ?? resolveWorkspaceRoot();
-  // Use pid as fallback so each process gets an isolated tmp subdir on Windows
-  // (process.getuid is Linux/macOS only).
-  const tmpRoot = path.join(
-    os.tmpdir(),
-    `enclaws-${String(typeof process.getuid === "function" ? process.getuid() : process.pid)}`,
-  );
   const extras = parseExtraAllowedPaths(process.env.ENCLAWS_EXTRA_ALLOWED_PATHS ?? "");
 
   return new PathPermissionPolicy([
@@ -137,7 +132,6 @@ export function buildPathPermissionPolicy(ctx: {
     { prefix: path.join(userRoot, "workspace"), ops: ALL_OPS },
     { prefix: workspace, ops: ALL_OPS },
     { prefix: os.tmpdir(), ops: ALL_OPS },
-    { prefix: tmpRoot, ops: ALL_OPS },
 
     // ── L2: read + write, no delete, no empty for critical files ───────────
     { prefix: path.join(tenantRoot, "IDENTITY.md"), ops: READ_ONLY },
@@ -151,9 +145,12 @@ export function buildPathPermissionPolicy(ctx: {
     { prefix: skillsRoot, ops: NO_DELETE },
 
     // ── L3: read-only ──────────────────────────────────────────────────────
+    { prefix: path.join(tenantRoot, "TOOLS.md"), ops: READ_ONLY },
     { prefix: path.join(tenantRoot, "agents"), ops: READ_ONLY },
+    { prefix: path.join(tenantRoot, "cron"), ops: READ_ONLY },
     { prefix: path.join(userRoot, "credentials"), ops: READ_ONLY },
     { prefix: path.join(userRoot, "devices"), ops: READ_ONLY },
+    { prefix: path.join(resolveStateDir(), "logs"), ops: READ_ONLY },
 
     // ── User-configured extra paths (ENCLAWS_EXTRA_ALLOWED_PATHS) ──────────
     ...extras,
