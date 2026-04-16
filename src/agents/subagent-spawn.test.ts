@@ -32,18 +32,18 @@ describe("compressSubagentResult", () => {
   });
 
   it("returns short results unchanged regardless of toggle", () => {
-    process.env.ENCLAWS_TOKEN_OPT_COMPRESS = "true";
+    // COMPRESS is on by default
     const short = "a".repeat(5_000);
     expect(compressSubagentResult(short)).toBe(short);
   });
 
   it("returns results unchanged when toggle is off", () => {
+    process.env.ENCLAWS_TOKEN_OPT_COMPRESS = "false";
     const long = "x".repeat(10_000);
     expect(compressSubagentResult(long)).toBe(long);
   });
 
-  it("compresses long results when toggle is on", () => {
-    process.env.ENCLAWS_TOKEN_OPT_COMPRESS = "true";
+  it("compresses long results when toggle is on (default)", () => {
     const long = "H".repeat(3_000) + "M".repeat(4_000) + "T".repeat(2_000);
     const result = compressSubagentResult(long);
     expect(result).toContain("H".repeat(3_000));
@@ -53,7 +53,6 @@ describe("compressSubagentResult", () => {
   });
 
   it("returns results at threshold unchanged", () => {
-    process.env.ENCLAWS_TOKEN_OPT_COMPRESS = "true";
     const exact = "a".repeat(6_000);
     expect(compressSubagentResult(exact)).toBe(exact);
   });
@@ -65,18 +64,17 @@ describe("resolveSubagentTools (OPT-11)", () => {
   });
 
   it("passes tools through when TOOLSYNC toggle is off", () => {
+    process.env.ENCLAWS_TOKEN_OPT_TOOLSYNC = "false";
     const tools = ["exec", "read", "write"];
     expect(resolveSubagentTools(tools)).toEqual(tools);
   });
 
-  it("returns undefined when TOOLSYNC toggle is on", () => {
-    process.env.ENCLAWS_TOKEN_OPT_TOOLSYNC = "true";
+  it("returns undefined when TOOLSYNC toggle is on (default)", () => {
     const tools = ["exec", "read", "write"];
     expect(resolveSubagentTools(tools)).toBeUndefined();
   });
 
   it("returns undefined when TOOLSYNC is on and tools is undefined", () => {
-    process.env.ENCLAWS_TOKEN_OPT_TOOLSYNC = "true";
     expect(resolveSubagentTools(undefined)).toBeUndefined();
   });
 });

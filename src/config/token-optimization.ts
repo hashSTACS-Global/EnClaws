@@ -16,5 +16,5 @@ const PHASE_TOGGLES = {
  * granular rollback without affecting other optimizations.
  */
 export function isOptEnabled(key: keyof typeof PHASE_TOGGLES): boolean {
-  return process.env[PHASE_TOGGLES[key]] === "true";
+  return process.env[PHASE_TOGGLES[key]] !== "false";
 }

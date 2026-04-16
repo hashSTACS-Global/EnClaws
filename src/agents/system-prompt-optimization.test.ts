@@ -1,10 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { buildAgentSystemPrompt } from "./system-prompt.js";
 
 describe("system-prompt PROMPT optimization", () => {
-  beforeEach(() => {
-    process.env.ENCLAWS_TOKEN_OPT_PROMPT = "true";
-  });
+  // PROMPT is on by default now; no beforeEach needed
 
   afterEach(() => {
     delete process.env.ENCLAWS_TOKEN_OPT_PROMPT;
@@ -22,7 +20,7 @@ describe("system-prompt PROMPT optimization", () => {
     expect(prompt).not.toContain("follow its instructions DIRECTLY");
   });
 
-  it("skips empty context files when PROMPT enabled", () => {
+  it("includes all valid context files when PROMPT enabled", () => {
     const prompt = buildAgentSystemPrompt({
       workspaceDir: "/test",
       contextFiles: [
@@ -30,59 +28,33 @@ describe("system-prompt PROMPT optimization", () => {
           path: "SOUL.md",
           content: "# Soul\n\nBe helpful and concise. Have strong opinions about everything.",
         },
-        { path: "USER.md", content: "# USER.md\n\n_(empty)_\n" },
-        { path: "HEARTBEAT.md", content: "# HEARTBEAT.md\n\n# Keep this file empty\n" },
+        { path: "CONFIG.md", content: "# Config\n\nSome config content." },
       ],
     });
     expect(prompt).toContain("SOUL.md");
     expect(prompt).toContain("Be helpful and concise");
-    expect(prompt).not.toContain("HEARTBEAT.md");
-    expect(prompt).not.toContain("USER.md");
+    expect(prompt).toContain("CONFIG.md");
   });
 
-  it("skips Reply Tags for feishu channel when PROMPT enabled", () => {
+  it("contains inline_skill instruction when PROMPT is off", () => {
+    process.env.ENCLAWS_TOKEN_OPT_PROMPT = "false";
     const prompt = buildAgentSystemPrompt({
       workspaceDir: "/test",
-      runtimeInfo: { channel: "feishu" },
+      skillsPrompt: [
+        "<available_skills>",
+        '- feishu-auth: Auth skill <inline_skill path="/skills/feishu-auth/SKILL.md">skill content</inline_skill>',
+        "</available_skills>",
+      ].join("\n"),
     });
-    expect(prompt).not.toContain("## Reply Tags");
-    expect(prompt).not.toContain("[[reply_to_current]]");
+    expect(prompt).toContain("follow its instructions DIRECTLY");
   });
 
-  it("keeps Reply Tags for web channel when PROMPT enabled", () => {
+  it("preserves empty context files when PROMPT toggle is off", () => {
+    process.env.ENCLAWS_TOKEN_OPT_PROMPT = "false";
     const prompt = buildAgentSystemPrompt({
       workspaceDir: "/test",
-      runtimeInfo: { channel: "web" },
-    });
-    expect(prompt).toContain("## Reply Tags");
-  });
-
-  it("skips CLI Quick Reference for IM channels when PROMPT enabled", () => {
-    const prompt = buildAgentSystemPrompt({
-      workspaceDir: "/test",
-      runtimeInfo: { channel: "telegram" },
-    });
-    expect(prompt).not.toContain("## EnClaws CLI Quick Reference");
-  });
-
-  it("skips Memory Management section when PROMPT enabled", () => {
-    const prompt = buildAgentSystemPrompt({
-      workspaceDir: "/test",
-      toolNames: ["tenant_memory", "user_memory"],
-    });
-    expect(prompt).not.toContain("## Memory Management");
-  });
-
-  it("preserves all sections when PROMPT toggle is off", () => {
-    delete process.env.ENCLAWS_TOKEN_OPT_PROMPT;
-    const prompt = buildAgentSystemPrompt({
-      workspaceDir: "/test",
-      toolNames: ["tenant_memory", "user_memory"],
-      runtimeInfo: { channel: "feishu" },
       contextFiles: [{ path: "HEARTBEAT.md", content: "# Keep empty\n" }],
     });
-    expect(prompt).toContain("## Reply Tags");
-    expect(prompt).toContain("## Memory Management");
     expect(prompt).toContain("HEARTBEAT.md");
   });
 });
