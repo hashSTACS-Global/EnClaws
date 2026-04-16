@@ -136,6 +136,7 @@ export function buildPathPermissionPolicy(ctx: {
     // ── L1: full read + write ──────────────────────────────────────────────
     { prefix: path.join(userRoot, "workspace"), ops: ALL_OPS },
     { prefix: workspace, ops: ALL_OPS },
+    { prefix: os.tmpdir(), ops: ALL_OPS },
     { prefix: tmpRoot, ops: ALL_OPS },
 
     // ── L2: read + write, no delete, no empty for critical files ───────────
