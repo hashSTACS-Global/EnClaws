@@ -1202,12 +1202,10 @@ export class TenantAgentsView extends LitElement {
     return html`<div class="empty">${t("common.comingSoon")}</div>`;
   }
 
-  private async saveSkillsEnabled(agent: TenantAgent, enabled: string[]) {
+  private async saveSkillsDisabled(agent: TenantAgent, disabled: string[]) {
     this.skillsSaving = true;
     try {
-      const config: Record<string, unknown> = { ...(agent.config ?? {}) };
-      config.skills = enabled;
-      await this.rpc("tenant.agents.update", { agentId: agent.agentId, config });
+      await this.rpc("tenant.agents.update", { agentId: agent.agentId, skills: disabled });
       this.skillsPendingEnabled = null;
       this.showSuccess("tenantAgents.agentUpdated");
       await this.loadAgents();
@@ -1221,17 +1219,18 @@ export class TenantAgentsView extends LitElement {
   private renderPanelSkills(agent: TenantAgent) {
     const allSkills = this.agentSkills;
     const allSkillNames = allSkills.map((s) => s.name);
-    const savedEnabled: string[] = Array.isArray((agent as any).skills) ? (agent as any).skills
+    // skills field is now a denylist — names in the array are DISABLED
+    const savedDisabled: string[] = Array.isArray((agent as any).skills) ? (agent as any).skills
       : Array.isArray(agent.config?.skills) ? agent.config.skills as string[] : [];
-    // Empty/null → all enabled (default for new agents)
-    const enableSet = new Set(this.skillsPendingEnabled ?? (savedEnabled.length > 0 ? savedEnabled : allSkillNames));
+    const disabledSet = new Set(this.skillsPendingEnabled ?? savedDisabled);
     const isDirty = this.skillsPendingEnabled !== null;
-    const enabledCount = enableSet.size;
+    const enabledCount = allSkillNames.length - disabledSet.size;
     const filter = this.skillsFilter.trim().toLowerCase();
 
     const toggleSkill = (name: string, checked: boolean) => {
-      const next = new Set(enableSet);
-      checked ? next.add(name) : next.delete(name);
+      const next = new Set(disabledSet);
+      // checked = enable → remove from denylist; unchecked = disable → add to denylist
+      checked ? next.delete(name) : next.add(name);
       this.skillsPendingEnabled = [...next];
     };
 
@@ -1255,13 +1254,13 @@ export class TenantAgentsView extends LitElement {
         </div>
         <div class="panel-actions">
           <button class="btn btn-outline btn-sm" ?disabled=${this.skillsSaving}
-            @click=${() => { this.skillsPendingEnabled = [...allSkillNames]; }}>${t("tenantAgents.enableAll")}</button>
+            @click=${() => { this.skillsPendingEnabled = []; }}>${t("tenantAgents.enableAll")}</button>
           <button class="btn btn-outline btn-sm" ?disabled=${this.skillsSaving}
-            @click=${() => { this.skillsPendingEnabled = []; }}>${t("tenantAgents.disableAll")}</button>
+            @click=${() => { this.skillsPendingEnabled = [...allSkillNames]; }}>${t("tenantAgents.disableAll")}</button>
           <button class="btn btn-outline btn-sm" ?disabled=${!isDirty || this.skillsSaving}
             @click=${() => { this.skillsPendingEnabled = null; }}>${t("tenantAgents.toolsReset")}</button>
           <button class="btn btn-primary btn-sm" ?disabled=${!isDirty || this.skillsSaving}
-            @click=${() => this.saveSkillsEnabled(agent, [...enableSet])}>
+            @click=${() => this.saveSkillsDisabled(agent, [...disabledSet])}>
             ${this.skillsSaving ? t("tenantAgents.saving") : t("tenantAgents.save")}
           </button>
         </div>
@@ -1276,7 +1275,7 @@ export class TenantAgentsView extends LitElement {
 
         <div class="skills-groups">
           ${filteredGroups.map(({ source, skills }) => {
-            const groupEnabled = skills.filter((s) => enableSet.has(s.name)).length;
+            const groupEnabled = skills.filter((s) => !disabledSet.has(s.name)).length;
             const collapsedByDefault = source === "enclaws-bundled";
             return html`
               <details class="skills-group" ?open=${!collapsedByDefault}>
@@ -1286,7 +1285,7 @@ export class TenantAgentsView extends LitElement {
                 </summary>
                 <div class="tools-list" style="grid-template-columns:1fr;margin-top:10px">
                   ${skills.map((s) => {
-                    const allowed = enableSet.has(s.name);
+                    const allowed = !disabledSet.has(s.name);
                     return html`
                       <div class="tool-row">
                         <div class="tool-row-info">
