@@ -14,7 +14,7 @@ import { CONFIG_DIR, resolveUserPath } from "../../utils.js";
 import { resolveSandboxPath } from "../sandbox-paths.js";
 import { getTenantBootstrapContext } from "../workspace.js";
 import { resolveBundledSkillsDir } from "./bundled-dir.js";
-import { shouldIncludeSkill } from "./config.js";
+import { isBundledSkill, shouldIncludeSkill } from "./config.js";
 import { normalizeSkillFilter } from "./filter.js";
 import {
   parseFrontmatter,
@@ -74,8 +74,22 @@ function filterSkillEntries(
   config?: OpenClawConfig,
   skillFilter?: string[],
   eligibility?: SkillEligibilityContext,
+  disabledBundledSkills?: string[],
 ): SkillEntry[] {
   let filtered = entries.filter((entry) => shouldIncludeSkill({ entry, config, eligibility }));
+
+  // Apply bundled skill denylist (agent-level, only affects bundled skills)
+  if (disabledBundledSkills && disabledBundledSkills.length > 0) {
+    const disabledSet = new Set(disabledBundledSkills);
+    const before = filtered.length;
+    filtered = filtered.filter(
+      (entry) => !isBundledSkill(entry) || !disabledSet.has(entry.skill.name),
+    );
+    skillsLogger.info(
+      `[skills-chain] disabledBundledSkills: removed ${before - filtered.length} bundled skills`,
+    );
+  }
+
   // If skillFilter is provided, only include skills in the filter list.
   skillsLogger.info(
     `[skills-chain] filterSkillEntries: total=${entries.length}, eligible=${filtered.length}, skillFilter=${skillFilter !== undefined ? JSON.stringify(skillFilter) : "undefined"}`,
@@ -552,6 +566,8 @@ type WorkspaceSkillBuildOptions = {
   /** If provided, only include skills with these names */
   skillFilter?: string[];
   eligibility?: SkillEligibilityContext;
+  /** If provided, exclude bundled skills with these names (denylist, agent-level) */
+  disabledBundledSkills?: string[];
 };
 
 function resolveWorkspaceSkillPromptState(
@@ -569,6 +585,7 @@ function resolveWorkspaceSkillPromptState(
     opts?.config,
     opts?.skillFilter,
     opts?.eligibility,
+    opts?.disabledBundledSkills,
   );
   const promptEntries = eligible.filter(
     (entry) => entry.invocation?.disableModelInvocation !== true,
@@ -776,6 +793,8 @@ export function buildWorkspaceSkillCommandSpecs(
     skillFilter?: string[];
     eligibility?: SkillEligibilityContext;
     reservedNames?: Set<string>;
+    /** If provided, exclude bundled skills with these names (denylist, agent-level) */
+    disabledBundledSkills?: string[];
   },
 ): SkillCommandSpec[] {
   const skillEntries = opts?.entries ?? loadWorkspaceSkillEntries(workspaceDir, opts);
@@ -784,6 +803,7 @@ export function buildWorkspaceSkillCommandSpecs(
     opts?.config,
     opts?.skillFilter,
     opts?.eligibility,
+    opts?.disabledBundledSkills,
   );
   const userInvocable = eligible.filter((entry) => entry.invocation?.userInvocable !== false);
   const used = new Set<string>();
