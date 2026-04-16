@@ -765,6 +765,8 @@ export const zh_CN: TranslationMap = {
     deleteFailed: "删除失败",
     channelNameExists: "频道名称已存在，请更换名称",
     duplicateAppId: "该频道下已存在相同 App ID 的应用",
+    duplicateAppIdAcrossChannels: "该 App ID 已在其他频道中注册，请勿重复添加",
+    duplicateAppIdInPayload: "存在重复的 App ID，请去重后再试",
     channelUpdated: "频道及关联 Agent 已更新",
     channelCreated: "频道 {name} 及关联 Agent 已创建",
     channelDeleted: "频道 {name} 已删除",

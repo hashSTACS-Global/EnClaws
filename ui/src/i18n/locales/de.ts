@@ -381,6 +381,8 @@ export const de: TranslationMap = {
     deleteFailed: "Loschen fehlgeschlagen",
     channelNameExists: "Kanalname existiert bereits, bitte verwenden Sie einen anderen Namen",
     duplicateAppId: "Eine App mit derselben App-ID existiert bereits in diesem Kanal",
+    duplicateAppIdAcrossChannels: "Diese App-ID ist bereits in einem anderen Kanal registriert",
+    duplicateAppIdInPayload: "Doppelte App-IDs in der Ubermittlung, bitte entfernen",
     channelUpdated: "Kanal und verknupfte Agenten aktualisiert",
     channelCreated: "Kanal {name} und verknupfte Agenten erstellt",
     channelDeleted: "Kanal {name} geloscht",

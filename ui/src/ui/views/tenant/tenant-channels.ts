@@ -346,6 +346,8 @@ export class TenantChannelsView extends LitElement {
   private tr(key: string): string {
     if (key.includes("频道名称已存在")) return t("tenantChannels.channelNameExists");
     if (key.includes("已存在相同 App ID")) return t("tenantChannels.duplicateAppId");
+    if (key.includes("已在其他频道中注册")) return t("tenantChannels.duplicateAppIdAcrossChannels");
+    if (key.includes("存在重复的 App ID")) return t("tenantChannels.duplicateAppIdInPayload");
     const result = t(key, this.msgParams);
     return result === key ? key : result;
   }
@@ -689,6 +691,27 @@ export class TenantChannelsView extends LitElement {
         return;
       }
       appIds.add(app.appId);
+      // Cross-channel duplicate: check if this appId already exists in another channel of the same type.
+      const dupChannel = this.channels.find((ch) =>
+        ch.channelType === this.formChannelType &&
+        ch.id !== this.editingId &&
+        ch.apps.some((a) => a.appId.toLowerCase() === app.appId.toLowerCase()),
+      );
+      if (dupChannel) {
+        this.showError("tenantChannels.duplicateAppIdAcrossChannels");
+        return;
+      }
+      // Also check within the same channel being edited — another app row (not this one) using the same appId.
+      if (this.editingId) {
+        const currentChannel = this.channels.find((ch) => ch.id === this.editingId);
+        const dupInSame = currentChannel?.apps.some((a) =>
+          a.id !== app.id && a.appId.toLowerCase() === app.appId.toLowerCase(),
+        );
+        if (dupInSame) {
+          this.showError("tenantChannels.duplicateAppIdAcrossChannels");
+          return;
+        }
+      }
       if (!app.formAgentBinding) {
         this.showError("tenantChannels.agentRequired", { name: app.botName || app.appId });
         return;

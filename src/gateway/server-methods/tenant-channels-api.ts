@@ -68,6 +68,35 @@ function isValidPolicy(v: unknown): v is ChannelPolicy {
   return typeof v === "string" && VALID_POLICIES.includes(v as ChannelPolicy);
 }
 
+// Tenant-scoped duplicate detection across channels of the same type.
+// Case-insensitive because some plugins (e.g. WeCom) normalize appId casing at runtime,
+// so "ww123" and "WW123" must collide even though Postgres UNIQUE(channel_id, app_id) would not.
+async function findConflictingAppId(
+  tenantId: string,
+  channelType: string,
+  appId: string,
+  excludeAppDbId?: string,
+): Promise<{ channelId: string; channelName: string | null; appId: string } | null> {
+  const target = appId.trim().toLowerCase();
+  if (!target) return null;
+  const sameTypeChannels = await listTenantChannels(tenantId, { activeOnly: false, channelType });
+  for (const ch of sameTypeChannels) {
+    const apps = await listChannelApps(ch.id);
+    for (const a of apps) {
+      if (excludeAppDbId && a.id === excludeAppDbId) continue;
+      if (a.appId.trim().toLowerCase() === target) {
+        return { channelId: ch.id, channelName: ch.channelName, appId: a.appId };
+      }
+    }
+  }
+  return null;
+}
+
+// Stable text — UI's tr() pattern-matches this string to translate into the active locale.
+// Keep the substring "已在其他频道中注册" stable if you change wording.
+const DUPLICATE_APP_ID_ACROSS_CHANNELS = "该 App ID 已在其他频道中注册，请勿重复添加";
+const DUPLICATE_APP_ID_IN_PAYLOAD = "存在重复的 App ID，请去重后再试";
+
 type ConnectionState = "online" | "offline" | "connecting";
 
 // Three-state status derived from the plugin's runtime snapshot:
@@ -241,6 +270,34 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         }
         if (app.groupPolicy && !isValidPolicy(app.groupPolicy)) {
           respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "App groupPolicy must be one of: open, allowlist, disabled"));
+          return;
+        }
+      }
+
+      // Reject duplicates within the request payload itself.
+      const seen = new Map<string, string>();
+      for (const app of apps) {
+        const key = app.appId.trim().toLowerCase();
+        if (seen.has(key)) {
+          respond(false, undefined, errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            DUPLICATE_APP_ID_IN_PAYLOAD,
+            { details: { appId: app.appId } },
+          ));
+          return;
+        }
+        seen.set(key, app.appId);
+      }
+
+      // Reject duplicates against existing channels of the same type in this tenant.
+      for (const app of apps) {
+        const conflict = await findConflictingAppId(ctx.tenantId, channelType, app.appId);
+        if (conflict) {
+          respond(false, undefined, errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            DUPLICATE_APP_ID_ACROSS_CHANNELS,
+            { details: { appId: app.appId, channelName: conflict.channelName } },
+          ));
           return;
         }
       }
@@ -736,6 +793,17 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    // Reject duplicate appId across all channels of the same type under this tenant.
+    const conflict = await findConflictingAppId(ctx.tenantId, channel.channelType, appId);
+    if (conflict) {
+      respond(false, undefined, errorShape(
+        ErrorCodes.INVALID_REQUEST,
+        DUPLICATE_APP_ID_ACROSS_CHANNELS,
+        { details: { appId, channelName: conflict.channelName } },
+      ));
+      return;
+    }
+
     try {
       const app = await createChannelApp({
         channelId,
@@ -896,6 +964,25 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
           channelForApp = ch;
           break;
         }
+      }
+    }
+
+    // Reject duplicate appId across all channels of the same type under this tenant,
+    // but allow keeping the current app's own appId (exclude by appDbId).
+    if (appId !== undefined && appId !== oldApp?.appId && channelForApp) {
+      const conflict = await findConflictingAppId(
+        ctx.tenantId,
+        channelForApp.channelType,
+        appId,
+        appDbId,
+      );
+      if (conflict) {
+        respond(false, undefined, errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          DUPLICATE_APP_ID_ACROSS_CHANNELS,
+          { details: { appId, channelName: conflict.channelName } },
+        ));
+        return;
       }
     }
 
