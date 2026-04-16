@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import type { SessionEntry } from "../config/sessions.js";
 import {
@@ -500,14 +500,14 @@ describe("deriveSessionTitle", () => {
     expect(deriveSessionTitle(undefined)).toBeUndefined();
   });
 
-  test("prefers displayName when set", () => {
+  test("combines subject and displayName as 'group · user' when both set", () => {
     const entry = {
       sessionId: "abc123",
       updatedAt: Date.now(),
       displayName: "My Custom Session",
       subject: "Group Chat",
     } as SessionEntry;
-    expect(deriveSessionTitle(entry)).toBe("My Custom Session");
+    expect(deriveSessionTitle(entry)).toBe("Group Chat · My Custom Session");
   });
 
   test("falls back to subject when displayName is missing", () => {
@@ -587,6 +587,40 @@ describe("deriveSessionTitle", () => {
       subject: "Actual Subject",
     } as SessionEntry;
     expect(deriveSessionTitle(entry)).toBe("Actual Subject");
+  });
+});
+
+describe("deriveSessionTitle — combined display", () => {
+  const baseEntry = (): import("../config/sessions/types.js").SessionEntry => ({
+    sessionId: "sess-001",
+    updatedAt: Date.now(),
+    systemSent: false,
+    abortedLastRun: false,
+  });
+
+  it("returns 'group · user' when both subject and displayName are present", () => {
+    const entry = { ...baseEntry(), subject: "研发讨论群", displayName: "张三" };
+    expect(deriveSessionTitle(entry)).toBe("研发讨论群 · 张三");
+  });
+
+  it("falls back to groupName when subject is absent", () => {
+    const entry = { ...baseEntry(), groupName: "feishu:g-abc", displayName: "张三" };
+    expect(deriveSessionTitle(entry)).toBe("feishu:g-abc · 张三");
+  });
+
+  it("returns only displayName for direct chat (no subject/groupName)", () => {
+    const entry = { ...baseEntry(), displayName: "张三" };
+    expect(deriveSessionTitle(entry)).toBe("张三");
+  });
+
+  it("returns only subject for regular group (no displayName)", () => {
+    const entry = { ...baseEntry(), subject: "产品讨论群" };
+    expect(deriveSessionTitle(entry)).toBe("产品讨论群");
+  });
+
+  it("falls back to first user message when no name fields", () => {
+    const entry = baseEntry();
+    expect(deriveSessionTitle(entry, "帮我查一下今天的会议")).toBe("帮我查一下今天的会议");
   });
 });
 
@@ -815,5 +849,40 @@ describe("listSessionsFromStore search", () => {
     expect(stale?.totalTokensFresh).toBe(false);
     expect(missing?.totalTokens).toBeUndefined();
     expect(missing?.totalTokensFresh).toBe(false);
+  });
+});
+
+// --- deriveSessionTitle 拼接逻辑 ---
+describe("deriveSessionTitle — combined display", () => {
+  const baseEntry = (): SessionEntry => ({
+    sessionId: "sess-001",
+    updatedAt: Date.now(),
+    systemSent: false,
+    abortedLastRun: false,
+  });
+
+  it("returns 'group · user' when both subject and displayName are present", () => {
+    const entry = { ...baseEntry(), subject: "研发讨论群", displayName: "张三" };
+    expect(deriveSessionTitle(entry)).toBe("研发讨论群 · 张三");
+  });
+
+  it("falls back to groupName when subject is absent", () => {
+    const entry = { ...baseEntry(), groupName: "feishu:g-abc", displayName: "张三" };
+    expect(deriveSessionTitle(entry)).toBe("feishu:g-abc · 张三");
+  });
+
+  it("returns only displayName for direct chat (no subject/groupName)", () => {
+    const entry = { ...baseEntry(), displayName: "张三" };
+    expect(deriveSessionTitle(entry)).toBe("张三");
+  });
+
+  it("returns only subject for regular group (no displayName)", () => {
+    const entry = { ...baseEntry(), subject: "产品讨论群" };
+    expect(deriveSessionTitle(entry)).toBe("产品讨论群");
+  });
+
+  it("falls back to first user message when no name fields", () => {
+    const entry = baseEntry();
+    expect(deriveSessionTitle(entry, "帮我查一下今天的会议")).toBe("帮我查一下今天的会议");
   });
 });
