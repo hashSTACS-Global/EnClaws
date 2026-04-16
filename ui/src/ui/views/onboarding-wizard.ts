@@ -1,21 +1,22 @@
 /**
  * Onboarding wizard — full-screen step-by-step guide after registration.
  *
- * Steps: Model → Agent → Channel → Done
+ * Steps: Model → Channel → Done. The agent is auto-created server-side
+ * with locale-aware defaults (see tenant.onboarding.setup).
  */
 
 import { html, css, LitElement, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
-import { t, I18nController } from "../../i18n/index.ts";
+import { t, i18n, I18nController } from "../../i18n/index.ts";
 import { tenantRpc, quotaErrorKey } from "./tenant/rpc.ts";
 import { PROVIDER_TYPES } from "../../constants/providers.ts";
 import { CHANNEL_TYPES, CHANNEL_ICON_MAP } from "../../constants/channels.ts";
 import { caretFix } from "../shared-styles.ts";
 
-type WizardStep = "welcome" | "channel" | "model" | "agent" | "done";
+type WizardStep = "welcome" | "channel" | "model" | "done";
 
-const STEPS: WizardStep[] = ["welcome", "model", "agent", "channel", "done"];
+const STEPS: WizardStep[] = ["welcome", "model", "channel", "done"];
 
 const CHANNEL_ICONS: Record<string, string> = Object.fromEntries(
   Object.entries(CHANNEL_ICON_MAP).map(([k, v]) => [k, `<img src="${v}" width="24" height="24" alt="${k}" style="object-fit:contain;" />`]),
@@ -393,10 +394,6 @@ export class OnboardingWizard extends LitElement {
   @state() private modelBaseUrl = "";
   @state() private modelName = "";
 
-  // Agent step
-  @state() private agentName = "";
-  @state() private agentPrompt = "";
-
   // Track what was completed
   private channelCreated = false;
   private modelCreated = false;
@@ -627,21 +624,8 @@ export class OnboardingWizard extends LitElement {
     return true;
   }
 
-  private validateAgent() {
-    this.agentName = this.agentName.trim();
-    if (!this.agentName) { this.error = t("onboarding.agentNameRequired"); return false; }
-    const hasModel = this.modelMode === "shared" ? !!this.selectedSharedModelId : !!this.selectedProvider;
-    if (!hasModel) { this.error = t("onboarding.modelRequiredForAgent"); return false; }
-    return true;
-  }
-
   private nextModel() {
     if (!this.validateModel()) return;
-    this.goNext();
-  }
-
-  private nextAgent() {
-    if (!this.validateAgent()) return;
     this.goNext();
   }
 
@@ -680,11 +664,8 @@ export class OnboardingWizard extends LitElement {
           providerId: this.selectedSharedModelId,
           modelId: this.selectedSharedSubModelId,
         } : undefined,
-        agent: {
-          agentId: this.agentName.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
-          name: this.agentName,
-          config: this.agentPrompt ? { systemPrompt: this.agentPrompt } : {},
-        },
+        agent: { name: t("onboarding.defaultAgentName") },
+        locale: i18n.getLocale(),
       });
 
       this.channelCreated = !!this.selectedChannel;
@@ -725,7 +706,7 @@ export class OnboardingWizard extends LitElement {
       <div class="wizard">
         ${this.step !== "welcome" && this.step !== "done" ? html`
           <div class="progress">
-            ${["model", "agent", "channel"].map((s, i) => {
+            ${["model", "channel"].map((s, i) => {
               const currentIdx = STEPS.indexOf(this.step) - 1;
               const cls = i < currentIdx ? "done" : i === currentIdx ? "active" : "";
               return html`<div class="progress-step ${cls}"></div>`;
@@ -735,7 +716,6 @@ export class OnboardingWizard extends LitElement {
 
         ${this.step === "welcome" ? this.renderWelcome() : nothing}
         ${this.step === "model" ? this.renderModel() : nothing}
-        ${this.step === "agent" ? this.renderAgent() : nothing}
         ${this.step === "channel" ? this.renderChannel() : nothing}
         ${this.step === "done" ? this.renderDone() : nothing}
       </div>
@@ -766,7 +746,7 @@ export class OnboardingWizard extends LitElement {
     const appIdLabel = isWecom ? "Bot ID" : isDingtalk ? "Client ID (AppKey)" : "App ID";
     const appSecretLabel = isWecom ? "Secret" : isDingtalk ? "Client Secret (AppSecret)" : "App Secret";
     return html`
-      <div class="step-indicator">${t("onboarding.step", { current: "3", total: "3" })}</div>
+      <div class="step-indicator">${t("onboarding.step", { current: "2", total: "2" })}</div>
       <div class="wizard-header">
         <h2 class="wizard-title">${t("onboarding.channelTitle")}</h2>
         <p class="wizard-desc">${t("onboarding.channelDesc")}</p>
@@ -899,7 +879,7 @@ export class OnboardingWizard extends LitElement {
     const selectedSharedProvider = this.sharedModels.find(m => m.id === this.selectedSharedModelId);
 
     return html`
-      <div class="step-indicator">${t("onboarding.step", { current: "1", total: "3" })}</div>
+      <div class="step-indicator">${t("onboarding.step", { current: "1", total: "2" })}</div>
       <div class="wizard-header">
         <h2 class="wizard-title">${t("onboarding.modelTitle")}</h2>
         <p class="wizard-desc">${t("onboarding.modelDesc")}</p>
@@ -999,46 +979,6 @@ export class OnboardingWizard extends LitElement {
           @click=${() => this.nextModel()}>
           ${t("onboarding.next")}
         </button>
-      </div>
-    `;
-  }
-
-  private renderAgent() {
-    return html`
-      <div class="step-indicator">${t("onboarding.step", { current: "2", total: "3" })}</div>
-      <div class="wizard-header">
-        <h2 class="wizard-title">${t("onboarding.agentTitle")}</h2>
-        <p class="wizard-desc">${t("onboarding.agentDesc")}</p>
-      </div>
-
-      ${this.error
-        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
-        : nothing}
-      ${!(this.modelMode === "shared" ? this.selectedSharedModelId : this.selectedProvider) ? html`<div class="error-msg">${t("onboarding.modelRequiredForAgent")}</div>` : nothing}
-
-      <div class="form-group">
-        <label>${t("onboarding.agentName")} <span class="required">*</span></label>
-        <input type="text" .value=${this.agentName}
-          @input=${(e: InputEvent) => { this.agentName = (e.target as HTMLInputElement).value; }}
-          placeholder=${t("onboarding.agentNamePlaceholder")} />
-      </div>
-      <div class="form-group">
-        <label>${t("onboarding.agentPrompt")} <span class="required">*</span></label>
-        <textarea .value=${this.agentPrompt}
-          @input=${(e: InputEvent) => { this.agentPrompt = (e.target as HTMLTextAreaElement).value; }}
-          placeholder=${t("onboarding.agentPromptPlaceholder")}></textarea>
-        <div class="form-hint">${t("onboarding.agentPromptHint")}</div>
-      </div>
-
-      <div class="wizard-actions">
-        <button class="btn btn-ghost" @click=${() => this.goBack()}>${t("onboarding.back")}</button>
-        <div>
-          <button class="btn btn-ghost" @click=${() => this.skip()}>${t("onboarding.skip")}</button>
-          <button class="btn btn-primary" ?disabled=${this.saving || !this.agentName || !this.agentPrompt || !(this.modelMode === "shared" ? this.selectedSharedModelId : this.selectedProvider)}
-            @click=${() => this.nextAgent()}>
-            ${t("onboarding.next")}
-          </button>
-        </div>
       </div>
     `;
   }

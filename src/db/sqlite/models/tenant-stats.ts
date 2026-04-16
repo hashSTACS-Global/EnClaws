@@ -15,7 +15,7 @@ function pInt(v: unknown): number {
 }
 
 export function getTenantSummary(tenantId: string) {
-  const tenantRes = sqliteQuery("SELECT name, plan, status, slug, created_at FROM tenants WHERE id = ?", [tenantId]);
+  const tenantRes = sqliteQuery("SELECT name, plan, status, created_at FROM tenants WHERE id = ?", [tenantId]);
   const t = tenantRes.rows[0] ?? {};
   const adminRes = sqliteQuery("SELECT display_name FROM users WHERE tenant_id = ? AND role = 'owner' LIMIT 1", [tenantId]);
 

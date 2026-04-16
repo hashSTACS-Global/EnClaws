@@ -17,8 +17,28 @@ import { createTenantModel } from "../../db/models/tenant-model.js";
 import { createTenantAgent } from "../../db/models/tenant-agent.js";
 import { createAuditLog } from "../../db/models/audit-log.js";
 import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
-import { syncIdentityFile, removeIdentityFile } from "./tenant-agents-api.js";
+import { seedAgentWorkspaceFiles, removeAgentWorkspaceFiles } from "../../agents/workspace.js";
+import { resolveTenantAgentDir } from "../../config/sessions/tenant-paths.js";
 import type { ModelConfigEntry } from "../../db/types.js";
+
+/**
+ * Resolve default agent identity for onboarding.
+ *
+ * `name` is sourced from UI i18n via `params.agent.name`; the English value
+ * here is a fallback for non-UI callers. `systemPrompt` is left empty so
+ * `seedAgentWorkspaceFiles` writes the locale-aware enterprise IDENTITY.md.
+ */
+function resolveDefaultAgent(): {
+  agentId: string;
+  name: string;
+  config: Record<string, unknown>;
+} {
+  return {
+    agentId: "my-first-agent",
+    name: "EnClaws AI Assistant",
+    config: {},
+  };
+}
 
 function getTenantCtx(
   client: GatewayRequestHandlerOptions["client"],
@@ -43,7 +63,8 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
    * Params:
    *   channel?: { channelType, channelName?, config? }
    *   model: { providerType, providerName, apiProtocol, apiKeyEncrypted, baseUrl?, models? }
-   *   agent: { agentId, name, config?, systemPrompt? }
+   *   agent?: { agentId?, name?, config? } — auto-filled with locale-aware defaults when omitted
+   *   locale?: string — UI locale (e.g. "zh-CN", "en") used to pick agent defaults
    */
   "tenant.onboarding.setup": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
@@ -59,7 +80,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { channel, model, sharedModel, agent } = params as {
+    const { channel, model, sharedModel, agent: agentParam, locale } = params as {
       channel?: {
         channelType: string;
         channelName?: string;
@@ -77,11 +98,12 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
         providerId: string;
         modelId: string;
       };
-      agent: {
-        agentId: string;
-        name: string;
+      agent?: {
+        agentId?: string;
+        name?: string;
         config?: Record<string, unknown>;
       };
+      locale?: string;
     };
 
     // Validate: either model or sharedModel must be provided
@@ -89,12 +111,16 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Model configuration is required"));
       return;
     }
-    if (!agent || !agent.agentId || !agent.name) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Agent configuration is required"));
-      return;
-    }
 
-    let identitySynced = false;
+    // Agent is auto-generated with locale-aware defaults when caller omits fields.
+    const defaults = resolveDefaultAgent();
+    const agent = {
+      agentId: agentParam?.agentId ?? defaults.agentId,
+      name: agentParam?.name ?? defaults.name,
+      config: agentParam?.config ?? defaults.config,
+    };
+
+    let filesSeeded = false;
     try {
       const result = await withTransaction(async () => {
         let channelResult = null;
@@ -196,10 +222,16 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
           createdBy: ctx.userId,
         });
 
-        // Sync systemPrompt to IDENTITY.md on disk (parity with tenant.agents.create).
-        // Tracked so we can roll back the file write if the transaction later fails.
-        await syncIdentityFile(ctx.tenantId, agent.agentId, agent.config);
-        identitySynced = true;
+        // Seed all five agent workspace files on disk so the agent is ready
+        // on first IM without relying on lazy init. Tracked so we can roll
+        // the writes back if the transaction later fails.
+        await seedAgentWorkspaceFiles(resolveTenantAgentDir(ctx.tenantId, agent.agentId), {
+          locale,
+          systemPrompt: typeof agent.config?.systemPrompt === "string"
+            ? (agent.config.systemPrompt as string)
+            : undefined,
+        });
+        filesSeeded = true;
 
         // Bind agent to channel app if both were created
         if (channelAppResult && agentResult) {
@@ -239,9 +271,9 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
         agent: { id: result.agent.id, agentId: result.agent.agentId, name: result.agent.name },
       });
     } catch (err) {
-      // Roll back IDENTITY.md if it was written before the transaction failed.
-      if (identitySynced) {
-        await removeIdentityFile(ctx.tenantId, agent.agentId).catch(() => {});
+      // Roll back seeded files if they were written before the transaction failed.
+      if (filesSeeded) {
+        await removeAgentWorkspaceFiles(resolveTenantAgentDir(ctx.tenantId, agent.agentId)).catch(() => {});
       }
       const msg = err instanceof Error ? err.message : "Onboarding setup failed";
       // Surface quota-exceeded errors with structured details so the UI can

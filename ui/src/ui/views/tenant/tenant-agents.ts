@@ -11,7 +11,7 @@
 import { html, css, LitElement, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
-import { t, I18nController } from "../../../i18n/index.ts";
+import { t, i18n, I18nController } from "../../../i18n/index.ts";
 import { tenantRpc, quotaErrorKey } from "./rpc.ts";
 import { pathForTab, inferBasePathFromPathname } from "../../navigation.ts";
 import { invalidateTenantAgentsCache } from "../../app-render.ts";
@@ -1063,6 +1063,7 @@ export class TenantAgentsView extends LitElement {
           name: this.formName,
           config,
           modelConfig: this.formModelConfig,
+          locale: i18n.getLocale(),
         });
         this.selectedAgentId = this.formAgentId;
         this.showSuccess("tenantAgents.agentCreated");

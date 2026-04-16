@@ -26,7 +26,7 @@ export async function getTenantSummary(tenantId: string) {
     userTotal, userActive30d,
     tokensAll, tokensMonth, tokensToday, tokensLastMonth, quotaRes,
   ] = await Promise.all([
-    query("SELECT name, plan, status, slug, created_at FROM tenants WHERE id = $1", [tenantId]),
+    query("SELECT name, plan, status, created_at FROM tenants WHERE id = $1", [tenantId]),
     query("SELECT COUNT(*) as c FROM tenant_agents WHERE tenant_id = $1", [tenantId]),
     query("SELECT COUNT(*) as c FROM tenant_agents WHERE tenant_id = $1 AND is_active = true", [tenantId]),
     query("SELECT COUNT(DISTINCT agent_id) as c FROM llm_interaction_traces WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '30 days'", [tenantId]),

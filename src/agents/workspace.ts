@@ -7,7 +7,7 @@ import { resolveRequiredHomeDir } from "../infra/home-dir.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../routing/session-key.js";
 import { resolveUserPath } from "../utils.js";
-import { getEnterpriseDefault } from "./enterprise-defaults.js";
+import { getEnterpriseDefault, isCurrentEnterpriseDefault } from "./enterprise-defaults.js";
 import { resolveWorkspaceTemplateDir } from "./workspace-templates.js";
 
 export function resolveDefaultAgentWorkspaceDir(
@@ -530,10 +530,10 @@ export async function ensureTenantBootstrapFiles(ctx: TenantBootstrapContext): P
   for (const target of migrateTargets) {
     try {
       const current = await fs.readFile(target.filePath, "utf-8");
-      // Overwrite if content matches the generic English template OR a previous
-      // version of the enterprise defaults (e.g. Chinese → English migration).
-      // User-customized content is left untouched.
-      if (current === target.enterpriseContent) { continue; }
+      // Leave user-customized content and current defaults (any locale) alone;
+      // only overwrite when the file still holds the generic template or a
+      // retired legacy default prefix.
+      if (isCurrentEnterpriseDefault(path.basename(target.filePath), current)) { continue; }
       const template = await loadTemplate(path.basename(target.filePath));
       const isTemplate = current === template;
       const { PREVIOUS_ENTERPRISE_DEFAULT_PREFIXES } = await import("./enterprise-defaults.js");
@@ -551,10 +551,10 @@ export async function ensureTenantBootstrapFiles(ctx: TenantBootstrapContext): P
     agentIndicators.map(async (p) => {
       try {
         const content = await fs.readFile(p, "utf-8");
-        // Check against both enterprise defaults and templates
-        const enterpriseDefault = getEnterpriseDefault(path.basename(p));
+        // Treat any current-locale enterprise default (en or zh) and the
+        // generic template as "no user content yet".
         const template = await loadTemplate(path.basename(p));
-        return content !== template && content !== enterpriseDefault;
+        return content !== template && !isCurrentEnterpriseDefault(path.basename(p), content);
       } catch {
         return false;
       }
@@ -571,6 +571,55 @@ export async function ensureTenantBootstrapFiles(ctx: TenantBootstrapContext): P
     const userTemplate = await loadTemplate(DEFAULT_USER_FILENAME);
     await writeFileIfMissing(userPath, userTemplate);
   }
+}
+
+/**
+ * Seed the agent workspace directory with the five per-agent files so callers
+ * don't have to wait for the first IM message to trigger lazy init. Writes are
+ * idempotent — existing files are preserved.
+ *
+ * - IDENTITY.md: `systemPrompt` when provided, otherwise the locale-aware
+ *   enterprise default.
+ * - AGENTS.md / SOUL.md: locale-aware enterprise defaults.
+ * - BOOTSTRAP.md / HEARTBEAT.md: generic workspace templates.
+ */
+export async function seedAgentWorkspaceFiles(
+  agentDir: string,
+  opts: { locale?: string; systemPrompt?: string } = {},
+): Promise<void> {
+  await fs.mkdir(agentDir, { recursive: true });
+
+  const prompt = typeof opts.systemPrompt === "string" ? opts.systemPrompt.trim() : "";
+  const identityContent = prompt || getEnterpriseDefault(DEFAULT_IDENTITY_FILENAME, opts.locale) || "";
+  const agentsContent = getEnterpriseDefault(DEFAULT_AGENTS_FILENAME, opts.locale) || "";
+  const soulContent = getEnterpriseDefault(DEFAULT_SOUL_FILENAME, opts.locale) || "";
+  const [heartbeatTemplate, bootstrapTemplate] = await Promise.all([
+    loadTemplate(DEFAULT_HEARTBEAT_FILENAME),
+    loadTemplate(DEFAULT_BOOTSTRAP_FILENAME),
+  ]);
+
+  await Promise.all([
+    writeFileIfMissing(path.join(agentDir, DEFAULT_IDENTITY_FILENAME), identityContent),
+    writeFileIfMissing(path.join(agentDir, DEFAULT_AGENTS_FILENAME), agentsContent),
+    writeFileIfMissing(path.join(agentDir, DEFAULT_SOUL_FILENAME), soulContent),
+    writeFileIfMissing(path.join(agentDir, DEFAULT_BOOTSTRAP_FILENAME), bootstrapTemplate),
+    writeFileIfMissing(path.join(agentDir, DEFAULT_HEARTBEAT_FILENAME), heartbeatTemplate),
+  ]);
+}
+
+/**
+ * Remove the five agent workspace files written by `seedAgentWorkspaceFiles`.
+ * Used to roll back a create flow when the enclosing transaction fails.
+ */
+export async function removeAgentWorkspaceFiles(agentDir: string): Promise<void> {
+  const names = [
+    DEFAULT_IDENTITY_FILENAME,
+    DEFAULT_AGENTS_FILENAME,
+    DEFAULT_SOUL_FILENAME,
+    DEFAULT_BOOTSTRAP_FILENAME,
+    DEFAULT_HEARTBEAT_FILENAME,
+  ];
+  await Promise.all(names.map((n) => fs.rm(path.join(agentDir, n), { force: true }).catch(() => {})));
 }
 
 /**
