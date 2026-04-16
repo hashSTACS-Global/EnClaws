@@ -135,7 +135,7 @@ export function deriveGroupSessionPatch(params: {
     patch.space = space;
   }
 
-  const displayName = buildGroupDisplayName({
+  const groupName = buildGroupDisplayName({
     provider: channel,
     subject: nextSubject ?? params.existing?.subject,
     groupChannel: nextGroupChannel ?? params.existing?.groupChannel,
@@ -143,8 +143,19 @@ export function deriveGroupSessionPatch(params: {
     id: resolution.id,
     key: params.sessionKey,
   });
-  if (displayName) {
-    patch.displayName = displayName;
+  if (groupName) {
+    patch.groupName = groupName;
+  }
+
+  // Per-sender group sessions embed ":sender:" in the key.
+  // Write the sender's real name as displayName so the UI can show
+  // "群名 · 用户名" without a read-time DB lookup.
+  const isPerSenderSession = params.sessionKey.includes(":sender:");
+  if (isPerSenderSession) {
+    const senderName = params.ctx.SenderName?.trim();
+    if (senderName && !isPlaceholderSenderName(senderName)) {
+      patch.displayName = senderName;
+    }
   }
 
   return patch;
