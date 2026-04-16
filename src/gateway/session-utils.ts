@@ -157,9 +157,10 @@ export function deriveSessionTitle(
   }
 
   // Resolve the two semantic halves:
-  //   groupLabel — the group/channel name (raw subject preferred over formatted groupName)
+  //   groupLabel — human-readable group name from subject (GroupSubject); groupName is a
+  //                routing slug and is intentionally excluded from display
   //   userLabel  — the IM user's real name
-  const groupLabel = entry.subject?.trim() || entry.groupName?.trim() || undefined;
+  const groupLabel = entry.subject?.trim() || undefined;
   const userLabel = entry.displayName?.trim() || undefined;
 
   // Per-sender group session: both present → combine
@@ -824,11 +825,10 @@ export function listSessionsFromStore(params: {
       const origin = entry?.origin;
       const originLabel = origin?.label;
       // Resolve display label using the new two-field semantics:
-      //   groupLabel — raw subject (human-readable) or formatted groupName
+      //   groupLabel — human-readable group name from subject; groupName is a routing slug
       //   userLabel  — IM user's real name (displayName)
       // When both are set this is a per-sender group session → combine.
-      const groupLabel =
-        (entry?.subject?.trim() || entry?.groupName?.trim()) || undefined;
+      const groupLabel = entry?.subject?.trim() || undefined;
       const userLabel = entry?.displayName?.trim() || undefined;
       const displayName =
         groupLabel && userLabel
