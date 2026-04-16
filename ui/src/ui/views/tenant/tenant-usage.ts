@@ -38,7 +38,7 @@ interface QuotaInfo {
 
 /** Subset of tenant.overview.summary used to populate the resource quota cards. */
 interface TenantSummary {
-  tenant: { name: string; plan: string; status: string; slug: string; createdAt: string; admin: string };
+  tenant: { name: string; plan: string; status: string; createdAt: string; admin: string };
   agents: { total: number; active: number; active30d: number };
   channels: { total: number; active: number; apps: number };
   users: { total: number; active30d: number };

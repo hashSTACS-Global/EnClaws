@@ -442,7 +442,7 @@ export class EnClawsMfaChallenge extends LitElement {
           tenantId: p.user.tenantId,
           forceChangePassword: Boolean(p.user.forceChangePassword),
         },
-        tenant: { id: p.user.tenantId, name: "", slug: "" },
+        tenant: { id: p.user.tenantId, name: "" },
         pwExp: p.pwExp,
       };
       saveAuth(auth);

@@ -3,7 +3,7 @@
  *
  * Mirrors the platform overview visual style (echarts) but scoped to a single tenant.
  * Layout:
- * 1. Tenant info bar (name, plan, status, slug, admin)
+ * 1. Tenant info bar (name, plan, status, admin)
  * 2. Summary cards (4): Agents, Channels, Users, Token
  * 3. Token usage trend (echarts line chart, 7d/30d)
  * 4. Two-col: Model distribution pie + Agent token bar chart
@@ -21,7 +21,7 @@ import { caretFix } from "../../shared-styles.ts";
 // ── Types ──
 
 interface TenantInfo {
-  name: string; plan: string; status: string; slug: string; createdAt: string; admin: string;
+  name: string; plan: string; status: string; createdAt: string; admin: string;
 }
 interface Summary {
   tenant: TenantInfo;

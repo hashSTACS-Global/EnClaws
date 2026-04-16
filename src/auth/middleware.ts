@@ -24,7 +24,6 @@ import type { TenantContext as BaseTenantContext } from "../types/tenant-context
  * is expected (e.g. path resolution functions).
  */
 export interface TenantContext extends BaseTenantContext {
-  tenantSlug: string;
   email?: string;
   role: UserRole;
   /** Gateway scopes derived from the user's role */
@@ -94,7 +93,6 @@ export async function tryJwtAuth(req: IncomingMessage): Promise<MultiTenantAuthR
     user: user.email ?? undefined,
     tenant: {
       tenantId: tenant.id,
-      tenantSlug: tenant.slug,
       userId: user.id,
       email: user.email ?? undefined,
       role: user.role as UserRole,

@@ -5,6 +5,9 @@
 import { query, getDbType, DB_SQLITE } from "../index.js";
 import * as sqliteStats from "../sqlite/models/platform-stats.js";
 
+/** Fixed UUID of the seeded platform tenant (see 001_init.sql). */
+const PLATFORM_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+
 function periodCondition(column: string, period: "all" | "month" | "today"): string {
   if (period === "month") return `${column} >= DATE_TRUNC('month', NOW())`;
   if (period === "today") return `${column} >= DATE_TRUNC('day', NOW())`;
@@ -15,7 +18,7 @@ export async function getPlatformSummary() {
   if (getDbType() === DB_SQLITE) return sqliteStats.getPlatformSummary();
 
   const [tenantTotal, tenantActive, curMonth, lastMonth, agentTotal, agentEnabled, agentActive] = await Promise.all([
-    query("SELECT COUNT(*) as c FROM tenants WHERE status != 'deleted' AND slug != '_platform'"),
+    query(`SELECT COUNT(*) as c FROM tenants WHERE status != 'deleted' AND id != '${PLATFORM_TENANT_ID}'`),
     query("SELECT COUNT(DISTINCT tenant_id) as c FROM llm_interaction_traces WHERE created_at >= NOW() - INTERVAL '30 days'"),
     query("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE recorded_at >= DATE_TRUNC('month', NOW())"),
     query("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as c FROM usage_records WHERE recorded_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month' AND recorded_at < DATE_TRUNC('month', NOW())"),
@@ -64,7 +67,7 @@ export async function getTokenRank(period: "all" | "month" | "today" = "all", li
     query(
       `SELECT t.name, t.plan, SUM(u.input_tokens + u.output_tokens) AS tokens
        FROM usage_records u JOIN tenants t ON u.tenant_id = t.id
-       WHERE ${cond} AND t.slug != '_platform'
+       WHERE ${cond} AND t.id != '${PLATFORM_TENANT_ID}'
        GROUP BY u.tenant_id, t.name, t.plan ORDER BY tokens DESC LIMIT $1`,
       [limit],
     ),
@@ -73,7 +76,7 @@ export async function getTokenRank(period: "all" | "month" | "today" = "all", li
        FROM usage_records u
        LEFT JOIN users us ON us.tenant_id = u.tenant_id AND (u.user_id = us.id::text OR u.user_id = us.union_id)
        JOIN tenants t ON u.tenant_id = t.id
-       WHERE ${cond} AND t.slug != '_platform' AND u.user_id IS NOT NULL
+       WHERE ${cond} AND t.id != '${PLATFORM_TENANT_ID}' AND u.user_id IS NOT NULL
        GROUP BY u.tenant_id, u.user_id, us.display_name, us.email, t.name ORDER BY tokens DESC LIMIT $1`,
       [limit],
     ),
@@ -87,7 +90,7 @@ export async function getTokenRank(period: "all" | "month" | "today" = "all", li
     query(
       `SELECT u.agent_id AS name, t.name AS tenant_name, SUM(u.input_tokens + u.output_tokens) AS tokens
        FROM usage_records u JOIN tenants t ON u.tenant_id = t.id
-       WHERE ${cond} AND u.agent_id IS NOT NULL AND t.slug != '_platform'
+       WHERE ${cond} AND u.agent_id IS NOT NULL AND t.id != '${PLATFORM_TENANT_ID}'
        GROUP BY u.tenant_id, u.agent_id, t.name ORDER BY tokens DESC LIMIT $1`,
       [limit],
     ),
@@ -149,10 +152,10 @@ export async function getUserActivity() {
   if (getDbType() === DB_SQLITE) return sqliteStats.getUserActivity();
 
   const [totalRes, activeRes, todayRes, weekRes] = await Promise.all([
-    query("SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id::text) FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.slug != '_platform') sub"),
-    query("SELECT COUNT(DISTINCT t.user_id) as c FROM llm_interaction_traces t JOIN tenants tn ON t.tenant_id = tn.id WHERE t.created_at >= NOW() - INTERVAL '30 days' AND tn.slug != '_platform'"),
-    query("SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id::text) FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.slug != '_platform' AND u.created_at >= DATE_TRUNC('day', NOW())) sub"),
-    query("SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id::text) FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.slug != '_platform' AND u.created_at >= NOW() - INTERVAL '7 days') sub"),
+    query(`SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id::text) FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.id != '${PLATFORM_TENANT_ID}') sub`),
+    query(`SELECT COUNT(DISTINCT t.user_id) as c FROM llm_interaction_traces t JOIN tenants tn ON t.tenant_id = tn.id WHERE t.created_at >= NOW() - INTERVAL '30 days' AND tn.id != '${PLATFORM_TENANT_ID}'`),
+    query(`SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id::text) FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.id != '${PLATFORM_TENANT_ID}' AND u.created_at >= DATE_TRUNC('day', NOW())) sub`),
+    query(`SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id::text) FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.id != '${PLATFORM_TENANT_ID}' AND u.created_at >= NOW() - INTERVAL '7 days') sub`),
   ]);
 
   return {

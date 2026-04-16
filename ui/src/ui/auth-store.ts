@@ -153,7 +153,6 @@ export class RegisterPendingVerificationError extends Error {
 export interface AuthTenant {
   id: string;
   name: string;
-  slug: string;
   plan?: string;
 }
 
@@ -407,7 +406,6 @@ export async function login(params: {
   gatewayUrl: string;
   email: string;
   password: string;
-  tenantSlug?: string;
 }): Promise<AuthState> {
   const hashedPassword = await hashPasswordForTransport(params.password);
   return new Promise((resolve, reject) => {
@@ -439,7 +437,6 @@ export async function login(params: {
               params: {
                 email: params.email,
                 password: hashedPassword,
-                tenantSlug: params.tenantSlug,
               },
             }),
           );
@@ -469,7 +466,6 @@ export async function login(params: {
               tenant: {
                 id: p.user.tenantId,
                 name: "",
-                slug: "",
               },
               pwExp: typeof p.pwExp === "number" ? p.pwExp : undefined,
             };
@@ -699,7 +695,6 @@ export async function adminResetPassword(
 export async function register(params: {
   gatewayUrl: string;
   tenantName: string;
-  tenantSlug: string;
   email: string;
   password: string;
   displayName?: string;
@@ -732,7 +727,6 @@ export async function register(params: {
               method: "auth.register",
               params: {
                 tenantName: params.tenantName,
-                tenantSlug: params.tenantSlug,
                 email: params.email,
                 password: hashedPassword,
                 displayName: params.displayName,
@@ -764,7 +758,6 @@ export async function register(params: {
               tenant: {
                 id: p.tenant.id,
                 name: p.tenant.name,
-                slug: p.tenant.slug,
               },
             };
             saveAuth(auth);

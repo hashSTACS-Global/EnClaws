@@ -55,7 +55,6 @@ export function getTenantSummary(tenantId: string) {
       name: (t.name as string) ?? "-",
       plan: (t.plan as string) ?? "free",
       status: (t.status as string) ?? "active",
-      slug: (t.slug as string) ?? "-",
       createdAt: t.created_at ? new Date(t.created_at as string).toISOString() : "",
       admin: (adminRes.rows[0]?.display_name as string) ?? "-",
     },

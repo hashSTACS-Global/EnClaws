@@ -705,7 +705,6 @@ export function attachGatewayWsMessageHandler(params: {
             if (jwtUser && jwtUser.status === "active" && jwtTenant && jwtTenant.status === "active") {
               earlyTenantContext = {
                 tenantId: jwtTenant.id,
-                tenantSlug: jwtTenant.slug,
                 userId: jwtUser.id,
                 email: jwtUser.email ?? undefined,
                 role: jwtUser.role as UserRole,
@@ -1064,7 +1063,7 @@ export function attachGatewayWsMessageHandler(params: {
           nextClient.tenant = earlyTenantContext;
           connectParams.scopes = earlyTenantContext.scopes;
           logWsControl.info(
-            `JWT auth ok conn=${connId} user=${earlyTenantContext.email} tenant=${earlyTenantContext.tenantSlug}`,
+            `JWT auth ok conn=${connId} user=${earlyTenantContext.email} tenant=${earlyTenantContext.tenantId}`,
           );
           // Eagerly initialise this user's tenant-scoped cron service so
           // existing cron jobs start executing even if no cron tool call is

@@ -16,7 +16,6 @@ import { caretFix } from "../shared-styles.ts";
 interface TenantRow {
   id: string;
   name: string;
-  slug: string;
   plan: "free" | "pro" | "enterprise";
   status: "active" | "suspended" | "deleted";
   quotas: {

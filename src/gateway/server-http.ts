@@ -342,12 +342,13 @@ export function createGatewayHttpServer(opts: {
   tlsOptions?: TlsOptions;
 }): HttpServer {
   // Lazily resolve the operator tenant ID for CS widget injection into index.html.
-  // Strategy: earliest registered business tenant (created_at ASC, skip _platform slugs).
+  // Strategy: earliest registered business tenant (created_at ASC, skip the fixed platform tenant).
   // Single-tenant deployments work out of the box; multi-tenant deployments can override
   // via ENCLAWS_CS_WIDGET_TENANT_ID env var.
   // Cached after first successful lookup — tenants don't change at runtime.
   // 懒加载运营方租户 ID（注册最早的非平台租户），注入到 index.html，让游客无需登录也能使用客服气泡。
   // 多租户场景：通过 ENCLAWS_CS_WIDGET_TENANT_ID 环境变量显式指定。
+  const PLATFORM_TENANT_ID_HTTP = "00000000-0000-0000-0000-000000000001";
   let _csTenantIdCache: string | undefined;
   async function getCsTenantIdCached(): Promise<string | undefined> {
     if (_csTenantIdCache) return _csTenantIdCache;
@@ -364,7 +365,7 @@ export function createGatewayHttpServer(opts: {
       // listTenants returns DESC; sort ASC in memory to get the oldest first.
       // 取注册时间最早的业务租户——业务上保证该租户即运营方。
       const sorted = tenants
-        .filter((t) => !t.slug.startsWith("_"))
+        .filter((t) => t.id !== PLATFORM_TENANT_ID_HTTP)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       _csTenantIdCache = sorted[0]?.id;
     } catch {
