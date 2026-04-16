@@ -303,6 +303,10 @@ export async function runCronIsolatedAgentTurn(params: {
     if (!cronSession.sessionEntry.channel) {
       cronSession.sessionEntry.channel = "cron";
     }
+    // Clear stale "System" displayName written by a prior buggy version.
+    if (cronSession.sessionEntry.displayName === "System") {
+      cronSession.sessionEntry.displayName = "";
+    }
   }
 
   // Respect session model override — check session.modelOverride before falling
