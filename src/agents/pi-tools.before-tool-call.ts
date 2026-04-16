@@ -1,4 +1,6 @@
+import path from "node:path";
 import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
+import { resolveStateDir } from "../config/paths.js";
 import type { SessionState } from "../logging/diagnostic-session-state.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
@@ -12,6 +14,12 @@ export type HookContext = {
   loopDetection?: ToolLoopDetectionConfig;
   /** Tenant user role for permission checks (e.g. blocking skill writes for non-admin). */
   tenantUserRole?: string;
+  /** Current session's tenant ID — injected from auth context, not from message content. */
+  tenantId?: string;
+  /** Current session's user ID — injected from auth context, not from message content. */
+  userId?: string;
+  /** Agent workspace directory override (for PathPermissionPolicy). */
+  workspaceDir?: string;
 };
 
 /**
@@ -131,6 +139,35 @@ const DESTRUCTIVE_EXEC_PATTERN =
   /\b(rm|rmdir|del|mv|cp|unlink|chmod|chown|truncate|shred|Remove-Item|Move-Item|Copy-Item|Rename-Item|Set-Content|Clear-Content|ri|mi|ci|rni)\b/i;
 
 /**
+ * Returns true if a shell command string appears to target the EnClaws state directory.
+ *
+ * Checks two things:
+ *  1. The resolved state dir path (honours ENCLAWS_STATE_DIR override).
+ *  2. The literal `/.enclaws/` path segment (covers ~ expansions and relative refs).
+ *
+ * This is a best-effort textual scan — not a full shell parser.
+ * The exec approval system is the primary execution gatekeeper; this is an early
+ * fast-path block before any approval prompt is shown.
+ */
+function isCommandTargetingStateDir(command: string): boolean {
+  const stateDir = resolveStateDir();
+  const normalizedCmd = command.replace(/\\/g, "/");
+  const normalizedState = stateDir.replace(/\\/g, "/");
+
+  // Match the resolved state dir path
+  if (normalizedCmd.includes(normalizedState)) return true;
+
+  // Match literal ~/.enclaws and /.enclaws path segments
+  if (/(?:^|[/~])\.enclaws(?:[/\s"'\\]|$)/.test(normalizedCmd)) return true;
+
+  // Match by basename of the state dir (handles ENCLAWS_STATE_DIR custom paths)
+  const stateDirBase = path.basename(normalizedState);
+  if (stateDirBase && normalizedCmd.includes(`/${stateDirBase}/`)) return true;
+
+  return false;
+}
+
+/**
  * Resolve role for the current tool call.
  * Uses the exact tenantId:userId key — never falls back to "any user in this tenant".
  */
@@ -224,6 +261,52 @@ export async function runBeforeToolCallHook(args: {
   const skillDenied = checkSkillWritePermission(toolName, params, args.ctx);
   if (skillDenied) {
     return { blocked: true, reason: skillDenied };
+  }
+
+  // State-dir exec guard: block any shell command that targets the EnClaws state directory.
+  // Active in all modes (not just multi-tenant) because the state dir is always sensitive.
+  // This covers the gap left by PathPermissionPolicy, which only checks read/write/edit tools.
+  if (toolName === "exec" || toolName === "process") {
+    const p = params as Record<string, unknown> | undefined;
+    const command = p ? String(p.command ?? p.cmd ?? "") : "";
+    if (command && isCommandTargetingStateDir(command)) {
+      log.warn(`[state-dir-guard] blocked ${toolName}: command targets state dir`);
+      return {
+        blocked: true,
+        reason:
+          "[SECURITY] Shell commands targeting the EnClaws state directory are not permitted. " +
+          "This is a hard security restriction — do NOT attempt alternative approaches " +
+          "(file tools, rename, copy, read, or any other tool on this path). " +
+          "Inform the user that this operation is not allowed.",
+      };
+    }
+  }
+
+  // Path permission policy: default-deny model for multi-tenant sessions.
+  // Only active when tenantId + userId are present in context (i.e. multi-tenant mode).
+  if (args.ctx?.tenantId && args.ctx?.userId) {
+    const { resolveToolPathOp, buildPathPermissionPolicy } = await import("../infra/path-permission-policy.js");
+    const op = resolveToolPathOp(toolName);
+    if (op !== null) {
+      const p = params as Record<string, unknown> | undefined;
+      const pathStr = p ? String(p.file_path ?? p.filePath ?? p.path ?? "") : "";
+      if (pathStr) {
+        const policy = buildPathPermissionPolicy({
+          tenantId: args.ctx.tenantId,
+          userId: args.ctx.userId,
+          workspaceDir: args.ctx.workspaceDir,
+        });
+        // For write ops on the write tool, pass content so noEmpty check can run
+        const content = (op === "write" && toolName === "write" && p)
+          ? String(p.content ?? "")
+          : undefined;
+        const violation = policy.check(pathStr, op, content);
+        if (violation) {
+          log.warn(`[path-policy] blocked ${toolName}: ${violation}`);
+          return { blocked: true, reason: violation };
+        }
+      }
+    }
   }
 
   if (args.ctx?.sessionKey) {
