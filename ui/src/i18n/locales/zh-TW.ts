@@ -524,6 +524,8 @@ export const zh_TW: TranslationMap = {
     deleteFailed: "刪除失敗",
     channelNameExists: "頻道名稱已存在，請更換名稱",
     duplicateAppId: "該頻道下已存在相同 App ID 的應用",
+    duplicateAppIdAcrossChannels: "該 App ID 已在其他頻道中註冊，請勿重複添加",
+    duplicateAppIdInPayload: "存在重複的 App ID，請去重後再試",
     channelUpdated: "頻道及關聯 Agent 已更新",
     channelCreated: "頻道 {name} 及關聯 Agent 已建立",
     channelDeleted: "頻道 {name} 已刪除",

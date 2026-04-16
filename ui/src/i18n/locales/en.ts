@@ -772,6 +772,8 @@ export const en: TranslationMap = {
     deleteFailed: "Delete failed",
     channelNameExists: "Channel name already exists, please use a different name",
     duplicateAppId: "An app with the same App ID already exists in this channel",
+    duplicateAppIdAcrossChannels: "This App ID is already registered in another channel",
+    duplicateAppIdInPayload: "Duplicate App IDs in the submission, please deduplicate",
     channelUpdated: "Channel and linked agents updated",
     channelCreated: "Channel {name} and linked agents created",
     channelDeleted: "Channel {name} deleted",

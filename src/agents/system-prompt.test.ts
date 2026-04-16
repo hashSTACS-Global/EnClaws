@@ -196,8 +196,12 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).toContain("## EnClaws CLI Quick Reference");
-    expect(prompt).toContain("enclaws gateway restart");
+    expect(prompt).toContain("enclaws gateway status");
     expect(prompt).toContain("Do not invent commands");
+    // Service start/stop/restart via shell is prohibited; AI must use the gateway tool
+    expect(prompt).not.toContain("enclaws gateway restart");
+    expect(prompt).not.toContain("enclaws gateway start\n");
+    expect(prompt).not.toContain("enclaws gateway stop\n");
   });
 
   it("guides runtime completion events without exposing internal metadata", () => {
