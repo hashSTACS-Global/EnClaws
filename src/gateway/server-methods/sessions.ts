@@ -63,30 +63,16 @@ import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
 import type { GatewayClient, GatewayRequestHandlers, RespondFn } from "./types.js";
 import { assertValidParams } from "./validation.js";
 import { isDbInitialized } from "../../db/index.js";
-import {
-  getUserDisplayNamesByIds,
-  getUserDisplayNamesByOpenIds,
-  getUserById,
-} from "../../db/models/user.js";
+import { getUserById } from "../../db/models/user.js";
 import type { SessionsListResult } from "../session-utils.types.js";
 
-// ── User display name resolution for session keys ───────────────────
-// Session keys embed user identifiers in two forms:
-//   - `t:{tenantId}:...:user:{userId}`  → UUID, look up in users table by id
-//   - `...:sender:{externalId}`         → channel external id (Feishu ou_xxx, WeCom userid, DingTalk staffId, ...), resolved via users.open_ids
-// When a match is found, set displayName and userRole on the session row so
-// the UI shows a human-readable name and can decide link behavior.
+// ── User display name resolution for webchat session keys ────────────────────
+// Webchat session keys embed the DB user UUID: `...:user:{uuid}`.
+// When a match is found, set displayName and userRole on the session row.
+// IM channel (Feishu/WeCom/DingTalk) per-sender sessions have displayName
+// written at message-processing time by deriveGroupSessionPatch — no read-time patch needed.
 
 const USER_SUFFIX_RE = /:user:([0-9a-f-]{36})$/i;
-const SENDER_MARKER = ":sender:";
-
-// Extract the raw id after ":sender:" in a session key, accepting any channel's external id format.
-function extractSenderId(key: string): string | null {
-  const idx = key.lastIndexOf(SENDER_MARKER);
-  if (idx < 0) return null;
-  const value = key.slice(idx + SENDER_MARKER.length).trim();
-  return value || null;
-}
 
 type UserInfo = { displayName: string | null; role: string | null };
 
@@ -96,26 +82,18 @@ async function enrichSessionDisplayNames(
 ): Promise<void> {
   if (!isDbInitialized() || !result.sessions?.length) return;
 
-  // Collect unique user identifiers from session keys
+  // Collect unique user UUIDs from webchat session keys (:user:{uuid})
   const userIdSet = new Set<string>();
-  const openIdSet = new Set<string>();
-
   for (const session of result.sessions) {
-    const key = session.key;
-    const userMatch = USER_SUFFIX_RE.exec(key);
+    const userMatch = USER_SUFFIX_RE.exec(session.key);
     if (userMatch) {
       userIdSet.add(userMatch[1]);
-      continue;
-    }
-    const senderId = extractSenderId(key);
-    if (senderId) {
-      openIdSet.add(senderId);
     }
   }
 
-  if (userIdSet.size === 0 && openIdSet.size === 0) return;
+  if (userIdSet.size === 0) return;
 
-  // Batch-fetch user info (displayName + role) by UUID
+  // Batch-fetch user info by UUID
   const userInfoMap = new Map<string, UserInfo>();
   await Promise.all(
     [...userIdSet].map(async (id) => {
@@ -126,33 +104,16 @@ async function enrichSessionDisplayNames(
     }),
   );
 
-  // Batch-fetch display names by channel external id (ou_xxx / wecom userid / dingtalk staffId)
-  const openIdNames = openIdSet.size > 0
-    ? await getUserDisplayNamesByOpenIds(tenantId, [...openIdSet])
-    : new Map<string, string>();
-
-  // Apply resolved names and roles to session rows.
-  // For `:user:` (webchat) keys, set displayName only if not already present.
-  // For `:sender:` keys (per-sender group sessions on feishu/wecom/dingtalk), override displayName with the sender's real name.
+  // Apply resolved names and roles — only if not already present (write-time value wins)
   for (const session of result.sessions) {
-    const key = session.key;
-    const userMatch = USER_SUFFIX_RE.exec(key);
-    if (userMatch) {
-      const info = userInfoMap.get(userMatch[1]);
-      if (info?.displayName) {
-        session.displayName = info.displayName;
-      }
-      if (info?.role) {
-        session.userRole = info.role;
-      }
-      continue;
+    const userMatch = USER_SUFFIX_RE.exec(session.key);
+    if (!userMatch) continue;
+    const info = userInfoMap.get(userMatch[1]);
+    if (info?.displayName && !session.displayName) {
+      session.displayName = info.displayName;
     }
-    const senderId = extractSenderId(key);
-    if (senderId) {
-      const name = openIdNames.get(senderId);
-      if (name) {
-        session.displayName = name;
-      }
+    if (info?.role) {
+      session.userRole = info.role;
     }
   }
 }
