@@ -292,12 +292,17 @@ export async function runCronIsolatedAgentTurn(params: {
     sessionId: runSessionId,
     sessionKey: runSessionKey,
   });
-  if (!cronSession.sessionEntry.label?.trim() && baseSessionKey.startsWith("cron:")) {
-    const labelSuffix =
-      typeof params.job.name === "string" && params.job.name.trim()
-        ? params.job.name.trim()
-        : params.job.id;
-    cronSession.sessionEntry.label = `Cron: ${labelSuffix}`;
+  if (baseSessionKey.startsWith("cron:")) {
+    if (!cronSession.sessionEntry.label?.trim()) {
+      const labelSuffix =
+        typeof params.job.name === "string" && params.job.name.trim()
+          ? params.job.name.trim()
+          : params.job.id;
+      cronSession.sessionEntry.label = `Cron: ${labelSuffix}`;
+    }
+    if (!cronSession.sessionEntry.channel) {
+      cronSession.sessionEntry.channel = "cron";
+    }
   }
 
   // Respect session model override — check session.modelOverride before falling
