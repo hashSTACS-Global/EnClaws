@@ -27,7 +27,6 @@ import { type OpenClawConfig, loadConfig } from "../../config/config.js";
 import { applyLinkUnderstanding } from "../../link-understanding/apply.js";
 import { applyMediaUnderstanding } from "../../media-understanding/apply.js";
 import { defaultRuntime } from "../../runtime.js";
-import { isDbInitialized } from "../../db/index.js";
 import { getTenantById } from "../../db/models/tenant.js";
 import { checkTokenQuota } from "../../db/models/usage.js";
 import { resolveCommandAuthorization } from "../command-auth.js";
