@@ -845,7 +845,7 @@ export function buildStreamPlaceholderReply(
   streamId: string,
   placeholderContent?: string,
 ): Record<string, unknown> {
-  const content = placeholderContent?.trim() || "1";
+  const content = placeholderContent?.trim() || process.env.ENCLAWS_PROCESSING_ACK_TEXT?.trim() || "任务已接收，处理中...";
   return {
     msgtype: "stream",
     stream: {

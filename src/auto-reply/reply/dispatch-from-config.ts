@@ -432,7 +432,7 @@ export async function dispatchReplyFromConfig(params: {
   // while the model and tools are still loading.
   // Calling onReasoningStream triggers ensureCardCreated() in the streaming
   // controller; the acknowledgment text is shown as a thinking indicator.
-  const processingAckText = process.env.ENCLAWS_PROCESSING_ACK_TEXT?.trim() ?? "任务已接收，处理中";
+  const processingAckText = process.env.ENCLAWS_PROCESSING_ACK_TEXT?.trim() ?? "🫡 任务已接收，处理中";
   if (params.replyOptions?.onReasoningStream && processingAckText) {
     try {
       await params.replyOptions.onReasoningStream({ text: processingAckText });

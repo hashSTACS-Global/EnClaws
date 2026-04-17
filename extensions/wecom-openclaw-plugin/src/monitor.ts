@@ -529,6 +529,29 @@ async function routeAndDispatchMessage(params: {
     await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
       ctx: ctxPayload,
       cfg: config,
+      replyOptions: {
+        onReasoningStream: async (payload) => {
+          if (!payload.text || !state.streamId || state.streamExpired) return;
+          try {
+            await sendWeComReply({
+              wsClient,
+              frame,
+              // 企微单聊 replyStream 首帧会截断末尾若干字符，追加空白补偿
+              text: `${payload.text}\u2002\u2002`,
+              runtime,
+              finish: false,
+              streamId: state.streamId,
+            });
+            isShowThink = true;
+            runtime.log?.(`[wecom][onReasoningStream] ack sent: "${payload.text.slice(0, 50)}"`);
+          } catch (err) {
+            if (err instanceof StreamExpiredError) {
+              state.streamExpired = true;
+            }
+            runtime.log?.(`[wecom][onReasoningStream] ack failed (non-fatal): ${String(err)}`);
+          }
+        },
+      },
       dispatcherOptions: {
         onReplyStart: async () => {
           if (!isShowThink && state.streamId && !state.accumulatedText) {

@@ -560,6 +560,30 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
     replyOptions: {
       ...replyOptions,  // ✅ 包含 onReplyStart、onTypingController、onTypingCleanup
       onModelSelected,
+      // ✅ 对齐飞书：onReasoningStream 提前创建 AI Card 并显示 ack 文本，让用户即时看到反馈
+      ...(streamingEnabled && !asyncMode && {
+        onReasoningStream: async (payload: ReplyPayload) => {
+          if (!payload.text) return;
+          log.info(`[DingTalk][onReasoningStream] 提前创建 AI Card，ack="${payload.text.slice(0, 50)}"`);
+          await startStreaming();
+          if (currentCardTarget) {
+            accumulatedText = payload.text;
+            try {
+              await streamAICard(
+                currentCardTarget as any,
+                payload.text,
+                false,
+                account.config as DingtalkConfig,
+                log,
+              );
+              lastUpdateTime = Date.now();
+              log.info(`[DingTalk][onReasoningStream] ✅ AI Card ack 文本已推送`);
+            } catch (err: any) {
+              log.warn(`[DingTalk][onReasoningStream] AI Card ack 推送失败（不影响主流程）: ${err.message}`);
+            }
+          }
+        },
+      }),
       ...(streamingEnabled && {
         onPartialReply: async (payload: ReplyPayload) => {
         log.info(`[DingTalk][onPartialReply] 被调用，payload.text=${payload.text ? payload.text.length : 'null'}`);
