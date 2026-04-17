@@ -31,6 +31,7 @@ import {
 } from "./commands-session.js";
 import { handleSubagentsCommand } from "./commands-subagents.js";
 import { handleInstallSkillCommand } from "./commands-install-skill.js";
+import { handleSkillInstallGuard } from "./commands-skill-guard.js";
 import { handleTasksCommand } from "./commands-tasks.js";
 import { handleTtsCommands } from "./commands-tts.js";
 import type {
@@ -155,6 +156,7 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleWhoamiCommand,
       handleSubagentsCommand,
       handleTasksCommand,
+      handleSkillInstallGuard,
       handleInstallSkillCommand,
       handleAcpCommand,
       handleConfigCommand,
