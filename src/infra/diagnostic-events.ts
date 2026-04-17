@@ -134,6 +134,26 @@ export type DiagnosticHeartbeatEvent = DiagnosticBaseEvent & {
   queued: number;
 };
 
+export type DiagnosticMemorySearchEvent = DiagnosticBaseEvent & {
+  type: "memory_search";
+  sessionKey?: string;
+  sessionId?: string;
+  channel?: string;
+  provider?: string;
+  resultCount?: number;
+  durationMs?: number;
+};
+
+export type DiagnosticSubagentContextEvent = DiagnosticBaseEvent & {
+  type: "subagent.context";
+  sessionKey?: string;
+  sessionId?: string;
+  channel?: string;
+  provider?: string;
+  model?: string;
+  contextTokens: number;
+};
+
 export type DiagnosticToolLoopEvent = DiagnosticBaseEvent & {
   type: "tool.loop";
   sessionKey?: string;
@@ -160,6 +180,8 @@ export type DiagnosticEventPayload =
   | DiagnosticLaneDequeueEvent
   | DiagnosticRunAttemptEvent
   | DiagnosticHeartbeatEvent
+  | DiagnosticMemorySearchEvent
+  | DiagnosticSubagentContextEvent
   | DiagnosticToolLoopEvent;
 
 export type DiagnosticEventInput = DiagnosticEventPayload extends infer Event

@@ -1,3 +1,4 @@
+import { isOptEnabled } from "../config/token-optimization.js";
 import { resolveQueueSettings } from "../auto-reply/reply/queue.js";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
@@ -416,11 +417,19 @@ function extractSubagentOutputText(message: unknown): string {
   return "";
 }
 
-export async function readLatestSubagentOutput(sessionKey: string): Promise<string | undefined> {
+export async function readLatestSubagentOutput(
+  sessionKey: string,
+  tenant?: { tenantId?: string; tenantUserId?: string },
+): Promise<string | undefined> {
+  const tenantParams =
+    tenant?.tenantId && tenant?.tenantUserId
+      ? { _tenantId: tenant.tenantId, _tenantUserId: tenant.tenantUserId }
+      : {};
   try {
     const latestAssistant = await readLatestAssistantReply({
       sessionKey,
       limit: 50,
+      ...tenantParams,
     });
     if (latestAssistant?.trim()) {
       return latestAssistant;
@@ -430,7 +439,7 @@ export async function readLatestSubagentOutput(sessionKey: string): Promise<stri
   }
   const history = await callGateway<{ messages?: Array<unknown> }>({
     method: "chat.history",
-    params: { sessionKey, limit: 50 },
+    params: { sessionKey, limit: 50, ...tenantParams },
   });
   const messages = Array.isArray(history?.messages) ? history.messages : [];
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -446,12 +455,13 @@ export async function readLatestSubagentOutput(sessionKey: string): Promise<stri
 async function readLatestSubagentOutputWithRetry(params: {
   sessionKey: string;
   maxWaitMs: number;
+  tenant?: { tenantId?: string; tenantUserId?: string };
 }): Promise<string | undefined> {
   const RETRY_INTERVAL_MS = FAST_TEST_MODE ? FAST_TEST_RETRY_INTERVAL_MS : 100;
   const deadline = Date.now() + Math.max(0, Math.min(params.maxWaitMs, 15_000));
   let result: string | undefined;
   while (Date.now() < deadline) {
-    result = await readLatestSubagentOutput(params.sessionKey);
+    result = await readLatestSubagentOutput(params.sessionKey, params.tenant);
     if (result?.trim()) {
       return result;
     }
@@ -464,6 +474,7 @@ async function waitForSubagentOutputChange(params: {
   sessionKey: string;
   baselineReply: string;
   maxWaitMs: number;
+  tenant?: { tenantId?: string; tenantUserId?: string };
 }): Promise<string> {
   const baseline = params.baselineReply.trim();
   if (!baseline) {
@@ -473,7 +484,7 @@ async function waitForSubagentOutputChange(params: {
   const deadline = Date.now() + Math.max(0, Math.min(params.maxWaitMs, 5_000));
   let latest = params.baselineReply;
   while (Date.now() < deadline) {
-    const next = await readLatestSubagentOutput(params.sessionKey);
+    const next = await readLatestSubagentOutput(params.sessionKey, params.tenant);
     if (next?.trim()) {
       latest = next;
       if (next.trim() !== baseline) {
@@ -1071,6 +1082,39 @@ function loadSessionEntryByKey(sessionKey: string) {
   return store[sessionKey];
 }
 
+function buildCompactSubagentOverlay(params: {
+  requesterSessionKey?: string;
+  requesterOrigin?: DeliveryContext;
+  childSessionKey: string;
+  label?: string;
+  task?: string;
+  acpEnabled?: boolean;
+  childDepth?: number;
+  maxSpawnDepth?: number;
+}): string {
+  const lines = [
+    `## Subagent Role: ${params.label ?? "worker"}`,
+    `Task: ${params.task ?? "Execute the assigned task and return structured results."}`,
+    "",
+    "Rules: Complete task → return <task_result> JSON → stop.",
+    "Do not chat, ask questions, or spawn sub-agents unless explicitly required.",
+    "",
+    "<task_result>",
+    '{"status": "success|partial|failed", "summary": "one-line summary", "blockers": []}',
+    "</task_result>",
+  ];
+  if (params.acpEnabled !== false) {
+    lines.push("", "Sub-agent spawning: Use sessions_spawn tool. Route to ACP only for IM delivery.");
+  }
+  if (params.maxSpawnDepth && params.childDepth) {
+    lines.push(`Depth: ${params.childDepth}/${params.maxSpawnDepth}. Do not exceed max depth.`);
+  }
+  if (params.childSessionKey) {
+    lines.push("", `Session: ${params.childSessionKey}`);
+  }
+  return lines.join("\n");
+}
+
 export function buildSubagentSystemPrompt(params: {
   requesterSessionKey?: string;
   requesterOrigin?: DeliveryContext;
@@ -1084,6 +1128,9 @@ export function buildSubagentSystemPrompt(params: {
   /** Config value: max allowed spawn depth. */
   maxSpawnDepth?: number;
 }) {
+  if (isOptEnabled("WORKER")) {
+    return buildCompactSubagentOverlay(params);
+  }
   const taskText =
     typeof params.task === "string" && params.task.trim()
       ? params.task.replace(/\s+/g, " ").trim()
@@ -1324,17 +1371,29 @@ export async function runSubagentAnnounceFlow(params: {
           outcome = { status: "timeout" };
         }
       }
-      reply = await readLatestSubagentOutput(params.childSessionKey);
+      const announceTenant =
+        params.tenantId && params.tenantUserId
+          ? { tenantId: params.tenantId, tenantUserId: params.tenantUserId }
+          : undefined;
+      reply = await readLatestSubagentOutput(params.childSessionKey, announceTenant);
     }
 
     if (!reply) {
-      reply = await readLatestSubagentOutput(params.childSessionKey);
+      const announceTenant =
+        params.tenantId && params.tenantUserId
+          ? { tenantId: params.tenantId, tenantUserId: params.tenantUserId }
+          : undefined;
+      reply = await readLatestSubagentOutput(params.childSessionKey, announceTenant);
     }
 
     if (!reply?.trim()) {
       reply = await readLatestSubagentOutputWithRetry({
         sessionKey: params.childSessionKey,
         maxWaitMs: params.timeoutMs,
+        tenant:
+          params.tenantId && params.tenantUserId
+            ? { tenantId: params.tenantId, tenantUserId: params.tenantUserId }
+            : undefined,
       });
     }
 
@@ -1382,6 +1441,10 @@ export async function runSubagentAnnounceFlow(params: {
         sessionKey: params.childSessionKey,
         baselineReply: reply,
         maxWaitMs: Math.max(minReplyChangeWaitMs, Math.min(params.timeoutMs, 2_000)),
+        tenant:
+          params.tenantId && params.tenantUserId
+            ? { tenantId: params.tenantId, tenantUserId: params.tenantUserId }
+            : undefined,
       });
     }
 

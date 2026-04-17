@@ -3,11 +3,24 @@ import type { ImageContent, TextContent, ToolResultMessage } from "@mariozechner
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { EffectiveContextPruningSettings } from "./settings.js";
 import { makeToolPrunablePredicate } from "./tools.js";
+import { isOptEnabled } from "../../../config/token-optimization.js";
 
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 // We currently skip pruning tool results that contain images. Still, we count them (approx.) so
 // we start trimming prunable tool results earlier when image-heavy context is consuming the window.
 const IMAGE_CHAR_ESTIMATE = 8_000;
+
+/**
+ * Estimate chars-per-token based on CJK content ratio.
+ * CJK characters encode at ~1.5-2 chars/token vs ~4 for ASCII.
+ */
+export function estimateCharsPerToken(text: string): number {
+  const cjkCount = (
+    text.match(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g) || []
+  ).length;
+  const cjkRatio = text.length > 0 ? cjkCount / text.length : 0;
+  return cjkRatio > 0.3 ? 2 : 4;
+}
 
 function asText(text: string): TextContent {
   return { type: "text", text };
@@ -235,7 +248,10 @@ export function pruneContextMessages(params: {
     return messages;
   }
 
-  const charWindow = contextWindowTokens * CHARS_PER_TOKEN_ESTIMATE;
+  const effectiveCharsPerToken = isOptEnabled("P1")
+    ? estimateCharsPerToken(messages.map((m) => JSON.stringify(m)).join(""))
+    : CHARS_PER_TOKEN_ESTIMATE;
+  const charWindow = contextWindowTokens * effectiveCharsPerToken;
   if (charWindow <= 0) {
     return messages;
   }

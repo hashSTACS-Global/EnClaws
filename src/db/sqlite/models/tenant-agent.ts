@@ -4,6 +4,7 @@
 
 import { sqliteQuery, generateUUID } from "../index.js";
 import type { TenantAgent, ModelConfigEntry } from "../../types.js";
+import { DEFAULT_DISABLED_BUNDLED_SKILLS } from "../../../agents/skills/defaults.js";
 
 function rowToAgent(row: Record<string, unknown>): TenantAgent {
   return {
@@ -36,7 +37,7 @@ export async function createTenantAgent(params: {
   sqliteQuery(
     `INSERT INTO tenant_agents (id, tenant_id, agent_id, name, config, model_config, tools, skills, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? null), params.createdBy ?? null],
+    [id, params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? DEFAULT_DISABLED_BUNDLED_SKILLS), params.createdBy ?? null],
   );
   const result = sqliteQuery("SELECT * FROM tenant_agents WHERE id = ?", [id]);
   return rowToAgent(result.rows[0]);
