@@ -122,3 +122,21 @@ export function clearAutoProvisionCache(): void {
   provisionedCache.clear();
   provisionedExpiry.clear();
 }
+
+/**
+ * Evict cached entries for a specific user within a tenant.
+ *
+ * Called after admin changes a user's role/status via `tenant.users.update`
+ * so the next session picks up the fresh value from DB instead of the stale cache.
+ *
+ * Cache key is `tenantId:openId:channelId` — we don't have openId at the call site,
+ * so we iterate and match on the cached value's `userId` (DB primary key).
+ */
+export function evictAutoProvisionCacheByUser(tenantId: string, userId: string): void {
+  for (const [key, entry] of provisionedCache) {
+    if (key.startsWith(`${tenantId}:`) && entry.userId === userId) {
+      provisionedCache.delete(key);
+      provisionedExpiry.delete(key);
+    }
+  }
+}

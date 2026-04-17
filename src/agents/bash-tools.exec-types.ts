@@ -10,6 +10,8 @@ export type ExecToolDefaults = {
   pathPrepend?: string[];
   /** Extra environment variables injected into every subprocess spawned by this exec tool instance. Takes precedence over LLM-provided env. */
   extraEnv?: Record<string, string>;
+  /** Async callback that returns additional env vars per execution (e.g. short-lived tokens). Merged after extraEnv, so it can override stale static values. */
+  extraEnvAsync?: () => Promise<Record<string, string>>;
   safeBins?: string[];
   safeBinTrustedDirs?: string[];
   safeBinProfiles?: Record<string, SafeBinProfileFixture>;

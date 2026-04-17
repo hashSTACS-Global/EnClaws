@@ -2,7 +2,7 @@ import { codingTools, createReadTool, readTool } from "@mariozechner/pi-coding-a
 import type { OpenClawConfig } from "../config/config.js";
 import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
 import { resolveMergedSafeBinProfileFixtures } from "../infra/exec-safe-bin-runtime-policy.js";
-import { logWarn } from "../logger.js";
+import { logInfo, logWarn } from "../logger.js";
 import { getPluginToolMeta } from "../plugins/tools.js";
 import { isSubagentSessionKey } from "../routing/session-key.js";
 import { resolveGatewayMessageChannel } from "../utils/message-channel.js";
@@ -189,6 +189,8 @@ function buildExecExtraEnv(options?: {
   agentAccountId?: string;
   config?: OpenClawConfig;
   workspaceDir?: string;
+  senderName?: string | null;
+  sessionKey?: string;
 }): Record<string, string> | undefined {
   const env: Record<string, string> = {};
 
@@ -203,6 +205,9 @@ function buildExecExtraEnv(options?: {
   if (options?.messageTo?.startsWith("chat:")) {
     env.ENCLAWS_CHAT_ID = options.messageTo.slice(5);
   }
+
+  // Pivot user identity — senderName as user identifier for external pipelines
+  if (options?.senderName) env.PIVOT_USER_ID = options.senderName;
 
   // Feishu app credentials — only for feishu provider, resolved from channel config
   const provider = options?.messageProvider?.toLowerCase();
@@ -221,7 +226,52 @@ function buildExecExtraEnv(options?: {
     }
   }
 
+  if (Object.keys(env).length > 0) {
+    logInfo(`[tools] exec extraEnv [${options?.sessionKey ?? "no-session"}]: ${Object.keys(env).join(", ")}`);
+  }
   return Object.keys(env).length > 0 ? env : undefined;
+}
+
+/**
+ * Build an async callback that fetches short-lived tokens per exec invocation.
+ * Called on every exec tool execution (not at session creation), so tokens
+ * are always fresh even for sessions lasting longer than the token TTL.
+ */
+function buildExecExtraEnvAsync(options?: {
+  messageProvider?: string;
+  agentAccountId?: string;
+  config?: OpenClawConfig;
+  sessionKey?: string;
+}): (() => Promise<Record<string, string>>) | undefined {
+  const provider = options?.messageProvider?.toLowerCase();
+  if (provider !== "feishu" || !options?.config) return undefined;
+
+  // Capture credentials once (static, don't expire).
+  // The token fetch inside the callback uses getTenantAccessToken's built-in cache,
+  // so repeated exec calls within the 2h window are cheap (no network round-trip).
+  let cachedCreds: { appId: string; appSecret: string } | null = null;
+  try {
+    const { extractFeishuCredentials } = require("../infra/feishu-user-resolve.js");
+    cachedCreds = extractFeishuCredentials(
+      options.config as unknown as Record<string, unknown>,
+      provider,
+      options.agentAccountId,
+    ) as { appId: string; appSecret: string } | null;
+  } catch {
+    return undefined;
+  }
+  if (!cachedCreds?.appId || !cachedCreds?.appSecret) return undefined;
+
+  const { appId, appSecret } = cachedCreds;
+  logInfo(`[tools] exec extraEnvAsync [${options?.sessionKey ?? "no-session"}]: registered Feishu token fetcher for appId=${appId}`);
+  return async () => {
+    const { getTenantAccessToken } = await import("../infra/feishu-user-resolve.js");
+    const token = await getTenantAccessToken(appId, appSecret);
+    if (!token) {
+      logWarn(`[tools] exec extraEnvAsync: failed to get tenant_access_token for appId=${appId}`);
+    }
+    return token ? { FEISHU_TENANT_ACCESS_TOKEN: token } : ({} as Record<string, string>);
+  };
 }
 
 export const __testing = {
@@ -472,6 +522,7 @@ export function createOpenClawCodingTools(options?: {
         }
       : undefined,
     extraEnv: buildExecExtraEnv({ ...options, workspaceDir: workspaceRoot }),
+    extraEnvAsync: buildExecExtraEnvAsync(options),
   });
   const processTool = createProcessTool({
     cleanupMs: cleanupMsOverride ?? execConfig.cleanupMs,

@@ -328,10 +328,12 @@ export const tenantHandlers: GatewayRequestHandlers = {
       ...(displayName !== undefined ? { displayName } : {}),
     });
 
-    if (status || role) {
-      const { clearAutoProvisionCache } = await import("../../infra/channel-auto-provision.js");
-      clearAutoProvisionCache();
-    }
+    // Evict auto-provision cache so the next session picks up the updated role from DB
+    // instead of returning the stale cached value.
+    try {
+      const { evictAutoProvisionCacheByUser } = await import("../../infra/channel-auto-provision.js");
+      evictAutoProvisionCacheByUser(ctx.tenantId, userId);
+    } catch { /* non-critical — cache will expire naturally in 10 min */ }
 
     await createAuditLog({
       tenantId: ctx.tenantId,

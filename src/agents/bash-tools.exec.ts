@@ -370,7 +370,16 @@ export function createExecTool(
       }
 
       const defaultsExtraEnv = defaults?.extraEnv ?? {};
-      const mergedEnv = { ...baseEnv, ...(params.env ?? {}), ...defaultsExtraEnv };
+      const asyncExtraEnv = defaults?.extraEnvAsync
+        ? await defaults.extraEnvAsync().catch((err) => {
+            logInfo(`[exec] extraEnvAsync failed: ${String(err)}`);
+            return {};
+          })
+        : {};
+      if (Object.keys(asyncExtraEnv).length > 0) {
+        logInfo(`[exec] extraEnvAsync injected: ${Object.keys(asyncExtraEnv).join(", ")}`);
+      }
+      const mergedEnv = { ...baseEnv, ...(params.env ?? {}), ...defaultsExtraEnv, ...asyncExtraEnv };
 
       const env = sandbox
         ? buildSandboxEnv({
