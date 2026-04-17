@@ -151,6 +151,7 @@ export type MsgContext = {
    * message instead of trying to run the agent.
    */
   TenantUserQuotaExceeded?: boolean;
+  TenantUserSuspended?: boolean;
   /** Thread identifier (Telegram topic id or Matrix thread event id). */
   MessageThreadId?: string | number;
   /** Telegram forum supergroup marker. */

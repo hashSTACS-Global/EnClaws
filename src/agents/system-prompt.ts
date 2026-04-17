@@ -589,7 +589,7 @@ export function buildAgentSystemPrompt(params: {
                   ? "- ENTERPRISE info (company name, business domain, products, tech stack, architecture, processes, team conventions, partner/vendor details) → call `tenant_memory(action=save)`"
                   : "",
                 "If one message contains BOTH types, call BOTH tools — one call each.",
-                "Example: '我叫刘昱，我们公司做AI+区块链' → call user_memory(save, '姓名：刘昱') AND tenant_memory(save, '企业业务：AI+区块链')",
+                "Example: '我叫张三，我们公司做AI+区块链' → call user_memory(save, '姓名：张三') AND tenant_memory(save, '企业业务：AI+区块链')",
                 "1. DO NOT merge personal and enterprise info into a single tool call.",
                 "2. DO NOT save enterprise info to user_memory just because a user mentioned it.",
                 "3. You MUST call the tool(s) in THIS response — text alone persists nothing.",

@@ -328,6 +328,11 @@ export const tenantHandlers: GatewayRequestHandlers = {
       ...(displayName !== undefined ? { displayName } : {}),
     });
 
+    if (status || role) {
+      const { clearAutoProvisionCache } = await import("../../infra/channel-auto-provision.js");
+      clearAutoProvisionCache();
+    }
+
     await createAuditLog({
       tenantId: ctx.tenantId,
       userId: ctx.userId,
@@ -376,6 +381,11 @@ export const tenantHandlers: GatewayRequestHandlers = {
     }
 
     const deleted = await deleteUser(userId);
+
+    {
+      const { clearAutoProvisionCache } = await import("../../infra/channel-auto-provision.js");
+      clearAutoProvisionCache();
+    }
 
     await createAuditLog({
       tenantId: ctx.tenantId,

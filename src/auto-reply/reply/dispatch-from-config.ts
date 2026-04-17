@@ -223,6 +223,16 @@ export async function dispatchReplyFromConfig(params: {
     }
   }
 
+  // ── User suspended gate ──────────────────────────────────────
+  if (ctx.TenantUserSuspended) {
+    logVerbose(`[dispatch] user is suspended, replying with notice`);
+    const payload = { text: "您的账号已被禁用，请联系管理员。" } satisfies ReplyPayload;
+    const queuedFinal = dispatcher.sendFinalReply(payload);
+    recordProcessed("completed", { reason: "user-suspended" });
+    markIdle("user_suspended");
+    return { queuedFinal, counts: dispatcher.getQueuedCounts() };
+  }
+
   // ── Pre-LLM auth gate ────────────────────────────────────────
   // 跨 IM 平台通用：如果某个 provider 注册了 driver、且当前用户的 SenderName
   // 仍然没拿到（contact API 没权限 / DB 未命中 / 没有存量 UAT），就：

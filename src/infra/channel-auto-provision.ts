@@ -43,6 +43,12 @@ export type AutoProvisionQuotaExceeded = {
   max: number;
 };
 
+export type AutoProvisionUserSuspended = {
+  userSuspended: true;
+  userId: string;
+  status: string;
+};
+
 /**
  * Auto-provision a user for a channel message sender.
  *
@@ -58,7 +64,7 @@ export async function autoProvisionTenantUser(params: {
   unionId?: string;
   displayName?: string;
   channelId?: string;
-}): Promise<AutoProvisionResult | AutoProvisionQuotaExceeded | null> {
+}): Promise<AutoProvisionResult | AutoProvisionQuotaExceeded | AutoProvisionUserSuspended | null> {
   if (!isDbInitialized()) return null;
 
   const { tenantId, openId, unionId, displayName, channelId } = params;
@@ -73,6 +79,7 @@ export async function autoProvisionTenantUser(params: {
 
   const { findOrCreateUserByOpenId } = await import("../db/models/user.js");
   const { UserQuotaExceededError } = await import("../db/models/user-quota-error.js");
+  const { UserSuspendedError } = await import("../db/models/user-suspended-error.js");
 
   let user;
   let userCreated;
@@ -88,10 +95,10 @@ export async function autoProvisionTenantUser(params: {
     userCreated = result.created;
   } catch (err) {
     if (err instanceof UserQuotaExceededError) {
-      // Surface as a sentinel so tenant-enrich can flag the message context.
-      // Intentionally NOT cached — once quota frees up, the next message
-      // should immediately re-evaluate.
       return { quotaExceeded: true, current: err.current, max: err.max };
+    }
+    if (err instanceof UserSuspendedError) {
+      return { userSuspended: true, userId: err.userId, status: err.status };
     }
     throw err;
   }

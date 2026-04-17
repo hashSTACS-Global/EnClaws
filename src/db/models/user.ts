@@ -239,7 +239,7 @@ export async function findUserByEmailAnyTenant(email: string): Promise<User | nu
  * display name (via LEFT JOIN on `tenant_channels`). `channelName` is null
  * when the user has no `channel_id` set or the channel row has been deleted.
  */
-export type ListedUser = SafeUser & { channelName: string | null };
+export type ListedUser = SafeUser & { channelName: string | null; channelType: string | null };
 
 export async function listUsers(
   tenantId: string,
@@ -271,7 +271,7 @@ export async function listUsers(
   // still come back (channel_name will just be NULL).
   const [dataResult, countResult] = await Promise.all([
     query(
-      `SELECT u.*, tc.channel_name
+      `SELECT u.*, tc.channel_name, tc.channel_type
          FROM users u
          LEFT JOIN tenant_channels tc ON tc.id = u.channel_id
          ${where}
@@ -285,7 +285,7 @@ export async function listUsers(
   return {
     users: dataResult.rows.map((row) => {
       const safe = toSafeUser(rowToUser(row));
-      return { ...safe, channelName: (row.channel_name as string) ?? null };
+      return { ...safe, channelName: (row.channel_name as string) ?? null, channelType: (row.channel_type as string) ?? null };
     }),
     total: parseInt(countResult.rows[0].count as string, 10),
   };
@@ -427,13 +427,17 @@ export async function findOrCreateUserByOpenId(
   // 1. Try to find by union_id first (preferred, cross-app stable identifier)
   if (unionId) {
     const byUnion = await query(
-      `SELECT * FROM users WHERE tenant_id = $1 AND union_id = $2 AND status = 'active'
+      `SELECT * FROM users WHERE tenant_id = $1 AND union_id = $2
          AND (channel_id = $3 OR channel_id IS NULL)
-       ORDER BY channel_id IS NULL ASC LIMIT 1`,
+       ORDER BY status = 'active' DESC, channel_id IS NULL ASC LIMIT 1`,
       [tenantId, unionId, channelId ?? null],
     );
     if (byUnion.rows.length > 0) {
       const user = rowToUser(byUnion.rows[0]);
+      if (user.status !== "active") {
+        const { UserSuspendedError } = await import("./user-suspended-error.js");
+        throw new UserSuspendedError(user.id, user.status);
+      }
       await backfillChannelId(user);
       // Append open_id to array if not already present
       if (openId && !user.openIds.includes(openId)) {
@@ -456,13 +460,17 @@ export async function findOrCreateUserByOpenId(
 
   // 2. Fallback: find by open_ids array containment
   const byOpenId = await query(
-    `SELECT * FROM users WHERE tenant_id = $1 AND open_ids @> ARRAY[$2]::varchar[] AND status = 'active'
+    `SELECT * FROM users WHERE tenant_id = $1 AND open_ids @> ARRAY[$2]::varchar[]
        AND (channel_id = $3 OR channel_id IS NULL)
-     ORDER BY channel_id IS NULL ASC LIMIT 1`,
+     ORDER BY status = 'active' DESC, channel_id IS NULL ASC LIMIT 1`,
     [tenantId, openId, channelId ?? null],
   );
   if (byOpenId.rows.length > 0) {
     const user = rowToUser(byOpenId.rows[0]);
+    if (user.status !== "active") {
+      const { UserSuspendedError } = await import("./user-suspended-error.js");
+      throw new UserSuspendedError(user.id, user.status);
+    }
     await backfillChannelId(user);
     // Update union_id if it was missing and is now available
     if (unionId && !user.unionId) {
