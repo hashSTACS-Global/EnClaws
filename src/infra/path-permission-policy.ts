@@ -54,6 +54,9 @@ type PathRule = {
   noEmpty?: boolean;
 };
 
+/** Public, read-only view of a matched rule (used by alias-boundary guard). */
+export type MatchedPathRule = Readonly<Pick<PathRule, "prefix">>;
+
 // ── PathPermissionPolicy ─────────────────────────────────────────────────────
 
 export class PathPermissionPolicy {
@@ -61,6 +64,21 @@ export class PathPermissionPolicy {
 
   constructor(rules: PathRule[]) {
     this.#rules = rules.map((r) => ({ ...r, prefix: path.resolve(r.prefix) }));
+  }
+
+  /**
+   * Find the first rule whose prefix lexically matches the path.
+   * Returns only the rule's prefix (used by tenant-boundary-guard to obtain
+   * the boundary root for symlink/junction alias checks).
+   */
+  findMatchingRule(absolutePath: string): MatchedPathRule | null {
+    const normalized = path.resolve(absolutePath);
+    for (const rule of this.#rules) {
+      if (isPathInside(rule.prefix, normalized)) {
+        return { prefix: rule.prefix };
+      }
+    }
+    return null;
   }
 
   /**

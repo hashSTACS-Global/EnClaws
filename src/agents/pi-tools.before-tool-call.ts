@@ -305,6 +305,17 @@ export async function runBeforeToolCallHook(args: {
           log.warn(`[path-policy] blocked ${toolName}: ${violation}`);
           return { blocked: true, reason: violation };
         }
+        // Layer 2: canonical-path alias check (symlink/junction escape).
+        // Resolves the real path and re-runs policy.check on the canonical
+        // target. Catches symlinks to forbidden files, and symlinks that
+        // escalate op permission (e.g. link in RW dir pointing at a RO file
+        // targeted by write).
+        const { assertPolicyBoundary } = await import("../infra/tenant-boundary-guard.js");
+        const aliasViolation = await assertPolicyBoundary({ policy, absolutePath: pathStr, op, content });
+        if (aliasViolation) {
+          log.warn(`[path-policy] blocked ${toolName} via alias guard: ${aliasViolation}`);
+          return { blocked: true, reason: aliasViolation };
+        }
       }
     }
   }
