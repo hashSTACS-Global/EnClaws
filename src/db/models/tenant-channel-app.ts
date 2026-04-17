@@ -142,6 +142,32 @@ export async function findTenantByChannelApp(
 }
 
 /**
+ * Check whether an active tenant_channel_apps row binds `agentId` to a
+ * channel of type `channelType` within `tenantId`. Used by the agent chat
+ * API to reject sessionKeys whose agent/channel pairing isn't configured.
+ */
+export async function agentChannelBindingExists(
+  tenantId: string,
+  agentId: string,
+  channelType: string,
+): Promise<boolean> {
+  if (getDbType() === DB_SQLITE) return sqliteChannelApp.agentChannelBindingExists(tenantId, agentId, channelType);
+  const result = await query(
+    `SELECT 1
+     FROM tenant_channel_apps ca
+     JOIN tenant_channels tc ON tc.id = ca.channel_id
+     WHERE ca.tenant_id = $1
+       AND ca.agent_id = $2
+       AND tc.channel_type = $3
+       AND ca.is_active = true
+       AND tc.is_active = true
+     LIMIT 1`,
+    [tenantId, agentId, channelType],
+  );
+  return result.rows.length > 0;
+}
+
+/**
  * Find the first active channel app bound to a specific agent.
  * Used by agent-scoped cron to resolve the delivery accountId automatically.
  */

@@ -128,6 +128,26 @@ export async function findTenantByChannelApp(
   return { tenantId, userId, channelId: row.channel_id as string };
 }
 
+export async function agentChannelBindingExists(
+  tenantId: string,
+  agentId: string,
+  channelType: string,
+): Promise<boolean> {
+  const result = sqliteQuery(
+    `SELECT 1
+     FROM tenant_channel_apps ca
+     JOIN tenant_channels tc ON tc.id = ca.channel_id
+     WHERE ca.tenant_id = ?
+       AND ca.agent_id = ?
+       AND tc.channel_type = ?
+       AND ca.is_active = 1
+       AND tc.is_active = 1
+     LIMIT 1`,
+    [tenantId, agentId, channelType],
+  );
+  return result.rows.length > 0;
+}
+
 export async function findChannelAppByAgent(
   tenantId: string,
   agentId: string,

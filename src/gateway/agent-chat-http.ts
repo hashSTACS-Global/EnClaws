@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { getTenantAgent } from "../db/models/tenant-agent.js";
 import { getTenantModel } from "../db/models/tenant-model.js";
+import { agentChannelBindingExists } from "../db/models/tenant-channel-app.js";
 import { createInteractionTrace, getMaxTurnIndex } from "../db/models/interaction-trace.js";
 import { getUserByUnionId } from "../db/models/user.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
@@ -99,6 +100,10 @@ export async function handleAgentChatHttpRequest(
     sendError(res, 400, "sessionKey missing agent:{agentId} segment");
     return true;
   }
+  if (!channel) {
+    sendError(res, 400, "sessionKey missing channel:{channel} segment");
+    return true;
+  }
   if (!unionId) {
     sendError(res, 400, "sessionKey missing union:{unionId} segment");
     return true;
@@ -143,6 +148,19 @@ export async function handleAgentChatHttpRequest(
   }
   if (!agent) {
     sendError(res, 404, `Agent not found: tenantId=${tenantId} agentId=${agentId}`, "not_found");
+    return true;
+  }
+
+  // --- Verify agent is bound to the given channel type ---
+  try {
+    const bound = await agentChannelBindingExists(tenantId, agentId, channel);
+    if (!bound) {
+      sendError(res, 404, `Agent ${agentId} is not bound to channel ${channel}`, "not_found");
+      return true;
+    }
+  } catch (err) {
+    log.error(`Failed to verify agent/channel binding: ${String(err)}`);
+    sendError(res, 500, "Internal error verifying agent/channel binding", "api_error");
     return true;
   }
 
@@ -204,8 +222,6 @@ export async function handleAgentChatHttpRequest(
     if (tenantModel.extraHeaders) {
       Object.assign(headers, tenantModel.extraHeaders);
     }
-
-    log.info(`LLM request: ${llmUrl} model=${modelId} tenantId=${tenantId} agentId=${agentId}`);
 
     const fetchResponse = await fetch(llmUrl, {
       method: "POST",
@@ -316,6 +332,5 @@ export async function handleAgentChatHttpRequest(
     },
   });
 
-  log.info(`LLM response: turnId=${turnId} turnIndex=${turnIndex} durationMs=${durationMs}`);
   return true;
 }
