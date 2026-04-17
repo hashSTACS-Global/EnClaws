@@ -1084,6 +1084,26 @@ export async function runEmbeddedAttempt(
         );
       }
 
+      // Log LLM request messages (key + truncated value)
+      {
+        const innerFn = activeSession.agent.streamFn;
+        activeSession.agent.streamFn = (model, context, options) => {
+          const ctxObj = context as unknown as Record<string, unknown>;
+          const msgs = ctxObj?.messages as Array<Record<string, unknown>> | undefined;
+          if (msgs) {
+            const truncate = (v: unknown): string => {
+              const s = typeof v === "string" ? v : JSON.stringify(v) ?? "";
+              return s.length > 20 ? `${s.slice(0, 20)}...` : s;
+            };
+            const summary = msgs.map((m) =>
+              Object.entries(m).map(([k, v]) => `${k}=${truncate(v)}`).join(" "),
+            );
+            log.info(`LLM request messages (${msgs.length}):\n${summary.join("\n")}`);
+          }
+          return innerFn(model, context, options);
+        };
+      }
+
       try {
         const prior = await sanitizeSessionHistory({
           messages: activeSession.messages,

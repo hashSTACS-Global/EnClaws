@@ -112,6 +112,15 @@ export async function getUserById(id: string): Promise<User | null> {
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
+export async function getUserByUnionId(unionId: string): Promise<User | null> {
+  const result = sqliteQuery(
+    `SELECT * FROM users WHERE union_id = ? AND status = 'active'
+     ORDER BY last_login_at DESC LIMIT 1`,
+    [unionId],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
 export async function getUserByEmail(
   tenantId: string,
   email: string,

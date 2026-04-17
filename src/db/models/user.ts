@@ -136,6 +136,22 @@ export async function getUserById(id: string): Promise<User | null> {
 }
 
 /**
+ * Find an active user by Feishu/WeCom/DingTalk union_id across tenants.
+ * Used by session-key-authenticated APIs that receive `union:{on_xxx}`
+ * without a tenantId and need to resolve the owning tenant.
+ */
+export async function getUserByUnionId(unionId: string): Promise<User | null> {
+  if (getDbType() === DB_SQLITE) return sqliteUser.getUserByUnionId(unionId);
+  const result = await query(
+    `SELECT * FROM users WHERE union_id = $1 AND status = 'active'
+     ORDER BY last_login_at DESC NULLS LAST
+     LIMIT 1`,
+    [unionId],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
+/**
  * Batch-fetch display names by user IDs. Returns a map of id → displayName.
  */
 export async function getUserDisplayNamesByIds(

@@ -46,6 +46,7 @@ import {
   resolveHookChannel,
   resolveHookDeliver,
 } from "./hooks.js";
+import { handleAgentChatHttpRequest } from "./agent-chat-http.js";
 import { sendGatewayAuthFailure, setDefaultSecurityHeaders } from "./http-common.js";
 import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
@@ -435,6 +436,10 @@ export function createGatewayHttpServer(opts: {
         return;
       }
       if (await handleSlackHttpRequest(req, res)) {
+        return;
+      }
+      // Agent Chat API — no auth, direct LLM proxy for tenant agents
+      if (await handleAgentChatHttpRequest(req, res)) {
         return;
       }
       if (openResponsesEnabled) {

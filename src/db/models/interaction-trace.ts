@@ -189,6 +189,18 @@ export async function getInteractionTrace(id: string): Promise<LlmInteractionTra
   return result.rows.length > 0 ? rowToTrace(result.rows[0]) : null;
 }
 
+export async function getMaxTurnIndex(turnId: string): Promise<number> {
+  if (getDbType() === DB_SQLITE) {
+    return sqliteTrace.getMaxTurnIndex(turnId);
+  }
+  const result = await query(
+    "SELECT MAX(turn_index) as max_index FROM llm_interaction_traces WHERE turn_id = $1",
+    [turnId],
+  );
+  const row = result.rows[0];
+  return row?.max_index != null ? Number(row.max_index) : -1;
+}
+
 /**
  * List turns (grouped) for a tenant - returns one row per turn with aggregated info.
  */

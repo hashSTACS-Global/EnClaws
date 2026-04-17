@@ -171,6 +171,15 @@ export async function getInteractionTrace(id: string): Promise<LlmInteractionTra
   return result.rows.length > 0 ? rowToTrace(result.rows[0]) : null;
 }
 
+export async function getMaxTurnIndex(turnId: string): Promise<number> {
+  const result = sqliteQuery(
+    "SELECT MAX(turn_index) as max_index FROM llm_interaction_traces WHERE turn_id = ?",
+    [turnId],
+  );
+  const row = result.rows[0];
+  return row?.max_index != null ? Number(row.max_index) : -1;
+}
+
 export async function listInteractionTurns(
   tenantId: string,
   opts?: {
