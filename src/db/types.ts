@@ -14,6 +14,7 @@ export interface TenantQuotas {
   maxAgents: number;
   maxChannels: number;
   maxTokensPerMonth: number;
+  maxCronJobs: number;
 }
 
 export interface TenantSettings {

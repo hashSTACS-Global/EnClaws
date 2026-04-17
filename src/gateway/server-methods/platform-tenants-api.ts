@@ -20,6 +20,7 @@ import {
   getTenantById,
   updateTenant,
   getPlanQuotas,
+  resolveEffectiveQuotas,
 } from "../../db/models/tenant.js";
 import { createAuditLog } from "../../db/models/audit-log.js";
 import type { TenantPlan, TenantQuotas, TenantStatus } from "../../db/types.js";
@@ -60,7 +61,13 @@ export const platformTenantsHandlers: GatewayRequestHandlers = {
         limit: Math.min(Math.max(limit ?? 20, 1), 100),
         offset: offset ?? 0,
       });
-      respond(true, result);
+      const tenants = await Promise.all(
+        result.tenants.map(async (tenant) => ({
+          ...tenant,
+          quotas: await resolveEffectiveQuotas(tenant),
+        })),
+      );
+      respond(true, { ...result, tenants });
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.INTERNAL_ERROR, err instanceof Error ? err.message : "Failed to list tenants"));
     }
@@ -81,7 +88,7 @@ export const platformTenantsHandlers: GatewayRequestHandlers = {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Tenant not found"));
         return;
       }
-      respond(true, tenant);
+      respond(true, { ...tenant, quotas: await resolveEffectiveQuotas(tenant) });
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.INTERNAL_ERROR, err instanceof Error ? err.message : "Failed to get tenant"));
     }
@@ -166,6 +173,24 @@ export const platformTenantsHandlers: GatewayRequestHandlers = {
       respond(true, { id: updated.id, status: updated.status });
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.INTERNAL_ERROR, err instanceof Error ? err.message : "Failed to suspend tenant"));
+    }
+  },
+
+  /**
+   * Return the default quotas for each known plan so the tenant-edit UI
+   * can reset quota inputs when the admin picks a different plan.
+   */
+  "platform.plans.quotas": async ({ client, respond }: GatewayRequestHandlerOptions) => {
+    if (!requirePlatformAdmin(client, respond)) return;
+    try {
+      const [free, pro, enterprise] = await Promise.all([
+        getPlanQuotas("free"),
+        getPlanQuotas("pro"),
+        getPlanQuotas("enterprise"),
+      ]);
+      respond(true, { free, pro, enterprise });
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.INTERNAL_ERROR, err instanceof Error ? err.message : "Failed to load plan quotas"));
     }
   },
 

@@ -12,11 +12,11 @@ export const TAB_GROUPS = [
     },
     {
         label: "workspace",
-        tabs: ["tenant-agents", "chat", "sessions", "sandbox"],
+        tabs: ["tenant-agents", "chat", "sessions"],
     },
     {
         label: "resources",
-        tabs: ["tenant-channels", "tenant-skills", "tenant-models"],
+        tabs: ["tenant-channels", "tenant-models"],
     },
     {
         label: "enterprise",
@@ -27,12 +27,12 @@ export const TAB_GROUPS = [
         tabs: ["cs-setup", "cs-knowledge", "cs-sessions"],
     },
     {
-        label: "system",
-        tabs: ["instances", "cron", "logs", "debug"],
-    },
-    {
         label: "platform",
         tabs: ["platform-tools","platform-models","platform-tenants"],
+    },
+    {
+        label: "system",
+        tabs: ["logs"],
     },
 ] as const;
 

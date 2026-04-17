@@ -659,6 +659,8 @@ export class TenantAgentsView extends LitElement {
   @state() private cronLoaded = false;
   @state() private cronBusy = false;
   @state() private cronError: string | null = null;
+  /** When true, render cronError via unsafeHTML (e.g. quota errors with upgrade links). */
+  @state() private cronErrorIsHtml = false;
   @state() private cronModalVisible = false;
   @state() private cronModalEditingJobId: string | null = null;
   @state() private cronForm: CronFormState = { ...DEFAULT_CRON_FORM };
@@ -1428,6 +1430,7 @@ export class TenantAgentsView extends LitElement {
     if (!agent) return;
     this.cronLoading = true;
     this.cronError = null;
+    this.cronErrorIsHtml = false;
     try {
       const res = await this.rpc("cron.list", {
         _agentId: agent.agentId,
@@ -1436,6 +1439,7 @@ export class TenantAgentsView extends LitElement {
       this.cronJobs = res.jobs ?? [];
     } catch (err) {
       this.cronError = String(err);
+      this.cronErrorIsHtml = false;
     } finally {
       this.cronLoading = false;
       this.cronLoaded = true;
@@ -1511,6 +1515,7 @@ export class TenantAgentsView extends LitElement {
     }
     this.cronBusy = true;
     this.cronError = null;
+    this.cronErrorIsHtml = false;
     try {
       const schedule = buildCronSchedule(this.cronForm);
       const payload = buildCronPayload(this.cronForm);
@@ -1557,7 +1562,14 @@ export class TenantAgentsView extends LitElement {
       this.closeCronModal();
       await this.loadCronJobs();
     } catch (err) {
-      this.cronError = String(err);
+      const q = quotaErrorKey(err);
+      if (q) {
+        this.cronError = t(q.key, q.params);
+        this.cronErrorIsHtml = true;
+      } else {
+        this.cronError = err instanceof Error ? err.message : String(err);
+        this.cronErrorIsHtml = false;
+      }
     } finally {
       this.cronBusy = false;
     }
@@ -1574,6 +1586,7 @@ export class TenantAgentsView extends LitElement {
       await this.loadCronJobs();
     } catch (err) {
       this.cronError = String(err);
+      this.cronErrorIsHtml = false;
     } finally {
       this.cronBusy = false;
     }
@@ -1586,6 +1599,7 @@ export class TenantAgentsView extends LitElement {
       await this.loadCronJobs();
     } catch (err) {
       this.cronError = String(err);
+      this.cronErrorIsHtml = false;
     } finally {
       this.cronBusy = false;
     }
@@ -1606,6 +1620,7 @@ export class TenantAgentsView extends LitElement {
       await this.loadCronJobs();
     } catch (err) {
       this.cronError = String(err);
+      this.cronErrorIsHtml = false;
     } finally {
       this.cronBusy = false;
     }
@@ -1655,7 +1670,7 @@ export class TenantAgentsView extends LitElement {
         </div>
       </div>
 
-      ${this.cronError ? html`<div class="form-error" style="margin-bottom: 12px;">${this.cronError}</div>` : nothing}
+      ${this.cronError ? html`<div class="form-error" style="margin-bottom: 12px;">${this.cronErrorIsHtml ? unsafeHTML(this.cronError) : this.cronError}</div>` : nothing}
 
       ${this.cronLoading && this.cronJobs.length === 0
         ? html`<div class="loading">${t("cron.jobs.loading")}</div>`
@@ -1726,7 +1741,7 @@ export class TenantAgentsView extends LitElement {
     return html`
       <div style="position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 24px;"
         @click=${(e: Event) => { if (e.target === e.currentTarget) this.closeCronModal(); }}>
-        <div style="background: var(--card, #ffffff); border: 1px solid var(--border, #e2eef2); border-radius: var(--radius, 8px); width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; padding: 24px;"
+        <div style="background: var(--card, #ffffff); border: 1px solid var(--border, #e2eef2); border-radius: var(--radius, 8px); width: 90%; max-width: 960px; max-height: 90vh; overflow-y: auto; padding: 24px;"
           @click=${(e: Event) => e.stopPropagation()}>
 
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -1746,7 +1761,7 @@ export class TenantAgentsView extends LitElement {
                 <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.fieldName")} *</div>
                 <input style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
                   .value=${form.name} @input=${(e: Event) => this.updateCronForm({ name: (e.target as HTMLInputElement).value })} />
-                ${errors.name ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${errors.name}</div>` : nothing}
+                ${errors.name ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${t(errors.name)}</div>` : nothing}
               </div>
               <div>
                 <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.description")}</div>
@@ -1787,7 +1802,7 @@ export class TenantAgentsView extends LitElement {
                   <input type="datetime-local" style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
                     .value=${form.scheduleAt}
                     @input=${(e: Event) => this.updateCronForm({ scheduleAt: (e.target as HTMLInputElement).value })} />
-                  ${errors.scheduleAt ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${errors.scheduleAt}</div>` : nothing}
+                  ${errors.scheduleAt ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${t(errors.scheduleAt)}</div>` : nothing}
                 </div>
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                   <input type="checkbox" .checked=${form.deleteAfterRun}
@@ -1803,7 +1818,7 @@ export class TenantAgentsView extends LitElement {
                   <input type="number" min="1" style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
                     .value=${form.everyAmount}
                     @input=${(e: Event) => this.updateCronForm({ everyAmount: (e.target as HTMLInputElement).value })} />
-                  ${errors.everyAmount ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${errors.everyAmount}</div>` : nothing}
+                  ${errors.everyAmount ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${t(errors.everyAmount)}</div>` : nothing}
                 </div>
                 <select style="padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit;"
                   .value=${form.everyUnit} @change=${(e: Event) => this.updateCronForm({ everyUnit: (e.target as HTMLSelectElement).value as "minutes" | "hours" | "days" })}>
@@ -1820,7 +1835,7 @@ export class TenantAgentsView extends LitElement {
                   <input style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box;"
                     .value=${form.cronExpr} placeholder="0 9 * * *"
                     @input=${(e: Event) => this.updateCronForm({ cronExpr: (e.target as HTMLInputElement).value })} />
-                  ${errors.cronExpr ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${errors.cronExpr}</div>` : nothing}
+                  ${errors.cronExpr ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${t(errors.cronExpr)}</div>` : nothing}
                 </div>
                 <div>
                   <div style="font-size: 0.8rem; color: var(--muted, #7ea5b2); margin-bottom: 4px;">${t("cron.form.timezoneOptional")}</div>
@@ -1863,7 +1878,7 @@ export class TenantAgentsView extends LitElement {
                 <textarea rows="3" style="width: 100%; padding: 6px 10px; border: 1px solid var(--border, #e2eef2); border-radius: 4px; background: var(--input-bg, #f8fcfd); color: inherit; box-sizing: border-box; font-family: inherit; resize: vertical;"
                   .value=${form.payloadText}
                   @input=${(e: Event) => this.updateCronForm({ payloadText: (e.target as HTMLTextAreaElement).value })}></textarea>
-                ${errors.payloadText ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${errors.payloadText}</div>` : nothing}
+                ${errors.payloadText ? html`<div style="font-size: 0.75rem; color: var(--danger, #ef4444); margin-top: 2px;">${t(errors.payloadText)}</div>` : nothing}
               </div>
               ${form.payloadKind === "agentTurn" ? html`
                 <div style="display: flex; gap: 12px;">
@@ -1950,7 +1965,7 @@ export class TenantAgentsView extends LitElement {
             ` : nothing}
           </fieldset>
 
-          ${this.cronError ? html`<div class="form-error" style="margin-bottom: 12px;">${this.cronError}</div>` : nothing}
+          ${this.cronError ? html`<div class="form-error" style="margin-bottom: 12px;">${this.cronErrorIsHtml ? unsafeHTML(this.cronError) : this.cronError}</div>` : nothing}
 
           <div style="display: flex; justify-content: flex-end; gap: 8px;">
             <button class="btn" @click=${() => this.closeCronModal()}>${t("cron.form.cancel")}</button>

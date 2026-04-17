@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   plan        TEXT NOT NULL DEFAULT 'free',
   status      TEXT NOT NULL DEFAULT 'active',
   settings    TEXT NOT NULL DEFAULT '{}',
-  quotas      TEXT NOT NULL DEFAULT '{"maxUsers":10,"maxAgents":5,"maxChannels":5,"maxTokensPerMonth":20000000}',
+  quotas      TEXT NOT NULL DEFAULT '{"maxUsers":10,"maxAgents":5,"maxChannels":5,"maxTokensPerMonth":20000000,"maxCronJobs":5}',
   trace_enabled    INTEGER NOT NULL DEFAULT 1,
   identity_prompt  TEXT NOT NULL DEFAULT '',
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -32,9 +32,12 @@ CREATE TABLE IF NOT EXISTS plans (
   max_agents           INTEGER NOT NULL,
   max_channels         INTEGER NOT NULL,
   max_tokens_per_month INTEGER NOT NULL,
+  max_cron_jobs        INTEGER NOT NULL DEFAULT 5,
   created_at           TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- Seeds for max_cron_jobs are applied in initSqliteDb (after ADD COLUMN migration),
+-- so this INSERT only covers the legacy columns to stay compatible with pre-upgrade tables.
 INSERT OR IGNORE INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month) VALUES
   ('free',       '免费版', 10, 5,  5,  20000000),
   ('pro',        '专业版', 20, 20, 20, 200000000),
@@ -408,7 +411,7 @@ VALUES (
   'EnClaws Platform',
   'enterprise',
   'active',
-  '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1}'
+  '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1,"maxCronJobs":-1}'
 );
 
 INSERT OR IGNORE INTO users (id, tenant_id, email, password_hash, display_name, role, status)

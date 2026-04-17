@@ -34,6 +34,7 @@ interface QuotaInfo {
   period: { start: string; end: string };
   tokens: { used: number; max: number; remaining: number; percentUsed: number };
   quotas: TenantQuotas;
+  currentCronJobs?: number;
 }
 
 /** Subset of tenant.overview.summary used to populate the resource quota cards. */
@@ -50,6 +51,7 @@ interface TenantQuotas {
   maxChannels?: number;
   maxModels?: number;
   maxTokensPerMonth?: number;
+  maxCronJobs?: number;
 }
 
 // ── Component ──
@@ -262,6 +264,7 @@ export class TenantUsageView extends LitElement {
                 ${this.renderResourceCard(t("tenantUsage.agents"), this.tenantSummary.agents.total, this.tenantQuotas.maxAgents)}
                 ${this.renderResourceCard(t("tenantUsage.channels"), this.tenantSummary.channels.total, this.tenantQuotas.maxChannels)}
                 ${this.renderResourceCard(t("tenantUsage.users"), this.tenantSummary.users.total, this.tenantQuotas.maxUsers)}
+                ${this.renderResourceCard(t("tenantUsage.cronJobs"), this.quota?.currentCronJobs ?? 0, this.tenantQuotas.maxCronJobs)}
               </div>
             </div>
           `

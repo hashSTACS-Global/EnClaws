@@ -38,6 +38,7 @@ const FALLBACK_FREE_QUOTAS: TenantQuotas = {
   maxAgents: 5,
   maxChannels: 5,
   maxTokensPerMonth: 20_000_000,
+  maxCronJobs: 5,
 };
 
 /**
@@ -45,11 +46,25 @@ const FALLBACK_FREE_QUOTAS: TenantQuotas = {
  * Returns FALLBACK_FREE_QUOTAS if the plan id is unknown or the table
  * cannot be queried (best-effort, never throws).
  */
+/**
+ * Merge a tenant's stored quotas with plan defaults for any missing fields.
+ * Ensures pre-existing tenants (whose quotas JSON predates a new quota
+ * field like `maxCronJobs`) render sensible values instead of undefined/0.
+ */
+export async function resolveEffectiveQuotas(tenant: Tenant): Promise<TenantQuotas> {
+  const planDefaults = await getPlanQuotas(tenant.plan);
+  const stored: Record<string, number> = {};
+  for (const [k, v] of Object.entries(tenant.quotas ?? {})) {
+    if (typeof v === "number" && !Number.isNaN(v)) stored[k] = v;
+  }
+  return { ...planDefaults, ...stored } as TenantQuotas;
+}
+
 export async function getPlanQuotas(planId: string): Promise<TenantQuotas> {
   if (getDbType() === DB_SQLITE) return sqliteTenant.getPlanQuotas(planId);
   try {
     const result = await query(
-      `SELECT max_users, max_agents, max_channels, max_tokens_per_month
+      `SELECT max_users, max_agents, max_channels, max_tokens_per_month, max_cron_jobs
        FROM plans WHERE id = $1`,
       [planId],
     );
@@ -60,6 +75,7 @@ export async function getPlanQuotas(planId: string): Promise<TenantQuotas> {
       maxAgents: parseInt(row.max_agents as string, 10),
       maxChannels: parseInt(row.max_channels as string, 10),
       maxTokensPerMonth: parseInt(row.max_tokens_per_month as string, 10),
+      maxCronJobs: parseInt(row.max_cron_jobs as string, 10),
     };
   } catch (err) {
     console.warn(`[tenant] getPlanQuotas(${planId}) failed, using fallback: ${String(err)}`);

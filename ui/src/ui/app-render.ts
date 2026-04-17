@@ -487,7 +487,7 @@ export function renderApp(state: AppViewState) {
                   const isPlatformAdmin = userRole === "platform-admin";
                   const isTenantAdmin = userRole === "owner" || userRole === "admin";
                   const tenantOnlyTabs = new Set(["tenant-settings", "tenant-users", "tenant-agents", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage", "tenant-cron", "cs-setup", "cs-knowledge", "cs-sessions"]);
-                  const platformOnlyTabs = new Set(["overview", "platform-models","platform-tools","platform-tenants"]);
+                  const platformOnlyTabs = new Set(["overview", "platform-models","platform-tools","platform-tenants","logs"]);
                   const visibleTabs = group.tabs.filter((tab) => {
                     if (platformOnlyTabs.has(tab)) {return isPlatformAdmin;}
                     if (tenantOnlyTabs.has(tab)) {return isTenantAdmin;}

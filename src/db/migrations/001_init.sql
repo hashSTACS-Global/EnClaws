@@ -44,7 +44,8 @@ CREATE TABLE tenants (
     "maxUsers": 10,
     "maxAgents": 5,
     "maxChannels": 5,
-    "maxTokensPerMonth": 20000000
+    "maxTokensPerMonth": 20000000,
+    "maxCronJobs": 5
   }',   -- resource quotas (mirrors plans.free; createTenant overrides via getPlanQuotas)
   trace_enabled    BOOLEAN      NOT NULL DEFAULT true,  -- LLM交互追踪开关
   identity_prompt  TEXT         NOT NULL DEFAULT '',   -- 企业身份特征描述
@@ -67,14 +68,15 @@ CREATE TABLE plans (
   max_agents             INTEGER NOT NULL,
   max_channels           INTEGER NOT NULL,
   max_tokens_per_month   BIGINT  NOT NULL,
+  max_cron_jobs          INTEGER NOT NULL DEFAULT 5,
   created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month) VALUES
-  ('free',       '免费版', 10, 5,  5,  20000000),
-  ('pro',        '专业版', 20, 20, 20, 200000000),
-  ('enterprise', '企业版', -1, -1, -1, -1)
+INSERT INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month, max_cron_jobs) VALUES
+  ('free',       '免费版', 10, 5,  5,  20000000, 5),
+  ('pro',        '专业版', 20, 20, 20, 200000000, 20),
+  ('enterprise', '企业版', -1, -1, -1, -1, 50)
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================

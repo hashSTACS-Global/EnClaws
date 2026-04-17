@@ -20,6 +20,21 @@ export type CronConfig = {
   enabled?: boolean;
   store?: string;
   maxConcurrentRuns?: number;
+  /**
+   * Auto-disable a job after this many consecutive errors. Default: 3.
+   * Runtime-only guardrail — not exposed to tenant UI.
+   */
+  autoDisableAfterErrors?: number;
+  /**
+   * Minimum allowed interval for `every` jobs in milliseconds. Default: 60000.
+   * Hardcoded guardrail — not exposed to tenant UI.
+   */
+  minIntervalMs?: number;
+  /**
+   * Allowed schedule kinds for tenant-created jobs. Default: all three.
+   * Hardcoded guardrail — not exposed to tenant UI.
+   */
+  allowedScheduleKinds?: Array<"at" | "every" | "cron">;
   /** Override default retry policy for one-shot jobs on transient errors. */
   retry?: CronRetryConfig;
   /**

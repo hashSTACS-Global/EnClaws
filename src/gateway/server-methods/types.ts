@@ -44,6 +44,12 @@ export type GatewayRequestContext = {
   resolveTenantCron?: (tenant: BaseTenantContext) => { cron: CronService; cronStorePath: string } | undefined;
   /** Resolve agent-scoped cron service + storePath for enterprise per-agent cron. */
   resolveTenantAgentCron?: (tenantId: string, agentId: string) => { cron: CronService; cronStorePath: string } | undefined;
+  /**
+   * Count the in-memory cron job total for a tenant across all its registered
+   * agent cron services. Used for platform-level quota enforcement and the
+   * enterprise "my plan" page. Eventually consistent with disk state.
+   */
+  countTenantCronJobs?: (tenantId: string) => number;
   execApprovalManager?: ExecApprovalManager;
   loadGatewayModelCatalog: () => Promise<ModelCatalogEntry[]>;
   getHealthCache: () => HealthSummary | null;

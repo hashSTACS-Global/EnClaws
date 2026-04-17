@@ -36,6 +36,7 @@ const FALLBACK_FREE_QUOTAS: TenantQuotas = {
   maxAgents: 5,
   maxChannels: 5,
   maxTokensPerMonth: 20_000_000,
+  maxCronJobs: 5,
 };
 
 /**
@@ -45,7 +46,7 @@ const FALLBACK_FREE_QUOTAS: TenantQuotas = {
 export async function getPlanQuotas(planId: string): Promise<TenantQuotas> {
   try {
     const result = sqliteQuery(
-      `SELECT max_users, max_agents, max_channels, max_tokens_per_month
+      `SELECT max_users, max_agents, max_channels, max_tokens_per_month, max_cron_jobs
        FROM plans WHERE id = ?`,
       [planId],
     );
@@ -56,6 +57,7 @@ export async function getPlanQuotas(planId: string): Promise<TenantQuotas> {
       maxAgents: Number(row.max_agents),
       maxChannels: Number(row.max_channels),
       maxTokensPerMonth: Number(row.max_tokens_per_month),
+      maxCronJobs: Number(row.max_cron_jobs),
     };
   } catch (err) {
     console.warn(`[tenant] getPlanQuotas(${planId}) failed, using fallback: ${String(err)}`);

@@ -595,6 +595,20 @@ export async function startGatewayServer(
     return cached;
   };
 
+  /**
+   * Count the in-memory cron jobs for a tenant across all its cached agent
+   * CronService instances. Reads from `state.store.jobs.length` (no disk I/O).
+   */
+  const countTenantCronJobs = (tenantId: string): number => {
+    const prefix = `${tenantId}:agent:`;
+    let total = 0;
+    for (const [key, entry] of tenantAgentCronCache) {
+      if (!key.startsWith(prefix)) continue;
+      total += entry.cron.getInMemoryJobCount();
+    }
+    return total;
+  };
+
   const channelManager = createChannelManager({
     loadConfig,
     channelLogs,
@@ -826,6 +840,7 @@ export async function startGatewayServer(
       cronStorePath,
       resolveTenantCron,
       resolveTenantAgentCron,
+      countTenantCronJobs,
       execApprovalManager,
       loadGatewayModelCatalog,
       getHealthCache,

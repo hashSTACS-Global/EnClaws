@@ -139,7 +139,7 @@ export function quotaErrorKey(
     max: String(e.details?.max ?? 0),
     contactLink: e.details?.contactLink ?? "",
   };
-  const known = ["agents", "channels", "users", "tokensPerMonth"];
+  const known = ["agents", "channels", "users", "tokensPerMonth", "cronJobs"];
   return {
     key: known.includes(resource)
       ? `errors.quotaExceeded.${resource}`

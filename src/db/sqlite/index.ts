@@ -63,6 +63,31 @@ export function initSqliteDb(url: string): void {
   // Initialize schema + seed data (inlined as TS constant to survive bundling)
   db.exec(SQLITE_SCHEMA_SQL);
 
+  // Lightweight column migrations for existing databases where CREATE TABLE
+  // IF NOT EXISTS is a no-op. Each ADD COLUMN is attempted once; a duplicate
+  // column error is swallowed so the call is idempotent.
+  const addColumnIfMissing = (table: string, column: string, ddl: string) => {
+    try {
+      db!.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+      console.log(`[sqlite] added column ${table}.${column}`);
+    } catch (err) {
+      const msg = String(err);
+      if (!msg.includes("duplicate column") && !msg.includes("duplicate_column")) {
+        throw err;
+      }
+    }
+  };
+  addColumnIfMissing("plans", "max_cron_jobs", "INTEGER NOT NULL DEFAULT 5");
+
+  // Re-seed plan rows so freshly-added column picks up correct per-plan values.
+  // Use INSERT OR REPLACE against the primary key.
+  db.exec(`
+    INSERT OR REPLACE INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month, max_cron_jobs) VALUES
+      ('free',       '免费版', 10, 5,  5,  20000000, 5),
+      ('pro',        '专业版', 20, 20, 20, 200000000, 20),
+      ('enterprise', '企业版', -1, -1, -1, -1, 50);
+  `);
+
   console.log(`[sqlite] Database initialized at ${dbPath}`);
 }
 

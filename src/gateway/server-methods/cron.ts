@@ -7,7 +7,9 @@ import {
 import type { CronJob, CronJobCreate, CronJobPatch } from "../../cron/types.js";
 import { validateScheduleTimestamp } from "../../cron/validate-timestamp.js";
 import { listTenantAgentIdsFromDisk } from "../../config/sessions/tenant-paths.js";
+import { loadConfig } from "../../config/io.js";
 import { isDbInitialized } from "../../db/index.js";
+import { getTenantById, resolveEffectiveQuotas } from "../../db/models/tenant.js";
 import { getUserDisplayNamesByOpenIds } from "../../db/models/user.js";
 import {
   ErrorCodes,
@@ -22,6 +24,7 @@ import {
   validateCronUpdateParams,
   validateWakeParams,
 } from "../protocol/index.js";
+import { getPlanUpgradeLink } from "../protocol/schema/error-codes.js";
 import type { GatewayClient, GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
 
 /**
@@ -184,6 +187,69 @@ export const cronHandlers: GatewayRequestHandlers = {
         errorShape(ErrorCodes.INVALID_REQUEST, timestampValidation.message),
       );
       return;
+    }
+    // Multi-tenant guardrails: hardcoded schedule-kind + min-interval checks,
+    // plus platform-allocated per-tenant job-count quota.
+    const effectiveTenantId =
+      client?.tenant?.tenantId ??
+      (typeof params._tenantId === "string" ? params._tenantId.trim() : "");
+    if (effectiveTenantId && isDbInitialized()) {
+      const cronCfg = loadConfig().cron ?? {};
+      const allowedKinds = cronCfg.allowedScheduleKinds ?? ["at", "every", "cron"];
+      if (!allowedKinds.includes(jobCreate.schedule.kind)) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Schedule kind "${jobCreate.schedule.kind}" is not allowed`,
+          ),
+        );
+        return;
+      }
+      const minIntervalMs = cronCfg.minIntervalMs ?? 60_000;
+      if (jobCreate.schedule.kind === "every" && jobCreate.schedule.everyMs < minIntervalMs) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Schedule interval must be at least ${minIntervalMs}ms`,
+          ),
+        );
+        return;
+      }
+      try {
+        const tenant = await getTenantById(effectiveTenantId);
+        const effectiveQuotas = tenant ? await resolveEffectiveQuotas(tenant) : undefined;
+        const maxCronJobs = effectiveQuotas?.maxCronJobs ?? -1;
+        if (maxCronJobs >= 0 && context.countTenantCronJobs) {
+          const current = context.countTenantCronJobs(effectiveTenantId);
+          if (current >= maxCronJobs) {
+            respond(
+              false,
+              undefined,
+              errorShape(
+                ErrorCodes.QUOTA_EXCEEDED,
+                `Cron job quota reached (${current}/${maxCronJobs}). Upgrade your plan.`,
+                {
+                  details: {
+                    resource: "cronJobs",
+                    current,
+                    max: maxCronJobs,
+                    contactLink: getPlanUpgradeLink(),
+                  },
+                },
+              ),
+            );
+            return;
+          }
+        }
+      } catch (err) {
+        context.logGateway.warn(
+          `cron.add: quota check failed for tenant ${effectiveTenantId}: ${String(err)}`,
+        );
+      }
     }
     // Auto-fill createdBy from tenant context if not already set.
     if (!jobCreate.createdBy && client?.tenant) {

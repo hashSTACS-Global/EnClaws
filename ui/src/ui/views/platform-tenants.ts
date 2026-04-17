@@ -23,6 +23,7 @@ interface TenantRow {
     maxAgents: number;
     maxChannels: number;
     maxTokensPerMonth: number;
+    maxCronJobs: number;
   };
   createdAt: string;
 }
@@ -36,6 +37,7 @@ interface EditState {
     maxAgents: number;
     maxChannels: number;
     maxTokensPerMonth: number;
+    maxCronJobs: number;
   };
 }
 
@@ -57,6 +59,15 @@ export class PlatformTenantsView extends LitElement {
   @state() private editLoading = false;
   @state() private editError = "";
   @state() private confirmSuspend: string | null = null;
+  /** Plan → default quotas map, fetched once via platform.plans.quotas. */
+  private planQuotas: Record<"free" | "pro" | "enterprise", EditState["quotas"]> | null = null;
+
+  /** Fallback used when platform.plans.quotas RPC is unavailable (e.g. older gateway). */
+  private readonly FALLBACK_PLAN_QUOTAS: Record<"free" | "pro" | "enterprise", EditState["quotas"]> = {
+    free:       { maxUsers: 10, maxAgents: 5,  maxChannels: 5,  maxTokensPerMonth: 20_000_000,  maxCronJobs: 5 },
+    pro:        { maxUsers: 20, maxAgents: 20, maxChannels: 20, maxTokensPerMonth: 200_000_000, maxCronJobs: 20 },
+    enterprise: { maxUsers: -1, maxAgents: -1, maxChannels: -1, maxTokensPerMonth: -1,          maxCronJobs: 50 },
+  };
 
   private readonly PAGE_SIZE = 20;
 
@@ -189,6 +200,22 @@ export class PlatformTenantsView extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.loadTenants();
+    void this.loadPlanQuotas();
+  }
+
+  private async loadPlanQuotas() {
+    try {
+      this.planQuotas = await tenantRpc(
+        "platform.plans.quotas",
+        {},
+        this.gatewayUrl,
+      ) as Record<"free" | "pro" | "enterprise", EditState["quotas"]>;
+    } catch (err) {
+      // Gateway may not have the RPC yet (pre-upgrade); fall back to baked-in defaults
+      // so the plan radio still resets quota inputs.
+      console.warn("platform.plans.quotas failed; using fallback defaults:", err);
+      this.planQuotas = this.FALLBACK_PLAN_QUOTAS;
+    }
   }
 
   private async loadTenants() {
@@ -222,6 +249,9 @@ export class PlatformTenantsView extends LitElement {
   private async openEdit(tenantId: string) {
     this.editError = "";
     try {
+      // Ensure plan-defaults are available before the modal opens so the first
+      // plan-radio change has something to read. Falls back silently if it fails.
+      if (!this.planQuotas) await this.loadPlanQuotas();
       const tenant = await tenantRpc("platform.tenants.get", { tenantId }, this.gatewayUrl) as TenantRow;
       this.editState = {
         tenantId: tenant.id,
@@ -242,6 +272,22 @@ export class PlatformTenantsView extends LitElement {
   private updateEditField(field: keyof EditState, value: unknown) {
     if (!this.editState) return;
     this.editState = { ...this.editState, [field]: value };
+  }
+
+  /**
+   * Dedicated plan-change handler: resets the quota inputs to the selected
+   * plan's defaults so admin always sees what they are opting into.
+   * Admin can still manually override any quota before saving.
+   */
+  private selectPlan(planId: "free" | "pro" | "enterprise") {
+    if (!this.editState) return;
+    const defaults = (this.planQuotas ?? this.FALLBACK_PLAN_QUOTAS)[planId];
+    this.editState = {
+      ...this.editState,
+      plan: planId,
+      quotas: { ...(defaults ?? this.editState.quotas) },
+    };
+    this.requestUpdate();
   }
 
   private updateEditQuota(key: keyof EditState["quotas"], value: string) {
@@ -395,8 +441,8 @@ export class PlatformTenantsView extends LitElement {
             <div class="plan-options">
               ${(["free", "pro", "enterprise"] as const).map(p => html`
                 <label class="plan-option">
-                  <input type="radio" name="plan" value=${p} .checked=${s.plan === p}
-                    @change=${() => this.updateEditField("plan", p)} />
+                  <input type="radio" name="plan" .value=${p} ?checked=${s.plan === p}
+                    @click=${() => this.selectPlan(p)} />
                   ${p}
                 </label>
               `)}
@@ -421,6 +467,10 @@ export class PlatformTenantsView extends LitElement {
               <div>
                 <label>月 Token 上限</label>
                 <input type="number" .value=${s.quotas.maxTokensPerMonth} @input=${(e: InputEvent) => this.updateEditQuota("maxTokensPerMonth", (e.target as HTMLInputElement).value)} />
+              </div>
+              <div>
+                <label>最大定时任务数</label>
+                <input type="number" .value=${s.quotas.maxCronJobs} @input=${(e: InputEvent) => this.updateEditQuota("maxCronJobs", (e.target as HTMLInputElement).value)} placeholder="-1 = 无限制" />
               </div>
             </div>
           </div>

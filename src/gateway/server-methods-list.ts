@@ -109,6 +109,7 @@ const BASE_METHODS = [
   "platform.tenants.update",
   "platform.tenants.suspend",
   "platform.tenants.unsuspend",
+  "platform.plans.quotas",
   "tenant.plan.current",
   // Customer Service Widget methods
   "cs.widget.connect",
