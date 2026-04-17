@@ -933,6 +933,21 @@ export async function startGatewayServer(
     }
   }
 
+  // Ensure all tenants have skill packs installed (fire-and-forget)
+  if (!minimalTestGateway && isDbInitialized()) {
+    void (async () => {
+      try {
+        const { tenants } = await listTenants();
+        if (tenants.length > 0) {
+          const { ensureSkillPacksForAllTenants } = await import("../agents/skill-pack-installer.js");
+          await ensureSkillPacksForAllTenants(tenants.map((t: { id: string }) => t.id), log);
+        }
+      } catch (err) {
+        log.warn(`skill-pack startup check failed: ${String(err)}`);
+      }
+    })();
+  }
+
   const configReloader = minimalTestGateway
     ? { stop: async () => {} }
     : (() => {
