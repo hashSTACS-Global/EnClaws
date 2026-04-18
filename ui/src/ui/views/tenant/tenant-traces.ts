@@ -822,9 +822,13 @@ export class TenantTracesView extends LitElement {
     const nlIdx = afterHeader.indexOf("\n");
     const rest = nlIdx >= 0 ? afterHeader.slice(nlIdx + 1) : afterHeader;
 
-    // Split by code-fenced blocks; the user's actual input is the last non-empty
-    // plain-text segment (not inside ```...```)
-    const segments = rest.split(/```[\s\S]*?```/g);
+    // Strip inbound-meta metadata blocks — handles both P1=true (compact JSON, no fence)
+    // and P1=false (code-fenced pretty JSON) formats.
+    const stripped = this.stripMetadataBlocks(rest);
+
+    // Split by residual code-fenced blocks; the user's actual input is the last
+    // non-empty plain-text segment (not inside ```...```)
+    const segments = stripped.split(/```[\s\S]*?```/g);
     let content = "";
     for (let i = segments.length - 1; i >= 0; i--) {
       const seg = segments[i].trim();
@@ -838,6 +842,79 @@ export class TenantTracesView extends LitElement {
     const cleanContent = content.replace(/^System:\s*/i, "").trim();
 
     return { platform, userName, userId, content: cleanContent };
+  }
+
+  /**
+   * Strip inbound-meta "untrusted metadata" label blocks from the raw user_input
+   * so only the user's actual message remains. Handles both formats emitted by
+   * src/auto-reply/reply/inbound-meta.ts:
+   *
+   *   P1=true (ENCLAWS_TOKEN_OPT_P1 not "false", default):
+   *     Conversation:
+   *     {"is_group_chat":true}
+   *
+   *   P1=false:
+   *     Conversation info (untrusted metadata):
+   *     ```json
+   *     {
+   *       "is_group_chat": true
+   *     }
+   *     ```
+   *
+   * Label base words: Conversation, Sender, Thread starter, Replied message,
+   *                   Forwarded, Chat history (each with optional suffix / parenthetical).
+   */
+  private stripMetadataBlocks(text: string): string {
+    // Strip inbound-meta label blocks (see method docstring above)
+    const METADATA_LABEL_RE =
+      /^\s*(Conversation(?:\s+info)?|Sender|Thread\s+starter|Replied\s+message|Forwarded(?:\s+message\s+context)?|Chat\s+history(?:\s+since\s+last\s+reply)?)\s*(?:\([^)]*\))?\s*:\s*$/i;
+
+    const lines = text.split("\n");
+    const out: string[] = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (METADATA_LABEL_RE.test(line)) {
+        i += 1;
+        // Skip the payload that follows the label:
+        //   - a code-fenced block (P1=false)
+        //   - a single-line compact JSON (P1=true)
+        if (i < lines.length && lines[i].trim().startsWith("```")) {
+          i += 1;
+          while (i < lines.length && !lines[i].trim().startsWith("```")) {
+            i += 1;
+          }
+          if (i < lines.length) {
+            i += 1;
+          }
+        } else if (i < lines.length) {
+          const t = lines[i].trim();
+          if (t.startsWith("{") && t.endsWith("}")) {
+            i += 1;
+          }
+        }
+        continue;
+      }
+      out.push(line);
+      i += 1;
+    }
+    let result = out.join("\n");
+
+    // Strip cron task scaffolding injected by src/cron/isolated-agent/run.ts:
+    //   [Scheduled Task Context] + 3 instruction lines + blank line  (preamble)
+    //   [Delivery Instructions] + trailing paragraph                 (epilogue)
+    // Keep the actual task content in between (the [cron:uuid name] line + body).
+    result = result
+      .replace(/^\s*\[Scheduled Task Context\][\s\S]*?(?:\n\s*\n|\n$|$)/, "")
+      .replace(/\n+\[Delivery Instructions\][\s\S]*$/, "");
+
+    // Strip IM channel "System" envelope line injected per-message. Example:
+    //   System: [2026-04-18 16:08:32 GMT+8] Feishu[cli_xxx] group oc_xxx | 刘昱 (ou_xxx) [msg:om_xxx, @bot]
+    // Match in multi-line mode; require bracketed timestamp and "| name (uid)" segments
+    // to avoid accidental matches against generic "System: Model switched." lines.
+    result = result.replace(/^System:\s*\[[^\]]+\][^\n]*\|[^\n]*\([^)]+\)[^\n]*\n?/m, "");
+
+    return result;
   }
 
   /** Extract user content or a short friendly label from a raw system message. */
@@ -856,10 +933,11 @@ export class TenantTracesView extends LitElement {
       return "[系统事件]";
     }
 
-    // Try to find clean user text: last non-empty segment outside code blocks
-    const segments = raw.split(/```[\s\S]*?```/g);
-    const SYSTEM_LINE =
-      /^\s*(System:|Conversation info|Sender|Replied message|<think>|IMPORTANT:)/i;
+    // Strip inbound-meta label blocks (both P1=true and P1=false formats),
+    // then try to find clean user text: last non-empty segment outside code blocks.
+    const stripped = this.stripMetadataBlocks(raw);
+    const segments = stripped.split(/```[\s\S]*?```/g);
+    const SYSTEM_LINE = /^\s*(System:|<think>|IMPORTANT:)/i;
     for (let i = segments.length - 1; i >= 0; i--) {
       const lines = segments[i].split("\n").filter((l) => l.trim() && !SYSTEM_LINE.test(l));
       const text = lines.join(" ").trim();
@@ -1172,7 +1250,10 @@ export class TenantTracesView extends LitElement {
       }
       const m = msg as Record<string, unknown>;
       const role = (m.role as string) ?? "unknown";
-      const text = this.extractContentText(m.content);
+      const rawText = this.extractContentText(m.content);
+      // Only strip inbound-meta blocks from user messages; other roles don't carry them.
+      // Users wanting the full raw prompt can toggle to the JSON view.
+      const text = role === "user" ? this.stripMetadataBlocks(rawText).trim() : rawText;
       const roleClass =
         role === "user"
           ? "user"
