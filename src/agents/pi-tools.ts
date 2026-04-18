@@ -1,6 +1,7 @@
 import { codingTools, createReadTool, readTool } from "@mariozechner/pi-coding-agent";
 import type { OpenClawConfig } from "../config/config.js";
 import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
+import { issueGatewayToken } from "../gateway/gateway-token-cache.js";
 import { resolveMergedSafeBinProfileFixtures } from "../infra/exec-safe-bin-runtime-policy.js";
 import { logInfo, logWarn } from "../logger.js";
 import { getPluginToolMeta } from "../plugins/tools.js";
@@ -198,38 +199,56 @@ function buildExecExtraEnv(options?: {
   if (options?.tenantId) {
     env.ENCLAWS_TENANT_ID = options.tenantId;
   }
-  if (options?.tenantUserId) {
+
+  // User identity — ENCLAWS_TENANT_USER_ID now carries openId (per 007 final decision)
+  const segments = parseSessionKeySegments(options?.sessionLabel ?? options?.sessionKey);
+  if (segments.open) {
+    env.ENCLAWS_TENANT_USER_ID = segments.open;
+  } else if (options?.tenantUserId) {
     env.ENCLAWS_TENANT_USER_ID = options.tenantUserId;
   }
 
-  // User display name — prefer name segment from new session label, fall back to senderName
-  const segments = parseSessionKeySegments(options?.sessionLabel ?? options?.sessionKey);
+  // User display name (new field name per 007)
   const userDisplayName = segments.name ?? options?.senderName ?? undefined;
   if (userDisplayName) {
-    env.ENCLAWS_TENANT_USER_NAME = userDisplayName;
+    env.ENCLAWS_TENANT_USER_DISNAME = userDisplayName;
   }
 
-  // User workspace path — enables skill scripts to save files to the correct user directory
+  // User workspace path
   if (options?.workspaceDir) {
     env.ENCLAWS_USER_WORKSPACE = options.workspaceDir;
   }
 
-  // Chat ID — extract from "chat:{chatId}" format in messageTo
+  // Chat ID
   if (options?.messageTo?.startsWith("chat:")) {
     env.ENCLAWS_CHAT_ID = options.messageTo.slice(5);
   }
 
-  // External session label — human-readable key for downstream attribution/routing
-  if (options?.sessionLabel) {
-    env.ENCLAWS_SESSION_KEY = options.sessionLabel;
-  }
-
-  // Gateway callback — transparent passthrough from process.env (set by operator)
+  // Gateway URL — passthrough from process.env
   if (process.env.ENCLAWS_GATEWAY_URL) {
     env.ENCLAWS_GATEWAY_URL = process.env.ENCLAWS_GATEWAY_URL;
   }
-  // Placeholder token — TODO: replace with per-user pivot_token from users table
-  env.ENCLAWS_GATEWAY_TOKEN = "token_fake_xxx";
+
+  // Gateway one-time token — opaque reference to cached sessionKey for attribution
+  if (
+    options?.sessionLabel &&
+    options?.sessionKey &&
+    options?.tenantId &&
+    segments.agentId &&
+    segments.channel &&
+    segments.open
+  ) {
+    env.ENCLAWS_GATEWAY_TOKEN = issueGatewayToken({
+      sessionLabel: options.sessionLabel,
+      internalSessionKey: options.sessionKey,
+      tenantId: options.tenantId,
+      agentSlug: segments.agentId,
+      channel: segments.channel,
+      userOpenId: segments.open,
+      userUnionId: segments.union ?? segments.open,
+      userDisplayName,
+    });
+  }
 
   // Python UTF-8 mode — ensure pipeline scripts read env/stdin/files correctly on all platforms
   env.PYTHONUTF8 = "1";
@@ -257,16 +276,18 @@ function buildExecExtraEnv(options?: {
   }
 
   if (Object.keys(env).length > 0) {
+    const tokenPreview = env.ENCLAWS_GATEWAY_TOKEN
+      ? `${env.ENCLAWS_GATEWAY_TOKEN.slice(0, 12)}...`
+      : "(unset)";
     logInfo(
       `[tools] exec env [${options?.sessionKey ?? "no-session"}]:` +
-        `\n  ENCLAWS_SESSION_KEY  = ${env.ENCLAWS_SESSION_KEY ?? "(unset)"}` +
+        `\n  ENCLAWS_GATEWAY_TOKEN = ${tokenPreview}` +
         `\n  ENCLAWS_TENANT_ID    = ${env.ENCLAWS_TENANT_ID ?? "(unset)"}` +
         `\n  ENCLAWS_TENANT_USER_ID   = ${env.ENCLAWS_TENANT_USER_ID ?? "(unset)"}` +
-        `\n  ENCLAWS_TENANT_USER_NAME = ${env.ENCLAWS_TENANT_USER_NAME ?? "(unset)"}` +
+        `\n  ENCLAWS_TENANT_USER_DISNAME = ${env.ENCLAWS_TENANT_USER_DISNAME ?? "(unset)"}` +
         `\n  ENCLAWS_USER_WORKSPACE   = ${env.ENCLAWS_USER_WORKSPACE ?? "(unset)"}` +
         `\n  ENCLAWS_CHAT_ID      = ${env.ENCLAWS_CHAT_ID ?? "(unset)"}` +
-        `\n  ENCLAWS_GATEWAY_URL  = ${env.ENCLAWS_GATEWAY_URL ?? "(unset)"}` +
-        `\n  ENCLAWS_GATEWAY_TOKEN = ${env.ENCLAWS_GATEWAY_TOKEN ?? "(unset)"}`,
+        `\n  ENCLAWS_GATEWAY_URL  = ${env.ENCLAWS_GATEWAY_URL ?? "(unset)"}`,
     );
   }
   return Object.keys(env).length > 0 ? env : undefined;
