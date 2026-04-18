@@ -78,6 +78,74 @@ export type ExecAllowlistEntry = {
   lastResolvedPath?: string;
 };
 
+/**
+ * Hard denylist entry for high-risk executables. Evaluated in the gateway exec
+ * host BEFORE approval — a denylist hit throws regardless of allowlist state,
+ * security mode, or user approval. Defaults are hardcoded in
+ * `exec-approvals-denylist.ts`.
+ */
+export type ExecDenylistEntry = {
+  /** Raw entry source string (used for logs / error reasons). */
+  source: string;
+  /** Lowercased binary name to match (e.g. `rm`, `kill`, `systemctl`). */
+  bin: string;
+  /** Case-insensitive word-boundary regex that matches the bin in a command. */
+  binRegex: RegExp;
+  /** Optional case-insensitive extra regex (e.g. `-[rRf]+\s` to narrow to `rm -rf`). */
+  pattern?: RegExp;
+};
+
+function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Parse an exec denylist spec.
+ *
+ * Format: `bin[:pattern]` entries separated by `|`, `,`, or newlines.
+ * - `rm:-[rRf]+\s` → block `rm` when followed by `-rf`/`-rR`/`-Rf` flags.
+ * - `kill`         → block any `kill` invocation.
+ * - `systemctl:stop|restart|disable` ← CAUTION: `|` inside a pattern must be
+ *   escaped because `|` is the top-level entry separator. Use `\|` or split the
+ *   rule into multiple entries (e.g. `systemctl:stop,systemctl:restart`).
+ *
+ * Invalid regex entries are dropped silently (best-effort).
+ */
+export function parseDenylist(raw: string | null | undefined): ExecDenylistEntry[] {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return [];
+
+  const entries: ExecDenylistEntry[] = [];
+  for (const part of trimmed.split(/(?<!\\)[|\n,]+/)) {
+    const piece = part.replace(/\\\|/g, "|").trim();
+    if (!piece) continue;
+
+    const colon = piece.indexOf(":");
+    const bin = (colon === -1 ? piece : piece.slice(0, colon)).trim().toLowerCase();
+    const patternSrc = colon === -1 ? "" : piece.slice(colon + 1).trim();
+    if (!bin) continue;
+
+    let binRegex: RegExp;
+    try {
+      binRegex = new RegExp(`\\b${escapeRegex(bin)}\\b`, "i");
+    } catch {
+      continue;
+    }
+
+    let pattern: RegExp | undefined;
+    if (patternSrc) {
+      try {
+        pattern = new RegExp(patternSrc, "i");
+      } catch {
+        continue;
+      }
+    }
+
+    entries.push({ source: piece, bin, binRegex, pattern });
+  }
+  return entries;
+}
+
 export type ExecApprovalsAgent = ExecApprovalsDefaults & {
   allowlist?: ExecAllowlistEntry[];
 };
