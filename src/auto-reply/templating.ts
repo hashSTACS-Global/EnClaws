@@ -144,6 +144,12 @@ export type MsgContext = {
   /** Tenant user role for permission checks during tool execution. */
   TenantUserRole?: string;
   /**
+   * Human-readable external session label for downstream skills/subprocesses.
+   * Injected as ENCLAWS_SESSION_KEY env var. Format:
+   *   agent:{id} | channel:{ch} | group:{id|"single"} | union:{uid} | open:{oid} | name:{encoded}
+   */
+  SessionLabel?: string;
+  /**
    * Set to true by tenant-enrich when a new IM user could not be
    * provisioned because the tenant has hit its `maxUsers` quota.
    * The reply pipeline (get-reply.ts) inspects this flag before

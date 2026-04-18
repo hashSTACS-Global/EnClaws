@@ -85,6 +85,8 @@ export type FollowupRun = {
     tenantUserId?: string;
     /** Tenant user role for permission checks during tool execution. */
     tenantUserRole?: string;
+    /** Human-readable session label injected as ENCLAWS_SESSION_KEY env var. */
+    sessionLabel?: string;
   };
 };
 
