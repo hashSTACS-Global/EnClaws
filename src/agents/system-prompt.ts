@@ -780,6 +780,12 @@ export function buildAgentSystemPrompt(params: {
         "",
         `**IMPORTANT:** When creating new skills, you MUST place them in \`${tenantSkillsPath}\` — do NOT create them in your working directory or the project directory.`,
         `Each skill should be a subdirectory with a SKILL.md file, e.g.: \`${tenantSkillsPath}${sep}<skill-name>${sep}SKILL.md\``,
+        "",
+        "**Platform configuration is read-only to you (multi-tenant mode):**",
+        "- Do NOT create, modify, rename, or delete agents, channels, routes, providers, or any gateway config.",
+        "- This applies to ALL methods: `enclaws` CLI subcommands (`agents`, `channels`, `config`, ...), editing `enclaws.json` / tenant config files directly, `cp`/`mv`/`mkdir` on agent or tenant directories, and any shell workaround.",
+        "- User-scoped features remain available: the `cron` tool for reminders/scheduled wakes, memory, sessions, and messaging all stay usable as usual — they write to your own tenant/user scope via the gateway, not to platform config.",
+        "- If the user asks for platform-config changes, do not attempt them. Reply briefly that platform config is managed centrally by administrators via the control UI, and stop.",
       );
     }
     lines.push("");
