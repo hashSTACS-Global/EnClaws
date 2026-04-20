@@ -149,7 +149,7 @@ export const BLOCKED_PATTERN_SOURCES: readonly string[] = [
   "完全重置|全量清空",
 
   // ── Power / service control (Chinese) ──
-  "关机|关闭系统|关闭服务器",
+  "关机|关闭.*系统|关闭.*服务器",
   "重启系统|重启服务器|重启linux|重启server|重启wsl|重启主机|重启机器|重启节点",
   "重启.*(linux|server|wsl|system|host|os|kernel|vm|vps|node)",
   "停止.*服务|关闭.*服务",
@@ -176,13 +176,14 @@ export const BLOCKED_PATTERN_SOURCES: readonly string[] = [
   "删除.*表|drop.*table|truncate.*table",
   "删除.*token|清空.*token|删除.*密钥|删除.*api.*key",
   "清空.*凭证|删除.*凭证|重置.*密码",
+  "凭证.*清空|凭证.*删除|凭证.*清除|凭证.*重置",
   "删除.*agent|删除.*助手|删除.*机器人",
   "批量删除|全部删除|删除所有",
   "清空.*历史|删除.*记录|清除.*日志",
   "删除.*管理员|删除.*admin",
   "修改.*权限|提权",
   "格式化|清空.*磁盘",
-  "断网|关闭.*防火墙",
+  "断网|关闭.*防火墙|网络.*断开|断开.*网络",
 
   // ── Protected config files (English) ──
   "\\b(?:clear|delete|wipe|empty|erase)\\b.*USER\\.md",
