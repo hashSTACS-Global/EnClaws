@@ -39,6 +39,7 @@ import {
   TOOL_LABEL_KEY,
   TOOL_DESC_KEY,
 } from "../tool-group-defs.ts";
+import { SKILL_LABEL_KEY, SKILL_DESC_KEY } from "../skill-defs.ts";
 
 
 interface ModelConfigEntry {
@@ -97,16 +98,16 @@ type SkillEntry = { name: string; description: string; emoji?: string; source: s
 type SkillCategory = { label: string; skills: SkillEntry[] };
 
 function bundledSkillCategories(skills: SkillEntry[]): SkillCategory[] {
-  const defs: Array<{ label: string; match: (n: string) => boolean }> = [
-    { label: "飞书 (Feishu)",  match: (n) => n.startsWith("feishu-") },
-    { label: "Memory",         match: (n) => n === "memory-manager" },
-    { label: "Sessions",       match: (n) => n === "session-logs" },
-    { label: "Runtime",        match: (n) => ["coding-agent", "healthcheck", "pingtest"].includes(n) },
-    { label: "Automation",     match: (n) => ["skill-creator", "mcporter"].includes(n) },
-    { label: "Web",            match: (n) => n === "weather" },
+  const defs: Array<{ labelKey: string; match: (n: string) => boolean }> = [
+    { labelKey: "tenantSkills.skillCatFeishu",     match: (n) => n.startsWith("feishu-") },
+    { labelKey: "tenantSkills.skillCatMemory",     match: (n) => n === "memory-manager" },
+    { labelKey: "tenantSkills.skillCatSessions",   match: (n) => n === "session-logs" },
+    { labelKey: "tenantSkills.skillCatRuntime",    match: (n) => ["coding-agent", "healthcheck", "pingtest"].includes(n) },
+    { labelKey: "tenantSkills.skillCatAutomation", match: (n) => ["skill-creator", "mcporter"].includes(n) },
+    { labelKey: "tenantSkills.skillCatWeb",        match: (n) => n === "weather" },
   ];
-  const groups = defs.map((d) => ({ label: d.label, skills: [] as SkillEntry[], match: d.match }));
-  const other: SkillCategory = { label: "Other", skills: [] };
+  const groups = defs.map((d) => ({ label: t(d.labelKey), skills: [] as SkillEntry[], match: d.match }));
+  const other: SkillCategory = { label: t("tenantSkills.skillCatOther"), skills: [] };
   for (const s of skills) {
     const g = groups.find((x) => x.match(s.name));
     (g ?? other).skills.push(s);
@@ -487,24 +488,25 @@ export class TenantAgentsView extends LitElement {
       color: var(--destructive, #ff4d4f); background: rgba(255,77,79,0.1); border: 1px solid rgba(255,77,79,0.25);
     }
 
-    /* Skills groups (matches .agent-skills-groups / .agent-skills-group / .agent-skills-header) */
+    /* Skills groups — mirrors .tools-section / .tools-section-header style */
     .skills-groups { display: grid; gap: 16px; }
-
-    .skills-group { display: block; }
-    .skills-group summary { list-style: none; }
+    .skills-group {
+      border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px);
+      padding: 10px; background: var(--bg, #0a0a0a);
+    }
+    .skills-group summary { list-style: none; cursor: pointer; }
     .skills-group summary::-webkit-details-marker { display: none; }
     .skills-group summary::marker { content: ""; }
     .skills-header {
-      display: flex; align-items: center; font-weight: 600; font-size: 13px;
-      text-transform: uppercase; letter-spacing: 0.04em;
-      color: var(--text-muted, #525252); cursor: pointer; gap: 8px;
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 600; font-size: 13px; cursor: pointer;
     }
     .skills-header > span:last-child { margin-left: auto; }
     .skills-header::after {
       content: "\u25B8"; font-size: 12px; color: var(--text-muted, #525252);
-      transition: transform 0.15s ease; margin-left: 8px;
+      transition: transform 0.15s ease;
     }
-    .skills-group[open] .skills-header::after { transform: rotate(90deg); }
+    .skills-group[open] > .skills-header::after { transform: rotate(90deg); }
     /* Skill rows (matches .list-item / .list-main / .list-title / .list-sub) */
     .skills-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
     .skill-row {
@@ -2003,6 +2005,7 @@ export class TenantAgentsView extends LitElement {
   }
 
   private renderPanelSkills(agent: TenantAgent) {
+    const translated = (key: string | undefined, raw: string) => { if (!key) return raw; const v = t(key); return v === key ? raw : v; };
     const allSkills = this.agentSkills;
     const allSkillNames = allSkills.map((s) => s.name);
     // skills field is now a denylist — names in the array are DISABLED
@@ -2029,7 +2032,7 @@ export class TenantAgentsView extends LitElement {
     }
     const filteredGroups = [...allGrouped.entries()].map(([source, skills]) => ({
       source,
-      skills: filter ? skills.filter((s) => [s.name, s.description].join(" ").toLowerCase().includes(filter)) : skills,
+      skills: filter ? skills.filter((s) => [translated(SKILL_LABEL_KEY[s.name], s.name), translated(SKILL_DESC_KEY[s.name], s.description)].join(" ").toLowerCase().includes(filter)) : skills,
     })).filter((g) => g.skills.length > 0);
     const shownCount = filteredGroups.reduce((s, g) => s + g.skills.length, 0);
 
@@ -2062,7 +2065,7 @@ export class TenantAgentsView extends LitElement {
         <div class="skills-groups">
           ${filteredGroups.map(({ source, skills }) => {
             const groupEnabled = skills.filter((s) => !disabledSet.has(s.name)).length;
-            const collapsedByDefault = source === "enclaws-bundled";
+            const collapsedByDefault = true;
             const groupLabel = source === "enclaws-bundled" ? t("tenantSkills.sourceBundled")
               : source === "enclaws-tenant" ? t("tenantSkills.sourceTenant")
               : source;
@@ -2071,8 +2074,8 @@ export class TenantAgentsView extends LitElement {
               return html`
                 <div class="tool-row">
                   <div class="tool-row-info">
-                    <div class="tool-row-name">${s.emoji ? `${s.emoji} ` : ""}${s.name}</div>
-                    <div class="tool-row-desc" title=${s.description}>${s.description}</div>
+                    <div class="tool-row-name">${s.emoji ? `${s.emoji} ` : ""}${translated(SKILL_LABEL_KEY[s.name], s.name)}</div>
+                    <div class="tool-row-desc" title=${translated(SKILL_DESC_KEY[s.name], s.description)}>${translated(SKILL_DESC_KEY[s.name], s.description)}</div>
                   </div>
                   <label class="cfg-toggle">
                     <input type="checkbox" .checked=${allowed} ?disabled=${this.skillsSaving}
@@ -2083,7 +2086,7 @@ export class TenantAgentsView extends LitElement {
               `;
             };
             return html`
-              <details class="skills-group" ?open=${!collapsedByDefault}>
+              <details class="skills-group" ?open=${!collapsedByDefault || !!filter}>
                 <summary class="skills-header">
                   <span>${groupLabel}</span>
                   <span>${groupEnabled}/${skills.length}</span>
@@ -2091,7 +2094,7 @@ export class TenantAgentsView extends LitElement {
                 ${source === "enclaws-bundled"
                   ? html`<div class="skills-groups" style="padding-left:12px;margin-top:10px;">
                       ${bundledSkillCategories(skills).map((cat) => html`
-                        <details class="skills-group" open>
+                        <details class="skills-group" ?open=${!!filter}>
                           <summary class="skills-header">
                             <span>${cat.label}</span>
                             <span>${cat.skills.filter((s) => !disabledSet.has(s.name)).length}/${cat.skills.length}</span>
