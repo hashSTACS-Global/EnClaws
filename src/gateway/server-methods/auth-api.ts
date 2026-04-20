@@ -316,7 +316,7 @@ export const authHandlers: GatewayRequestHandlers = {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.INVALID_REQUEST, "该企业账号已被禁用，请联系平台管理员"),
+            errorShape(ErrorCodes.INVALID_REQUEST, "Tenant is suspended"),
           );
           return;
         }

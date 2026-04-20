@@ -716,6 +716,7 @@ export class EnClawsLogin extends LitElement {
     if (raw.includes("Invalid credentials")) return t("login.invalidCredentials");
     if (raw.includes("已注册") || raw.includes("already registered") || raw.includes("duplicate key") || raw.includes("unique constraint")) return t("login.emailAlreadyRegistered");
     if (raw.includes("verify your email") || raw.includes("pendingVerification")) return t("login.pendingVerification");
+    if (raw.includes("该企业账号已被禁用") || raw.includes("tenant suspended") || raw.includes("Tenant is suspended")) return t("login.tenantSuspended");
     return raw;
   }
 
