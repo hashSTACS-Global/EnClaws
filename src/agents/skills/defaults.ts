@@ -1,44 +1,13 @@
 /**
  * Bundled skills disabled by default for enterprise deployments.
  *
- * These skills target personal/consumer scenarios (smart home, Apple ecosystem,
- * social media, entertainment) and add noise to enterprise agent prompts.
- *
  * Stored in `tenant_agents.skills` (denylist) when creating new agents.
  * Admins can re-enable individual skills per agent via the UI.
+ *
+ * Currently empty: the enterprise bundle already ships only the 8 core skills
+ * (`coding-agent`, `healthcheck`, `mcporter`, `memory-manager`, `pingtest`,
+ * `session-logs`, `skill-creator`, `weather`). Consumer / personal / macOS-only
+ * skills have been physically removed from `skills/`, so no per-agent denylist
+ * is required. This hook point stays to support future additions.
  */
-export const DEFAULT_DISABLED_BUNDLED_SKILLS: readonly string[] = Object.freeze([
-  // Apple ecosystem (macOS-only)
-  "apple-notes",
-  "apple-reminders",
-  "bear-notes",
-  "bluebubbles",
-  "imsg",
-  "peekaboo",
-  "things-mac",
-  // Smart home / consumer hardware
-  "blucli",
-  "camsnap",
-  "eightctl",
-  "openhue",
-  "sonoscli",
-  // Music / entertainment / personal services
-  "gifgrep",
-  "ordercli",
-  "songsee",
-  "spotify-player",
-  // Social media / consumer publishing
-  "blogwatcher",
-  "wacli",
-  "xiaohongshu-publisher",
-  "xurl",
-  // Personal tools
-  "1password",
-  "goplaces",
-  // Node screen casting
-  "canvas",
-  // Functional overlap
-  "gemini",
-  "obsidian",
-  "openai-whisper",
-]);
+export const DEFAULT_DISABLED_BUNDLED_SKILLS: readonly string[] = Object.freeze([]);
