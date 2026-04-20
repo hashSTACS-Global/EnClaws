@@ -7,10 +7,16 @@ import { extractAssistantText, stripToolMessages } from "./sessions-helpers.js";
 export async function readLatestAssistantReply(params: {
   sessionKey: string;
   limit?: number;
+  _tenantId?: string;
+  _tenantUserId?: string;
 }): Promise<string | undefined> {
+  const tenantParams =
+    params._tenantId && params._tenantUserId
+      ? { _tenantId: params._tenantId, _tenantUserId: params._tenantUserId }
+      : {};
   const history = await callGateway<{ messages: Array<unknown> }>({
     method: "chat.history",
-    params: { sessionKey: params.sessionKey, limit: params.limit ?? 50 },
+    params: { sessionKey: params.sessionKey, limit: params.limit ?? 50, ...tenantParams },
   });
   const filtered = stripToolMessages(Array.isArray(history?.messages) ? history.messages : []);
   for (let i = filtered.length - 1; i >= 0; i -= 1) {

@@ -12,7 +12,6 @@ import {
 import { type OpenClawConfig, loadConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import {
-  buildGroupDisplayName,
   canonicalizeMainSessionAlias,
   loadSessionStore,
   resolveAgentMainSessionKey,
@@ -157,14 +156,29 @@ export function deriveSessionTitle(
     return undefined;
   }
 
-  if (entry.displayName?.trim()) {
-    return entry.displayName.trim();
+  // Resolve the two semantic halves:
+  //   groupLabel — human-readable group name from subject (GroupSubject); groupName is a
+  //                routing slug and is intentionally excluded from display
+  //   userLabel  — the IM user's real name
+  const groupLabel = entry.subject?.trim() || undefined;
+  const userLabel = entry.displayName?.trim() || undefined;
+
+  // Per-sender group session: both present → combine
+  if (groupLabel && userLabel) {
+    return `${groupLabel} · ${userLabel}`;
   }
 
-  if (entry.subject?.trim()) {
-    return entry.subject.trim();
+  // Direct chat: only user name
+  if (userLabel) {
+    return userLabel;
   }
 
+  // Regular group: only group name
+  if (groupLabel) {
+    return groupLabel;
+  }
+
+  // Derive from transcript content
   if (firstUserMessage?.trim()) {
     const normalized = firstUserMessage.replace(/\s+/g, " ").trim();
     return truncateTitle(normalized, DERIVED_TITLE_MAX_LEN);
@@ -808,23 +822,21 @@ export function listSessionsFromStore(params: {
       const subject = entry?.subject;
       const groupChannel = entry?.groupChannel;
       const space = entry?.space;
-      const id = parsed?.id;
       const origin = entry?.origin;
       const originLabel = origin?.label;
+      // Resolve display label using the new two-field semantics:
+      //   groupLabel — human-readable group name from subject; groupName is a routing slug
+      //   userLabel  — IM user's real name (displayName)
+      // When both are set this is a per-sender group session → combine.
+      const groupLabel = entry?.subject?.trim() || undefined;
+      const userLabel = entry?.displayName?.trim() || undefined;
       const displayName =
-        entry?.displayName ??
-        (channel
-          ? buildGroupDisplayName({
-              provider: channel,
-              subject,
-              groupChannel,
-              space,
-              id,
-              key,
-            })
-          : undefined) ??
-        entry?.label ??
-        originLabel;
+        groupLabel && userLabel
+          ? `${groupLabel} · ${userLabel}`
+          : userLabel
+            ?? groupLabel
+            ?? entry?.label
+            ?? originLabel;
       const deliveryFields = normalizeSessionDeliveryFields(entry);
       const parsedAgent = parseAgentSessionKey(key);
       const sessionAgentId = normalizeAgentId(parsedAgent?.agentId ?? resolveDefaultAgentId(cfg));

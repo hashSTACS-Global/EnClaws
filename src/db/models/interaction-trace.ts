@@ -8,7 +8,9 @@ import type { LlmInteractionTrace } from "../types.js";
 
 /** Sanitize a value for PostgreSQL JSONB — strip \u0000 null bytes which PG rejects. */
 function sanitizeJson(val: unknown): string | null {
-  if (val == null) return null;
+  if (val == null) {
+    return null;
+  }
   return JSON.stringify(val).replace(/\\u0000/g, "");
 }
 
@@ -32,10 +34,10 @@ function rowToTrace(row: Record<string, unknown>): LlmInteractionTrace {
     response: row.response ?? null,
     stopReason: (row.stop_reason as string) ?? null,
     errorMessage: (row.error_message as string) ?? null,
-    inputTokens: parseInt(String(row.input_tokens ?? 0), 10),
-    outputTokens: parseInt(String(row.output_tokens ?? 0), 10),
-    cacheReadTokens: parseInt(String(row.cache_read_tokens ?? 0), 10),
-    cacheWriteTokens: parseInt(String(row.cache_write_tokens ?? 0), 10),
+    inputTokens: parseInt(String(Number(row.input_tokens) || 0), 10),
+    outputTokens: parseInt(String(Number(row.output_tokens) || 0), 10),
+    cacheReadTokens: parseInt(String(Number(row.cache_read_tokens) || 0), 10),
+    cacheWriteTokens: parseInt(String(Number(row.cache_write_tokens) || 0), 10),
     durationMs: (row.duration_ms as number) ?? null,
     createdAt: row.created_at as Date,
   };
@@ -65,7 +67,9 @@ export async function createInteractionTrace(params: {
   cacheWriteTokens?: number;
   durationMs?: number;
 }): Promise<void> {
-  if (getDbType() === DB_SQLITE) return sqliteTrace.createInteractionTrace(params);
+  if (getDbType() === DB_SQLITE) {
+    return sqliteTrace.createInteractionTrace(params);
+  }
   try {
     await query(
       `INSERT INTO llm_interaction_traces
@@ -116,7 +120,9 @@ export async function listInteractionTraces(
     offset?: number;
   },
 ): Promise<{ traces: LlmInteractionTrace[]; total: number }> {
-  if (getDbType() === DB_SQLITE) return sqliteTrace.listInteractionTraces(tenantId, opts);
+  if (getDbType() === DB_SQLITE) {
+    return sqliteTrace.listInteractionTraces(tenantId, opts);
+  }
   const conditions = ["tenant_id = $1"];
   const values: unknown[] = [tenantId];
   let idx = 2;
@@ -165,7 +171,9 @@ export async function listInteractionTraces(
 }
 
 export async function getInteractionsByTurn(turnId: string): Promise<LlmInteractionTrace[]> {
-  if (getDbType() === DB_SQLITE) return sqliteTrace.getInteractionsByTurn(turnId);
+  if (getDbType() === DB_SQLITE) {
+    return sqliteTrace.getInteractionsByTurn(turnId);
+  }
   const result = await query(
     "SELECT * FROM llm_interaction_traces WHERE turn_id = $1 ORDER BY turn_index ASC",
     [turnId],
@@ -174,12 +182,23 @@ export async function getInteractionsByTurn(turnId: string): Promise<LlmInteract
 }
 
 export async function getInteractionTrace(id: string): Promise<LlmInteractionTrace | null> {
-  if (getDbType() === DB_SQLITE) return sqliteTrace.getInteractionTrace(id);
-  const result = await query(
-    "SELECT * FROM llm_interaction_traces WHERE id = $1",
-    [id],
-  );
+  if (getDbType() === DB_SQLITE) {
+    return sqliteTrace.getInteractionTrace(id);
+  }
+  const result = await query("SELECT * FROM llm_interaction_traces WHERE id = $1", [id]);
   return result.rows.length > 0 ? rowToTrace(result.rows[0]) : null;
+}
+
+export async function getMaxTurnIndex(turnId: string): Promise<number> {
+  if (getDbType() === DB_SQLITE) {
+    return sqliteTrace.getMaxTurnIndex(turnId);
+  }
+  const result = await query(
+    "SELECT MAX(turn_index) as max_index FROM llm_interaction_traces WHERE turn_id = $1",
+    [turnId],
+  );
+  const row = result.rows[0];
+  return row?.max_index != null ? Number(row.max_index) : -1;
 }
 
 /**
@@ -201,6 +220,7 @@ export async function listInteractionTurns(
     turnId: string;
     userInput: string | null;
     agentId: string | null;
+    agentName: string | null;
     channel: string | null;
     userId: string | null;
     sessionKey: string | null;
@@ -214,7 +234,9 @@ export async function listInteractionTurns(
   }>;
   total: number;
 }> {
-  if (getDbType() === DB_SQLITE) return sqliteTrace.listInteractionTurns(tenantId, opts);
+  if (getDbType() === DB_SQLITE) {
+    return sqliteTrace.listInteractionTurns(tenantId, opts);
+  }
   const conditions = ["tenant_id = $1"];
   const values: unknown[] = [tenantId];
   let idx = 2;
@@ -253,24 +275,30 @@ export async function listInteractionTurns(
   values.push(limit, offset);
 
   const result = await query(
-    `SELECT
-       turn_id,
-       MAX(CASE WHEN turn_index = 0 THEN user_input END) as user_input,
-       MAX(agent_id::text) as agent_id,
-       MAX(channel::text) as channel,
-       MAX(user_id::text) as user_id,
-       MAX(session_key::text) as session_key,
-       MAX(provider::text) as provider,
-       MAX(model::text) as model,
-       COUNT(*) as interaction_count,
-       COALESCE(SUM(input_tokens), 0) as total_input_tokens,
-       COALESCE(SUM(output_tokens), 0) as total_output_tokens,
-       COALESCE(SUM(duration_ms), 0) as total_duration_ms,
-       MIN(created_at) as created_at
-     FROM llm_interaction_traces ${where}
-     GROUP BY turn_id
-     ORDER BY MIN(created_at) DESC
-     LIMIT $${idx++} OFFSET $${idx}`,
+    `SELECT g.*,
+            COALESCE(ta.name, g.agent_id) as agent_name
+     FROM (
+       SELECT
+         turn_id,
+         MAX(CASE WHEN turn_index = 0 THEN user_input END) as user_input,
+         MAX(agent_id::text) as agent_id,
+         MAX(channel::text) as channel,
+         MAX(user_id::text) as user_id,
+         MAX(session_key::text) as session_key,
+         MAX(provider::text) as provider,
+         MAX(model::text) as model,
+         COUNT(*) as interaction_count,
+         COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+         COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+         COALESCE(SUM(duration_ms), 0) as total_duration_ms,
+         MIN(created_at) as created_at,
+         MAX(tenant_id::text) as tenant_id
+       FROM llm_interaction_traces ${where}
+       GROUP BY turn_id
+       ORDER BY MIN(created_at) DESC
+       LIMIT $${idx++} OFFSET $${idx}
+     ) g
+     LEFT JOIN tenant_agents ta ON ta.agent_id = g.agent_id AND ta.tenant_id = g.tenant_id`,
     values,
   );
 
@@ -279,6 +307,7 @@ export async function listInteractionTurns(
       turnId: row.turn_id as string,
       userInput: (row.user_input as string) ?? null,
       agentId: (row.agent_id as string) ?? null,
+      agentName: (row.agent_name as string) ?? null,
       channel: (row.channel as string) ?? null,
       userId: (row.user_id as string) ?? null,
       sessionKey: (row.session_key as string) ?? null,

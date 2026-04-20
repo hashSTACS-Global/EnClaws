@@ -169,7 +169,13 @@ export async function resolveMedia(params: {
       const userDir = LC.runtime?.channel?.session?.resolveTenantUserDir?.(tenantId, userId);
       if (userDir) {
         const path = await import('path');
-        mediaBaseDir = path.join(userDir, 'media');
+        // Write inbound media into the user's workspace (not a sibling `media/` dir),
+        // so skills running under the sandbox — which restricts reads to the workspace
+        // root via assertSandboxPath(workspaceOnly: true) — can actually open the file.
+        // Previously files landed in `<userDir>/media/inbound/` which is outside the
+        // workspace root, and the agent would refuse to read them citing "security
+        // restrictions". See src/agents/sandbox-media-paths.ts.
+        mediaBaseDir = path.join(userDir, 'workspace');
       }
     } catch {
       // Fall back to default media dir

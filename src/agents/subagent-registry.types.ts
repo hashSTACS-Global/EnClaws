@@ -32,6 +32,10 @@ export type SubagentRunRecord = {
   endedReason?: SubagentLifecycleEndedReason;
   /** Set after the subagent_ended hook has been emitted successfully once. */
   endedHookEmittedAt?: number;
+  /** Tenant ID for multi-tenant scoped subagent sessions. */
+  tenantId?: string;
+  /** Tenant user ID for multi-tenant scoped subagent sessions. */
+  tenantUserId?: string;
   /** Number of times this task has been retried (0 = first attempt). */
   retryCount?: number;
   /** Maximum retries allowed for this task (from retry policy). */

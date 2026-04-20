@@ -60,7 +60,9 @@ export async function enrichTenantContext(
         // user already exists in DB — we only need to resolve their role.
         // The quota-exceeded sentinel cannot occur here, but we narrow the
         // type defensively to keep the AutoProvisionResult fields accessible.
-        if (provisioned && !("quotaExceeded" in provisioned)) {
+        if (provisioned && "userSuspended" in provisioned) {
+          ctx.TenantUserSuspended = true;
+        } else if (provisioned && !("quotaExceeded" in provisioned)) {
           ctx.TenantUserRole = provisioned.role;
           // Backfill sender name from DB if plugin didn't resolve it
           if (isMissingSenderName(ctx) && provisioned.displayName && !isPlaceholderName(provisioned.displayName)) {
@@ -95,7 +97,20 @@ export async function enrichTenantContext(
     const accountId = (ctx as Record<string, unknown>).AccountId as string | undefined;
     if (accountId) {
       const accounts = channelCfg?.accounts as Record<string, Record<string, unknown> | undefined> | undefined;
-      tenantId = accounts?.[accountId]?.tenantId as string | undefined;
+      // Some channels (e.g. wecom) normalize accountId to lowercase on ctx while
+      // the accounts map is keyed by the original-case credential id. Try exact
+      // match first, then fall back to a case-insensitive scan.
+      let accountEntry = accounts?.[accountId];
+      if (!accountEntry && accounts) {
+        const lowerAccountId = accountId.toLowerCase();
+        for (const [key, entry] of Object.entries(accounts)) {
+          if (key.toLowerCase() === lowerAccountId) {
+            accountEntry = entry;
+            break;
+          }
+        }
+      }
+      tenantId = accountEntry?.tenantId as string | undefined;
     }
   }
   if (!tenantId) return;
@@ -113,18 +128,29 @@ export async function enrichTenantContext(
       ? await resolveChannelTenantContext(provider, accountId)
       : undefined;
 
+    // 某些渠道（如企业微信 AI Bot）回调里没有独立的 unionId 字段，
+    // 但 senderId 已经是企业内稳定的跨会话标识——等价于 unionId 的角色。
+    // 这里按 provider 做兜底，保证 DB 的 union_id 列能被填上，
+    // 下游 autoProvisionTenantUser 的 union_id 优先查找也能命中。
+    const unionIdFallbackProviders = new Set(["wecom", "dingtalk"]);
+    const resolvedUnionId = ctx.SenderUnionId
+      ?? (unionIdFallbackProviders.has(provider) ? senderId : undefined);
+
     const provisioned = await autoProvisionTenantUser({
       tenantId,
       openId: senderId,
-      unionId: ctx.SenderUnionId ?? undefined,
+      unionId: resolvedUnionId,
       displayName: ctx.SenderName ?? undefined,
       channelId: tenantCtx?.channelId,
     });
 
-    if (provisioned && "quotaExceeded" in provisioned) {
-      // User quota hit — set TenantId so the reply pipeline runs (and the
-      // user gets a reply via the same channel), and mark the context so
-      // get-reply.ts can short-circuit with a friendly upgrade message.
+    if (provisioned && "userSuspended" in provisioned) {
+      ctx.TenantId = tenantId;
+      ctx.TenantUserSuspended = true;
+      logVerbose(
+        `[tenant-enrich] user ${provisioned.userId} is ${provisioned.status} for ${provider}/${senderId} — message blocked`,
+      );
+    } else if (provisioned && "quotaExceeded" in provisioned) {
       ctx.TenantId = tenantId;
       ctx.TenantUserQuotaExceeded = true;
       logVerbose(

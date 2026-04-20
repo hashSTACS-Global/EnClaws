@@ -638,6 +638,7 @@ export async function runEmbeddedPiAgent(
             tenantId: params.tenantId,
             tenantUserId: params.tenantUserId,
             tenantUserRole: params.tenantUserRole,
+            sessionLabel: params.sessionLabel,
           });
 
           const {

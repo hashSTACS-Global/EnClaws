@@ -402,6 +402,8 @@ function startSubagentAnnounceCleanupFlow(runId: string, entry: SubagentRunRecor
     outcome: entry.outcome,
     spawnMode: entry.spawnMode,
     expectsCompletionMessage: entry.expectsCompletionMessage,
+    tenantId: entry.tenantId,
+    tenantUserId: entry.tenantUserId,
   })
     .then((didAnnounce) => {
       void finalizeSubagentCleanup(runId, entry.cleanup, didAnnounce);
@@ -912,6 +914,8 @@ export function registerSubagentRun(params: {
   retryCount?: number;
   maxRetries?: number;
   originalRunId?: string;
+  tenantId?: string;
+  tenantUserId?: string;
 }) {
   const now = Date.now();
   const cfg = loadConfig();
@@ -942,6 +946,8 @@ export function registerSubagentRun(params: {
     retryCount: params.retryCount,
     maxRetries: params.maxRetries,
     originalRunId: params.originalRunId,
+    tenantId: params.tenantId,
+    tenantUserId: params.tenantUserId,
   });
   ensureListener();
   persistSubagentRuns();

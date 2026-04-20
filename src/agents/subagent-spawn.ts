@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
 import { loadConfig } from "../config/config.js";
+import { isOptEnabled } from "../config/token-optimization.js";
 import { callGateway } from "../gateway/call.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import {
@@ -28,6 +29,23 @@ import {
   resolveInternalSessionKey,
   resolveMainSessionAlias,
 } from "./tools/sessions-helpers.js";
+
+const MAX_RESULT_CHARS = 6_000;
+const RESULT_HEAD_CHARS = 3_000;
+const RESULT_TAIL_CHARS = 2_000;
+
+/** When TOOLSYNC toggle is on, return undefined so subagent inherits parent's full tool set for shared cache prefix. */
+export function resolveSubagentTools(tools: string[] | undefined): string[] | undefined {
+  return isOptEnabled("TOOLSYNC") ? undefined : tools;
+}
+
+export function compressSubagentResult(result: string): string {
+  if (!isOptEnabled("COMPRESS") || result.length <= MAX_RESULT_CHARS) return result;
+  const head = result.slice(0, RESULT_HEAD_CHARS);
+  const tail = result.slice(-RESULT_TAIL_CHARS);
+  const trimmedChars = result.length - RESULT_HEAD_CHARS - RESULT_TAIL_CHARS;
+  return `${head}\n\n... [${trimmedChars} chars trimmed] ...\n\n${tail}`;
+}
 
 export const SUBAGENT_SPAWN_MODES = ["run", "session"] as const;
 export type SpawnSubagentMode = (typeof SUBAGENT_SPAWN_MODES)[number];
@@ -63,6 +81,10 @@ export type SpawnSubagentContext = {
   requesterAgentIdOverride?: string;
   /** Multi-agent Cognitive Loop Fusion: current recursive iteration depth */
   iterationDepth?: number;
+  /** Tenant ID for multi-tenant scoped subagent sessions. */
+  tenantId?: string;
+  /** Tenant user ID for multi-tenant scoped subagent sessions. */
+  tenantUserId?: string;
 };
 
 export const SUBAGENT_SPAWN_ACCEPTED_NOTE =
@@ -475,8 +497,10 @@ export async function spawnSubagentDirect(
         groupId: ctx.agentGroupId ?? undefined,
         groupChannel: ctx.agentGroupChannel ?? undefined,
         groupSpace: ctx.agentGroupSpace ?? undefined,
-        tools: params.tools,
+        tools: resolveSubagentTools(params.tools),
         skills: params.skills,
+        ...(ctx.tenantId ? { _tenantId: ctx.tenantId } : {}),
+        ...(ctx.tenantUserId ? { _tenantUserId: ctx.tenantUserId } : {}),
       },
       timeoutMs: 10_000,
     });
@@ -549,6 +573,8 @@ export async function spawnSubagentDirect(
     runTimeoutSeconds,
     expectsCompletionMessage,
     spawnMode,
+    tenantId: ctx.tenantId,
+    tenantUserId: ctx.tenantUserId,
   });
 
   if (hookRunner?.hasHooks("subagent_spawned")) {
@@ -604,9 +630,14 @@ export async function spawnSubagentDirect(
 
       // Attempt to read the final message from the session
       try {
-        const text = await readLatestSubagentOutput(childSessionKey);
+        const text = await readLatestSubagentOutput(
+          childSessionKey,
+          ctx.tenantId && ctx.tenantUserId
+            ? { tenantId: ctx.tenantId, tenantUserId: ctx.tenantUserId }
+            : undefined,
+        );
         if (text) {
-          completionText = text;
+          completionText = compressSubagentResult(text);
         }
       } catch {
         // Ignore read errors

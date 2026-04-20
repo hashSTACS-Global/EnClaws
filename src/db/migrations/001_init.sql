@@ -9,6 +9,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- Drop all tables (reverse dependency order)
 -- ============================================================
 DROP FUNCTION IF EXISTS update_updated_at_column CASCADE;
+DROP TABLE IF EXISTS cs_messages CASCADE;
+DROP TABLE IF EXISTS cs_sessions CASCADE;
 DROP TABLE IF EXISTS _migrations CASCADE;
 DROP TABLE IF EXISTS login_attempts CASCADE;
 DROP TABLE IF EXISTS password_history CASCADE;
@@ -35,7 +37,6 @@ DROP TABLE IF EXISTS sys_tools_config CASCADE;
 CREATE TABLE tenants (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name        VARCHAR(255) NOT NULL,
-  slug        VARCHAR(128) NOT NULL UNIQUE,       -- URL-safe identifier
   plan        VARCHAR(64)  NOT NULL DEFAULT 'free', -- free | pro | enterprise
   status      VARCHAR(32)  NOT NULL DEFAULT 'active', -- active | suspended | deleted
   settings    JSONB        NOT NULL DEFAULT '{}',  -- tenant-level settings overrides
@@ -43,7 +44,8 @@ CREATE TABLE tenants (
     "maxUsers": 10,
     "maxAgents": 5,
     "maxChannels": 5,
-    "maxTokensPerMonth": 20000000
+    "maxTokensPerMonth": 20000000,
+    "maxCronJobs": 5
   }',   -- resource quotas (mirrors plans.free; createTenant overrides via getPlanQuotas)
   trace_enabled    BOOLEAN      NOT NULL DEFAULT true,  -- LLM交互追踪开关
   identity_prompt  TEXT         NOT NULL DEFAULT '',   -- 企业身份特征描述
@@ -51,7 +53,6 @@ CREATE TABLE tenants (
   updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_tenants_slug ON tenants (slug);
 CREATE INDEX idx_tenants_status ON tenants (status);
 
 -- ============================================================
@@ -67,14 +68,15 @@ CREATE TABLE plans (
   max_agents             INTEGER NOT NULL,
   max_channels           INTEGER NOT NULL,
   max_tokens_per_month   BIGINT  NOT NULL,
+  max_cron_jobs          INTEGER NOT NULL DEFAULT 5,
   created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month) VALUES
-  ('free',       '免费版', 10, 5,  5,  20000000),
-  ('pro',        '专业版', 20, 20, 20, 200000000),
-  ('enterprise', '企业版', -1, -1, -1, -1)
+INSERT INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month, max_cron_jobs) VALUES
+  ('free',       '免费版', 10, 5,  5,  20000000, 5),
+  ('pro',        '专业版', 20, 20, 20, 200000000, 20),
+  ('enterprise', '企业版', -1, -1, -1, -1, 50)
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
@@ -163,7 +165,6 @@ CREATE TABLE tenant_channel_apps (
   tenant_id    UUID         NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   app_id       VARCHAR(255) NOT NULL,
   app_secret   VARCHAR(512) NOT NULL DEFAULT '',
-  bot_name     VARCHAR(255) NOT NULL DEFAULT '',
   group_policy VARCHAR(32)  NOT NULL DEFAULT 'open', -- open | allowlist | disabled
   agent_id     VARCHAR(128),                         -- bound agent logical ID
   is_active    BOOLEAN      NOT NULL DEFAULT true,
@@ -411,11 +412,11 @@ INSERT INTO sys_logging_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS sys_plugins_config (
   id                       INTEGER PRIMARY KEY CHECK (id = 1),
   enabled                  BOOLEAN NOT NULL DEFAULT true,
-  allow                    JSONB NOT NULL DEFAULT '["openclaw-lark"]',
+  allow                    JSONB NOT NULL DEFAULT '["openclaw-lark","wecom-openclaw-plugin","dingtalk-openclaw-connector"]',
   deny                     JSONB NOT NULL DEFAULT '[]',
   load                     JSONB NOT NULL DEFAULT '{}',
   slots                    JSONB NOT NULL DEFAULT '{}',
-  entries                  JSONB NOT NULL DEFAULT '{"openclaw-lark":{"enabled":true}}',
+  entries                  JSONB NOT NULL DEFAULT '{"openclaw-lark":{"enabled":true},"wecom-openclaw-plugin":{"enabled":true},"dingtalk-openclaw-connector":{"enabled":true}}',
   installs                 JSONB NOT NULL DEFAULT '{}',
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -449,7 +450,43 @@ CREATE TABLE IF NOT EXISTS sys_tools_config (
 INSERT INTO sys_tools_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 -- ============================================================
--- 15. Migration tracking
+-- 15. Customer Service (sessions + messages)
+-- ============================================================
+CREATE TABLE cs_sessions (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id        UUID         NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  visitor_id       VARCHAR(128) NOT NULL,
+  visitor_name     VARCHAR(255),
+  state            VARCHAR(32)  NOT NULL DEFAULT 'ai_active',
+  channel          VARCHAR(32)  NOT NULL DEFAULT 'web_widget',
+  tags             JSONB        NOT NULL DEFAULT '[]',
+  identity_anchors JSONB        NOT NULL DEFAULT '{}',
+  metadata         JSONB        NOT NULL DEFAULT '{}',
+  assigned_to      UUID         REFERENCES users(id),
+  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  closed_at        TIMESTAMPTZ
+);
+
+CREATE INDEX idx_cs_sessions_tenant ON cs_sessions (tenant_id, created_at DESC);
+CREATE INDEX idx_cs_sessions_state  ON cs_sessions (tenant_id, state) WHERE closed_at IS NULL;
+
+CREATE TABLE cs_messages (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id    UUID         NOT NULL REFERENCES cs_sessions(id) ON DELETE CASCADE,
+  tenant_id     UUID         NOT NULL,
+  role          VARCHAR(16)  NOT NULL,
+  content       TEXT         NOT NULL,
+  confidence    JSONB,
+  feedback_type VARCHAR(32),
+  source_chunks JSONB,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_cs_messages_session ON cs_messages (session_id, created_at);
+
+-- ============================================================
+-- 16. Migration tracking
 -- ============================================================
 CREATE TABLE IF NOT EXISTS _migrations (
   id          SERIAL PRIMARY KEY,
@@ -482,6 +519,8 @@ CREATE TRIGGER trg_channel_apps_updated_at BEFORE UPDATE ON tenant_channel_apps
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER trg_tenant_models_updated_at BEFORE UPDATE ON tenant_models
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trg_cs_sessions_updated_at BEFORE UPDATE ON cs_sessions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================
 -- Platform overview indexes (cross-tenant aggregation)
@@ -495,16 +534,15 @@ CREATE INDEX IF NOT EXISTS idx_traces_model_time ON llm_interaction_traces (mode
 -- ============================================================
 -- Seed: Platform admin tenant + user (password: Aa123456!, stored as bcrypt(sha256(password)))
 -- ============================================================
-INSERT INTO tenants (id, name, slug, plan, status, quotas)
+INSERT INTO tenants (id, name, plan, status, quotas)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
   'EnClaws Platform',
-  '_platform',
   'enterprise',
   'active',
   '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1}'
 )
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (id, tenant_id, email, password_hash, display_name, role, status)
 VALUES (

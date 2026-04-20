@@ -135,7 +135,7 @@ export function deriveGroupSessionPatch(params: {
     patch.space = space;
   }
 
-  const displayName = buildGroupDisplayName({
+  const groupName = buildGroupDisplayName({
     provider: channel,
     subject: nextSubject ?? params.existing?.subject,
     groupChannel: nextGroupChannel ?? params.existing?.groupChannel,
@@ -143,10 +143,46 @@ export function deriveGroupSessionPatch(params: {
     id: resolution.id,
     key: params.sessionKey,
   });
-  if (displayName) {
-    patch.displayName = displayName;
+  if (groupName) {
+    patch.groupName = groupName;
   }
 
+  // Per-sender group sessions embed ":sender:" in the key.
+  // Write the sender's identity as displayName so the UI can show "群名 · 用户名".
+  // SenderName is the best available identity per channel:
+  //   - Feishu: resolved real name (via auth-gate / user-name-cache)
+  //   - WeCom: userId (e.g. "liuyu") — intentional, this IS the display identity
+  //   - DingTalk: senderNick from message payload
+  const isPerSenderSession = params.sessionKey.includes(":sender:");
+  if (isPerSenderSession) {
+    const senderName = params.ctx.SenderName?.trim();
+    if (senderName && !isPlaceholderSenderName(senderName)) {
+      patch.displayName = senderName;
+    }
+  }
+
+  return patch;
+}
+
+function isPlaceholderSenderName(name: string | undefined): boolean {
+  if (!name) return true;
+  return name.startsWith("ou_") || name.startsWith("on_") || name.startsWith("oc_");
+}
+
+function deriveDirectChatPatch(ctx: MsgContext): Partial<SessionEntry> {
+  const patch: Partial<SessionEntry> = {};
+  const providerRaw =
+    (typeof ctx.OriginatingChannel === "string" && ctx.OriginatingChannel) ||
+    ctx.Surface ||
+    ctx.Provider;
+  const channel = normalizeMessageChannel(providerRaw);
+  if (channel) {
+    patch.channel = channel;
+  }
+  const senderName = ctx.SenderName?.trim();
+  if (senderName && !isPlaceholderSenderName(senderName)) {
+    patch.displayName = senderName;
+  }
   return patch;
 }
 
@@ -158,11 +194,13 @@ export function deriveSessionMetaPatch(params: {
 }): Partial<SessionEntry> | null {
   const groupPatch = deriveGroupSessionPatch(params);
   const origin = deriveSessionOrigin(params.ctx);
-  if (!groupPatch && !origin) {
+  const directPatch = groupPatch ? null : deriveDirectChatPatch(params.ctx);
+
+  if (!groupPatch && !origin && (!directPatch || Object.keys(directPatch).length === 0)) {
     return null;
   }
 
-  const patch: Partial<SessionEntry> = groupPatch ? { ...groupPatch } : {};
+  const patch: Partial<SessionEntry> = groupPatch ? { ...groupPatch } : { ...(directPatch ?? {}) };
   const mergedOrigin = mergeOrigin(params.existing?.origin, origin);
   if (mergedOrigin) {
     patch.origin = mergedOrigin;

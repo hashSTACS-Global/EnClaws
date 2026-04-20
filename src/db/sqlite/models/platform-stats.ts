@@ -5,6 +5,9 @@
 
 import { sqliteQuery } from "../index.js";
 
+/** Fixed UUID of the seeded platform tenant (see schema-sql.ts). */
+const PLATFORM_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+
 // Time filter helper
 function periodCondition(column: string, period: "all" | "month" | "today"): string {
   if (period === "month") return `${column} >= DATE('now', 'start of month')`;
@@ -14,7 +17,7 @@ function periodCondition(column: string, period: "all" | "month" | "today"): str
 
 export function getPlatformSummary() {
   // tenants
-  const tenantTotal = Number(sqliteQuery("SELECT COUNT(*) as c FROM tenants WHERE status != 'deleted' AND slug != '_platform'").rows[0].c);
+  const tenantTotal = Number(sqliteQuery(`SELECT COUNT(*) as c FROM tenants WHERE status != 'deleted' AND id != '${PLATFORM_TENANT_ID}'`).rows[0].c);
   const tenantActive = Number(sqliteQuery("SELECT COUNT(DISTINCT tenant_id) as c FROM llm_interaction_traces WHERE created_at >= DATE('now', '-30 days')").rows[0].c);
 
   // month tokens
@@ -61,7 +64,7 @@ export function getTokenRank(period: "all" | "month" | "today", limit: number) {
   const tenants = sqliteQuery(
     `SELECT t.name, t.plan, SUM(u.input_tokens + u.output_tokens) AS tokens
      FROM usage_records u JOIN tenants t ON u.tenant_id = t.id
-     WHERE ${cond} AND t.slug != '_platform'
+     WHERE ${cond} AND t.id != '${PLATFORM_TENANT_ID}'
      GROUP BY u.tenant_id ORDER BY tokens DESC LIMIT ?`,
     [limit],
   ).rows.map((r: any) => ({ name: r.name as string, plan: r.plan as string, tokens: Number(r.tokens) }));
@@ -72,7 +75,7 @@ export function getTokenRank(period: "all" | "month" | "today", limit: number) {
      FROM usage_records u
      LEFT JOIN users us ON us.tenant_id = u.tenant_id AND (u.user_id = us.id OR u.user_id = us.union_id)
      JOIN tenants t ON u.tenant_id = t.id
-     WHERE ${cond} AND t.slug != '_platform' AND u.user_id IS NOT NULL
+     WHERE ${cond} AND t.id != '${PLATFORM_TENANT_ID}' AND u.user_id IS NOT NULL
      GROUP BY u.tenant_id, u.user_id ORDER BY tokens DESC LIMIT ?`,
     [limit],
   ).rows.map((r: any) => ({ name: (r.name as string) || "-", tenantName: (r.tenant_name as string) || "-", tokens: Number(r.tokens) }));
@@ -97,7 +100,7 @@ export function getTokenRank(period: "all" | "month" | "today", limit: number) {
     `SELECT u.agent_id AS name, t.name AS tenant_name, SUM(u.input_tokens + u.output_tokens) AS tokens
      FROM usage_records u
      JOIN tenants t ON u.tenant_id = t.id
-     WHERE ${cond} AND u.agent_id IS NOT NULL AND t.slug != '_platform'
+     WHERE ${cond} AND u.agent_id IS NOT NULL AND t.id != '${PLATFORM_TENANT_ID}'
      GROUP BY u.tenant_id, u.agent_id ORDER BY tokens DESC LIMIT ?`,
     [limit],
   ).rows.map((r: any) => ({ name: r.name as string, tenantName: r.tenant_name as string, tokens: Number(r.tokens) }));
@@ -144,19 +147,19 @@ export function getChannelDistribution() {
 
 export function getUserActivity() {
   const total = Number(sqliteQuery(
-    "SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id) as uid FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.slug != '_platform')"
+    `SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id) as uid FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.id != '${PLATFORM_TENANT_ID}')`
   ).rows[0].c);
 
   const active30d = Number(sqliteQuery(
-    "SELECT COUNT(DISTINCT tr.user_id) as c FROM llm_interaction_traces tr JOIN tenants t ON tr.tenant_id = t.id WHERE tr.created_at >= DATE('now', '-30 days') AND t.slug != '_platform'"
+    `SELECT COUNT(DISTINCT tr.user_id) as c FROM llm_interaction_traces tr JOIN tenants t ON tr.tenant_id = t.id WHERE tr.created_at >= DATE('now', '-30 days') AND t.id != '${PLATFORM_TENANT_ID}'`
   ).rows[0].c);
 
   const newToday = Number(sqliteQuery(
-    "SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id) as uid FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.slug != '_platform' AND u.created_at >= DATE('now'))"
+    `SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id) as uid FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.id != '${PLATFORM_TENANT_ID}' AND u.created_at >= DATE('now'))`
   ).rows[0].c);
 
   const newThisWeek = Number(sqliteQuery(
-    "SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id) as uid FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.slug != '_platform' AND u.created_at >= DATE('now', '-7 days'))"
+    `SELECT COUNT(*) as c FROM (SELECT DISTINCT u.tenant_id, COALESCE(u.union_id, u.id) as uid FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.status = 'active' AND t.id != '${PLATFORM_TENANT_ID}' AND u.created_at >= DATE('now', '-7 days'))`
   ).rows[0].c);
 
   return { total, active30d, newToday, newThisWeek };

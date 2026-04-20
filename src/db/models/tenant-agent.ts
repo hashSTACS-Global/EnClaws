@@ -5,6 +5,7 @@
 import { query, getDbType, DB_SQLITE } from "../index.js";
 import * as sqliteAgent from "../sqlite/models/tenant-agent.js";
 import type { TenantAgent, ModelConfigEntry } from "../types.js";
+import { DEFAULT_DISABLED_BUNDLED_SKILLS } from "../../agents/skills/defaults.js";
 
 function rowToAgent(row: Record<string, unknown>): TenantAgent {
   return {
@@ -38,7 +39,7 @@ export async function createTenantAgent(params: {
     `INSERT INTO tenant_agents (tenant_id, agent_id, name, config, model_config, tools, skills, created_by)
      VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8)
      RETURNING *`,
-    [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? null), params.createdBy ?? null],
+    [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? DEFAULT_DISABLED_BUNDLED_SKILLS), params.createdBy ?? null],
   );
   return rowToAgent(result.rows[0]);
 }
@@ -176,15 +177,18 @@ export function toConfigAgentsList(
         : undefined;
 
     const toolsDeny = a.tools?.deny ?? [];
-    const skillsEnabled = Array.isArray(a.skills) ? a.skills : [];
 
+    // NOTE: `a.skills` is a denylist of bundled skills in multi-tenant mode.
+    // It is consumed via getTenantAgent → disabledBundledSkills in get-reply.ts.
+    // Do NOT copy it into cfg.agents.list[*].skills, which carries the legacy
+    // file-config allowlist semantic — doing so would make resolveAgentSkillsFilter
+    // misread the denylist as an allowlist and filter every non-listed skill out.
     return {
       id: a.agentId,
       name: a.name,
       ...a.config,
       ...(modelField !== undefined ? { model: modelField } : {}),
       ...(toolsDeny.length > 0 ? { tools: { ...((a.config?.tools as Record<string, unknown>) ?? {}), deny: toolsDeny } } : {}),
-      ...(Array.isArray(a.skills) ? { skills: skillsEnabled } : {}),
     };
   });
 }

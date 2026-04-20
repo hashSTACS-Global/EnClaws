@@ -76,6 +76,9 @@ export const SCOPE_BYPASS_METHODS = new Set([
   // Feishu bot registration
   "tenant.feishu.register.begin",
   "tenant.feishu.register.poll",
+  // WeCom bot registration
+  "tenant.wecom.register.begin",
+  "tenant.wecom.register.poll",
   // Tenant session management
   "tenant.sessions.list",
   "tenant.sessions.get",
@@ -85,6 +88,8 @@ export const SCOPE_BYPASS_METHODS = new Set([
   "tenant.usage.quota",
   // Tenant onboarding
   "tenant.onboarding.setup",
+  // Tenant cron (cross-agent)
+  "cron.listAll",
   // Platform overview (handled by platform-admin RBAC)
   "platform.overview.summary",
   "platform.overview.tokenTrend",

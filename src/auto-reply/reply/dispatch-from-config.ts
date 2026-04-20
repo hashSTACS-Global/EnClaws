@@ -185,14 +185,65 @@ export async function dispatchReplyFromConfig(params: {
   // tenant-scoped workspace/session paths.
   await enrichTenantContext(ctx, cfg);
 
+  // ── Tenant suspension check ────────────────────────────────────
+  // If the tenant has been suspended by platform admin, reply with a short
+  // notice and skip LLM execution so no agent runs or token consumption.
+  // Resolve tenantId from ctx (set by enrichTenantContext) OR from channel
+  // config directly — the latter covers cases where auto-provision failed
+  // (e.g. during suspension) and ctx.TenantId was never set.
+  {
+    let checkTenantId = ctx.TenantId;
+    if (!checkTenantId) {
+      const provider = (ctx.Provider ?? ctx.Surface ?? "").toLowerCase();
+      const channelCfg = (cfg.channels as Record<string, Record<string, unknown> | undefined>)?.[provider];
+      checkTenantId = channelCfg?.tenantId as string | undefined;
+      if (!checkTenantId) {
+        const accountId = (ctx as Record<string, unknown>).AccountId as string | undefined;
+        if (accountId) {
+          const accounts = channelCfg?.accounts as Record<string, Record<string, unknown> | undefined> | undefined;
+          checkTenantId = accounts?.[accountId]?.tenantId as string | undefined;
+        }
+      }
+    }
+    if (checkTenantId) {
+      try {
+        const { getTenantById } = await import("../../db/models/tenant.js");
+        const tenant = await getTenantById(checkTenantId);
+        if (tenant && tenant.status === "suspended") {
+          logVerbose(`[dispatch] tenant ${checkTenantId} is suspended, replying with notice`);
+          const payload = { text: "该企业账号已被禁用，请联系平台管理员。" } satisfies ReplyPayload;
+          const queuedFinal = dispatcher.sendFinalReply(payload);
+          recordProcessed("completed", { reason: "tenant-suspended" });
+          markIdle("tenant_suspended");
+          return { queuedFinal, counts: dispatcher.getQueuedCounts() };
+        }
+      } catch {
+        // Non-fatal: if DB check fails, allow the message through
+      }
+    }
+  }
+
+  // ── User suspended gate ──────────────────────────────────────
+  if (ctx.TenantUserSuspended) {
+    logVerbose(`[dispatch] user is suspended, replying with notice`);
+    const payload = { text: "您的账号已被禁用，请联系管理员。" } satisfies ReplyPayload;
+    const queuedFinal = dispatcher.sendFinalReply(payload);
+    recordProcessed("completed", { reason: "user-suspended" });
+    markIdle("user_suspended");
+    return { queuedFinal, counts: dispatcher.getQueuedCounts() };
+  }
+
   // ── Pre-LLM auth gate ────────────────────────────────────────
-  // 跨 IM 平台通用：如果某个 provider 注册了 driver、且当前用户的 SenderName
-  // 仍然没拿到（contact API 没权限 / DB 未命中 / 没有存量 UAT），就：
-  //   1. 把这条入站消息暂存到 pending 队列
-  //   2. 通过 driver 给用户发一张轻量授权卡片（飞书是 DM via open_id）
-  //   3. 早退 —— LLM 不跑，token 不消耗
-  //   4. 用户授权后 driver 把名字写 DB，pending 队列重放本消息（这次有名字了）
-  // 没注册 driver 的 provider（slack/discord/telegram 等）会直接放行，互不影响。
+  // Shared across IM platforms: if a provider has a driver registered and the
+  // current user's SenderName is still unresolved (no contact-API permission /
+  // DB miss / no stored UAT):
+  //   1. stash this inbound message into the pending queue
+  //   2. have the driver send a lightweight auth card to the user (Feishu uses DM via open_id)
+  //   3. short-circuit — the LLM does not run, no tokens spent
+  //   4. after the user authorizes, the driver writes the name to DB and the
+  //      pending queue replays this message (which now carries the name)
+  // Providers with no registered driver (slack/discord/telegram, ...) are
+  // passed through untouched.
   const gateResult = await coreAuthGate({
     ctx,
     cfg,
@@ -394,7 +445,7 @@ export async function dispatchReplyFromConfig(params: {
   // while the model and tools are still loading.
   // Calling onReasoningStream triggers ensureCardCreated() in the streaming
   // controller; the acknowledgment text is shown as a thinking indicator.
-  const processingAckText = process.env.ENCLAWS_PROCESSING_ACK_TEXT?.trim() ?? "任务已接收，处理中";
+  const processingAckText = process.env.ENCLAWS_PROCESSING_ACK_TEXT?.trim() ?? "🫡 任务已接收，处理中";
   if (params.replyOptions?.onReasoningStream && processingAckText) {
     try {
       await params.replyOptions.onReasoningStream({ text: processingAckText });

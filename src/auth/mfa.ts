@@ -172,7 +172,6 @@ interface ChallengeEntry {
   tenantId: string;
   email: string | null;
   role: string;
-  tslug: string;
   expiresAt: number;
 }
 
@@ -196,7 +195,6 @@ export function issueMfaChallenge(params: {
   tenantId: string;
   email: string | null;
   role: string;
-  tslug: string;
 }): string {
   const token = crypto.randomBytes(32).toString("base64url");
   challengeStore.set(token, {
@@ -204,7 +202,6 @@ export function issueMfaChallenge(params: {
     tenantId: params.tenantId,
     email: params.email,
     role: params.role,
-    tslug: params.tslug,
     expiresAt: Date.now() + CHALLENGE_TTL_MS,
   });
   return token;

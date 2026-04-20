@@ -34,11 +34,12 @@ interface QuotaInfo {
   period: { start: string; end: string };
   tokens: { used: number; max: number; remaining: number; percentUsed: number };
   quotas: TenantQuotas;
+  currentCronJobs?: number;
 }
 
 /** Subset of tenant.overview.summary used to populate the resource quota cards. */
 interface TenantSummary {
-  tenant: { name: string; plan: string; status: string; slug: string; createdAt: string; admin: string };
+  tenant: { name: string; plan: string; status: string; createdAt: string; admin: string };
   agents: { total: number; active: number; active30d: number };
   channels: { total: number; active: number; apps: number };
   users: { total: number; active30d: number };
@@ -50,6 +51,7 @@ interface TenantQuotas {
   maxChannels?: number;
   maxModels?: number;
   maxTokensPerMonth?: number;
+  maxCronJobs?: number;
 }
 
 // ── Component ──
@@ -126,9 +128,19 @@ export class TenantUsageView extends LitElement {
     .empty-hint { color: var(--text-muted, #525252); font-size: 0.85rem; padding: 1rem 0.5rem; text-align: center; }
 
     .section-note {
-      font-size: 0.7rem; color: var(--text-muted, #525252);
-      margin-top: 0.25rem; font-style: italic;
+      font-size: 0.85rem; color: var(--text-2, #a1a1aa);
+      margin-top: 0.35rem;
+      display: flex; align-items: center; gap: 0.5rem;
     }
+    .plan-tag {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 0.25rem 0.7rem;
+      border-radius: 9999px; font-size: 0.8rem; font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .plan-tag.free { background: var(--border, #333); color: var(--muted, #888); }
+    .plan-tag.pro { background: var(--accent-light, #1e3a5f); color: var(--accent, #3b82f6); }
+    .plan-tag.enterprise { background: var(--accent-light, #1e3a5f); color: var(--accent-2, #8b5cf6); }
   `];
 
   @property({ type: String }) gatewayUrl = "";
@@ -256,12 +268,14 @@ export class TenantUsageView extends LitElement {
             <div class="section">
               <h3>${t("tenantUsage.resourceQuotas")}</h3>
               <div class="section-note">
-                ${t("tenantUsage.currentPlan")}：<strong>${this.tenantSummary.tenant.plan}</strong>
+                ${t("tenantUsage.currentPlan")}
+                <span class="plan-tag ${this.tenantSummary.tenant.plan}">${t(`platformTenants.plan${this.tenantSummary.tenant.plan.charAt(0).toUpperCase()}${this.tenantSummary.tenant.plan.slice(1)}` as any) || this.tenantSummary.tenant.plan}</span>
               </div>
               <div class="resource-grid" style="margin-top: 0.75rem;">
                 ${this.renderResourceCard(t("tenantUsage.agents"), this.tenantSummary.agents.total, this.tenantQuotas.maxAgents)}
                 ${this.renderResourceCard(t("tenantUsage.channels"), this.tenantSummary.channels.total, this.tenantQuotas.maxChannels)}
                 ${this.renderResourceCard(t("tenantUsage.users"), this.tenantSummary.users.total, this.tenantQuotas.maxUsers)}
+                ${this.renderResourceCard(t("tenantUsage.cronJobs"), this.quota?.currentCronJobs ?? 0, this.tenantQuotas.maxCronJobs)}
               </div>
             </div>
           `

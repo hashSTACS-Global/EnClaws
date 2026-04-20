@@ -2,27 +2,38 @@
  * Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
  * SPDX-License-Identifier: MIT
  *
- * 飞书"轻量授权" driver —— core 端实现，不依赖任何插件代码。
+ * Feishu "lightweight auth" driver — implemented in core, with zero plugin dependencies.
  *
- * 流程（被 `auth-gate.ts::coreAuthGate` 调用）：
- *   1. 用 OAuth Device Authorization Grant (RFC 8628) 申请最小 scope
- *      `offline_access`，拿到一个 device code + verification URL
- *   2. 把含 verification URL 的 interactive 卡片**通过 receive_id_type='open_id'
- *      DM 给用户**——飞书会自动定位到 bot↔user 的 p2p 会话（陌生用户会被
- *      230013 拦截，driver 返回 delivered=false 让 gate 清 cooldown 重试）
- *   3. 异步轮询 token endpoint 直到用户授权成功 / 拒绝 / 过期
- *   4. 拿到 UAT 后调 `/open-apis/authen/v1/user_info` 获取用户名（这个 endpoint
- *      不需要任何额外业务 scope，UAT 有效就能返回 name / en_name）
- *   5. 调 gate 给的 `onComplete(name)` —— gate 会写 DB + 重放暂存的入站消息
+ * Flow (invoked by `auth-gate.ts::coreAuthGate`):
+ *   1. Use the OAuth Device Authorization Grant (RFC 8628) to request the
+ *      minimal `offline_access` scope, obtaining a device code + verification URL.
+ *   2. DM the user an interactive card containing the verification URL
+ *      **via receive_id_type='open_id'** — Feishu routes this into the
+ *      bot↔user p2p chat automatically. If the user is a stranger the
+ *      request is blocked with 230013 and the driver returns
+ *      delivered=false, letting the gate clear the cooldown and retry.
+ *   3. Poll the token endpoint asynchronously until the user approves, denies,
+ *      or the code expires.
+ *   4. Once we have a UAT, call `/open-apis/authen/v1/user_info` to fetch
+ *      the user's name. That endpoint requires no extra business scope — a
+ *      valid UAT is enough to return name / en_name.
+ *   5. Call the gate-provided `onComplete(name)` — the gate persists the name
+ *      to DB and replays the queued inbound message.
  *
- * 与插件 `extensions/openclaw-lark/src/tools/oauth.ts::executeAuthorize` 的区别：
- *   - 完全 fetch-based，不依赖 Lark SDK（保持 core 与插件解耦）
- *   - **不存 token**，拿到名字写完 DB 就丢弃（够用了，刷新场景极少）
- *   - 不复用插件的 cardkit（少一些卡片更新动效，换来零插件依赖）
- *   - 不做 owner 检查（任意用户可为自己授权，本来就是用户自己授权自己）
+ * Differences vs. the plugin path
+ * (`extensions/openclaw-lark/src/tools/oauth.ts::executeAuthorize`):
+ *   - Purely fetch-based; does not depend on the Lark SDK (keeps core
+ *     decoupled from plugins).
+ *   - **Does not store the token** — once the name has been persisted the
+ *     token is discarded (good enough, refresh scenarios are very rare).
+ *   - Does not reuse the plugin's cardkit (we lose some card-update
+ *     animations but keep zero plugin dependencies).
+ *   - Does not run an owner check (any user can authorize themselves, which
+ *     is exactly what happens here).
  *
- * 注册：模块顶层调用 `registerAuthDriver(feishuLiteAuthDriver)`，由
- * `auth-gate-bootstrap.ts` 在 boot 时 import 一下即可触发注册。
+ * Registration: this module calls `registerAuthDriver(feishuLiteAuthDriver)`
+ * at the top level. `auth-gate-bootstrap.ts` just has to `import` this file
+ * at boot and the driver self-registers.
  */
 
 import { createSubsystemLogger } from "../logging/subsystem.js";
@@ -35,7 +46,7 @@ const log = createSubsystemLogger("feishu-lite-auth");
 const LITE_SCOPE = "offline_access";
 
 // ---------------------------------------------------------------------------
-// Lark/Feishu OAuth endpoints (国内版默认；lark 国际版 TODO)
+// Lark/Feishu OAuth endpoints (defaults to the Chinese Feishu hosts; international Lark TODO).
 // ---------------------------------------------------------------------------
 
 const DEVICE_AUTH_URL = "https://accounts.feishu.cn/oauth/v1/device_authorization";
@@ -160,7 +171,7 @@ async function pollDeviceToken(
       return null;
     } catch (err) {
       log.warn(`token poll fetch failed: ${String(err)}`);
-      // 网络抖动，下一轮继续
+      // Transient network hiccup — try again next iteration.
     }
   }
   log.info(`device flow timed out after ${expiresIn}s`);
@@ -259,12 +270,13 @@ async function sendInteractiveDm(
 }
 
 // ---------------------------------------------------------------------------
-// Step 5: build "授权完成" success card and patch the original DM card in place
+// Step 5: build the success card and patch the original DM card in place.
 // ---------------------------------------------------------------------------
 
 /**
- * 构造授权成功后用于替换原卡片的"完成"卡片。
- * 不带按钮，避免用户再次点击早已失效的 OAuth 链接。
+ * Builds the "auth complete" card used to replace the original DM card after
+ * a successful authorization. Button-less by design — we do not want users
+ * clicking the OAuth link again once it has already been consumed.
  */
 function buildLiteAuthSuccessCard(name: string): Record<string, unknown> {
   return {
@@ -295,9 +307,10 @@ function buildLiteAuthSuccessCard(name: string): Record<string, unknown> {
 }
 
 /**
- * 用 `PATCH /open-apis/im/v1/messages/{message_id}` 把已经发出去的卡片内容替换掉。
- * 飞书要求 PATCH 请求 body 是 `{ content: "<json string>" }`，content 是新卡片的
- * JSON 字符串。
+ * Replace an already-sent interactive card in place using
+ * `PATCH /open-apis/im/v1/messages/{message_id}`. Feishu expects the PATCH
+ * body as `{ content: "<json string>" }` where content is the new card
+ * serialized as a JSON string.
  */
 async function patchInteractiveCard(
   tenantToken: string,
@@ -339,39 +352,40 @@ export const feishuLiteAuthDriver: AuthGateDriver = {
       return { delivered: false, reason: "no-sender-id" };
     }
 
-    // 1. 找出对应 account 的 appId / appSecret
+    // 1. Look up the appId / appSecret for this account.
     const accountId = (ctx as Record<string, unknown>).AccountId as string | undefined;
     const creds = extractFeishuCredentials(cfg as unknown as Record<string, unknown>, "feishu", accountId);
     if (!creds) {
       return { delivered: false, reason: "no-credentials" };
     }
 
-    // 2. 拿 tenant access token（用来调 IM 发卡片）
+    // 2. Fetch a tenant access token (used to send the IM card).
     const tenantToken = await getTenantAccessToken(creds.appId, creds.appSecret);
     if (!tenantToken) {
       return { delivered: false, reason: "tenant-token-failed" };
     }
 
-    // 3. 申请 device authorization
+    // 3. Request device authorization.
     const deviceAuth = await requestDeviceAuthorization(creds.appId, creds.appSecret);
     if (!deviceAuth) {
       return { delivered: false, reason: "device-auth-failed" };
     }
 
-    // 4. 构造卡片 + DM 给用户
+    // 4. Build the card and DM it to the user.
     const card = buildLiteAuthCard(deviceAuth.verificationUriComplete);
     const sendResult = await sendInteractiveDm(tenantToken, senderId, card);
     if (!sendResult.ok) {
       log.warn(`DM send failed for ${senderId}: ${sendResult.reason}`);
       return { delivered: false, reason: sendResult.reason };
     }
-    // 记录原卡片的 message_id，用于授权完成后 PATCH 替换为"授权完成"卡片
+    // Remember the message_id so we can PATCH this card into the success card later.
     const originalCardMessageId = sendResult.messageId;
     log.info(
       `lite-auth DM delivered to ${senderId} (message_id=${originalCardMessageId ?? "unknown"}), polling device flow in background`,
     );
 
-    // 5. 后台轮询 token；拿到名字后回调 onComplete（gate 会写 DB + 重放）
+    // 5. Poll for the token in the background; once we have the name, invoke
+    //    onComplete (the gate persists to DB + replays the queued message).
     setImmediate(async () => {
       const token = await pollDeviceToken(
         creds.appId,
@@ -390,8 +404,10 @@ export const feishuLiteAuthDriver: AuthGateDriver = {
       }
       log.info(`lite-auth complete: ${senderId} → "${name}"`);
 
-      // 5a. 把原 DM 卡片 PATCH 成"授权完成"卡片，避免按钮一直显示"前往授权"
-      //     需要先刷新 tenant token（前面那个 token 可能已经过期，特别是用户拖了很久才点）
+      // 5a. PATCH the original DM card into the success card so the "go authorize"
+      //     button does not linger once authorization is done. We refresh the tenant
+      //     token first — the one from step 2 may have expired (the user may have
+      //     taken a long time to click).
       if (originalCardMessageId) {
         try {
           const freshTenantToken = await getTenantAccessToken(creds.appId, creds.appSecret);
@@ -409,7 +425,7 @@ export const feishuLiteAuthDriver: AuthGateDriver = {
         }
       }
 
-      // 5b. 触发 gate 的 onComplete（写 DB + replay 之前暂存的消息）
+      // 5b. Fire the gate's onComplete (writes the name to DB + replays the stashed message).
       try {
         await onComplete(name);
       } catch (err) {
@@ -421,5 +437,5 @@ export const feishuLiteAuthDriver: AuthGateDriver = {
   },
 };
 
-// 模块加载时自动注册
+// Self-register at module load time.
 registerAuthDriver(feishuLiteAuthDriver);

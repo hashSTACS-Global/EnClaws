@@ -13,17 +13,15 @@ PRAGMA journal_mode = WAL;
 CREATE TABLE IF NOT EXISTS tenants (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
-  slug        TEXT NOT NULL UNIQUE,
   plan        TEXT NOT NULL DEFAULT 'free',
   status      TEXT NOT NULL DEFAULT 'active',
   settings    TEXT NOT NULL DEFAULT '{}',
-  quotas      TEXT NOT NULL DEFAULT '{"maxUsers":10,"maxAgents":5,"maxChannels":5,"maxTokensPerMonth":20000000}',
+  quotas      TEXT NOT NULL DEFAULT '{"maxUsers":10,"maxAgents":5,"maxChannels":5,"maxTokensPerMonth":20000000,"maxCronJobs":5}',
   trace_enabled    INTEGER NOT NULL DEFAULT 1,
   identity_prompt  TEXT NOT NULL DEFAULT '',
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants (slug);
 CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants (status);
 
 -- Plans (subscription plan dictionary). -1 = unlimited.
@@ -34,9 +32,12 @@ CREATE TABLE IF NOT EXISTS plans (
   max_agents           INTEGER NOT NULL,
   max_channels         INTEGER NOT NULL,
   max_tokens_per_month INTEGER NOT NULL,
+  max_cron_jobs        INTEGER NOT NULL DEFAULT 5,
   created_at           TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- Seeds for max_cron_jobs are applied in initSqliteDb (after ADD COLUMN migration),
+-- so this INSERT only covers the legacy columns to stay compatible with pre-upgrade tables.
 INSERT OR IGNORE INTO plans (id, name, max_users, max_agents, max_channels, max_tokens_per_month) VALUES
   ('free',       '免费版', 10, 5,  5,  20000000),
   ('pro',        '专业版', 20, 20, 20, 200000000),
@@ -110,7 +111,6 @@ CREATE TABLE IF NOT EXISTS tenant_channel_apps (
   tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   app_id       TEXT NOT NULL,
   app_secret   TEXT NOT NULL DEFAULT '',
-  bot_name     TEXT NOT NULL DEFAULT '',
   group_policy TEXT NOT NULL DEFAULT 'open',
   agent_id     TEXT,
   is_active    INTEGER NOT NULL DEFAULT 1,
@@ -332,11 +332,11 @@ INSERT OR IGNORE INTO sys_logging_config (id) VALUES (1);
 CREATE TABLE IF NOT EXISTS sys_plugins_config (
   id                       INTEGER PRIMARY KEY CHECK (id = 1),
   enabled                  INTEGER NOT NULL DEFAULT 1,
-  allow                    TEXT NOT NULL DEFAULT '["openclaw-lark"]',
+  allow                    TEXT NOT NULL DEFAULT '["openclaw-lark","wecom-openclaw-plugin","dingtalk-openclaw-connector"]',
   deny                     TEXT NOT NULL DEFAULT '[]',
   load                     TEXT NOT NULL DEFAULT '{}',
   slots                    TEXT NOT NULL DEFAULT '{}',
-  entries                  TEXT NOT NULL DEFAULT '{"openclaw-lark":{"enabled":true}}',
+  entries                  TEXT NOT NULL DEFAULT '{"openclaw-lark":{"enabled":true},"wecom-openclaw-plugin":{"enabled":true},"dingtalk-openclaw-connector":{"enabled":true}}',
   installs                 TEXT NOT NULL DEFAULT '{}',
   updated_at               TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -404,14 +404,13 @@ CREATE TRIGGER IF NOT EXISTS trg_channel_apps_updated_at AFTER UPDATE ON tenant_
   END;
 
 -- Seed: Platform admin tenant + user (password: Aa123456!, stored as bcrypt(sha256(password)))
-INSERT OR IGNORE INTO tenants (id, name, slug, plan, status, quotas)
+INSERT OR IGNORE INTO tenants (id, name, plan, status, quotas)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
   'EnClaws Platform',
-  '_platform',
   'enterprise',
   'active',
-  '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1}'
+  '{"maxUsers":-1,"maxAgents":-1,"maxChannels":-1,"maxTokensPerMonth":-1,"maxCronJobs":-1}'
 );
 
 INSERT OR IGNORE INTO users (id, tenant_id, email, password_hash, display_name, role, status)

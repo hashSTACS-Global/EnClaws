@@ -19,6 +19,7 @@ import {
 } from "../../db/models/interaction-trace.js";
 import { assertPermission, RbacError } from "../../auth/rbac.js";
 import type { TenantContext } from "../../auth/middleware.js";
+import { loadSessionEntry } from "../session-utils.js";
 
 /** Parse a date-only string and set to end of day (23:59:59.999). */
 function parseUntilDate(s: string): Date {
@@ -41,6 +42,41 @@ function getTenantCtx(
     return null;
   }
   return tenant;
+}
+
+/**
+ * Enrich turns with session displayName and channel from sessions.json.
+ *
+ * Reads session store files (sync I/O, typically < 1ms each) to look up
+ * the authoritative displayName that was already resolved and cached by
+ * the inbound pipeline (metadata.ts). This avoids fragile regex parsing
+ * of raw LLM prompt text on the client side.
+ */
+function enrichTurnsWithSessionMeta(
+  turns: Array<{
+    sessionKey: string | null;
+    userId: string | null;
+    [k: string]: unknown;
+  }>,
+  tenantId: string,
+): Array<Record<string, unknown>> {
+  return turns.map((turn) => {
+    let sessionDisplayName: string | null = null;
+    let sessionChannel: string | null = null;
+    if (turn.sessionKey) {
+      try {
+        const { entry } = loadSessionEntry(turn.sessionKey, {
+          tenantId,
+          userId: turn.userId ?? undefined,
+        });
+        if (entry?.displayName) sessionDisplayName = entry.displayName;
+        if (entry?.channel) sessionChannel = entry.channel;
+      } catch {
+        // Non-fatal: session file may not exist for old/pruned sessions
+      }
+    }
+    return { ...turn, sessionDisplayName, sessionChannel };
+  });
 }
 
 export const tenantTracesHandlers: GatewayRequestHandlers = {
@@ -81,7 +117,8 @@ export const tenantTracesHandlers: GatewayRequestHandlers = {
       offset,
     });
 
-    respond(true, result);
+    const enrichedTurns = enrichTurnsWithSessionMeta(result.turns, ctx.tenantId);
+    respond(true, { turns: enrichedTurns, total: result.total });
   },
 
   /**

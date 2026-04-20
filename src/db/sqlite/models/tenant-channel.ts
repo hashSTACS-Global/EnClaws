@@ -143,7 +143,6 @@ export async function toConfigChannels(channels: TenantChannel[]): Promise<Recor
       apps: apps.map((a) => ({
         appId: a.appId,
         appSecret: a.appSecret,
-        botName: a.botName,
         groupPolicy: a.groupPolicy,
         isActive: a.isActive,
       })),

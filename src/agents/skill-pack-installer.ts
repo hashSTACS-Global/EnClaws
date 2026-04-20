@@ -137,6 +137,39 @@ export type SkillPackResult = {
   skipped?: string;
 };
 
+/**
+ * Check whether a tenant already has skill packs installed.
+ * Returns true if at least one skill subdirectory exists under the target.
+ */
+function hasSkillPack(tenantId: string): boolean {
+  const targetDir = path.join(resolveTenantSkillsDir(tenantId), "feishu-skills");
+  if (!fs.existsSync(targetDir)) return false;
+  return SKILLS.some((s) => fs.existsSync(path.join(targetDir, s)));
+}
+
+/**
+ * Ensure all tenants have skill packs installed.
+ * Called on gateway startup — only installs for tenants missing skill packs.
+ */
+export async function ensureSkillPacksForAllTenants(
+  tenantIds: string[],
+  log?: { info: (msg: string) => void; warn: (msg: string) => void },
+): Promise<void> {
+  const autoInstall = process.env.SKILL_PACK_AUTO_INSTALL?.trim().toLowerCase();
+  if (autoInstall === "false" || autoInstall === "0") return;
+
+  for (const tenantId of tenantIds) {
+    if (hasSkillPack(tenantId)) continue;
+    log?.info(`skill-pack: tenant ${tenantId} missing skill pack, installing...`);
+    const result = await installSkillPack(tenantId);
+    if (result.ok && result.installed.length > 0) {
+      log?.info(`skill-pack: installed ${result.installed.length} skills for tenant ${tenantId}`);
+    } else if (!result.ok) {
+      log?.warn(`skill-pack: failed for tenant ${tenantId}: ${result.errors.map((e) => e.error).join(", ")}`);
+    }
+  }
+}
+
 export async function installSkillPack(tenantId: string): Promise<SkillPackResult> {
   // Check toggle
   const autoInstall = process.env.SKILL_PACK_AUTO_INSTALL?.trim().toLowerCase();

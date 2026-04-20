@@ -542,6 +542,7 @@ export type CronJobState = {
 export type CronJob = {
   id: string;
   agentId?: string;
+  createdBy?: { userId: string; displayName?: string };
   name: string;
   description?: string;
   enabled: boolean;

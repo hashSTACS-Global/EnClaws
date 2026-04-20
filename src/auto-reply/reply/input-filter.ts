@@ -3,7 +3,6 @@ import { BLOCKED_PATTERN_SOURCES } from "./blocked-patterns.js";
 
 const log = createSubsystemLogger("input-filter");
 
-/** Compile pattern strings into RegExp array once at startup. */
 const BLOCKED_PATTERNS: RegExp[] = [];
 for (const src of BLOCKED_PATTERN_SOURCES) {
   try {

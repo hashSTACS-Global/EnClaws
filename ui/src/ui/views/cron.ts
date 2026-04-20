@@ -1428,6 +1428,7 @@ function renderJob(job: CronJob, props: CronProps) {
         <div class="list-sub">${formatCronSchedule(job)}</div>
         ${renderJobPayload(job)}
         ${job.agentId ? html`<div class="muted cron-job-agent">${t("cron.jobDetail.agent")}: ${job.agentId}</div>` : nothing}
+        ${job.createdBy ? html`<div class="muted cron-job-agent">${t("cron.createdBy")}: ${job.createdBy.displayName || job.createdBy.userId}</div>` : nothing}
       </div>
       <div class="list-meta">
         ${renderJobState(job)}

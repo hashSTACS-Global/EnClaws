@@ -50,6 +50,15 @@ export class CronService {
     return this.state.store?.jobs.find((job) => job.id === id);
   }
 
+  /**
+   * Synchronously read the number of jobs currently loaded in memory.
+   * Returns 0 before `start()` has populated the store. Used for tenant-wide
+   * quota checks and display without async disk I/O.
+   */
+  getInMemoryJobCount(): number {
+    return this.state.store?.jobs.length ?? 0;
+  }
+
   wake(opts: { mode: "now" | "next-heartbeat"; text: string }) {
     return ops.wakeNow(this.state, opts);
   }

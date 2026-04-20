@@ -16,7 +16,6 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
   return {
     id: row.id as string,
     name: row.name as string,
-    slug: row.slug as string,
     plan: row.plan as TenantPlan,
     status: row.status as TenantStatus,
     settings: (typeof row.settings === "string" ? JSON.parse(row.settings) : row.settings ?? {}) as TenantSettings,
@@ -37,6 +36,7 @@ const FALLBACK_FREE_QUOTAS: TenantQuotas = {
   maxAgents: 5,
   maxChannels: 5,
   maxTokensPerMonth: 20_000_000,
+  maxCronJobs: 5,
 };
 
 /**
@@ -46,7 +46,7 @@ const FALLBACK_FREE_QUOTAS: TenantQuotas = {
 export async function getPlanQuotas(planId: string): Promise<TenantQuotas> {
   try {
     const result = sqliteQuery(
-      `SELECT max_users, max_agents, max_channels, max_tokens_per_month
+      `SELECT max_users, max_agents, max_channels, max_tokens_per_month, max_cron_jobs
        FROM plans WHERE id = ?`,
       [planId],
     );
@@ -57,6 +57,7 @@ export async function getPlanQuotas(planId: string): Promise<TenantQuotas> {
       maxAgents: Number(row.max_agents),
       maxChannels: Number(row.max_channels),
       maxTokensPerMonth: Number(row.max_tokens_per_month),
+      maxCronJobs: Number(row.max_cron_jobs),
     };
   } catch (err) {
     console.warn(`[tenant] getPlanQuotas(${planId}) failed, using fallback: ${String(err)}`);
@@ -72,12 +73,11 @@ export async function createTenant(input: CreateTenantInput): Promise<Tenant> {
   const quotas = { ...planQuotas, ...input.quotas };
 
   sqliteQuery(
-    `INSERT INTO tenants (id, name, slug, plan, settings, quotas)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tenants (id, name, plan, settings, quotas)
+     VALUES (?, ?, ?, ?, ?)`,
     [
       id,
       input.name,
-      input.slug,
       input.plan ?? "free",
       JSON.stringify(input.settings ?? {}),
       JSON.stringify(quotas),
@@ -93,13 +93,9 @@ export async function getTenantById(id: string): Promise<Tenant | null> {
   return result.rows.length > 0 ? rowToTenant(result.rows[0]) : null;
 }
 
-export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
-  const result = sqliteQuery("SELECT * FROM tenants WHERE slug = ?", [slug]);
-  return result.rows.length > 0 ? rowToTenant(result.rows[0]) : null;
-}
-
 export async function listTenants(opts?: {
   status?: TenantStatus;
+  search?: string;
   limit?: number;
   offset?: number;
 }): Promise<{ tenants: Tenant[]; total: number }> {
@@ -109,6 +105,10 @@ export async function listTenants(opts?: {
   if (opts?.status) {
     conditions.push("status = ?");
     values.push(opts.status);
+  }
+  if (opts?.search) {
+    conditions.push("name LIKE ?");
+    values.push(`%${opts.search}%`);
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -132,7 +132,7 @@ export async function listTenants(opts?: {
 
 export async function updateTenant(
   id: string,
-  updates: Partial<Pick<Tenant, "name" | "slug" | "plan" | "status" | "settings" | "quotas" | "traceEnabled" | "identityPrompt">>,
+  updates: Partial<Pick<Tenant, "name" | "plan" | "status" | "settings" | "quotas" | "traceEnabled" | "identityPrompt">>,
 ): Promise<Tenant | null> {
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -140,10 +140,6 @@ export async function updateTenant(
   if (updates.name !== undefined) {
     sets.push("name = ?");
     values.push(updates.name);
-  }
-  if (updates.slug !== undefined) {
-    sets.push("slug = ?");
-    values.push(updates.slug);
   }
   if (updates.plan !== undefined) {
     sets.push("plan = ?");
@@ -217,4 +213,15 @@ export async function checkTenantQuota(
   // -1 means unlimited (enterprise plan).
   if (max < 0) return { allowed: true, current, max };
   return { allowed: current < max, current, max };
+}
+
+export async function getMonthlyTokenUsage(tenantId: string): Promise<number> {
+  const result = sqliteQuery(
+    `SELECT COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens), 0) AS total
+     FROM usage_records
+     WHERE tenant_id = ?
+       AND strftime('%Y-%m', recorded_at) = strftime('%Y-%m', 'now')`,
+    [tenantId],
+  );
+  return Number(result.rows[0].total) || 0;
 }

@@ -28,9 +28,11 @@ import { listAllTenantChannelApps } from "../../db/models/tenant-channel-app.js"
 import { createAuditLog } from "../../db/models/audit-log.js";
 import { assertPermission, RbacError } from "../../auth/rbac.js";
 import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
+import { bumpSkillsSnapshotVersion } from "../../agents/skills/refresh.js";
 import type { TenantContext } from "../../auth/middleware.js";
 import type { ModelConfigEntry } from "../../db/types.js";
 import { resolveTenantAgentDir } from "../../config/sessions/tenant-paths.js";
+import { seedAgentWorkspaceFiles } from "../../agents/workspace.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -43,12 +45,6 @@ export async function syncIdentityFile(tenantId: string, agentId: string, config
   const agentDir = resolveTenantAgentDir(tenantId, agentId);
   await fs.mkdir(agentDir, { recursive: true });
   await fs.writeFile(path.join(agentDir, DEFAULT_IDENTITY_FILENAME), systemPrompt, "utf-8");
-}
-
-/** Remove the agent's IDENTITY.md file. Used to roll back syncIdentityFile on transaction failure. */
-export async function removeIdentityFile(tenantId: string, agentId: string): Promise<void> {
-  const agentDir = resolveTenantAgentDir(tenantId, agentId);
-  await fs.rm(path.join(agentDir, DEFAULT_IDENTITY_FILENAME), { force: true });
 }
 
 function getTenantCtx(
@@ -122,13 +118,14 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { agentId, name, config, modelConfig, tools, skills } = params as {
+    const { agentId, name, config, modelConfig, tools, skills, locale } = params as {
       agentId: string;
       name: string;
       config?: Record<string, unknown>;
       modelConfig?: ModelConfigEntry[];
       tools?: { deny: string[] };
       skills?: string[];
+      locale?: string;
     };
 
     if (!agentId || !name) {
@@ -147,10 +144,7 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
     }
 
     if (!/^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$/.test(agentId)) {
-      respond(false, undefined, errorShape(
-        ErrorCodes.INVALID_PARAMS,
-        "agentId must be lowercase alphanumeric with hyphens/underscores, 1-64 chars",
-      ));
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "tenantAgents.agentIdPattern"));
       return;
     }
 
@@ -206,7 +200,10 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       createdBy: ctx.userId,
     });
 
-    await syncIdentityFile(ctx.tenantId, agentId, config);
+    await seedAgentWorkspaceFiles(resolveTenantAgentDir(ctx.tenantId, agentId), {
+      locale,
+      systemPrompt: typeof config?.systemPrompt === "string" ? config.systemPrompt : undefined,
+    });
     invalidateTenantConfigCache(ctx.tenantId);
     await context.reloadDbChannels();
 
@@ -321,6 +318,16 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       await syncIdentityFile(ctx.tenantId, agentId, config);
     }
     invalidateTenantConfigCache(ctx.tenantId);
+    // When skills or tools denylist changes via UI, cached skillsSnapshot in
+    // sessionStore becomes stale (watcher-based invalidation only fires on
+    // file changes, not config writes). Bump the global snapshot version so
+    // the next turn of any session rebuilds from fresh DB state.
+    if (resolvedSkills !== undefined || resolvedTools !== undefined) {
+      bumpSkillsSnapshotVersion({
+        reason: "manual",
+        changedPath: `tenant:${ctx.tenantId}/agent:${agentId}`,
+      });
+    }
     await context.reloadDbChannels();
 
     await createAuditLog({

@@ -11,6 +11,7 @@ const telemetryState = vi.hoisted(() => {
       setStatus: vi.fn(),
     })),
   };
+  const observableGauges = new Map<string, { addCallback: ReturnType<typeof vi.fn> }>();
   const meter = {
     createCounter: vi.fn((name: string) => {
       const counter = { add: vi.fn() };
@@ -22,8 +23,13 @@ const telemetryState = vi.hoisted(() => {
       histograms.set(name, histogram);
       return histogram;
     }),
+    createObservableGauge: vi.fn((name: string) => {
+      const gauge = { addCallback: vi.fn() };
+      observableGauges.set(name, gauge);
+      return gauge;
+    }),
   };
-  return { counters, histograms, tracer, meter };
+  return { counters, histograms, observableGauges, tracer, meter };
 });
 
 const sdkStart = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -183,9 +189,11 @@ describe("diagnostics-otel service", () => {
   beforeEach(() => {
     telemetryState.counters.clear();
     telemetryState.histograms.clear();
+    telemetryState.observableGauges.clear();
     telemetryState.tracer.startSpan.mockClear();
     telemetryState.meter.createCounter.mockClear();
     telemetryState.meter.createHistogram.mockClear();
+    telemetryState.meter.createObservableGauge.mockClear();
     sdkStart.mockClear();
     sdkShutdown.mockClear();
     logEmit.mockClear();

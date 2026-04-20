@@ -1,0 +1,29 @@
+# 编辑器/IDE
+.idea
+.vscode
+.zed
+
+# 系统文件
+.DS_Store
+*.swp
+
+# 依赖
+node_modules
+
+# 构建产物
+dist
+
+# 日志
+npm-debug.log
+yarn-error.log
+
+# 锁文件
+/package-lock.json
+
+.npmrc
+
+# 测试生成的媒体文件
+test-media-files
+.codebuddy
+
+requirements

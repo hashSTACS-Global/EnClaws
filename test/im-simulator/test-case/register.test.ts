@@ -19,7 +19,6 @@ describe("full setup → chat", () => {
         // 1. Register tenant
         await env.register({
             tenantName: "IM Simulator Test",
-            tenantSlug: slug,
             email: email,
             password: password,
         });

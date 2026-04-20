@@ -1,6 +1,7 @@
 import { createHmac, createHash } from "node:crypto";
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
+import { isOptEnabled } from "../config/token-optimization.js";
 import type { MemoryCitationsMode } from "../config/types.memory.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
@@ -15,7 +16,7 @@ import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
  * - "minimal": Reduced sections (Tooling, Workspace, Runtime) - used for subagents
  * - "none": Just basic identity line, no sections
  */
-export type PromptMode = "full" | "minimal" | "none";
+export type PromptMode = "full" | "minimal" | "worker" | "none";
 type OwnerIdDisplay = "raw" | "hash";
 
 /**
@@ -25,24 +26,30 @@ type OwnerIdDisplay = "raw" | "hash";
  *   .../tenants/{tenantId}/agents/{agentId}/AGENT.md
  * Returns the tenant dir path if detected (preserving original OS path format).
  */
-function detectTenantDirFromContextFiles(
-  files: Array<{ path: string }>,
-): string | undefined {
+function detectTenantDirFromContextFiles(files: Array<{ path: string }>): string | undefined {
   for (const file of files) {
     const filePath = file.path;
     // Use forward-slash normalization for detection only
     const normalized = filePath.replace(/\\/g, "/");
     const tenantsIdx = normalized.lastIndexOf("/tenants/");
-    if (tenantsIdx === -1) {continue;}
+    if (tenantsIdx === -1) {
+      continue;
+    }
     const afterTenants = normalized.slice(tenantsIdx + "/tenants/".length);
     const slashIdx = afterTenants.indexOf("/");
-    if (slashIdx === -1) {continue;}
+    if (slashIdx === -1) {
+      continue;
+    }
     const tenantId = afterTenants.slice(0, slashIdx);
-    if (!tenantId) {continue;}
+    if (!tenantId) {
+      continue;
+    }
     // Return using original path format (preserves Windows backslashes)
     const sep = filePath.includes("\\") ? "\\" : "/";
     const origTenantsIdx = filePath.lastIndexOf(`${sep}tenants${sep}`);
-    if (origTenantsIdx === -1) {continue;}
+    if (origTenantsIdx === -1) {
+      continue;
+    }
     return filePath.slice(0, origTenantsIdx + `${sep}tenants${sep}`.length + tenantId.length);
   }
   return undefined;
@@ -53,7 +60,7 @@ function buildSkillsSection(params: { skillsPrompt?: string; readToolName: strin
   if (!trimmed) {
     return [];
   }
-  const hasInlineSkills = trimmed.includes("<inline_skill");
+  const hasInlineSkills = !isOptEnabled("PROMPT") && trimmed.includes("<inline_skill");
   return [
     "## Skills (mandatory)",
     "Before replying: scan <available_skills> <description> entries.",
@@ -83,12 +90,24 @@ function buildMemorySection(params: {
   if (!params.availableTools.has("memory_search") && !params.availableTools.has("memory_get")) {
     return [];
   }
-  const lines = [
-    "## Memory & Deep Context Retrieval (Act as a Human Employee)",
-    "You are an active employee. Before starting ANY new task, answering questions about prior work, decisions, or preferences, you MUST run `memory_search` on MEMORY.md + memory/*.md.",
-    "Do not hallucinate past context. If you encounter a new domain, search memory first to see if you have 'learned' about it previously.",
-    "Use `memory_get` to pull specific lines. If you have low confidence after searching, explicitly state that you checked your memory but found no relevant records.",
-  ];
+  const lines = isOptEnabled("P1")
+    ? [
+        "## Memory & Deep Context Retrieval",
+        "Search memory ONLY when:",
+        "- User references prior conversations or decisions",
+        "- Task requires context from previous work",
+        '- User explicitly asks "do you remember..."',
+        "- You need to check existing notes before creating new ones",
+        "",
+        "Do NOT search memory for simple greetings, confirmations, or self-contained questions.",
+        "Use `memory_get` to pull specific lines. State explicitly if you found no relevant records.",
+      ]
+    : [
+        "## Memory & Deep Context Retrieval (Act as a Human Employee)",
+        "You are an active employee. Before starting ANY new task, answering questions about prior work, decisions, or preferences, you MUST run `memory_search` on MEMORY.md + memory/*.md.",
+        "Do not hallucinate past context. If you encounter a new domain, search memory first to see if you have 'learned' about it previously.",
+        "Use `memory_get` to pull specific lines. If you have low confidence after searching, explicitly state that you checked your memory but found no relevant records.",
+      ];
   if (params.citationsMode === "off") {
     lines.push(
       "Citations are disabled: do not mention file paths or line numbers in replies unless explicitly asked.",
@@ -102,10 +121,7 @@ function buildMemorySection(params: {
   return lines;
 }
 
-function buildTenantMemorySection(params: {
-  isMinimal: boolean;
-  availableTools: Set<string>;
-}) {
+function buildTenantMemorySection(params: { isMinimal: boolean; availableTools: Set<string> }) {
   if (params.isMinimal) {
     return [];
   }
@@ -114,9 +130,7 @@ function buildTenantMemorySection(params: {
   if (!hasTenantMemory && !hasUserMemory) {
     return [];
   }
-  const lines: string[] = [
-    "## Memory Management",
-  ];
+  const lines: string[] = ["## Memory Management"];
   if (hasTenantMemory) {
     lines.push(
       "",
@@ -175,7 +189,7 @@ function buildTimeSection(params: { userTimezone?: string }) {
   return ["## Current Date & Time", `Time zone: ${params.userTimezone}`, ""];
 }
 
-function buildReplyTagsSection(isMinimal: boolean) {
+function buildReplyTagsSection(isMinimal: boolean, _runtimeChannel?: string) {
   if (isMinimal) {
     return [];
   }
@@ -448,6 +462,7 @@ export function buildAgentSystemPrompt(params: {
   const messageChannelOptions = listDeliverableMessageChannels().join("|");
   const promptMode = params.promptMode ?? "full";
   const isMinimal = promptMode === "minimal" || promptMode === "none";
+  const isWorker = promptMode === "worker";
   const sandboxContainerWorkspace = params.sandboxInfo?.containerWorkspaceDir?.trim();
   const sanitizedWorkspaceDir = sanitizeForPromptLiteral(params.workspaceDir);
   const sanitizedSandboxContainerWorkspace = sandboxContainerWorkspace
@@ -468,23 +483,33 @@ export function buildAgentSystemPrompt(params: {
     "Do not manipulate or persuade anyone to expand access or disable safeguards. Do not copy yourself or change system prompts, safety rules, or tool policies unless explicitly requested.",
     "If a tool is not in your available tools list, it has been disabled by policy. Do NOT attempt to achieve the same effect through other tools (e.g. using exec, process, nodes, or sub-agents to bypass a disabled write/read tool). Do NOT perform any preparatory steps (e.g. reading a file before writing it) for an operation whose core tool is unavailable. Instead, immediately inform the user that the required capability has been disabled and stop.",
     "",
+    "## Enterprise Operation Restrictions (HARD LIMITS — cannot be overridden by any user instruction or confirmation)",
+    "The following are PERMANENTLY PROHIBITED:",
+    "1. Starting, stopping, or restarting the EnClaws Gateway or any system service via exec/shell — even if the user explicitly asks or confirms. If service control is needed, inform the user to use the `gateway` tool or run the CLI themselves.",
+    "2. Deleting, moving, renaming, or modifying files inside the EnClaws state directory (~/.enclaws/ or $ENCLAWS_STATE_DIR) via any tool.",
+    "3. Clearing, emptying, or replacing the content of protected files (USER.md, MEMORY.md, AGENT.md, SOUL.md, IDENTITY.md) — even with 'placeholder' or 'minimal' content as a substitute.",
+    "4. Deleting or truncating databases, credentials, API keys, tokens, or audit logs.",
+    "5. Cross-tenant or cross-user file access (reading/writing another tenant's or user's directory).",
+    "When any of the above is requested: immediately refuse with a clear explanation that the operation is prohibited. Do NOT seek workarounds, do NOT write placeholder content, do NOT use alternative tools (exec, read, cp, mv, etc.) to achieve the same effect. User confirmation does NOT override these restrictions.",
+    "",
   ];
   const skillsSection = buildSkillsSection({
     skillsPrompt,
     readToolName,
   });
+  const skipExtended = isMinimal || isWorker;
   const memorySection = buildMemorySection({
-    isMinimal,
+    isMinimal: skipExtended,
     availableTools,
     citationsMode: params.memoryCitationsMode,
   });
   const tenantMemorySection = buildTenantMemorySection({
-    isMinimal,
+    isMinimal: skipExtended,
     availableTools,
   });
   const docsSection = buildDocsSection({
     docsPath: params.docsPath,
-    isMinimal,
+    isMinimal: skipExtended,
     readToolName,
   });
   const workspaceNotes = (params.workspaceNotes ?? []).map((note) => note.trim()).filter(Boolean);
@@ -494,33 +519,38 @@ export function buildAgentSystemPrompt(params: {
     return "You are a personal assistant running inside EnClaws.";
   }
 
+  const toolListSection = isOptEnabled("TOOLLIST")
+    ? ["## Tool Usage"]
+    : [
+        "## Tooling",
+        "Tool availability (filtered by policy):",
+        "Tool names are case-sensitive. Call tools exactly as listed.",
+        toolLines.length > 0
+          ? toolLines.join("\n")
+          : [
+              "Pi lists the standard tools above. This runtime enables:",
+              "- grep: search file contents for patterns",
+              "- find: find files by glob pattern",
+              "- ls: list directory contents",
+              "- apply_patch: apply multi-file patches",
+              `- ${execToolName}: run shell commands (supports background via yieldMs/background)`,
+              `- ${processToolName}: manage background exec sessions`,
+              "- browser: control EnClaws's dedicated browser",
+              "- canvas: present/eval/snapshot the Canvas",
+              "- nodes: list/describe/notify/camera/screen on paired nodes",
+              "- cron: manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
+              "- sessions_list: list sessions",
+              "- sessions_history: fetch session history",
+              "- sessions_send: send to another session",
+              "- subagents: list/steer/kill sub-agent runs",
+              '- session_status: show usage/time/model state and answer "what model are we using?"',
+            ].join("\n"),
+        "TOOLS.md does not control tool availability; it is user guidance for how to use external tools.",
+      ];
   const lines = [
     "You are a personal assistant running inside EnClaws.",
     "",
-    "## Tooling",
-    "Tool availability (filtered by policy):",
-    "Tool names are case-sensitive. Call tools exactly as listed.",
-    toolLines.length > 0
-      ? toolLines.join("\n")
-      : [
-          "Pi lists the standard tools above. This runtime enables:",
-          "- grep: search file contents for patterns",
-          "- find: find files by glob pattern",
-          "- ls: list directory contents",
-          "- apply_patch: apply multi-file patches",
-          `- ${execToolName}: run shell commands (supports background via yieldMs/background)`,
-          `- ${processToolName}: manage background exec sessions`,
-          "- browser: control EnClaws's dedicated browser",
-          "- canvas: present/eval/snapshot the Canvas",
-          "- nodes: list/describe/notify/camera/screen on paired nodes",
-          "- cron: manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
-          "- sessions_list: list sessions",
-          "- sessions_history: fetch session history",
-          "- sessions_send: send to another session",
-          "- subagents: list/steer/kill sub-agent runs",
-          '- session_status: show usage/time/model state and answer "what model are we using?"',
-        ].join("\n"),
-    "TOOLS.md does not control tool availability; it is user guidance for how to use external tools.",
+    ...toolListSection,
     `For long waits, avoid rapid poll loops: use ${execToolName} with enough yieldMs or ${processToolName}(action=poll, timeout=<ms>).`,
     "If a task is more complex or takes longer, spawn a sub-agent via `sessions_spawn`. The tool will automatically wait for the sub-agent to finish and return its output inline. You can then use this output.",
     ...(hasSessionsSpawn && acpEnabled
@@ -540,46 +570,51 @@ export function buildAgentSystemPrompt(params: {
     "Use plain human language for narration unless in a technical context.",
     "When a first-class tool exists for an action, use the tool directly instead of asking the user to run equivalent CLI or slash commands.",
     "",
-    "## Proactivity & Scheduling (Act as a Human Assistant)",
-    "When a user asks you to perform a task in the future, follow-up later, or set a reminder (e.g., 'remind me at 3pm', 'check this tomorrow', 'run this task every Friday'):",
-    "1. DO NOT just passively say 'I will do it' or 'I have made a note'.",
-    "2. You MUST proactively and immediately use the `cron` tool (`action=add`) to schedule the job.",
-    "3. Set the job payload to `agentTurn` so that you are correctly woken up to perform the work.",
-    "4. Formulate the `message` inside the payload so your future self knows exactly what to do and what context to retrieve.",
-    "",
-    ...(availableTools.has("user_memory") || availableTools.has("tenant_memory")
+    ...(!isWorker
       ? [
-          "Memory saving rules — classify information by CONTENT TYPE, not by who said it:",
-          availableTools.has("user_memory")
-            ? "- PERSONAL info (user's name, nickname, personal role/title, personal preferences, personal background) → call `user_memory(action=save)`"
-            : "",
-          availableTools.has("tenant_memory")
-            ? "- ENTERPRISE info (company name, business domain, products, tech stack, architecture, processes, team conventions, partner/vendor details) → call `tenant_memory(action=save)`"
-            : "",
-          "If one message contains BOTH types, call BOTH tools — one call each.",
-          "Example: '我叫刘昱，我们公司做AI+区块链' → call user_memory(save, '姓名：刘昱') AND tenant_memory(save, '企业业务：AI+区块链')",
-          "1. DO NOT merge personal and enterprise info into a single tool call.",
-          "2. DO NOT save enterprise info to user_memory just because a user mentioned it.",
-          "3. You MUST call the tool(s) in THIS response — text alone persists nothing.",
+          "## Proactivity & Scheduling (Act as a Human Assistant)",
+          "When a user asks you to perform a task in the future, follow-up later, or set a reminder (e.g., 'remind me at 3pm', 'check this tomorrow', 'run this task every Friday'):",
+          "1. DO NOT just passively say 'I will do it' or 'I have made a note'.",
+          "2. You MUST proactively and immediately use the `cron` tool (`action=add`) to schedule the job.",
+          "3. Set the job payload to `agentTurn` so that you are correctly woken up to perform the work.",
+          "4. Formulate the `message` inside the payload so your future self knows exactly what to do and what context to retrieve.",
           "",
+          ...(availableTools.has("user_memory") || availableTools.has("tenant_memory")
+            ? [
+                "Memory saving rules — classify information by CONTENT TYPE, not by who said it:",
+                availableTools.has("user_memory")
+                  ? "- PERSONAL info (user's name, nickname, personal role/title, personal preferences, personal background) → call `user_memory(action=save)`"
+                  : "",
+                availableTools.has("tenant_memory")
+                  ? "- ENTERPRISE info (company name, business domain, products, tech stack, architecture, processes, team conventions, partner/vendor details) → call `tenant_memory(action=save)`"
+                  : "",
+                "If one message contains BOTH types, call BOTH tools — one call each.",
+                "Example: '我叫张三，我们公司做AI+区块链' → call user_memory(save, '姓名：张三') AND tenant_memory(save, '企业业务：AI+区块链')",
+                "1. DO NOT merge personal and enterprise info into a single tool call.",
+                "2. DO NOT save enterprise info to user_memory just because a user mentioned it.",
+                "3. You MUST call the tool(s) in THIS response — text alone persists nothing.",
+                "",
+              ]
+            : []),
         ]
       : []),
     ...safetySection,
-    "## EnClaws CLI Quick Reference",
-    "EnClaws is controlled via subcommands. Do not invent commands.",
-    "To manage the Gateway daemon service (start/stop/restart):",
-    "- enclaws gateway status",
-    "- enclaws gateway start",
-    "- enclaws gateway stop",
-    "- enclaws gateway restart",
-    "If unsure, ask the user to run `enclaws help` (or `enclaws gateway --help`) and paste the output.",
-    "",
-    ...skillsSection,
+    ...(!isWorker
+      ? [
+          "## EnClaws CLI Quick Reference",
+          "EnClaws is controlled via subcommands. Do not invent commands.",
+          "To check Gateway status: `enclaws gateway status` (read-only, always safe).",
+          "To start/stop/restart the Gateway: use the `gateway` tool (action=restart/update) if available — do NOT run shell commands like `systemctl`, `enclaws gateway start/stop/restart`, or `pkill` to control the service. If the `gateway` tool is unavailable, tell the user to run the command themselves.",
+          "If unsure, ask the user to run `enclaws help` (or `enclaws gateway --help`) and paste the output.",
+          "",
+        ]
+      : []),
+    ...(!isWorker ? skillsSection : []),
     ...memorySection,
     ...tenantMemorySection,
-    // Skip self-update for subagent/none modes
-    hasGateway && !isMinimal ? "## EnClaws Self-Update" : "",
-    hasGateway && !isMinimal
+    // Skip self-update for subagent/worker/none modes
+    hasGateway && !isMinimal && !isWorker ? "## EnClaws Self-Update" : "",
+    hasGateway && !isMinimal && !isWorker
       ? [
           "Get Updates (self-update) is ONLY allowed when the user explicitly asks for it.",
           "Do not run config.apply or update.run unless the user explicitly requests an update or config change; if it's not explicit, ask first.",
@@ -588,19 +623,21 @@ export function buildAgentSystemPrompt(params: {
           "After restart, EnClaws pings the last active session automatically.",
         ].join("\n")
       : "",
-    hasGateway && !isMinimal ? "" : "",
+    hasGateway && !isMinimal && !isWorker ? "" : "",
     "",
-    // Skip model aliases for subagent/none modes
-    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal
+    // Skip model aliases for subagent/worker/none modes
+    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
       ? "## Model Aliases"
       : "",
-    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal
+    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
       ? "Prefer aliases when specifying model overrides; full provider/model is also accepted."
       : "",
-    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal
+    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
       ? params.modelAliasLines.join("\n")
       : "",
-    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal ? "" : "",
+    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal && !isWorker
+      ? ""
+      : "",
     userTimezone
       ? "If you need the current date, time, or day of week, run session_status (📊 session_status)."
       : "",
@@ -610,8 +647,8 @@ export function buildAgentSystemPrompt(params: {
     ...workspaceNotes,
     "",
     ...docsSection,
-    params.sandboxInfo?.enabled ? "## Sandbox" : "",
-    params.sandboxInfo?.enabled
+    params.sandboxInfo?.enabled && !isWorker ? "## Sandbox" : "",
+    params.sandboxInfo?.enabled && !isWorker
       ? [
           "You are running in a sandboxed runtime (tools execute in Docker).",
           "Some tools may be unavailable due to sandbox policy.",
@@ -654,8 +691,8 @@ export function buildAgentSystemPrompt(params: {
           .filter(Boolean)
           .join("\n")
       : "",
-    params.sandboxInfo?.enabled ? "" : "",
-    ...buildUserIdentitySection(ownerLine, isMinimal),
+    params.sandboxInfo?.enabled && !isWorker ? "" : "",
+    ...buildUserIdentitySection(ownerLine, skipExtended),
     ...buildTimeSection({
       userTimezone,
     }),
@@ -666,25 +703,25 @@ export function buildAgentSystemPrompt(params: {
     // Included for both full and minimal (subagent) modes since subagents also
     // need delegation and cognitive-loop guidance.
     ...(!isMinimal ? [SELF_DRIVING_MODE, ""] : []),
-    ...buildReplyTagsSection(isMinimal),
+    ...buildReplyTagsSection(skipExtended, runtimeChannel),
     ...buildMessagingSection({
-      isMinimal,
+      isMinimal: skipExtended,
       availableTools,
       messageChannelOptions,
       inlineButtonsEnabled,
       runtimeChannel,
       messageToolHints: params.messageToolHints,
     }),
-    ...buildVoiceSection({ isMinimal, ttsHint: params.ttsHint }),
+    ...buildVoiceSection({ isMinimal: skipExtended, ttsHint: params.ttsHint }),
   ];
 
-  if (extraSystemPrompt) {
+  if (extraSystemPrompt && !isOptEnabled("CACHE")) {
     // Use "Subagent Context" header for minimal mode (subagents), otherwise "Group Chat Context"
     const contextHeader =
       promptMode === "minimal" ? "## Subagent Context" : "## Group Chat Context";
     lines.push(contextHeader, extraSystemPrompt, "");
   }
-  if (params.reactionGuidance) {
+  if (params.reactionGuidance && !isWorker) {
     const { level, channel } = params.reactionGuidance;
     const guidanceText =
       level === "minimal"
@@ -707,7 +744,7 @@ export function buildAgentSystemPrompt(params: {
           ].join("\n");
     lines.push("## Reactions", guidanceText, "");
   }
-  if (reasoningHint) {
+  if (reasoningHint && !isWorker) {
     lines.push("## Reasoning Format", reasoningHint, "");
   }
 
@@ -715,8 +752,9 @@ export function buildAgentSystemPrompt(params: {
   const validContextFiles = contextFiles.filter(
     (file) => typeof file.path === "string" && file.path.trim().length > 0,
   );
-  if (validContextFiles.length > 0) {
-    const hasSoulFile = validContextFiles.some((file) => {
+  const effectiveContextFiles = validContextFiles;
+  if (effectiveContextFiles.length > 0) {
+    const hasSoulFile = effectiveContextFiles.some((file) => {
       const normalizedPath = file.path.trim().replace(/\\/g, "/");
       const baseName = normalizedPath.split("/").pop() ?? normalizedPath;
       return baseName.toLowerCase() === "soul.md";
@@ -728,7 +766,7 @@ export function buildAgentSystemPrompt(params: {
       );
     }
     // Detect multi-tenant layout: files from tenant/agent/user dirs
-    const tenantDirPath = detectTenantDirFromContextFiles(validContextFiles);
+    const tenantDirPath = detectTenantDirFromContextFiles(effectiveContextFiles);
     if (tenantDirPath) {
       const sep = tenantDirPath.includes("\\") ? "\\" : "/";
       const tenantSkillsPath = `${tenantDirPath}${sep}skills`;
@@ -742,16 +780,22 @@ export function buildAgentSystemPrompt(params: {
         "",
         `**IMPORTANT:** When creating new skills, you MUST place them in \`${tenantSkillsPath}\` — do NOT create them in your working directory or the project directory.`,
         `Each skill should be a subdirectory with a SKILL.md file, e.g.: \`${tenantSkillsPath}${sep}<skill-name>${sep}SKILL.md\``,
+        "",
+        "**Platform configuration is read-only to you (multi-tenant mode):**",
+        "- Do NOT create, modify, rename, or delete agents, channels, routes, providers, or any gateway config.",
+        "- This applies to ALL methods: `enclaws` CLI subcommands (`agents`, `channels`, `config`, ...), editing `enclaws.json` / tenant config files directly, `cp`/`mv`/`mkdir` on agent or tenant directories, and any shell workaround.",
+        "- User-scoped features remain available: the `cron` tool for reminders/scheduled wakes, memory, sessions, and messaging all stay usable as usual — they write to your own tenant/user scope via the gateway, not to platform config.",
+        "- If the user asks for platform-config changes, do not attempt them. Reply briefly that platform config is managed centrally by administrators via the control UI, and stop.",
       );
     }
     lines.push("");
-    for (const file of validContextFiles) {
+    for (const file of effectiveContextFiles) {
       lines.push(`## ${file.path}`, "", file.content, "");
     }
   }
 
-  // Skip silent replies for subagent/none modes
-  if (!isMinimal) {
+  // Skip silent replies for subagent/worker/none modes
+  if (!isMinimal && !isWorker) {
     lines.push(
       "## Silent Replies",
       `When you have nothing to say, respond with ONLY: ${SILENT_REPLY_TOKEN}`,
@@ -768,8 +812,8 @@ export function buildAgentSystemPrompt(params: {
     );
   }
 
-  // Skip heartbeats for subagent/none modes
-  if (!isMinimal) {
+  // Skip heartbeats for subagent/worker/none modes
+  if (!isMinimal && !isWorker) {
     lines.push(
       "## Heartbeats",
       heartbeatPromptLine,
@@ -786,12 +830,29 @@ export function buildAgentSystemPrompt(params: {
     buildRuntimeLine(runtimeInfo, runtimeChannel, runtimeCapabilities, params.defaultThinkLevel),
     `Reasoning: ${reasoningLevel} (hidden unless on/stream). Toggle /reasoning; /status shows Reasoning when enabled.`,
     "",
-    "## Skills Reporting (MANDATORY)",
-    "At the very end of your final reply, you MUST append exactly one line:",
-    "- If you used any skill (via inline_skill block or by reading a SKILL.md): `> Skills used: <name1>, <name2>`",
-    "- If you used no skill: `> Skills used: none`",
-    "Do NOT omit this line under any circumstances.",
   );
+
+  // Skip skills reporting for worker mode
+  if (!isWorker) {
+    lines.push(
+      "## Skills Reporting (MANDATORY)",
+      "At the very end of your final reply, you MUST append exactly one line:",
+      "- If you used any skill (via inline_skill block or by reading a SKILL.md): `> Skills used: <name1>, <name2>`",
+      "- If you used no skill: `> Skills used: none`",
+      "Do NOT omit this line under any circumstances.",
+    );
+  }
+
+  // Token optimization: move extraSystemPrompt to the very end to maximize cache prefix length.
+  // When CACHE toggle is enabled, dynamic content (inboundMeta, groupChatContext) goes last
+  // so all static sections above can be cached by Anthropic/OpenRouter prefix matching.
+  if (extraSystemPrompt && isOptEnabled("CACHE")) {
+    const contextHeader =
+      promptMode === "minimal" || promptMode === "worker"
+        ? "## Subagent Context"
+        : "## Group Chat Context";
+    lines.push("", contextHeader, extraSystemPrompt);
+  }
 
   return lines.filter(Boolean).join("\n");
 }

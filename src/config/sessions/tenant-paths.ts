@@ -219,6 +219,8 @@ export function resolveTenantCredentialsDir(
  * Resolve the tenant user's cron directory.
  *
  * Multi-tenant: ~/.enclaws/tenants/{tenantId}/users/{userId}/cron/
+ *
+ * @deprecated Use resolveTenantAgentCronDir for agent-scoped cron.
  */
 export function resolveTenantCronDir(
   tenantId: string,
@@ -234,6 +236,8 @@ export function resolveTenantCronDir(
  * Resolve the tenant user's cron store file path.
  *
  * Multi-tenant: ~/.enclaws/tenants/{tenantId}/users/{userId}/cron/jobs.json
+ *
+ * @deprecated Use resolveTenantAgentCronStorePath for agent-scoped cron.
  */
 export function resolveTenantCronStorePath(
   tenantId: string,
@@ -242,6 +246,33 @@ export function resolveTenantCronStorePath(
   homedir?: () => string,
 ): string {
   return path.join(resolveTenantCronDir(tenantId, userId, env, homedir), "jobs.json");
+}
+
+/**
+ * Resolve the tenant agent's cron directory.
+ *
+ * ~/.enclaws/tenants/{tenantId}/agents/{agentId}/cron/
+ */
+export function resolveTenantAgentCronDir(tenantId: string, agentId: string): string {
+  return path.join(resolveTenantDir(tenantId), "agents", agentId, "cron");
+}
+
+/**
+ * Resolve the tenant agent's cron store file path.
+ *
+ * ~/.enclaws/tenants/{tenantId}/agents/{agentId}/cron/jobs.json
+ */
+export function resolveTenantAgentCronStorePath(tenantId: string, agentId: string): string {
+  return path.join(resolveTenantAgentCronDir(tenantId, agentId), "jobs.json");
+}
+
+/**
+ * Resolve the tenant orphan cron store file path (for jobs without an agent).
+ *
+ * ~/.enclaws/tenants/{tenantId}/cron/_orphan/jobs.json
+ */
+export function resolveTenantOrphanCronStorePath(tenantId: string): string {
+  return path.join(resolveTenantDir(tenantId), "cron", "_orphan", "jobs.json");
 }
 
 /**

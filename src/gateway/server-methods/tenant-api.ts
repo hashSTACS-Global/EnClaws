@@ -13,7 +13,7 @@
 
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
 import { ErrorCodes, errorShape, getPlanUpgradeLink } from "../protocol/index.js";
-import { getTenantById, updateTenant, checkTenantQuota } from "../../db/models/tenant.js";
+import { getTenantById, updateTenant, checkTenantQuota, getMonthlyTokenUsage } from "../../db/models/tenant.js";
 import { createUser, listUsers, updateUser, deleteUser, getUserById, findUserByEmail } from "../../db/models/user.js";
 import { validatePasswordStrength } from "../../auth/password-policy.js";
 import { listAuditLogs, createAuditLog } from "../../db/models/audit-log.js";
@@ -71,7 +71,6 @@ export const tenantHandlers: GatewayRequestHandlers = {
     respond(true, {
       id: tenant.id,
       name: tenant.name,
-      slug: tenant.slug,
       plan: tenant.plan,
       status: tenant.status,
       settings: tenant.settings,
@@ -329,6 +328,13 @@ export const tenantHandlers: GatewayRequestHandlers = {
       ...(displayName !== undefined ? { displayName } : {}),
     });
 
+    // Evict auto-provision cache so the next session picks up the updated role from DB
+    // instead of returning the stale cached value.
+    try {
+      const { evictAutoProvisionCacheByUser } = await import("../../infra/channel-auto-provision.js");
+      evictAutoProvisionCacheByUser(ctx.tenantId, userId);
+    } catch { /* non-critical — cache will expire naturally in 10 min */ }
+
     await createAuditLog({
       tenantId: ctx.tenantId,
       userId: ctx.userId,
@@ -377,6 +383,11 @@ export const tenantHandlers: GatewayRequestHandlers = {
     }
 
     const deleted = await deleteUser(userId);
+
+    {
+      const { clearAutoProvisionCache } = await import("../../infra/channel-auto-provision.js");
+      clearAutoProvisionCache();
+    }
 
     await createAuditLog({
       tenantId: ctx.tenantId,
@@ -427,5 +438,45 @@ export const tenantHandlers: GatewayRequestHandlers = {
     });
 
     respond(true, result);
+  },
+
+  /**
+   * Get the current tenant's plan, quotas, and real-time usage.
+   */
+  "tenant.plan.current": async ({ client, respond }: GatewayRequestHandlerOptions) => {
+    const ctx = getTenantCtx(client, respond);
+    if (!ctx) return;
+
+    try {
+      assertPermission(ctx.role, "tenant.read");
+    } catch (err) {
+      if (handleRbacError(err, respond)) return;
+      throw err;
+    }
+
+    const tenant = await getTenantById(ctx.tenantId);
+    if (!tenant) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Tenant not found"));
+      return;
+    }
+
+    const [usersQ, agentsQ, channelsQ, tokensCurrent] = await Promise.all([
+      checkTenantQuota(ctx.tenantId, "users"),
+      checkTenantQuota(ctx.tenantId, "agents"),
+      checkTenantQuota(ctx.tenantId, "channels"),
+      getMonthlyTokenUsage(ctx.tenantId),
+    ]);
+
+    respond(true, {
+      plan: tenant.plan,
+      status: tenant.status,
+      quotas: tenant.quotas,
+      usage: {
+        users:           { current: usersQ.current,    max: usersQ.max },
+        agents:          { current: agentsQ.current,   max: agentsQ.max },
+        channels:        { current: channelsQ.current, max: channelsQ.max },
+        tokensThisMonth: { current: tokensCurrent,     max: tenant.quotas.maxTokensPerMonth },
+      },
+    });
   },
 };

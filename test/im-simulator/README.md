@@ -150,7 +150,7 @@ test/im-simulator/
 const env = new TestEnv({ url: "ws://127.0.0.1:18789", gatewayToken: "" });
 
 // 1. 注册租户
-await env.register({ tenantName: "Test", tenantSlug: "test", email: "admin@test.com", password: "xxx" });
+await env.register({ tenantName: "Test", email: "admin@test.com", password: "xxx" });
 
 // 2. 创建模型
 const model = await env.createModel({

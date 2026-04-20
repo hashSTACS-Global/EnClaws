@@ -46,6 +46,7 @@ export function detectIdType(id: string): FeishuIdType | null {
   if (!id) return null;
   if (id.startsWith(CHAT_PREFIX)) return 'chat_id';
   if (id.startsWith(OPEN_ID_PREFIX)) return 'open_id';
+  if (id.startsWith('on_')) return 'union_id';
   // Plain alphanumeric strings (no prefix) are treated as tenant user IDs.
   if (/^[a-zA-Z0-9]+$/.test(id)) return 'user_id';
   return null;
@@ -150,9 +151,12 @@ export function formatFeishuTarget(id: string, type?: FeishuIdType): string {
  * Determine the `receive_id_type` query parameter for the Feishu send-message
  * API based on the target identifier.
  */
-export function resolveReceiveIdType(id: string): 'chat_id' | 'open_id' | 'user_id' {
+export function resolveReceiveIdType(id: string): 'chat_id' | 'open_id' | 'union_id' | 'user_id' {
   if (id.startsWith(CHAT_PREFIX)) return 'chat_id';
   if (id.startsWith(OPEN_ID_PREFIX)) return 'open_id';
+  // union_id should normally be resolved to open_id before reaching here,
+  // but handle it as a safety net.
+  if (id.startsWith('on_')) return 'union_id';
   // Default to open_id for any other pattern (safer for outbound API calls).
   return 'open_id';
 }

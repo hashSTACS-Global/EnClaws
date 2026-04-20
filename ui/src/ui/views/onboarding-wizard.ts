@@ -1,22 +1,22 @@
 /**
  * Onboarding wizard — full-screen step-by-step guide after registration.
  *
- * Steps: Model → Agent → Channel → Done
+ * Steps: Model → Channel → Done. The agent is auto-created server-side
+ * with locale-aware defaults (see tenant.onboarding.setup).
  */
 
 import { html, css, LitElement, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
-import { t, I18nController } from "../../i18n/index.ts";
+import { t, i18n, I18nController } from "../../i18n/index.ts";
 import { tenantRpc, quotaErrorKey } from "./tenant/rpc.ts";
 import { PROVIDER_TYPES } from "../../constants/providers.ts";
 import { CHANNEL_TYPES, CHANNEL_ICON_MAP } from "../../constants/channels.ts";
 import { caretFix } from "../shared-styles.ts";
 
-type WizardStep = "welcome" | "channel" | "model" | "agent" | "done";
+type WizardStep = "welcome" | "channel" | "model" | "done";
 
-const STEPS: WizardStep[] = ["welcome", "model", "agent", "channel", "done"];
+const STEPS: WizardStep[] = ["welcome", "model", "channel", "done"];
 
 const CHANNEL_ICONS: Record<string, string> = Object.fromEntries(
   Object.entries(CHANNEL_ICON_MAP).map(([k, v]) => [k, `<img src="${v}" width="24" height="24" alt="${k}" style="object-fit:contain;" />`]),
@@ -374,6 +374,13 @@ export class OnboardingWizard extends LitElement {
   private feishuDomain = "feishu";
   private feishuEnv = "prod";
   private feishuPollTimer?: ReturnType<typeof setInterval>;
+  @state() private wecomMode: "scan" | "manual" = "scan";
+  @state() private wecomVerificationUrl = "";
+  @state() private wecomQrPageUrl = "";
+  @state() private wecomPolling = false;
+  @state() private wecomInitializing = false;
+  private wecomScode = "";
+  private wecomPollTimer?: ReturnType<typeof setInterval>;
   @state() private channelAppId = "";
   @state() private channelAppSecret = "";
 
@@ -386,10 +393,6 @@ export class OnboardingWizard extends LitElement {
   @state() private modelApiKey = "";
   @state() private modelBaseUrl = "";
   @state() private modelName = "";
-
-  // Agent step
-  @state() private agentName = "";
-  @state() private agentPrompt = "";
 
   // Track what was completed
   private channelCreated = false;
@@ -404,6 +407,7 @@ export class OnboardingWizard extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this.stopFeishuPoll();
+    this.stopWecomPoll();
   }
 
   private async loadSharedModels() {
@@ -529,6 +533,70 @@ export class OnboardingWizard extends LitElement {
     }
   }
 
+  // ── WeCom scan flow ──
+  private async startWecomScan() {
+    this.wecomInitializing = true;
+    this.wecomVerificationUrl = "";
+    this.wecomQrPageUrl = "";
+    this.error = "";
+    try {
+      const result = await this.rpc("tenant.wecom.register.begin") as {
+        scode: string; authUrl: string; qrPageUrl: string; interval: number; expireIn: number;
+      };
+      this.wecomScode = result.scode;
+      this.wecomVerificationUrl = result.authUrl;
+      this.wecomQrPageUrl = result.qrPageUrl;
+      this.wecomPolling = true;
+      this.wecomInitializing = false;
+      this.startWecomPoll(result.interval);
+    } catch (e) {
+      this.wecomInitializing = false;
+      this.error = e instanceof Error ? e.message : t("onboarding.saveFailed");
+    }
+  }
+
+  private startWecomPoll(intervalSec: number) {
+    this.stopWecomPoll();
+    this.wecomPollTimer = setInterval(async () => {
+      try {
+        const result = await this.rpc("tenant.wecom.register.poll", { scode: this.wecomScode }) as {
+          status: "completed" | "pending" | "error";
+          botId?: string; secret?: string; error?: string;
+        };
+        if (result.status === "completed" && result.botId && result.secret) {
+          this.stopWecomPoll();
+          this.channelAppId = result.botId;
+          this.channelAppSecret = result.secret;
+          this.wecomPolling = false;
+          this.wecomMode = "manual";
+        } else if (result.status === "error") {
+          this.stopWecomPoll();
+          this.wecomPolling = false;
+          this.error = result.error ?? t("onboarding.saveFailed");
+        }
+      } catch { /* ignore transient errors */ }
+    }, Math.max(intervalSec, 3) * 1000);
+  }
+
+  private stopWecomPoll() {
+    if (this.wecomPollTimer) {
+      clearInterval(this.wecomPollTimer);
+      this.wecomPollTimer = undefined;
+    }
+  }
+
+  private setWecomMode(mode: "scan" | "manual") {
+    this.wecomMode = mode;
+    this.stopWecomPoll();
+    this.wecomPolling = false;
+    this.wecomVerificationUrl = "";
+    this.wecomQrPageUrl = "";
+    this.wecomInitializing = false;
+    if (mode === "scan") {
+      void this.startWecomScan();
+    }
+  }
+
   // ── Step validation (local only, no API calls) ──
   private validateChannel() {
     if (!this.selectedChannel) { this.error = t("onboarding.selectChannel"); return false; }
@@ -556,21 +624,8 @@ export class OnboardingWizard extends LitElement {
     return true;
   }
 
-  private validateAgent() {
-    this.agentName = this.agentName.trim();
-    if (!this.agentName) { this.error = t("onboarding.agentNameRequired"); return false; }
-    const hasModel = this.modelMode === "shared" ? !!this.selectedSharedModelId : !!this.selectedProvider;
-    if (!hasModel) { this.error = t("onboarding.modelRequiredForAgent"); return false; }
-    return true;
-  }
-
   private nextModel() {
     if (!this.validateModel()) return;
-    this.goNext();
-  }
-
-  private nextAgent() {
-    if (!this.validateAgent()) return;
     this.goNext();
   }
 
@@ -609,11 +664,8 @@ export class OnboardingWizard extends LitElement {
           providerId: this.selectedSharedModelId,
           modelId: this.selectedSharedSubModelId,
         } : undefined,
-        agent: {
-          agentId: this.agentName.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
-          name: this.agentName,
-          config: this.agentPrompt ? { systemPrompt: this.agentPrompt } : {},
-        },
+        agent: { name: t("onboarding.defaultAgentName") },
+        locale: i18n.getLocale(),
       });
 
       this.channelCreated = !!this.selectedChannel;
@@ -654,7 +706,7 @@ export class OnboardingWizard extends LitElement {
       <div class="wizard">
         ${this.step !== "welcome" && this.step !== "done" ? html`
           <div class="progress">
-            ${["model", "agent", "channel"].map((s, i) => {
+            ${["model", "channel"].map((s, i) => {
               const currentIdx = STEPS.indexOf(this.step) - 1;
               const cls = i < currentIdx ? "done" : i === currentIdx ? "active" : "";
               return html`<div class="progress-step ${cls}"></div>`;
@@ -664,7 +716,6 @@ export class OnboardingWizard extends LitElement {
 
         ${this.step === "welcome" ? this.renderWelcome() : nothing}
         ${this.step === "model" ? this.renderModel() : nothing}
-        ${this.step === "agent" ? this.renderAgent() : nothing}
         ${this.step === "channel" ? this.renderChannel() : nothing}
         ${this.step === "done" ? this.renderDone() : nothing}
       </div>
@@ -687,9 +738,15 @@ export class OnboardingWizard extends LitElement {
 
   private renderChannel() {
     const isFeishu = this.selectedChannel === "feishu";
-    const showManualForm = this.selectedChannel && (!isFeishu || this.feishuMode === "manual");
+    const isWecom = this.selectedChannel === "wecom";
+    const isDingtalk = this.selectedChannel === "dingtalk";
+    const showManualForm = this.selectedChannel
+      && (!isFeishu || this.feishuMode === "manual")
+      && (!isWecom || this.wecomMode === "manual");
+    const appIdLabel = isWecom ? "Bot ID" : isDingtalk ? "Client ID (AppKey)" : "App ID";
+    const appSecretLabel = isWecom ? "Secret" : isDingtalk ? "Client Secret (AppSecret)" : "App Secret";
     return html`
-      <div class="step-indicator">${t("onboarding.step", { current: "3", total: "3" })}</div>
+      <div class="step-indicator">${t("onboarding.step", { current: "2", total: "2" })}</div>
       <div class="wizard-header">
         <h2 class="wizard-title">${t("onboarding.channelTitle")}</h2>
         <p class="wizard-desc">${t("onboarding.channelDesc")}</p>
@@ -710,6 +767,12 @@ export class OnboardingWizard extends LitElement {
                 void this.startFeishuScan();
               } else if (ch.type !== "feishu") {
                 this.stopFeishuPoll();
+              }
+              if (ch.type === "wecom" && prev !== "wecom") {
+                this.wecomMode = "scan";
+                void this.startWecomScan();
+              } else if (ch.type !== "wecom") {
+                this.stopWecomPoll();
               }
             }}>
             <span class="option-icon">${unsafeHTML(CHANNEL_ICONS[ch.type] ?? "")}</span>
@@ -742,14 +805,41 @@ export class OnboardingWizard extends LitElement {
         ` : nothing}
       ` : nothing}
 
+      ${isWecom ? html`
+        <div class="feishu-mode-bar">
+          <button type="button" class="feishu-mode-btn ${this.wecomMode === 'scan' ? 'active' : ''}"
+            @click=${() => this.setWecomMode("scan")}>📱 ${t("onboarding.wecomScan")}</button>
+          <button type="button" class="feishu-mode-btn ${this.wecomMode === 'manual' ? 'active' : ''}"
+            @click=${() => this.setWecomMode("manual")}>⌨️ ${t("onboarding.wecomManual")}</button>
+        </div>
+        ${this.wecomMode === "scan" ? html`
+          ${this.wecomVerificationUrl ? html`
+            <div class="qr-container">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(this.wecomVerificationUrl)}" alt="QR Code" />
+            </div>
+            <div class="qr-hint">${t("onboarding.wecomScanHint")}</div>
+            ${this.wecomQrPageUrl ? html`
+              <div class="qr-hint"><a href=${this.wecomQrPageUrl} target="_blank" rel="noopener noreferrer" style="color:var(--accent,#3b82f6)">${t("onboarding.wecomOpenQrPage")}</a></div>
+            ` : nothing}
+            ${this.wecomPolling ? html`
+              <div class="qr-polling">
+                <span class="dot">●</span> ${t("onboarding.wecomPolling")}
+              </div>
+            ` : nothing}
+          ` : html`
+            <div class="qr-hint">${this.wecomInitializing ? t("onboarding.wecomInitializing") : ""}</div>
+          `}
+        ` : nothing}
+      ` : nothing}
+
       ${showManualForm ? html`
         <div class="form-group">
-          <label>App ID <span class="required">*</span></label>
+          <label>${appIdLabel} <span class="required">*</span></label>
           <input type="text" .value=${this.channelAppId}
             @input=${(e: InputEvent) => { this.channelAppId = (e.target as HTMLInputElement).value; }} />
         </div>
         <div class="form-group">
-          <label>App Secret <span class="required">*</span></label>
+          <label>${appSecretLabel} <span class="required">*</span></label>
           <div class="secret-wrap">
             <input type="password" .value=${this.channelAppSecret}
               @input=${(e: InputEvent) => { this.channelAppSecret = (e.target as HTMLInputElement).value; }} />
@@ -789,7 +879,7 @@ export class OnboardingWizard extends LitElement {
     const selectedSharedProvider = this.sharedModels.find(m => m.id === this.selectedSharedModelId);
 
     return html`
-      <div class="step-indicator">${t("onboarding.step", { current: "1", total: "3" })}</div>
+      <div class="step-indicator">${t("onboarding.step", { current: "1", total: "2" })}</div>
       <div class="wizard-header">
         <h2 class="wizard-title">${t("onboarding.modelTitle")}</h2>
         <p class="wizard-desc">${t("onboarding.modelDesc")}</p>
@@ -889,46 +979,6 @@ export class OnboardingWizard extends LitElement {
           @click=${() => this.nextModel()}>
           ${t("onboarding.next")}
         </button>
-      </div>
-    `;
-  }
-
-  private renderAgent() {
-    return html`
-      <div class="step-indicator">${t("onboarding.step", { current: "2", total: "3" })}</div>
-      <div class="wizard-header">
-        <h2 class="wizard-title">${t("onboarding.agentTitle")}</h2>
-        <p class="wizard-desc">${t("onboarding.agentDesc")}</p>
-      </div>
-
-      ${this.error
-        ? html`<div class="error-msg">${this.errorIsHtml ? unsafeHTML(this.error) : this.error}</div>`
-        : nothing}
-      ${!(this.modelMode === "shared" ? this.selectedSharedModelId : this.selectedProvider) ? html`<div class="error-msg">${t("onboarding.modelRequiredForAgent")}</div>` : nothing}
-
-      <div class="form-group">
-        <label>${t("onboarding.agentName")} <span class="required">*</span></label>
-        <input type="text" .value=${this.agentName}
-          @input=${(e: InputEvent) => { this.agentName = (e.target as HTMLInputElement).value; }}
-          placeholder=${t("onboarding.agentNamePlaceholder")} />
-      </div>
-      <div class="form-group">
-        <label>${t("onboarding.agentPrompt")} <span class="required">*</span></label>
-        <textarea .value=${this.agentPrompt}
-          @input=${(e: InputEvent) => { this.agentPrompt = (e.target as HTMLTextAreaElement).value; }}
-          placeholder=${t("onboarding.agentPromptPlaceholder")}></textarea>
-        <div class="form-hint">${t("onboarding.agentPromptHint")}</div>
-      </div>
-
-      <div class="wizard-actions">
-        <button class="btn btn-ghost" @click=${() => this.goBack()}>${t("onboarding.back")}</button>
-        <div>
-          <button class="btn btn-ghost" @click=${() => this.skip()}>${t("onboarding.skip")}</button>
-          <button class="btn btn-primary" ?disabled=${this.saving || !this.agentName || !this.agentPrompt || !(this.modelMode === "shared" ? this.selectedSharedModelId : this.selectedProvider)}
-            @click=${() => this.nextAgent()}>
-            ${t("onboarding.next")}
-          </button>
-        </div>
       </div>
     `;
   }

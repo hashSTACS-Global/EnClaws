@@ -20,8 +20,8 @@ interface TenantUser {
   status: string;
   lastLoginAt: string | null;
   createdAt: string;
-  /** Resolved from tenant_channels.channel_name via backend LEFT JOIN. */
   channelName: string | null;
+  channelType: string | null;
 }
 
 @customElement("tenant-users-view")
@@ -295,6 +295,11 @@ export class TenantUsersView extends LitElement {
     return map[role] ?? role;
   }
 
+  private formatChannelType(channelType: string | null): string {
+    if (!channelType) return "-";
+    return t(`channels.${channelType}` as any) || channelType;
+  }
+
   private statusLabel(status: string): string {
     const map: Record<string, string> = {
       active: t("tenantUsers.statusActive"),
@@ -327,7 +332,6 @@ export class TenantUsersView extends LitElement {
         <table>
           <thead>
             <tr>
-              <th>${t("tenantUsers.email")}</th>
               <th>${t("tenantUsers.displayName")}</th>
               <th>${t("tenantUsers.channel")}</th>
               <th>${t("tenantUsers.role")}</th>
@@ -339,9 +343,8 @@ export class TenantUsersView extends LitElement {
           <tbody>
             ${this.users.map(user => html`
               <tr>
-                <td>${user.email ?? "-"}</td>
                 <td>${user.displayName ?? "-"}</td>
-                <td>${user.channelName ?? "-"}</td>
+                <td>${this.formatChannelType(user.channelType)}</td>
                 <td>
                   <span class="role-badge ${user.role}">${this.roleLabel(user.role)}</span>
                 </td>

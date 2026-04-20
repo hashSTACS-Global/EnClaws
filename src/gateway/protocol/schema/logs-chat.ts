@@ -27,6 +27,8 @@ export const ChatHistoryParamsSchema = Type.Object(
   {
     sessionKey: NonEmptyString,
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
+    _tenantId: Type.Optional(Type.String()),
+    _tenantUserId: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );

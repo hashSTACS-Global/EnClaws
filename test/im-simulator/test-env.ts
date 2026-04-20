@@ -8,7 +8,7 @@
  *   const env = new TestEnv({ url: "ws://127.0.0.1:18789" });
  *
  *   // Full setup
- *   await env.register({ tenantName: "Acme", tenantSlug: "acme", email: "a@b.com", password: "12345678" });
+ *   await env.register({ tenantName: "Acme", email: "a@b.com", password: "12345678" });
  *   const model = await env.createModel({ providerType: "deepseek", ... });
  *   await env.createAgent({ agentId: "bot", name: "Bot", modelConfig: [...] });
  *   const reply = await env.sendAsUser({ agentId: "bot", message: "hello" });
@@ -95,7 +95,6 @@ export class TestEnv {
     const hashedPassword = createHash("sha256").update(opts.password).digest("hex");
     const res = await client.request<RegisterResult>("auth.register", {
       tenantName: opts.tenantName,
-      tenantSlug: opts.tenantSlug,
       email: opts.email,
       password: hashedPassword,
       displayName: opts.displayName,
@@ -115,7 +114,6 @@ export class TestEnv {
     const res = await client.request<LoginResult>("auth.login", {
       email: opts.email,
       password: hashedPassword,
-      tenantSlug: opts.tenantSlug,
     });
     this.email = opts.email;
     await this.reconnectWithJwt(res.accessToken);

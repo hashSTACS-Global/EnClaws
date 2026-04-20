@@ -116,6 +116,7 @@ export async function handleInlineActions(params: {
   directiveAck?: ReplyPayload;
   abortedLastRun: boolean;
   skillFilter?: string[];
+  disabledBundledSkills?: string[];
 }): Promise<InlineActionResult> {
   const {
     ctx,
@@ -153,6 +154,7 @@ export async function handleInlineActions(params: {
     directiveAck,
     abortedLastRun: initialAbortedLastRun,
     skillFilter,
+    disabledBundledSkills,
   } = params;
 
   let directives = initialDirectives;
@@ -172,6 +174,7 @@ export async function handleInlineActions(params: {
             workspaceDir,
             cfg,
             skillFilter,
+            disabledBundledSkills,
           })
         : [];
 

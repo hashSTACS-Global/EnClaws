@@ -15,11 +15,13 @@ import {
   type SessionEntry,
   updateSessionStore,
 } from "../../config/sessions.js";
+import { isOptEnabled } from "../../config/token-optimization.js";
 import { logVerbose } from "../../globals.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 const skillsLog = createSubsystemLogger("skills");
 import { clearCommandLane, getQueueSize } from "../../process/command-queue.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
+import { buildSessionLabelFromContext } from "../../routing/session-label.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
 import { hasControlCommand } from "../command-detection.js";
 import { buildInboundMediaNote } from "../media-note.js";
@@ -299,7 +301,11 @@ export async function runPreparedReply(
             ? { InboundHistory: undefined, ThreadStarterBody: undefined }
             : {}),
         }
-      : { ...sessionCtx, ThreadStarterBody: undefined },
+      : {
+          ...sessionCtx,
+          ThreadStarterBody: undefined,
+          InboundHistory: isOptEnabled("DEDUP") ? undefined : sessionCtx.InboundHistory,
+        },
   );
   const baseBodyForPrompt = isBareSessionReset
     ? baseBodyFinal
@@ -347,7 +353,9 @@ export async function runPreparedReply(
     : threadStarterBody
       ? `[Thread starter - for context]\n${threadStarterBody}`
       : undefined;
-  skillsLog.info(`[skills-chain] get-reply-run: skillFilter from opts = ${JSON.stringify(opts?.skillFilter ?? null)}`);
+  skillsLog.info(
+    `[skills-chain] get-reply-run: skillFilter from opts = ${JSON.stringify(opts?.skillFilter ?? null)}`,
+  );
   const skillResult = await ensureSkillSnapshot({
     sessionEntry,
     sessionStore,
@@ -358,11 +366,14 @@ export async function runPreparedReply(
     workspaceDir,
     cfg,
     skillFilter: opts?.skillFilter,
+    disabledBundledSkills: opts?.disabledBundledSkills,
   });
   sessionEntry = skillResult.sessionEntry ?? sessionEntry;
   currentSystemSent = skillResult.systemSent;
   const skillsSnapshot = skillResult.skillsSnapshot;
-  skillsLog.info(`[skills-chain] get-reply-run: snapshot skills count = ${skillsSnapshot?.skills?.length ?? 0}, skillFilter in snapshot = ${JSON.stringify(skillsSnapshot?.skillFilter ?? null)}`);
+  skillsLog.info(
+    `[skills-chain] get-reply-run: snapshot skills count = ${skillsSnapshot?.skills?.length ?? 0}, skillFilter in snapshot = ${JSON.stringify(skillsSnapshot?.skillFilter ?? null)}`,
+  );
   const prefixedBody = [threadContextNote, prefixedBodyBase].filter(Boolean).join("\n\n");
   const mediaNote = buildInboundMediaNote(ctx);
   const mediaReplyHint = mediaNote
@@ -489,6 +500,7 @@ export async function runPreparedReply(
       senderName: sessionCtx.SenderName?.trim() || undefined,
       senderUsername: sessionCtx.SenderUsername?.trim() || undefined,
       senderE164: sessionCtx.SenderE164?.trim() || undefined,
+      sessionLabel: buildSessionLabelFromContext(sessionCtx),
       senderIsOwner: command.senderIsOwner,
       sessionFile,
       workspaceDir,

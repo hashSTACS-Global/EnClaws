@@ -571,7 +571,7 @@ export function buildCronPayload(form: CronFormState) {
   return payload;
 }
 
-function buildFailureAlert(form: CronFormState) {
+export function buildFailureAlert(form: CronFormState) {
   if (form.failureAlertMode === "disabled") {
     return false as const;
   }

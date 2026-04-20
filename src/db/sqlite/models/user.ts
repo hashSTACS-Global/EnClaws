@@ -112,6 +112,15 @@ export async function getUserById(id: string): Promise<User | null> {
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
+export async function getUserByUnionId(unionId: string): Promise<User | null> {
+  const result = sqliteQuery(
+    `SELECT * FROM users WHERE union_id = ? AND status = 'active'
+     ORDER BY last_login_at DESC LIMIT 1`,
+    [unionId],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
 export async function getUserByEmail(
   tenantId: string,
   email: string,
@@ -135,10 +144,21 @@ export async function findUserByEmail(email: string): Promise<User | null> {
   return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
+export async function findUserByEmailAnyTenant(email: string): Promise<User | null> {
+  const result = sqliteQuery(
+    `SELECT u.* FROM users u
+     WHERE u.email = ? AND u.status = 'active'
+     ORDER BY CASE WHEN u.last_login_at IS NULL THEN 1 ELSE 0 END, u.last_login_at DESC
+     LIMIT 1`,
+    [email.toLowerCase().trim()],
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
+}
+
 export async function listUsers(
   tenantId: string,
   opts?: { status?: UserStatus; role?: UserRole; channelId?: string; limit?: number; offset?: number },
-): Promise<{ users: (SafeUser & { channelName: string | null })[]; total: number }> {
+): Promise<{ users: (SafeUser & { channelName: string | null; channelType: string | null })[]; total: number }> {
   const conditions: string[] = ["u.tenant_id = ?"];
   const values: unknown[] = [tenantId];
 
@@ -159,9 +179,9 @@ export async function listUsers(
   const limit = opts?.limit ?? 50;
   const offset = opts?.offset ?? 0;
 
-  // LEFT JOIN tenant_channels 拿 channel_name；无 channel_id 的用户字段为 null。
+  // LEFT JOIN tenant_channels to fetch channel_name; users without channel_id get null.
   const dataResult = sqliteQuery(
-    `SELECT u.*, tc.channel_name
+    `SELECT u.*, tc.channel_name, tc.channel_type
        FROM users u
        LEFT JOIN tenant_channels tc ON tc.id = u.channel_id
        ${where}
@@ -177,7 +197,7 @@ export async function listUsers(
   return {
     users: dataResult.rows.map((row) => {
       const safe = toSafeUser(rowToUser(row));
-      return { ...safe, channelName: (row.channel_name as string) ?? null };
+      return { ...safe, channelName: (row.channel_name as string) ?? null, channelType: (row.channel_type as string) ?? null };
     }),
     total: Number(countResult.rows[0].count),
   };
@@ -290,13 +310,17 @@ export async function findOrCreateUserByOpenId(
   // 1. Try to find by union_id first
   if (unionId) {
     const byUnion = sqliteQuery(
-      `SELECT * FROM users WHERE tenant_id = ? AND union_id = ? AND status = 'active'
+      `SELECT * FROM users WHERE tenant_id = ? AND union_id = ?
          AND (channel_id = ? OR channel_id IS NULL)
-       ORDER BY channel_id IS NULL ASC LIMIT 1`,
+       ORDER BY (status = 'active') DESC, channel_id IS NULL ASC LIMIT 1`,
       [tenantId, unionId, channelId ?? null],
     );
     if (byUnion.rows.length > 0) {
       const user = rowToUser(byUnion.rows[0]);
+      if (user.status !== "active") {
+        const { UserSuspendedError } = await import("../../models/user-suspended-error.js");
+        throw new UserSuspendedError(user.id, user.status);
+      }
       backfillChannelId(user);
       // Append open_id to array if not already present
       if (openId && !user.openIds.includes(openId)) {
@@ -321,14 +345,18 @@ export async function findOrCreateUserByOpenId(
   // 2. Fallback: find by open_ids array containment using json_each
   const byOpenId = sqliteQuery(
     `SELECT u.* FROM users u
-     WHERE u.tenant_id = ? AND u.status = 'active'
+     WHERE u.tenant_id = ?
        AND EXISTS (SELECT 1 FROM json_each(u.open_ids) WHERE json_each.value = ?)
        AND (u.channel_id = ? OR u.channel_id IS NULL)
-     ORDER BY u.channel_id IS NULL ASC LIMIT 1`,
+     ORDER BY (u.status = 'active') DESC, u.channel_id IS NULL ASC LIMIT 1`,
     [tenantId, openId, channelId ?? null],
   );
   if (byOpenId.rows.length > 0) {
     const user = rowToUser(byOpenId.rows[0]);
+    if (user.status !== "active") {
+      const { UserSuspendedError } = await import("../../models/user-suspended-error.js");
+      throw new UserSuspendedError(user.id, user.status);
+    }
     backfillChannelId(user);
     // Update union_id if missing
     if (unionId && !user.unionId) {
@@ -402,10 +430,12 @@ export function findUserByOpenIdForDisplay(
   tenantId: string,
   openId: string,
 ): { rows: Array<Record<string, unknown>> } {
+  // Case-insensitive: core canonicalizes session keys to lowercase (e.g. "liuyu"),
+  // but users.open_ids may preserve the channel's original casing (e.g. "LiuYu").
   return sqliteQuery(
     `SELECT display_name FROM users
      WHERE tenant_id = ? AND status = 'active'
-       AND EXISTS (SELECT 1 FROM json_each(open_ids) WHERE json_each.value = ?)
+       AND EXISTS (SELECT 1 FROM json_each(open_ids) WHERE lower(json_each.value) = lower(?))
      LIMIT 1`,
     [tenantId, openId],
   );

@@ -33,6 +33,7 @@ import { tenantHandlers } from "./server-methods/tenant-api.js";
 import { tenantAgentsHandlers } from "./server-methods/tenant-agents-api.js";
 import { tenantChannelsHandlers } from "./server-methods/tenant-channels-api.js";
 import { feishuRegisterHandlers } from "./server-methods/feishu-register-api.js";
+import { wecomRegisterHandlers } from "./server-methods/wecom-register-api.js";
 import { tenantSessionsHandlers } from "./server-methods/tenant-sessions-api.js";
 import { tenantModelsHandlers } from "./server-methods/tenant-models-api.js";
 import { tenantSettingsHandlers } from "./server-methods/tenant-settings-api.js";
@@ -40,6 +41,7 @@ import { tenantTracesHandlers } from "./server-methods/tenant-traces-api.js";
 import { tenantUsageHandlers } from "./server-methods/tenant-usage-api.js";
 import { platformOverviewHandlers } from "./server-methods/platform-overview-api.js";
 import { platformModelsHandlers } from "./server-methods/platform-models-api.js";
+import { platformTenantsHandlers } from "./server-methods/platform-tenants-api.js";
 import { tenantOverviewHandlers } from "./server-methods/tenant-overview-api.js";
 import { tenantOnboardingHandlers } from "./server-methods/tenant-onboarding-api.js";
 import { csWidgetHandlers } from "./server-methods/cs-widget.js";
@@ -129,6 +131,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...tenantAgentsHandlers,
   ...tenantChannelsHandlers,
   ...feishuRegisterHandlers,
+  ...wecomRegisterHandlers,
   ...tenantModelsHandlers,
   ...tenantSettingsHandlers,
   ...tenantSessionsHandlers,
@@ -136,6 +139,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...tenantUsageHandlers,
   ...platformOverviewHandlers,
   ...platformModelsHandlers,
+  ...platformTenantsHandlers,
   ...tenantOverviewHandlers,
   ...tenantOnboardingHandlers,
   ...csWidgetHandlers,

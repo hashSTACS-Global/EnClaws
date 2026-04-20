@@ -68,6 +68,10 @@ export function createSessionsSpawnTool(opts?: {
   requesterAgentIdOverride?: string;
   /** Multi-agent Cognitive Loop Fusion: current recursive iteration depth */
   iterationDepth?: number;
+  /** Tenant ID for multi-tenant scoped subagent sessions. */
+  tenantId?: string;
+  /** Tenant user ID for multi-tenant scoped subagent sessions. */
+  tenantUserId?: string;
 }): AnyAgentTool {
   return {
     label: "Sessions",
@@ -175,6 +179,8 @@ export function createSessionsSpawnTool(opts?: {
                 agentGroupSpace: opts?.agentGroupSpace,
                 requesterAgentIdOverride: opts?.requesterAgentIdOverride,
                 iterationDepth: opts?.iterationDepth,
+                tenantId: opts?.tenantId,
+                tenantUserId: opts?.tenantUserId,
               },
             );
 

@@ -106,9 +106,11 @@ import "./views/tenant/cs-setup.ts";
 import "./views/tenant/cs-knowledge.ts";
 import "./views/tenant/cs-sessions.ts";
 import "./components/cs-widget.ts";
+import "./views/tenant/tenant-cron.ts";
 import "./views/platform-overview.ts";
 import "./views/platform-tools.ts";
 import "./views/platform-models.ts";
+import "./views/platform-tenants.ts";
 import "./views/onboarding-wizard.ts";
 import "./views/auth-phase1.ts";
 import "./views/password-expiry-banner.ts";
@@ -258,6 +260,11 @@ function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
   return identity?.avatarUrl;
 }
 
+/** Pending cross-tab navigation target (e.g. from tenant-cron → tenant-agents). */
+let _pendingAgentNav: { agentId: string; panel: string } | null = null;
+/** Pending cross-tab navigation target (e.g. from tenant-agents → tenant-channels). */
+let _pendingChannelNav: { channelType?: string } | null = null;
+
 export function renderApp(state: AppViewState) {
   const enClawsVersion =
     (typeof state.hello?.server?.version === "string" && state.hello.server.version.trim()) ||
@@ -405,9 +412,13 @@ export function renderApp(state: AppViewState) {
         }
       }}
     ></enclaws-login>
-    ${typeof document !== "undefined" && !!document.querySelector('meta[name="ec-cs-tenant-id"]')
-      ? html`<cs-widget></cs-widget>`
-      : nothing}`;
+    ${(() => {
+      if (typeof document === "undefined") return nothing;
+      const tid = document
+        .querySelector<HTMLMetaElement>('meta[name="ec-cs-tenant-id"]')
+        ?.content;
+      return tid ? html`<cs-widget tenant-id=${tid}></cs-widget>` : nothing;
+    })()}`;
   }
 
   // Phase 1: post-login force-change-password overlay (covers invite + admin reset)
@@ -484,8 +495,8 @@ export function renderApp(state: AppViewState) {
                   const userRole = authState?.user?.role;
                   const isPlatformAdmin = userRole === "platform-admin";
                   const isTenantAdmin = userRole === "owner" || userRole === "admin";
-                  const tenantOnlyTabs = new Set(["tenant-settings", "tenant-users", "tenant-agents", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage", "cs-setup", "cs-knowledge", "cs-sessions"]);
-                  const platformOnlyTabs = new Set(["overview", "platform-models","platform-tools"]);
+                  const tenantOnlyTabs = new Set(["tenant-settings", "tenant-users", "tenant-agents", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage", "tenant-cron", "cs-setup", "cs-knowledge", "cs-sessions"]);
+                  const platformOnlyTabs = new Set(["overview", "platform-models","platform-tools","platform-tenants","logs"]);
                   const visibleTabs = group.tabs.filter((tab) => {
                     if (platformOnlyTabs.has(tab)) {return isPlatformAdmin;}
                     if (tenantOnlyTabs.has(tab)) {return isTenantAdmin;}
@@ -687,6 +698,14 @@ export function renderApp(state: AppViewState) {
                                   ? html`
                                       <platform-models-view
                                               .gatewayUrl=${state.settings.gatewayUrl}></platform-models-view>`
+                                  : nothing
+                  }
+
+                  ${
+                          !isComingSoon && state.tab === "platform-tenants"
+                                  ? html`
+                                      <platform-tenants-view
+                                              .gatewayUrl=${state.settings.gatewayUrl}></platform-tenants-view>`
                                   : nothing
                   }
 
@@ -1572,7 +1591,7 @@ export function renderApp(state: AppViewState) {
                   }
 
                   ${
-                          !isComingSoon && (state.tab === "tenant-overview" || state.tab === "tenant-settings" || state.tab === "tenant-users" || state.tab === "tenant-agents" || state.tab === "tenant-channels" || state.tab === "tenant-models" || state.tab === "tenant-skills" || state.tab === "tenant-traces" || state.tab === "tenant-usage" || state.tab === "cs-setup" || state.tab === "cs-knowledge" || state.tab === "cs-sessions")
+                          !isComingSoon && (state.tab === "tenant-overview" || state.tab === "tenant-settings" || state.tab === "tenant-users" || state.tab === "tenant-agents" || state.tab === "tenant-channels" || state.tab === "tenant-models" || state.tab === "tenant-skills" || state.tab === "tenant-traces" || state.tab === "tenant-usage" || state.tab === "tenant-cron" || state.tab === "cs-setup" || state.tab === "cs-knowledge" || state.tab === "cs-sessions")
                                   ? html`
                                       <section class="card">
                                           ${state.tab === "tenant-overview" ? html`
@@ -1584,12 +1603,29 @@ export function renderApp(state: AppViewState) {
                                           ${state.tab === "tenant-users" ? html`
                                               <tenant-users-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}></tenant-users-view>` : nothing}
-                                          ${state.tab === "tenant-agents" ? html`
+                                          ${state.tab === "tenant-agents" ? (() => {
+                                              const nav = _pendingAgentNav;
+                                              if (nav) { _pendingAgentNav = null; }
+                                              return html`
                                               <tenant-agents-view
-                                                      .gatewayUrl=${state.settings.gatewayUrl}></tenant-agents-view>` : nothing}
-                                          ${state.tab === "tenant-channels" ? html`
+                                                      .gatewayUrl=${state.settings.gatewayUrl}
+                                                      .initialAgentId=${nav?.agentId ?? null}
+                                                      .initialPanel=${nav?.panel ?? null}
+                                                      @navigate-to-channel=${(e: CustomEvent<{ channelType: string }>) => {
+                                                        _pendingChannelNav = { channelType: e.detail.channelType };
+                                                        state.setTab("tenant-channels" as any);
+                                                      }}></tenant-agents-view>`;
+                                          })() : nothing}
+                                          ${state.tab === "tenant-channels" ? (() => {
+                                              _pendingChannelNav = null;
+                                              return html`
                                               <tenant-channels-view
-                                                      .gatewayUrl=${state.settings.gatewayUrl}></tenant-channels-view>` : nothing}
+                                                      .gatewayUrl=${state.settings.gatewayUrl}
+                                                      @navigate-to-agent=${(e: CustomEvent<{ agentId: string }>) => {
+                                                        _pendingAgentNav = { agentId: e.detail.agentId, panel: "channels" };
+                                                        state.setTab("tenant-agents" as any);
+                                                      }}></tenant-channels-view>`;
+                                          })() : nothing}
                                           ${state.tab === "tenant-models" ? html`
                                               <tenant-models-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}></tenant-models-view>` : nothing}
@@ -1602,6 +1638,13 @@ export function renderApp(state: AppViewState) {
                                           ${!isComingSoon && state.tab === "tenant-usage" ? html`
                                               <tenant-usage-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}></tenant-usage-view>` : nothing}
+                                          ${state.tab === "tenant-cron" ? html`
+                                              <tenant-cron-view
+                                                      .gatewayUrl=${state.settings.gatewayUrl}
+                                                      @navigate-to-agent-cron=${(e: CustomEvent<{ agentId: string }>) => {
+                                                        _pendingAgentNav = { agentId: e.detail.agentId, panel: "cron" };
+                                                        state.setTab("tenant-agents" as any);
+                                                      }}></tenant-cron-view>` : nothing}
                                           ${state.tab === "cs-setup" ? html`
                                               <cs-setup-view></cs-setup-view>` : nothing}
                                           ${state.tab === "cs-knowledge" ? html`
@@ -1644,9 +1687,13 @@ export function renderApp(state: AppViewState) {
           </div>
           ${renderExecApprovalPrompt(state)}
           ${renderGatewayUrlConfirmation(state)}
-          ${typeof document !== "undefined" && !!document.querySelector('meta[name="ec-cs-tenant-id"]')
-            ? html`<cs-widget></cs-widget>`
-            : nothing}
+          ${(() => {
+            if (typeof document === "undefined") return nothing;
+            const tid = document
+              .querySelector<HTMLMetaElement>('meta[name="ec-cs-tenant-id"]')
+              ?.content;
+            return tid ? html`<cs-widget tenant-id=${tid}></cs-widget>` : nothing;
+          })()}
       </div>
   `;
 }

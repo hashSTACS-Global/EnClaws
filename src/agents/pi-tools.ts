@@ -1,10 +1,12 @@
 import { codingTools, createReadTool, readTool } from "@mariozechner/pi-coding-agent";
 import type { OpenClawConfig } from "../config/config.js";
 import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
+import { issueGatewayToken } from "../gateway/gateway-token-cache.js";
 import { resolveMergedSafeBinProfileFixtures } from "../infra/exec-safe-bin-runtime-policy.js";
-import { logWarn } from "../logger.js";
+import { logInfo, logWarn } from "../logger.js";
 import { getPluginToolMeta } from "../plugins/tools.js";
 import { isSubagentSessionKey } from "../routing/session-key.js";
+import { parseSessionKeySegments } from "../routing/session-label.js";
 import { resolveGatewayMessageChannel } from "../utils/message-channel.js";
 import { resolveAgentConfig } from "./agent-scope.js";
 import { createApplyPatchTool } from "./apply-patch.js";
@@ -175,11 +177,9 @@ export function resolveToolLoopDetectionConfig(params: {
  * Build the extraEnv record for the exec tool.
  *
  * Injects process-isolated environment variables so that tenant skill scripts
- * can read context without relying on shared files or model parameter passing:
- *   - ENCLAWS_TENANT_ID / ENCLAWS_TENANT_USER_ID — multi-tenant identity
- *   - ENCLAWS_USER_WORKSPACE — full path to the current user's workspace directory
- *   - FEISHU_APP_ID / FEISHU_APP_SECRET — channel app credentials (concurrency-safe)
- *   - ENCLAWS_CHAT_ID — current chat id for auth card routing
+ * can read context without relying on shared files or model parameter passing.
+ * All values are injected into a per-request dictionary (not process.env), making
+ * this concurrency-safe even under concurrent multi-tenant sessions.
  */
 function buildExecExtraEnv(options?: {
   tenantId?: string;
@@ -189,20 +189,70 @@ function buildExecExtraEnv(options?: {
   agentAccountId?: string;
   config?: OpenClawConfig;
   workspaceDir?: string;
+  senderName?: string | null;
+  sessionKey?: string;
+  sessionLabel?: string;
 }): Record<string, string> | undefined {
   const env: Record<string, string> = {};
 
   // Tenant identity
-  if (options?.tenantId) env.ENCLAWS_TENANT_ID = options.tenantId;
-  if (options?.tenantUserId) env.ENCLAWS_TENANT_USER_ID = options.tenantUserId;
+  if (options?.tenantId) {
+    env.ENCLAWS_TENANT_ID = options.tenantId;
+  }
 
-  // User workspace path — enables skill scripts to save files to the correct user directory
-  if (options?.workspaceDir) env.ENCLAWS_USER_WORKSPACE = options.workspaceDir;
+  // User identity — ENCLAWS_TENANT_USER_ID now carries openId (per 007 final decision)
+  const segments = parseSessionKeySegments(options?.sessionLabel ?? options?.sessionKey);
+  if (segments.open) {
+    env.ENCLAWS_TENANT_USER_ID = segments.open;
+  } else if (options?.tenantUserId) {
+    env.ENCLAWS_TENANT_USER_ID = options.tenantUserId;
+  }
 
-  // Chat ID — extract from "chat:{chatId}" format in messageTo
+  // User display name (new field name per 007)
+  const userDisplayName = segments.name ?? options?.senderName ?? undefined;
+  if (userDisplayName) {
+    env.ENCLAWS_TENANT_USER_DISNAME = userDisplayName;
+  }
+
+  // User workspace path
+  if (options?.workspaceDir) {
+    env.ENCLAWS_USER_WORKSPACE = options.workspaceDir;
+  }
+
+  // Chat ID
   if (options?.messageTo?.startsWith("chat:")) {
     env.ENCLAWS_CHAT_ID = options.messageTo.slice(5);
   }
+
+  // Gateway URL — passthrough from process.env
+  if (process.env.ENCLAWS_GATEWAY_URL) {
+    env.ENCLAWS_GATEWAY_URL = process.env.ENCLAWS_GATEWAY_URL;
+  }
+
+  // Gateway one-time token — opaque reference to cached sessionKey for attribution
+  if (
+    options?.sessionLabel &&
+    options?.sessionKey &&
+    options?.tenantId &&
+    segments.agentId &&
+    segments.channel &&
+    segments.open
+  ) {
+    env.ENCLAWS_GATEWAY_TOKEN = issueGatewayToken({
+      sessionLabel: options.sessionLabel,
+      internalSessionKey: options.sessionKey,
+      tenantId: options.tenantId,
+      agentSlug: segments.agentId,
+      channel: segments.channel,
+      userOpenId: segments.open,
+      userUnionId: segments.union ?? segments.open,
+      userDisplayName,
+    });
+  }
+
+  // Python UTF-8 mode — ensure pipeline scripts read env/stdin/files correctly on all platforms
+  env.PYTHONUTF8 = "1";
+  env.PYTHONIOENCODING = "utf-8";
 
   // Feishu app credentials — only for feishu provider, resolved from channel config
   const provider = options?.messageProvider?.toLowerCase();
@@ -214,14 +264,81 @@ function buildExecExtraEnv(options?: {
         provider,
         options.agentAccountId,
       ) as { appId: string; appSecret: string } | null;
-      if (creds?.appId) env.FEISHU_APP_ID = creds.appId;
-      if (creds?.appSecret) env.FEISHU_APP_SECRET = creds.appSecret;
+      if (creds?.appId) {
+        env.FEISHU_APP_ID = creds.appId;
+      }
+      if (creds?.appSecret) {
+        env.FEISHU_APP_SECRET = creds.appSecret;
+      }
     } catch {
       // Non-fatal — skill scripts fall back to config.json / enclaws.json
     }
   }
 
+  if (Object.keys(env).length > 0) {
+    const tokenPreview = env.ENCLAWS_GATEWAY_TOKEN
+      ? `${env.ENCLAWS_GATEWAY_TOKEN.slice(0, 12)}...`
+      : "(unset)";
+    logInfo(
+      `[tools] exec env [${options?.sessionKey ?? "no-session"}]:` +
+        `\n  ENCLAWS_GATEWAY_TOKEN = ${tokenPreview}` +
+        `\n  ENCLAWS_TENANT_ID    = ${env.ENCLAWS_TENANT_ID ?? "(unset)"}` +
+        `\n  ENCLAWS_TENANT_USER_ID   = ${env.ENCLAWS_TENANT_USER_ID ?? "(unset)"}` +
+        `\n  ENCLAWS_TENANT_USER_DISNAME = ${env.ENCLAWS_TENANT_USER_DISNAME ?? "(unset)"}` +
+        `\n  ENCLAWS_USER_WORKSPACE   = ${env.ENCLAWS_USER_WORKSPACE ?? "(unset)"}` +
+        `\n  ENCLAWS_CHAT_ID      = ${env.ENCLAWS_CHAT_ID ?? "(unset)"}` +
+        `\n  ENCLAWS_GATEWAY_URL  = ${env.ENCLAWS_GATEWAY_URL ?? "(unset)"}`,
+    );
+  }
   return Object.keys(env).length > 0 ? env : undefined;
+}
+
+/**
+ * Build an async callback that fetches short-lived tokens per exec invocation.
+ * Called on every exec tool execution (not at session creation), so tokens
+ * are always fresh even for sessions lasting longer than the token TTL.
+ */
+function buildExecExtraEnvAsync(options?: {
+  messageProvider?: string;
+  agentAccountId?: string;
+  config?: OpenClawConfig;
+  sessionKey?: string;
+}): (() => Promise<Record<string, string>>) | undefined {
+  const provider = options?.messageProvider?.toLowerCase();
+  if (provider !== "feishu" || !options?.config) {
+    return undefined;
+  }
+
+  // Capture credentials once (static, don't expire).
+  // The token fetch inside the callback uses getTenantAccessToken's built-in cache,
+  // so repeated exec calls within the 2h window are cheap (no network round-trip).
+  let cachedCreds: { appId: string; appSecret: string } | null = null;
+  try {
+    const { extractFeishuCredentials } = require("../infra/feishu-user-resolve.js");
+    cachedCreds = extractFeishuCredentials(
+      options.config as unknown as Record<string, unknown>,
+      provider,
+      options.agentAccountId,
+    ) as { appId: string; appSecret: string } | null;
+  } catch {
+    return undefined;
+  }
+  if (!cachedCreds?.appId || !cachedCreds?.appSecret) {
+    return undefined;
+  }
+
+  const { appId, appSecret } = cachedCreds;
+  logInfo(
+    `[tools] exec extraEnvAsync [${options?.sessionKey ?? "no-session"}]: registered Feishu token fetcher for appId=${appId}`,
+  );
+  return async () => {
+    const { getTenantAccessToken } = await import("../infra/feishu-user-resolve.js");
+    const token = await getTenantAccessToken(appId, appSecret);
+    if (!token) {
+      logWarn(`[tools] exec extraEnvAsync: failed to get tenant_access_token for appId=${appId}`);
+    }
+    return token ? { FEISHU_TENANT_ACCESS_TOKEN: token } : ({} as Record<string, string>);
+  };
 }
 
 export const __testing = {
@@ -301,6 +418,8 @@ export function createOpenClawCodingTools(options?: {
   tenantUserRole?: string;
   /** Tool names overridden by skills (these plugin tools will be removed). */
   skillOverrides?: string[];
+  /** Human-readable session label to inject as ENCLAWS_SESSION_KEY into subprocesses. */
+  sessionLabel?: string;
 }): AnyAgentTool[] {
   const execToolName = "exec";
   const sandbox = options?.sandbox?.enabled ? options.sandbox : undefined;
@@ -471,7 +590,12 @@ export function createOpenClawCodingTools(options?: {
           env: sandbox.docker.env,
         }
       : undefined,
-    extraEnv: buildExecExtraEnv({ ...options, workspaceDir: workspaceRoot }),
+    extraEnv: buildExecExtraEnv({
+      ...options,
+      workspaceDir: workspaceRoot,
+      sessionLabel: options?.sessionLabel,
+    }),
+    extraEnvAsync: buildExecExtraEnvAsync(options),
   });
   const processTool = createProcessTool({
     cleanupMs: cleanupMsOverride ?? execConfig.cleanupMs,
@@ -597,9 +721,6 @@ export function createOpenClawCodingTools(options?: {
   const overrideSet = options?.skillOverrides?.length
     ? new Set(options.skillOverrides.map((n) => n.toLowerCase()))
     : undefined;
-  if (overrideSet) {
-    const removed = subagentFiltered.filter((tool) => overrideSet.has(tool.name.toLowerCase())).map((t) => t.name);
-  }
   const afterSkillOverrides = overrideSet
     ? subagentFiltered.filter((tool) => !overrideSet.has(tool.name.toLowerCase()))
     : subagentFiltered;
@@ -616,6 +737,9 @@ export function createOpenClawCodingTools(options?: {
       sessionKey: options?.sessionKey,
       loopDetection: resolveToolLoopDetectionConfig({ cfg: options?.config, agentId }),
       tenantUserRole: options?.tenantUserRole,
+      tenantId: options?.tenantId,
+      userId: options?.tenantUserId,
+      workspaceDir: options?.workspaceDir,
     }),
   );
   const withAbort = options?.abortSignal

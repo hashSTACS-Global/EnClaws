@@ -336,6 +336,8 @@ function runAgentAttempt(params: {
     toolsOverride: params.opts.toolsOverride,
     agentDir: params.agentDir,
     onAgentEvent: params.onAgentEvent,
+    tenantId: params.opts.tenantId,
+    tenantUserId: params.opts.tenantUserId,
   });
 }
 

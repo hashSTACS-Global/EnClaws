@@ -115,6 +115,8 @@ export type RunEmbeddedPiAgentParams = {
   tenantUserId?: string;
   /** Tenant user role for permission checks during tool execution. */
   tenantUserRole?: string;
+  /** Human-readable session label injected as ENCLAWS_SESSION_KEY env var. */
+  sessionLabel?: string;
   /**
    * Override the system prompt mode. Defaults to "full" for main sessions, "minimal" for subagents.
    * Pass "none" for lightweight runners (e.g. CS agent) that supply their own system prompt via

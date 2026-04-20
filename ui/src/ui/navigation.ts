@@ -12,27 +12,27 @@ export const TAB_GROUPS = [
     },
     {
         label: "workspace",
-        tabs: ["tenant-agents", "chat", "sessions", "sandbox"],
+        tabs: ["tenant-agents", "chat", "sessions"],
     },
     {
         label: "resources",
-        tabs: ["tenant-channels", "tenant-skills", "tenant-models"],
+        tabs: ["tenant-channels", "tenant-models"],
     },
     {
         label: "enterprise",
-        tabs: ["tenant-settings", "tenant-users", "tenant-traces", "tenant-usage"],
+        tabs: ["tenant-settings", "tenant-users", "tenant-traces", "tenant-usage", "tenant-cron"],
     },
     {
         label: "cs",
         tabs: ["cs-setup", "cs-knowledge", "cs-sessions"],
     },
     {
-        label: "system",
-        tabs: ["instances", "cron", "logs", "debug"],
+        label: "platform",
+        tabs: ["platform-tools","platform-models","platform-tenants"],
     },
     {
-        label: "platform",
-        tabs: ["platform-tools","platform-models"],
+        label: "system",
+        tabs: ["logs"],
     },
 ] as const;
 
@@ -61,7 +61,9 @@ export type Tab =
     | "tenant-overview"
     | "tenant-traces"
     | "tenant-usage"
+    | "tenant-cron"
     | "platform-tools"
+    | "platform-tenants"
     | "cs-setup"
     | "cs-knowledge"
     | "cs-sessions";
@@ -91,7 +93,9 @@ const TAB_PATHS: Record<Tab, string> = {
     "tenant-skills": "/tenant-skills",
     "tenant-traces": "/tenant-traces",
     "tenant-usage": "/tenant-usage",
+    "tenant-cron": "/tenant-cron",
     "platform-tools": "/platform-tools",
+    "platform-tenants": "/platform-tenants",
     "cs-setup": "/cs-setup",
     "cs-knowledge": "/cs-knowledge",
     "cs-sessions": "/cs-sessions",
@@ -228,8 +232,12 @@ export function iconForTab(tab: Tab): IconName {
             return "scrollText";
         case "tenant-usage":
             return "barChart";
+        case "tenant-cron":
+            return "loader";
         case "platform-tools":
             return "zap";
+        case "platform-tenants":
+            return "folder";
         case "cs-setup":
             return "settings";
         case "cs-knowledge":

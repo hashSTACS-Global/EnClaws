@@ -13,6 +13,7 @@ import {
   resolveAllowAlwaysPatterns,
   resolveExecApprovals,
 } from "../infra/exec-approvals.js";
+import { evaluateDenylist, getExecDenylist } from "../infra/exec-approvals-denylist.js";
 import { detectCommandObfuscation } from "../infra/exec-obfuscation-detect.js";
 import type { SafeBinProfile } from "../infra/exec-safe-bin-policy.js";
 import { logInfo } from "../logger.js";
@@ -100,6 +101,15 @@ export async function processGatewayAllowlist(
       throw new Error(`exec denied: allowlist execution plan unavailable (${enforced.reason})`);
     }
     enforcedCommand = enforced.command;
+  }
+  const denylistDecision = evaluateDenylist({
+    command: params.command,
+    denylist: getExecDenylist(),
+    segments: allowlistEval.segments,
+  });
+  if (denylistDecision.blocked) {
+    logInfo(`exec: denylist block (gateway): ${denylistDecision.reason}`);
+    throw new Error(`exec denied: ${denylistDecision.reason}`);
   }
   const obfuscation = detectCommandObfuscation(params.command);
   if (obfuscation.detected) {

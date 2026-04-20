@@ -18,6 +18,17 @@ export const handleInstallSkillCommand: CommandHandler = async (params, allowTex
     return { shouldContinue: false };
   }
 
+  const tenantRole = params.ctx.TenantUserRole;
+  if (tenantRole && !["owner", "admin"].includes(tenantRole)) {
+    logVerbose(
+      `Blocking /install-skill: tenantRole=${tenantRole} sender=${params.command.senderId || "<unknown>"}`,
+    );
+    return {
+      shouldContinue: false,
+      reply: { text: "权限不足：仅管理员可安装技能" },
+    };
+  }
+
   const arg = normalized.slice("/install-skill".length).trim();
   if (!arg) {
     return {

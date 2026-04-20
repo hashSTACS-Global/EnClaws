@@ -318,12 +318,11 @@ export const feishuPlugin: ChannelPlugin<LarkAccount> = {
   gateway: {
     startAccount: async (ctx) => {
       const { monitorFeishuProvider } = await import('./monitor.js');
-      const { LarkClient: LC } = await import('../core/lark-client.js');
       const account = getLarkAccount(ctx.cfg, ctx.accountId);
       const port = account.config?.webhookPort ?? null;
 
       // Pre-startup probe — fail fast if credentials are invalid
-      const lark = LC.fromAccount(account);
+      const lark = LarkClient.fromAccount(account);
       const probeResult = await lark.probe();
       if (!probeResult.ok) {
         ctx.setStatus({ accountId: ctx.accountId, port, connected: false, lastError: probeResult.error });

@@ -109,6 +109,7 @@ const PLUGIN_SDK_SUBPATHS = [
   "tool-send",
   "temp-path",
   "allow-from",
+  "runtime-store",
 ] as const;
 
 const resolvePluginSdkSubpathAliases = (): Record<string, string> => {

@@ -19,14 +19,13 @@ export type SimulatorConnectionOptions = {
 
 export type RegisterOptions = {
   tenantName: string;
-  tenantSlug: string;
   email: string;
   password: string;
   displayName?: string;
 };
 
 export type RegisterResult = {
-  tenant: { id: string; name: string; slug: string };
+  tenant: { id: string; name: string };
   user: { id: string; email: string; role: string; displayName?: string };
   accessToken: string;
   refreshToken: string;
@@ -35,7 +34,6 @@ export type RegisterResult = {
 export type LoginOptions = {
   email: string;
   password: string;
-  tenantSlug?: string;
 };
 
 export type LoginResult = {

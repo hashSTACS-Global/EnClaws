@@ -190,6 +190,7 @@ export function createSessionsListTool(opts?: {
           channel: derivedChannel,
           label: typeof entry.label === "string" ? entry.label : undefined,
           displayName: typeof entry.displayName === "string" ? entry.displayName : undefined,
+          groupName: typeof entry.groupName === "string" ? entry.groupName : undefined,
           deliveryContext:
             deliveryChannel || deliveryTo || deliveryAccountId
               ? {

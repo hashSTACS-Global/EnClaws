@@ -30,7 +30,7 @@ import {
   unregisterActiveDispatcher,
 } from '../../channel/chat-queue';
 import { isLikelyAbortText } from '../../channel/abort-detect';
-import { isThreadCapableGroup } from '../../core/chat-info-cache';
+import { getChatInfo, isThreadCapableGroup } from '../../core/chat-info-cache';
 import { encodeFeishuRouteTarget } from '../../core/targets';
 import type { LarkClient } from '../../core/lark-client';
 import { runFeishuDoctorI18n } from '../../commands/doctor';
@@ -220,7 +220,19 @@ export async function dispatchToAgent(params: {
     }
   }
 
-  // 1b. Resolve thread session isolation (async: may query group info API)
+  // 1b. Resolve group chat name (cached via im.chat.get, 1-hour TTL)
+  if (dc.isGroup) {
+    const chatInfo = await getChatInfo({
+      cfg: dc.accountScopedCfg,
+      chatId: dc.ctx.chatId,
+      accountId: dc.account.accountId,
+    });
+    if (chatInfo?.chatName) {
+      dc.chatName = chatInfo.chatName;
+    }
+  }
+
+  // 1c. Resolve thread session isolation (async: may query group info API)
   if (dc.isThread && dc.ctx.threadId) {
     dc.threadSessionKey = await resolveThreadSessionKey({
       accountScopedCfg: dc.accountScopedCfg,

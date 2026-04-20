@@ -103,6 +103,14 @@ const BASE_METHODS = [
   "chat.history",
   "chat.abort",
   "chat.send",
+  // Platform tenant management
+  "platform.tenants.list",
+  "platform.tenants.get",
+  "platform.tenants.update",
+  "platform.tenants.suspend",
+  "platform.tenants.unsuspend",
+  "platform.plans.quotas",
+  "tenant.plan.current",
   // Customer Service Widget methods
   "cs.widget.connect",
   "cs.widget.send",

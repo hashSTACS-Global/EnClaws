@@ -420,6 +420,7 @@ export function createJob(state: CronServiceState, input: CronJobCreate): CronJo
     wakeMode: input.wakeMode,
     payload: input.payload,
     delivery: input.delivery,
+    createdBy: input.createdBy,
     failureAlert: input.failureAlert,
     state: {
       ...input.state,

@@ -78,7 +78,10 @@ import {
   resolveTenantDevicesDir,
   resolveTenantCredentialsDir,
   resolveTenantCronDir,
+  resolveTenantAgentCronDir,
+  resolveTenantAgentCronStorePath,
   resolveTenantAgentWorkspaceDir,
+  resolveTenantAgentSessionsDir,
 } from "../config/sessions/tenant-paths.js";
 import { isMultiTenantMode } from "../config/multi-tenant.js";
 import { isDbInitialized } from "../db/index.js";
@@ -556,6 +559,56 @@ export async function startGatewayServer(
     return cached;
   };
 
+  // Per-tenant-agent CronService cache (keyed by "tenantId:agentId").
+  const tenantAgentCronCache = new Map<string, { cron: CronService; cronStorePath: string }>();
+  const resolveTenantAgentCron = (tenantId: string, agentId: string) => {
+    const key = `${tenantId}:agent:${agentId}`;
+    let cached = tenantAgentCronCache.get(key);
+    if (cached) return cached;
+    const cronDir = resolveTenantAgentCronDir(tenantId, agentId);
+    if (!fs.existsSync(cronDir)) {
+      fs.mkdirSync(cronDir, { recursive: true });
+    }
+    // Ensure tenant-scoped sessions directory exists for the agent so isolated
+    // cron runs can acquire the session write-lock without ENOENT.
+    // Sessions live under tenants/{tid}/users/{agentId}/sessions/ (agentId is
+    // used as the userId for agent-scoped cron).
+    const tenantAgentSessionsDir = resolveTenantAgentSessionsDir(tenantId, agentId, undefined, undefined, agentId);
+    if (!fs.existsSync(tenantAgentSessionsDir)) {
+      fs.mkdirSync(tenantAgentSessionsDir, { recursive: true });
+    }
+    const agentStorePath = resolveTenantAgentCronStorePath(tenantId, agentId);
+    const agentCronState = buildTenantCronService({
+      tenantId,
+      userId: agentId, // agent acts as the "user" for the cron service
+      storePath: agentStorePath,
+      cfg: cfgAtStart,
+      deps,
+      broadcast,
+      cronEnabled: cronState.cronEnabled,
+    });
+    void agentCronState.cron.start().catch((err) =>
+      logCron.error(`agent cron start failed (${key}): ${String(err)}`),
+    );
+    cached = { cron: agentCronState.cron, cronStorePath: agentCronState.storePath };
+    tenantAgentCronCache.set(key, cached);
+    return cached;
+  };
+
+  /**
+   * Count the in-memory cron jobs for a tenant across all its cached agent
+   * CronService instances. Reads from `state.store.jobs.length` (no disk I/O).
+   */
+  const countTenantCronJobs = (tenantId: string): number => {
+    const prefix = `${tenantId}:agent:`;
+    let total = 0;
+    for (const [key, entry] of tenantAgentCronCache) {
+      if (!key.startsWith(prefix)) continue;
+      total += entry.cron.getInMemoryJobCount();
+    }
+    return total;
+  };
+
   const channelManager = createChannelManager({
     loadConfig,
     channelLogs,
@@ -786,6 +839,8 @@ export async function startGatewayServer(
       cron,
       cronStorePath,
       resolveTenantCron,
+      resolveTenantAgentCron,
+      countTenantCronJobs,
       execApprovalManager,
       loadGatewayModelCatalog,
       getHealthCache,
@@ -891,6 +946,21 @@ export async function startGatewayServer(
         log.warn(`gateway_start hook failed: ${String(err)}`);
       });
     }
+  }
+
+  // Ensure all tenants have skill packs installed (fire-and-forget)
+  if (!minimalTestGateway && isDbInitialized()) {
+    void (async () => {
+      try {
+        const { tenants } = await listTenants();
+        if (tenants.length > 0) {
+          const { ensureSkillPacksForAllTenants } = await import("../agents/skill-pack-installer.js");
+          await ensureSkillPacksForAllTenants(tenants.map((t: { id: string }) => t.id), log);
+        }
+      } catch (err) {
+        log.warn(`skill-pack startup check failed: ${String(err)}`);
+      }
+    })();
   }
 
   const configReloader = minimalTestGateway

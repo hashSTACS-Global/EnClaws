@@ -2,7 +2,7 @@
  * Gateway RPC handlers for tenant settings management.
  *
  * Methods:
- *   tenant.settings.get    - Get current tenant settings (name, slug, identityPrompt)
+ *   tenant.settings.get    - Get current tenant settings (name, identityPrompt)
  *   tenant.settings.update - Update tenant settings and sync IDENTITY.md to disk
  *   tenant.memory.get      - Get current tenant MEMORY.md content
  *   tenant.memory.update   - Update tenant MEMORY.md content
@@ -78,7 +78,6 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
 
     respond(true, {
       name: tenant.name,
-      slug: tenant.slug,
       identityPrompt: tenant.identityPrompt,
     });
   },
@@ -97,23 +96,13 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { name, slug, identityPrompt } = params as {
+    const { name, identityPrompt } = params as {
       name?: string;
-      slug?: string;
       identityPrompt?: string;
     };
 
-    if (slug !== undefined && !/^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(slug)) {
-      respond(false, undefined, errorShape(
-        ErrorCodes.INVALID_PARAMS,
-        "slug 必须为小写字母数字，可包含连字符和下划线，长度 1-128",
-      ));
-      return;
-    }
-
     const updates: Record<string, unknown> = {};
     if (name !== undefined) updates.name = name;
-    if (slug !== undefined) updates.slug = slug;
     if (identityPrompt !== undefined) updates.identityPrompt = identityPrompt;
 
     if (Object.keys(updates).length === 0) {
@@ -137,12 +126,11 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
       userId: ctx.userId,
       action: "tenant.settings.update",
       resource: `tenant:${ctx.tenantId}`,
-      detail: { name, slug, hasIdentityPrompt: identityPrompt !== undefined },
+      detail: { name, hasIdentityPrompt: identityPrompt !== undefined },
     });
 
     respond(true, {
       name: updated.name,
-      slug: updated.slug,
       identityPrompt: updated.identityPrompt,
     });
   },

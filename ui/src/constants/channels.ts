@@ -14,9 +14,6 @@ export const CHANNEL_TYPES: readonly ChannelTypeDef[] = [
   { value: "feishu", labelKey: "channels.feishu", icon: "/feishu-logo.svg" },
   { value: "dingtalk", labelKey: "channels.dingtalk", icon: "/dingtalk-logo.svg" },
   { value: "wecom", labelKey: "channels.wecom", icon: "/wecom-logo.svg" },
-  { value: "telegram", labelKey: "channels.telegram", icon: "/telegram-logo.svg" },
-  { value: "whatsapp", labelKey: "channels.whatsapp", icon: "/whatsapp-logo.svg" },
-  { value: "discord", labelKey: "channels.discord", icon: "/discord-logo.svg" },
 ] as const;
 
 /** Quick lookup: channel type value → icon path (or undefined) */

@@ -9,7 +9,7 @@
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import { isDbInitialized } from "../../db/index.js";
-import { getTenantById } from "../../db/models/tenant.js";
+import { getTenantById, resolveEffectiveQuotas } from "../../db/models/tenant.js";
 import { getTenantUsageSummary, checkTokenQuota } from "../../db/models/usage.js";
 import { assertPermission, RbacError } from "../../auth/rbac.js";
 import type { TenantContext } from "../../auth/middleware.js";
@@ -99,7 +99,7 @@ export const tenantUsageHandlers: GatewayRequestHandlers = {
   /**
    * Check current quota status.
    */
-  "tenant.usage.quota": async ({ client, respond }: GatewayRequestHandlerOptions) => {
+  "tenant.usage.quota": async ({ client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
     if (!ctx) return;
 
@@ -109,12 +109,15 @@ export const tenantUsageHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const tokenQuota = await checkTokenQuota(ctx.tenantId, tenant.quotas.maxTokensPerMonth);
+    const effectiveQuotas = await resolveEffectiveQuotas(tenant);
+    const tokenQuota = await checkTokenQuota(ctx.tenantId, effectiveQuotas.maxTokensPerMonth);
 
     // Get current month start
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const currentCronJobs = context.countTenantCronJobs?.(ctx.tenantId) ?? 0;
 
     respond(true, {
       plan: tenant.plan,
@@ -128,7 +131,8 @@ export const tenantUsageHandlers: GatewayRequestHandlers = {
         remaining: Math.max(0, tokenQuota.max - tokenQuota.used),
         percentUsed: tokenQuota.max > 0 ? Math.round((tokenQuota.used / tokenQuota.max) * 100) : 0,
       },
-      quotas: tenant.quotas,
+      quotas: effectiveQuotas,
+      currentCronJobs,
     });
   },
 };

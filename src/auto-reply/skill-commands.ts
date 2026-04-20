@@ -32,10 +32,12 @@ export function listSkillCommandsForWorkspace(params: {
   workspaceDir: string;
   cfg: OpenClawConfig;
   skillFilter?: string[];
+  disabledBundledSkills?: string[];
 }): SkillCommandSpec[] {
   return buildWorkspaceSkillCommandSpecs(params.workspaceDir, {
     config: params.cfg,
     skillFilter: params.skillFilter,
+    disabledBundledSkills: params.disabledBundledSkills,
     eligibility: { remote: getRemoteSkillEligibility() },
     reservedNames: listReservedChatSlashCommandNames(),
   });

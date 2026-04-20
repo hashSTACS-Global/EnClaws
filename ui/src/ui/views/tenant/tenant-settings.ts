@@ -1,5 +1,5 @@
 /**
- * Tenant settings view — manage enterprise name, slug, and identity prompt.
+ * Tenant settings view — manage enterprise name and identity prompt.
  */
 
 import { html, css, LitElement, nothing } from "lit";
@@ -99,12 +99,10 @@ export class TenantSettingsView extends LitElement {
   @state() private successKey = "";
   private msgTimer?: ReturnType<typeof setTimeout>;
   @state() private name = "";
-  @state() private slug = "";
   @state() private identityPrompt = "";
   @state() private memoryContent = "";
   @state() private memorySaving = false;
   @state() private memorySuccess = "";
-  @state() private slugFocused = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -131,7 +129,6 @@ export class TenantSettingsView extends LitElement {
 
   /** Translate key at render time; map known server errors, otherwise return as-is. */
   private tr(key: string): string {
-    if (key.includes("小写字母数字") || key.includes("lowercase")) return t("login.tenantSlugHint");
     const result = t(key);
     return result === key ? key : result;
   }
@@ -142,11 +139,9 @@ export class TenantSettingsView extends LitElement {
     try {
       const result = await this.rpc("tenant.settings.get") as {
         name: string;
-        slug: string;
         identityPrompt: string;
       };
       this.name = result.name ?? "";
-      this.slug = result.slug ?? "";
       this.identityPrompt = result.identityPrompt ?? "";
       // Load memory content
       try {
@@ -168,17 +163,12 @@ export class TenantSettingsView extends LitElement {
       this.showError("tenantSettings.nameRequired");
       return;
     }
-    if (!this.slug.trim()) {
-      this.showError("tenantSettings.slugRequired");
-      return;
-    }
     this.saving = true;
     this.errorKey = "";
     this.successKey = "";
     try {
       await this.rpc("tenant.settings.update", {
         name: this.name.trim(),
-        slug: this.slug.trim(),
         identityPrompt: this.identityPrompt,
       });
       this.showSuccess("tenantSettings.saved");
@@ -222,16 +212,6 @@ export class TenantSettingsView extends LitElement {
               placeholder=${t("tenantSettings.namePlaceholder")}
               .value=${this.name}
               @input=${(e: InputEvent) => (this.name = (e.target as HTMLInputElement).value)} />
-          </div>
-          <div class="form-field">
-            <label>${t("tenantSettings.slug")}</label>
-            <input type="text"
-              placeholder=${t("tenantSettings.slugPlaceholder")}
-              .value=${this.slug}
-              @input=${(e: InputEvent) => (this.slug = (e.target as HTMLInputElement).value)}
-              @focus=${() => { this.slugFocused = true; }}
-              @blur=${() => { this.slugFocused = false; }} />
-            ${this.slugFocused ? html`<div class="hint">${t("login.tenantSlugHint")}</div>` : nothing}
           </div>
           <div class="form-field">
             <label>${t("tenantSettings.identityPrompt")}</label>

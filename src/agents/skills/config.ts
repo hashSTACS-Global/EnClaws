@@ -51,7 +51,7 @@ function normalizeAllowlist(input: unknown): string[] | undefined {
 
 const BUNDLED_SOURCES = new Set(["enclaws-bundled"]);
 
-function isBundledSkill(entry: SkillEntry): boolean {
+export function isBundledSkill(entry: SkillEntry): boolean {
   return BUNDLED_SOURCES.has(entry.skill.source);
 }
 
