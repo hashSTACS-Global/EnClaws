@@ -177,15 +177,18 @@ export function toConfigAgentsList(
         : undefined;
 
     const toolsDeny = a.tools?.deny ?? [];
-    const skillsEnabled = Array.isArray(a.skills) ? a.skills : [];
 
+    // NOTE: `a.skills` is a denylist of bundled skills in multi-tenant mode.
+    // It is consumed via getTenantAgent → disabledBundledSkills in get-reply.ts.
+    // Do NOT copy it into cfg.agents.list[*].skills, which carries the legacy
+    // file-config allowlist semantic — doing so would make resolveAgentSkillsFilter
+    // misread the denylist as an allowlist and filter every non-listed skill out.
     return {
       id: a.agentId,
       name: a.name,
       ...a.config,
       ...(modelField !== undefined ? { model: modelField } : {}),
       ...(toolsDeny.length > 0 ? { tools: { ...((a.config?.tools as Record<string, unknown>) ?? {}), deny: toolsDeny } } : {}),
-      ...(Array.isArray(a.skills) ? { skills: skillsEnabled } : {}),
     };
   });
 }
