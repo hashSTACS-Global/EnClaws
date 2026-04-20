@@ -258,7 +258,7 @@ export class TenantUsageView extends LitElement {
             <div class="section">
               <h3>${t("tenantUsage.resourceQuotas")}</h3>
               <div class="section-note">
-                ${t("tenantUsage.currentPlan")}：<strong>${this.tenantSummary.tenant.plan}</strong>
+                ${t("tenantUsage.currentPlan")}：<strong>${t(`platformTenants.plan${this.tenantSummary.tenant.plan.charAt(0).toUpperCase()}${this.tenantSummary.tenant.plan.slice(1)}` as any) || this.tenantSummary.tenant.plan}</strong>
               </div>
               <div class="resource-grid" style="margin-top: 0.75rem;">
                 ${this.renderResourceCard(t("tenantUsage.agents"), this.tenantSummary.agents.total, this.tenantQuotas.maxAgents)}

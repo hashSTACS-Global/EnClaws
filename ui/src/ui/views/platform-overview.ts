@@ -783,7 +783,7 @@ export class PlatformOverviewView extends LitElement {
             ${this.renderRankList((this.rank?.tenants ?? []).map(item => ({
               label: item.name,
               value: item.tokens,
-              badge: item.plan,
+              badge: t(`platformTenants.plan${item.plan.charAt(0).toUpperCase()}${item.plan.slice(1)}` as any) || item.plan,
               badgeClass: item.plan,
             })))}
           </div>

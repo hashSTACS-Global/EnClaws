@@ -944,7 +944,7 @@ export class TenantOverviewView extends LitElement {
           <div class="summary-sub">${t("tenantOverview.active30d")}: ${s.users.active30d}</div>
         </div>
         <div class="summary-card">
-          <div class="summary-label">${t("tenantOverview.monthToken")} <span class="plan-badge">${s.tenant.plan}</span></div>
+          <div class="summary-label">${t("tenantOverview.monthToken")} <span class="plan-badge">${t(`platformTenants.plan${s.tenant.plan.charAt(0).toUpperCase()}${s.tenant.plan.slice(1)}` as any) || s.tenant.plan}</span></div>
           <div class="summary-value">${this.fmt(s.tokens.month)}</div>
           <div class="summary-sub">${t("tenantOverview.vsLastMonth")}: <span style="color:${monthDiffColor}">${monthDiffText}</span></div>
         </div>

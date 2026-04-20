@@ -95,6 +95,7 @@ export async function getTenantById(id: string): Promise<Tenant | null> {
 
 export async function listTenants(opts?: {
   status?: TenantStatus;
+  search?: string;
   limit?: number;
   offset?: number;
 }): Promise<{ tenants: Tenant[]; total: number }> {
@@ -104,6 +105,10 @@ export async function listTenants(opts?: {
   if (opts?.status) {
     conditions.push("status = ?");
     values.push(opts.status);
+  }
+  if (opts?.search) {
+    conditions.push("name LIKE ?");
+    values.push(`%${opts.search}%`);
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";

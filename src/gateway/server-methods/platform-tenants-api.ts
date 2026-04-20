@@ -49,8 +49,9 @@ export const platformTenantsHandlers: GatewayRequestHandlers = {
   "platform.tenants.list": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
     if (!requirePlatformAdmin(client, respond)) return;
 
-    const { status, limit, offset } = params as {
+    const { status, search, limit, offset } = params as {
       status?: TenantStatus;
+      search?: string;
       limit?: number;
       offset?: number;
     };
@@ -58,6 +59,7 @@ export const platformTenantsHandlers: GatewayRequestHandlers = {
     try {
       const result = await listTenants({
         status,
+        search: search?.trim() || undefined,
         limit: Math.min(Math.max(limit ?? 20, 1), 100),
         offset: offset ?? 0,
       });
