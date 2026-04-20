@@ -173,10 +173,26 @@ export const BLOCKED_PATTERN_SOURCES: readonly string[] = [
 
   // ── Data destruction (Chinese) ──
   "删除.*数据库|清空.*数据库",
-  "删除.*表|drop.*table|truncate.*table",
+  // NOTE: Do NOT use bare "删除.*表" — matches Feishu/Lark bitable "删除默认表" (false positive).
+  //       Require 数据表/数据库表 for Chinese DB context.
+  "删除.*数据表|删除.*数据库表|清空.*数据表|drop.*table|truncate.*table",
   "删除.*token|清空.*token|删除.*密钥|删除.*api.*key",
   "清空.*凭证|删除.*凭证|重置.*密码",
   "凭证.*清空|凭证.*删除|凭证.*清除|凭证.*重置",
+
+  // ── Credential / secret exposure (Chinese) ──
+  // Prevent accidental leaks via print/show/dump of tokens, secrets, env vars carrying creds.
+  "(打印|显示|输出|查看|告诉我|告知|展示|读取|dump|dump出来).*(token|密钥|secret|credential|凭证|api[_\\s-]*key|access[_\\s-]*key|private[_\\s-]*key|密码|password)",
+  "(打印|显示|输出|查看|告诉我|告知|展示).*(enclaws_[a-z_]*(token|secret|key|password))",
+  "(打印|显示|输出|查看|告诉我|展示).*环境变量.*(token|secret|key|password|密钥|凭证|密码)",
+  "(打印|显示|输出|查看).*(enclaws_gateway_token|enclaws_.*_token|enclaws_.*_secret|enclaws_.*_key)",
+
+  // ── Credential / secret exposure (English) ──
+  "\\b(print|show|echo|cat|dump|reveal|expose|leak|display|output|reveal)\\b.*\\b(token|secret|credential|api[_\\s-]*key|access[_\\s-]*key|private[_\\s-]*key|password|passwd)\\b",
+  "\\becho\\s+\\$[A-Z_]*(TOKEN|SECRET|KEY|PASSWORD|PASSWD)\\b",
+  "\\b(print|show|echo|cat|dump|display)\\b.*\\benv(ironment)?\\b.*\\b(TOKEN|SECRET|KEY|PASSWORD)\\b",
+  "\\b(print|show|echo|cat|dump|display|reveal).*enclaws_[a-z_]*(token|secret|key|password)",
+  "\\benclaws_[a-z_]*(token|secret|password)\\b.*\\b(value|值|内容|明文)",
   "删除.*agent|删除.*助手|删除.*机器人",
   "批量删除|全部删除|删除所有",
   "清空.*历史|删除.*记录|清除.*日志",
