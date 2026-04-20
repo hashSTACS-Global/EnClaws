@@ -49,6 +49,103 @@ async function resolveToken(): Promise<string | null> {
   return null;
 }
 
+/**
+ * WebSocket RPC helper for streaming responses.
+ *
+ * Sends a request, stays open to receive push event frames.
+ * The caller closes the connection by returning true from onEvent.
+ * Returns a cancel function for cleanup.
+ *
+ * 流式 RPC 辅助函数：发送请求后保持连接，通过 onEvent 回调接收服务端推送帧。
+ * onEvent 返回 true 即关闭连接。返回取消函数供调用方主动关闭。
+ */
+export function tenantRpcStream(
+  method: string,
+  params: Record<string, unknown>,
+  options: {
+    /** Called once with the initial RPC response payload (the ACK). */
+    onAck: (payload: unknown) => void;
+    /** Called for each push event frame; return true to close the connection. */
+    onEvent: (event: string, payload: unknown) => boolean;
+    /** Max wait time in ms (default: 60 000). */
+    timeoutMs?: number;
+    gatewayUrl?: string;
+  },
+): () => void {
+  const { onAck, onEvent, timeoutMs = 60_000, gatewayUrl } = options;
+  let ws: WebSocket | null = null;
+  let closed = false;
+
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    clearTimeout(timer);
+    ws?.close();
+    ws = null;
+  };
+
+  // eslint-disable-next-line prefer-const
+  let timer: ReturnType<typeof setTimeout> = setTimeout(() => {
+    cleanup();
+    onEvent("timeout", null);
+  }, timeoutMs);
+
+  // Token resolution is async; run in background.
+  // Token 解析异步执行，WS 连接延后建立。
+  (async () => {
+    const token = await resolveToken();
+    if (closed) return;
+
+    ws = new WebSocket(resolveGatewayUrl(gatewayUrl));
+    let handshakeDone = false;
+    let ackReceived = false;
+
+    ws.onopen = () => {
+      ws!.send(JSON.stringify({
+        type: "req",
+        id: generateUUID(),
+        method: "connect",
+        params: buildConnectParams(token),
+      }));
+    };
+
+    ws.onmessage = (ev) => {
+      try {
+        const frame = JSON.parse(ev.data as string);
+        if (frame.type === "res" && !handshakeDone) {
+          handshakeDone = true;
+          ws!.send(JSON.stringify({ type: "req", id: generateUUID(), method, params }));
+          return;
+        }
+        if (frame.type === "res" && !ackReceived) {
+          ackReceived = true;
+          if (frame.ok) {
+            onAck(frame.payload);
+          } else {
+            cleanup();
+            onEvent("error", frame.error);
+          }
+          return;
+        }
+        if (frame.type === "event") {
+          const shouldClose = onEvent(frame.event as string, frame.payload);
+          if (shouldClose) cleanup();
+        }
+      } catch (err) {
+        cleanup();
+        onEvent("error", err);
+      }
+    };
+
+    ws.onerror = () => {
+      cleanup();
+      onEvent("error", new Error("连接失败"));
+    };
+  })();
+
+  return cleanup;
+}
+
 export async function tenantRpc(
   method: string,
   params: Record<string, unknown> = {},

@@ -12,14 +12,8 @@ export type CSSessionState = "ai_active" | "human_active";
 // 消息角色（三方对话）
 export type CSMessageRole = "customer" | "ai" | "boss" | "system";
 
-// -- Confidence verdict (pure rules, no LLM) --
-// 置信度判定（纯规则，不依赖 LLM）
-export type CSConfidenceVerdict = "ok" | "knowledge_gap" | "suspect_badcase";
-
-export interface CSConfidence {
-  score: number;
-  verdict: CSConfidenceVerdict;
-}
+// Confidence types are defined in confidence.ts and re-exported from index.ts.
+// 置信度类型定义在 confidence.ts，通过 index.ts 统一导出。
 
 // -- Session --
 // 会话
@@ -47,7 +41,7 @@ export interface CSMessage {
   tenantId: string;
   role: CSMessageRole;
   content: string;
-  confidence: CSConfidence | null;
+  confidence: import("./confidence.js").ConfidenceResult | null;
   feedbackType: string | null;
   sourceChunks: unknown[] | null;
   createdAt: Date;

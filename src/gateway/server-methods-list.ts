@@ -117,6 +117,7 @@ const BASE_METHODS = [
   "cs.config.get",
   "cs.config.set",
   "cs.config.test",
+  "cs.admin.listLowConfidence",
 ];
 
 export function listGatewayMethods(): string[] {

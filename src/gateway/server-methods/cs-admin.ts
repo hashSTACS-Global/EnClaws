@@ -20,7 +20,7 @@ import { ErrorCodes, errorShape } from "../protocol/index.js";
 import type { GatewayRequestHandlers } from "./types.js";
 import { resolveTenantDir } from "../../config/sessions/tenant-paths.js";
 import { listCSSessions } from "../../db/models/cs-session.js";
-import { listCSMessages, getLastCSMessageForSession } from "../../db/models/cs-message.js";
+import { listCSMessages, getLastCSMessageForSession, listLowConfidenceMessages } from "../../db/models/cs-message.js";
 import { getTenantById } from "../../db/models/tenant.js";
 import { DEFAULT_CS_BASE_PROMPT, renderCSBasePrompt } from "../../customer-service/rag/cs-system-prompt.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
@@ -91,6 +91,14 @@ export interface CSConfig {
    * 自定义客服基础 prompt；未设置时运行时使用默认模板。
    */
   customSystemPrompt?: string;
+  /**
+   * Confidence gate sensitivity preset. Maps to ConfidenceThresholds at runtime.
+   *   strict   → okThreshold 0.7 / gapThreshold 0.4 — tighter filter, more fallbacks
+   *   balanced → okThreshold 0.6 / gapThreshold 0.3 — default
+   *   lenient  → okThreshold 0.5 / gapThreshold 0.2 — more permissive
+   * 置信度门控灵敏度预设，在运行时映射为具体阈值。
+   */
+  confidencePreset?: "strict" | "balanced" | "lenient";
 }
 
 export function csConfigPath(tenantId: string): string {
@@ -327,6 +335,34 @@ export const csAdminHandlers: GatewayRequestHandlers = {
   },
 
   /**
+   * cs.admin.listLowConfidence — list AI replies that triggered the confidence gate.
+   * Used by the CS admin UI to surface Badcase candidates (knowledge_gap / suspect_badcase).
+   *
+   * Params: { tenantId, limit?, verdicts? }
+   * Response: { entries: Array<{ aiMessage, customerMessage, visitorName }> }
+   *
+   * 列出置信度门控触发兜底的 AI 回复，运营端 Badcase 候选队列。
+   */
+  "cs.admin.listLowConfidence": async ({ params, respond }) => {
+    const tenantId = params.tenantId as string | undefined;
+    if (!tenantId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "tenantId is required"));
+      return;
+    }
+    try {
+      const entries = await listLowConfidenceMessages(tenantId, {
+        limit: (params.limit as number) ?? 50,
+        verdicts: params.verdicts as Array<"knowledge_gap" | "suspect_badcase"> | undefined,
+      });
+      respond(true, { entries });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.error(`cs.admin.listLowConfidence failed: ${message}`);
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to load badcase list"));
+    }
+  },
+
+  /**
    * cs.config.get — read tenant CS config (feishu credentials, redacted secret).
    *
    * Params: { tenantId }
@@ -378,6 +414,7 @@ export const csAdminHandlers: GatewayRequestHandlers = {
           },
           companyName,
           customSystemPrompt: renderedPrompt,
+          confidencePreset: cfg.confidencePreset ?? "balanced",
         },
       });
     } catch (err) {
@@ -458,6 +495,13 @@ export const csAdminHandlers: GatewayRequestHandlers = {
       if (params.customSystemPrompt !== undefined) {
         const raw = (params.customSystemPrompt as string).trim();
         updated.customSystemPrompt = raw || undefined;
+      }
+
+      // Update confidencePreset if provided.
+      // 置信度预设：只有传入时才更新。
+      const preset = params.confidencePreset as "strict" | "balanced" | "lenient" | undefined;
+      if (preset !== undefined && ["strict", "balanced", "lenient"].includes(preset)) {
+        updated.confidencePreset = preset;
       }
 
       await writeCSConfig(tenantId, updated);

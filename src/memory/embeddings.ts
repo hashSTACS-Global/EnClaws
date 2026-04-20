@@ -174,8 +174,12 @@ export async function createEmbeddingProvider(
   if (requestedProvider === "auto") {
     const missingKeyErrors: string[] = [];
     let localError: string | null = null;
+    let localExplicitAttempted = false;
 
+    // 1) Local with explicit modelPath (user configured a local GGUF file).
+    // 1) 用户显式配置了本地 GGUF 模型路径，优先使用。
     if (canAutoSelectLocal(options)) {
+      localExplicitAttempted = true;
       try {
         const local = await createProvider("local");
         return { ...local, requestedProvider };
@@ -184,6 +188,8 @@ export async function createEmbeddingProvider(
       }
     }
 
+    // 2) Remote providers — reuse any API key configured for LLM.
+    // 2) 远程 provider，复用 LLM 已配置的 API Key（openai/gemini/voyage/mistral）。
     for (const provider of REMOTE_EMBEDDING_PROVIDER_IDS) {
       try {
         const result = await createProvider(provider);
@@ -201,7 +207,23 @@ export async function createEmbeddingProvider(
       }
     }
 
-    // All providers failed due to missing API keys - return null provider for FTS-only mode
+    // 3) Last-resort fallback: built-in local model (auto-downloaded from HF).
+    // Activated only when no remote keys available AND user did not already try a broken local path.
+    // This lets tenants with no embedding-capable LLM provider (e.g. DeepSeek-only) still get RAG.
+    //
+    // 3) 兜底：内置 node-llama-cpp + HuggingFace embeddinggemma-300m 模型（首次使用自动下载）。
+    // 当远程 provider 全部缺 key 且用户未显式配置本地模型路径时触发，保证 DeepSeek-only 等租户仍可用 RAG。
+    if (!localExplicitAttempted) {
+      try {
+        const local = await createProvider("local");
+        return { ...local, requestedProvider };
+      } catch (err) {
+        localError = formatLocalSetupError(err);
+      }
+    }
+
+    // All providers failed — return null for FTS-only mode.
+    // 所有 provider 都不可用，退化为 FTS 纯关键词检索。
     const details = [...missingKeyErrors, localError].filter(Boolean) as string[];
     const reason = details.length > 0 ? details.join("\n\n") : "No embeddings provider available.";
     return {

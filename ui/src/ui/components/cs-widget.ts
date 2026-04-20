@@ -13,11 +13,12 @@
 
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, state, property } from "lit/decorators.js";
-import { tenantRpc } from "../views/tenant/rpc.ts";
+import { tenantRpc, tenantRpcStream } from "../views/tenant/rpc.ts";
 import { loadAuth } from "../auth-store.ts";
 import { generateUUID } from "../uuid.ts";
 
 const VISITOR_ID_KEY = "ec_cs_visitor_id";
+const VISITOR_TOKEN_KEY = "ec_cs_visitor_token";
 
 interface CSMsg {
   id: string;
@@ -25,6 +26,16 @@ interface CSMsg {
   text: string;
   roleLabel: string;
   pending?: boolean;
+  /** true while the LLM is streaming this message (shows typewriter cursor). */
+  streaming?: boolean;
+  /** Matches cs-delta event streamId so partial replies can update the right bubble. */
+  streamId?: string;
+  /**
+   * Clarification option buttons (knowledge_gap + ambiguous path).
+   * Clicking sends the option text as a new customer message.
+   * 模糊追问选项按钮（知识盲区 + 问题不明确时），点击即发送对应选项文本。
+   */
+  clarifyOptions?: string[];
 }
 
 function getOrCreateVisitorId(): string {
@@ -232,6 +243,47 @@ export class CSWidget extends LitElement {
       30% { opacity: 1; transform: scale(1); }
     }
 
+    /* Streaming typewriter cursor */
+    .stream-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 0.9em;
+      background: currentColor;
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* Clarification option buttons (knowledge_gap + ambiguous) */
+    .clarify-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .clarify-btn {
+      background: var(--cs-panel-bg, #fff);
+      border: 1px solid var(--cs-header-bg, #0969da);
+      color: var(--cs-header-bg, #0969da);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+      font-family: inherit;
+    }
+
+    .clarify-btn:hover {
+      background: var(--cs-header-bg, #0969da);
+      color: #fff;
+    }
+
     /* Input area */
     .input-area {
       border-top: 1px solid var(--color-border, #e1e4e8);
@@ -321,9 +373,22 @@ export class CSWidget extends LitElement {
   @state() private unread = 0;
 
   private _visitorId = getOrCreateVisitorId();
+  /** HMAC token issued by server on connect, stored in localStorage for subsequent requests. */
+  private _visitorToken: string | null = localStorage.getItem(VISITOR_TOKEN_KEY);
+  /** Cancel function for the active streaming RPC connection, if any. */
+  private _cancelStream: (() => void) | null = null;
 
   private get tenantId(): string | undefined {
-    return this.tenantIdOverride ?? loadAuth()?.user?.tenantId;
+    // Priority: explicit attribute → logged-in user → server-injected meta tag (for guest access).
+    // Using <meta name="ec-cs-tenant-id"> instead of inline script to comply with CSP script-src 'self'.
+    // 优先级：显式属性 → 登录用户 → 服务端注入的 <meta> 标签（CSP 兼容，支持游客使用）。
+    return (
+      this.tenantIdOverride ??
+      loadAuth()?.user?.tenantId ??
+      (typeof document !== "undefined"
+        ? (document.querySelector('meta[name="ec-cs-tenant-id"]') as HTMLMetaElement | null)?.content || undefined
+        : undefined)
+    );
   }
 
   private async _connect() {
@@ -339,7 +404,14 @@ export class CSWidget extends LitElement {
         tenantId,
         visitorId: this._visitorId,
         channel: this.channel,
-      }) as { sessionId: string; messages: Array<{ id: string; role: string; content: string }> };
+      }) as { sessionId: string; token?: string; messages: Array<{ id: string; role: string; content: string }> };
+
+      // Persist the server-issued token for authenticating future requests.
+      // 持久化服务端下发的 token，用于后续请求鉴权。
+      if (result.token) {
+        this._visitorToken = result.token;
+        localStorage.setItem(VISITOR_TOKEN_KEY, result.token);
+      }
 
       this.sessionId = result.sessionId;
       // Load history
@@ -379,7 +451,7 @@ export class CSWidget extends LitElement {
     }
   }
 
-  private async _sendMessage() {
+  private _sendMessage() {
     const text = this.inputText.trim();
     // Allow sending even without sessionId — session is created lazily on first message.
     // 允许在 sessionId 为空时发送，session 由后端在首条消息时按需创建。
@@ -387,16 +459,14 @@ export class CSWidget extends LitElement {
     const tenantId = this.tenantId;
     if (!tenantId) return;
 
-    const tempId = `tmp-${Date.now()}`;
     this.messages = [
       ...this.messages,
-      { id: tempId, role: "customer", text, roleLabel: "我", pending: false },
+      { id: `tmp-${Date.now()}`, role: "customer", text, roleLabel: "我" },
     ];
     this.inputText = "";
     this.sending = true;
     this._scrollToBottom();
 
-    // Pending AI typing indicator
     const typingId = `typing-${Date.now()}`;
     this.messages = [
       ...this.messages,
@@ -404,41 +474,132 @@ export class CSWidget extends LitElement {
     ];
     this._scrollToBottom();
 
-    try {
-      const result = await tenantRpc("cs.widget.send", {
+    // Cancel any in-progress stream before starting a new one.
+    // 发新消息前取消上一个未完成的流式连接。
+    this._cancelStream?.();
+    this._cancelStream = tenantRpcStream(
+      "cs.widget.send",
+      {
         tenantId,
         visitorId: this._visitorId,
+        ...(this._visitorToken ? { token: this._visitorToken } : {}),
         text,
-      }) as { sessionId?: string; messageId: string; role: string; text: string; roleLabel: string };
+      },
+      {
+        onAck: (ack) => {
+          const p = ack as Record<string, unknown>;
+          if (p?.sessionId && !this.sessionId) this.sessionId = p.sessionId as string;
 
-      // Capture sessionId from first response (lazy session creation).
-      // 从首次响应中捕获 sessionId（懒加载 session）。
-      if (result.sessionId && !this.sessionId) {
-        this.sessionId = result.sessionId;
-      }
-
-      // Replace typing indicator with real reply
-      this.messages = [
-        ...this.messages.filter((m) => m.id !== typingId),
-        {
-          id: result.messageId,
-          role: result.role as CSMsg["role"],
-          text: result.text,
-          roleLabel: result.roleLabel,
+          if (p?.streamId) {
+            // Streaming mode: tag the typing bubble with streamId so cs-delta events
+            // can update the right message. 流式模式：给等待气泡打上 streamId 标签。
+            this.messages = this.messages.map((m) =>
+              m.id === typingId
+                ? { ...m, streamId: p.streamId as string, streaming: true }
+                : m,
+            );
+          } else {
+            // Direct fallback (no connId on server): payload has the full reply.
+            // 直接回复模式（服务端无 connId）：ACK 即包含完整回复。
+            const role = ((p?.role as string) ?? "ai") as CSMsg["role"];
+            this.messages = [
+              ...this.messages.filter((m) => m.id !== typingId),
+              {
+                id: (p?.messageId as string) ?? `ai-${Date.now()}`,
+                role,
+                text: (p?.text as string) ?? "",
+                roleLabel: (p?.roleLabel as string) ?? "🤖 AI 助手",
+                clarifyOptions: p?.clarifyOptions as string[] | undefined,
+              },
+            ];
+            if (!this.open) this.unread++;
+            this.sending = false;
+            this._scrollToBottom();
+          }
         },
-      ];
+        onEvent: (event, rawPayload) => {
+          if (event === "cs-delta") {
+            const delta = rawPayload as {
+              streamId: string;
+              text?: string;
+              done: boolean;
+              messageId?: string;
+              roleLabel?: string;
+              error?: boolean;
+            };
 
-      if (!this.open) this.unread++;
-    } catch (_err) {
-      this.messages = this.messages.filter((m) => m.id !== typingId);
-      this.messages = [
-        ...this.messages,
-        { id: `err-${Date.now()}`, role: "system", text: "发送失败，请重试", roleLabel: "系统" },
-      ];
-    } finally {
-      this.sending = false;
-      this._scrollToBottom();
-    }
+            if (delta.error) {
+              this.messages = [
+                ...this.messages.filter(
+                  (m) => m.streamId !== delta.streamId && m.id !== typingId,
+                ),
+                { id: `err-${Date.now()}`, role: "system", text: "AI 回复失败，请重试", roleLabel: "系统" },
+              ];
+              this.sending = false;
+              this._scrollToBottom();
+              return true; // close WS
+            }
+
+            if (delta.done) {
+              // Final frame: replace streaming bubble with completed message.
+              // 最终帧：将流式气泡替换为完整消息。
+              this.messages = this.messages.map((m) =>
+                m.streamId === delta.streamId || m.id === typingId
+                  ? {
+                      id: delta.messageId ?? m.id,
+                      role: "ai" as CSMsg["role"],
+                      text: delta.text ?? m.text,
+                      roleLabel: delta.roleLabel ?? m.roleLabel,
+                      streaming: false,
+                      clarifyOptions: (delta as any).clarifyOptions as string[] | undefined,
+                    }
+                  : m,
+              );
+              if (!this.open) this.unread++;
+              this.sending = false;
+              this._scrollToBottom();
+              return true; // close WS
+            }
+
+            // Partial chunk: update accumulated text, switch from typing dots to text.
+            // 片段帧：更新累积文本，从等待动画切换为文字显示。
+            this.messages = this.messages.map((m) =>
+              m.streamId === delta.streamId || m.id === typingId
+                ? { ...m, text: delta.text ?? m.text, pending: false, streaming: true }
+                : m,
+            );
+            this._scrollToBottom();
+            return false;
+          }
+
+          if (event === "error" || event === "timeout") {
+            this.messages = [
+              ...this.messages.filter((m) => m.id !== typingId && !m.streamId),
+              { id: `err-${Date.now()}`, role: "system", text: "发送失败，请重试", roleLabel: "系统" },
+            ];
+            this.sending = false;
+            this._scrollToBottom();
+            return true;
+          }
+          return false;
+        },
+        timeoutMs: 60_000,
+      },
+    );
+  }
+
+  /**
+   * Send a clarification option as a new customer message.
+   * Removes the option buttons once one is selected.
+   * 发送澄清选项，选择后移除该消息的选项按钮（避免重复点击）。
+   */
+  private _sendClarifyOption(msgId: string, option: string) {
+    // Remove clarify buttons from the source message to prevent double-send.
+    this.messages = this.messages.map((m) =>
+      m.id === msgId ? { ...m, clarifyOptions: undefined } : m,
+    );
+    this.inputText = option;
+    this._sendMessage();
   }
 
   private _onKeyDown(e: KeyboardEvent) {
@@ -456,7 +617,9 @@ export class CSWidget extends LitElement {
   }
 
   private _renderMessage(msg: CSMsg) {
-    if (msg.pending) {
+    // Show typing dots only while pending and no text yet (before first chunk).
+    // 仅在 pending 且尚无文本时显示等待动画（首个片段到达前）。
+    if (msg.pending && !msg.text) {
       return html`
         <div class="msg-wrap ai">
           <div class="msg-role">${msg.roleLabel}</div>
@@ -470,7 +633,21 @@ export class CSWidget extends LitElement {
     return html`
       <div class="msg-wrap ${msg.role}">
         ${msg.role !== "customer" ? html`<div class="msg-role">${msg.roleLabel}</div>` : nothing}
-        <div class="msg-bubble ${msg.pending ? "pending" : ""}">${msg.text}</div>
+        <div class="msg-bubble">
+          ${msg.text}${msg.streaming ? html`<span class="stream-cursor"></span>` : nothing}
+        </div>
+        ${msg.clarifyOptions && msg.clarifyOptions.length > 0
+          ? html`
+            <div class="clarify-options">
+              ${msg.clarifyOptions.map((opt) => html`
+                <button
+                  class="clarify-btn"
+                  ?disabled=${this.sending}
+                  @click=${() => this._sendClarifyOption(msg.id, opt)}
+                >${opt}</button>
+              `)}
+            </div>`
+          : nothing}
         ${msg.role === "customer" ? html`<div class="msg-role">${msg.roleLabel}</div>` : nothing}
       </div>
     `;

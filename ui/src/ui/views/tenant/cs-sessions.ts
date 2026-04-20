@@ -43,6 +43,13 @@ const STATE_COLOR: Record<string, string> = {
   human_active: "#9a6700",
 };
 
+const CHANNEL_LABEL: Record<string, string> = {
+  web_widget: "Web 窗口",
+  feishu:     "飞书",
+  wechat:     "微信",
+  telegram:   "Telegram",
+};
+
 const ROLE_LABEL: Record<string, string> = {
   customer: "访客",
   ai: "🤖 AI",
@@ -117,6 +124,29 @@ export class CSSessionsView extends LitElement {
         font-family: monospace;
         color: var(--color-text-secondary, #6a737d);
         margin-top: 2px;
+      }
+
+      .channel-tag {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 500;
+        background: var(--color-bg-secondary, #f6f8fa);
+        border: 1px solid var(--color-border, #e1e4e8);
+        color: var(--color-text-secondary, #6a737d);
+      }
+
+      .last-msg-preview {
+        font-size: 12px;
+        color: var(--color-text-secondary, #6a737d);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        max-width: 200px;
+        line-height: 1.4;
+        margin-top: 3px;
       }
 
       .state-badge {
@@ -222,6 +252,15 @@ export class CSSessionsView extends LitElement {
   @state() private messagesLoading: string | null = null;
   @state() private offset = 0;
   @state() private hasMore = true;
+  /** Tab toggle: "sessions" (default list) vs "badcase" (low-confidence replies). */
+  /** 视图切换：会话列表 / 低置信问题（Badcase）列表。 */
+  @state() private activeTab: "sessions" | "badcase" = "sessions";
+  @state() private badcaseEntries: Array<{
+    aiMessage: { id: string; content: string; createdAt: string | Date; confidence: { verdict: string; score: number } | null };
+    customerMessage: { content: string } | null;
+    visitorName: string | null;
+  }> = [];
+  @state() private badcaseLoading = false;
 
   private readonly PAGE_SIZE = 30;
   private _i18n = new I18nController(this);
@@ -281,6 +320,35 @@ export class CSSessionsView extends LitElement {
     }
   }
 
+  /**
+   * Load low-confidence AI replies (Badcase queue).
+   * 加载低置信 AI 回复（运营 Badcase 队列）。
+   */
+  private async _loadBadcases() {
+    const tenantId = this.tenantId;
+    if (!tenantId) return;
+    this.badcaseLoading = true;
+    this.error = null;
+    try {
+      const result = (await tenantRpc("cs.admin.listLowConfidence", {
+        tenantId,
+        limit: 50,
+      })) as { entries: CSSessionsView["badcaseEntries"] };
+      this.badcaseEntries = result.entries ?? [];
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : "加载失败";
+    } finally {
+      this.badcaseLoading = false;
+    }
+  }
+
+  private _switchTab(tab: "sessions" | "badcase") {
+    this.activeTab = tab;
+    if (tab === "badcase" && this.badcaseEntries.length === 0) {
+      void this._loadBadcases();
+    }
+  }
+
   private _formatDate(iso: string): string {
     try {
       return new Date(iso).toLocaleString("zh-CN", { hour12: false });
@@ -293,7 +361,7 @@ export class CSSessionsView extends LitElement {
     const msgs = this.messages[session.id];
     return html`
       <tr class="thread-row">
-        <td colspan="6">
+        <td colspan="7">
           <div class="thread-panel">
             ${this.messagesLoading === session.id
               ? html`<p class="msg-loading">加载消息中…</p>`
@@ -318,12 +386,75 @@ export class CSSessionsView extends LitElement {
   render() {
     return html`
       <div class="toolbar">
-        <h2>AI 客服会话记录</h2>
-        <button class="btn" @click=${() => this._loadSessions(true)}>刷新</button>
+        <h2>AI 客服</h2>
+        <div style="display:flex;gap:8px;margin-left:16px">
+          <button
+            class="btn ${this.activeTab === "sessions" ? "btn-primary" : ""}"
+            style="${this.activeTab === "sessions" ? "background:#0969da;color:#fff" : ""}"
+            @click=${() => this._switchTab("sessions")}
+          >会话记录</button>
+          <button
+            class="btn ${this.activeTab === "badcase" ? "btn-primary" : ""}"
+            style="${this.activeTab === "badcase" ? "background:#cf222e;color:#fff" : ""}"
+            @click=${() => this._switchTab("badcase")}
+          >低置信问题 ${this.badcaseEntries.length > 0 ? html`<span style="background:rgba(255,255,255,0.3);padding:1px 6px;border-radius:8px;font-size:11px;margin-left:4px">${this.badcaseEntries.length}</span>` : nothing}</button>
+        </div>
+        <div style="flex:1"></div>
+        <button class="btn" @click=${() => this.activeTab === "sessions" ? this._loadSessions(true) : this._loadBadcases()}>刷新</button>
       </div>
 
       ${this.error ? html`<p class="error-msg">${this.error}</p>` : nothing}
 
+      ${this.activeTab === "badcase" ? this._renderBadcaseTab() : this._renderSessionsTab()}
+    `;
+  }
+
+  private _renderBadcaseTab() {
+    if (this.badcaseLoading) {
+      return html`<div class="loading">加载中…</div>`;
+    }
+    if (this.badcaseEntries.length === 0) {
+      return html`<div class="empty-state">暂无低置信问题（AI 回答质量良好 ✓）</div>`;
+    }
+    return html`
+      <div style="padding:8px 0">
+        <p style="color:#6a737d;font-size:12px;margin:8px 0 16px">
+          这里展示置信度门控触发兜底或转人工的 AI 回复。可据此补充知识库或调整 prompt。
+        </p>
+        ${this.badcaseEntries.map((entry) => {
+          const verdict = entry.aiMessage.confidence?.verdict ?? "unknown";
+          const score = entry.aiMessage.confidence?.score?.toFixed(2) ?? "—";
+          const verdictColor = verdict === "suspect_badcase" ? "#cf222e" : "#bf8700";
+          const verdictLabel = verdict === "knowledge_gap" ? "知识盲区" : verdict === "suspect_badcase" ? "可疑错误" : verdict;
+          return html`
+            <div style="border:1px solid #e1e4e8;border-radius:6px;padding:12px;margin-bottom:10px;background:#fff">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <div style="display:flex;gap:8px;align-items:center">
+                  <span style="background:${verdictColor};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${verdictLabel}</span>
+                  <span style="color:#6a737d;font-size:12px">score: ${score}</span>
+                  <span style="color:#6a737d;font-size:12px">访客: ${entry.visitorName ?? "匿名"}</span>
+                </div>
+                <span style="color:#6a737d;font-size:11px">${this._formatDate(typeof entry.aiMessage.createdAt === "string" ? entry.aiMessage.createdAt : entry.aiMessage.createdAt.toISOString())}</span>
+              </div>
+              ${entry.customerMessage ? html`
+                <div style="margin:6px 0">
+                  <span style="color:#6a737d;font-size:12px">问：</span>
+                  <span style="color:#24292f">${entry.customerMessage.content}</span>
+                </div>
+              ` : nothing}
+              <div style="margin:6px 0">
+                <span style="color:#6a737d;font-size:12px">答：</span>
+                <span style="color:#24292f">${entry.aiMessage.content}</span>
+              </div>
+            </div>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  private _renderSessionsTab() {
+    return html`
       ${this.loading && this.sessions.length === 0
         ? html`<div class="loading">加载中…</div>`
         : !this.error && this.sessions.length === 0
@@ -334,6 +465,7 @@ export class CSSessionsView extends LitElement {
                 <tr>
                   <th></th>
                   <th>访客</th>
+                  <th>渠道</th>
                   <th>状态</th>
                   <th>最后发言</th>
                   <th>发起时间</th>
@@ -357,6 +489,11 @@ export class CSSessionsView extends LitElement {
                       <div class="visitor-id">${s.visitorId.slice(0, 16)}…</div>
                     </td>
                     <td>
+                      <span class="channel-tag">
+                        ${CHANNEL_LABEL[s.channel] ?? s.channel}
+                      </span>
+                    </td>
+                    <td>
                       <span
                         class="state-badge"
                         style="color: ${STATE_COLOR[s.state] ?? "#555"}"
@@ -365,15 +502,11 @@ export class CSSessionsView extends LitElement {
                     </td>
                     <td>
                       ${s.lastMessage ? html`
-                        <div style="display:flex;align-items:center;gap:6px">
-                          ${needsAttention
-                            ? html`<span style="color:#cf222e;font-size:11px;font-weight:600">● 待回复</span>`
-                            : html`<span style="color:#6a737d;font-size:11px">● 已回复</span>`
-                          }
-                          <span style="font-size:12px;color:#6a737d;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                            ${s.lastMessage.content.slice(0, 40)}${s.lastMessage.content.length > 40 ? "…" : ""}
-                          </span>
-                        </div>
+                        ${needsAttention
+                          ? html`<span style="color:#cf222e;font-size:11px;font-weight:600">● 待回复</span>`
+                          : html`<span style="color:#6a737d;font-size:11px">● 已回复</span>`
+                        }
+                        <div class="last-msg-preview">${s.lastMessage.content}</div>
                       ` : html`<span style="font-size:11px;color:#aaa">—</span>`}
                     </td>
                     <td class="date-cell">${this._formatDate(s.createdAt)}</td>

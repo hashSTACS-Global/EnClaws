@@ -446,6 +446,7 @@ export class CSSetupView extends LitElement {
     disableMarkdown: true,
     hideInternals: true,
   };
+  @state() private confidencePreset: "strict" | "balanced" | "lenient" = "balanced";
   @state() private saving = false;
   @state() private testing = false;
   @state() private checkResults: CheckResult[] | null = null;
@@ -505,6 +506,7 @@ export class CSSetupView extends LitElement {
           };
           companyName?: string;
           customSystemPrompt?: string;
+          confidencePreset?: "strict" | "balanced" | "lenient";
         };
       };
       const cfg = result.config;
@@ -529,6 +531,7 @@ export class CSSetupView extends LitElement {
         disableMarkdown:     r?.disableMarkdown     ?? true,
         hideInternals:       r?.hideInternals       ?? true,
       };
+      this.confidencePreset = cfg.confidencePreset ?? "balanced";
 
       // Restore saved channels as locked
       // 从配置恢复已保存的渠道，初始状态为锁定（只读）
@@ -595,6 +598,7 @@ export class CSSetupView extends LitElement {
         notifyIntervalMinutes: this.notifyIntervalMinutes,
         restrictions: this.restrictions,
         customSystemPrompt: this.customSystemPrompt,
+        confidencePreset: this.confidencePreset,
       });
       this._showToast("配置已保存", true);
       this.appSecret = "";
@@ -920,6 +924,21 @@ export class CSSetupView extends LitElement {
               </label>
             `)}
           </div>
+        </div>
+
+        <div class="form-group">
+          <label>置信度灵敏度</label>
+          <select
+            .value=${this.confidencePreset}
+            @change=${(e: Event) => {
+              this.confidencePreset = (e.target as HTMLSelectElement).value as typeof this.confidencePreset;
+            }}
+          >
+            <option value="strict">严格（0.7 / 0.4）— 更多转人工，减少 AI 猜测</option>
+            <option value="balanced">均衡（0.6 / 0.3）— 默认推荐</option>
+            <option value="lenient">宽松（0.5 / 0.2）— 允许 AI 在知识库较弱时仍尝试回答</option>
+          </select>
+          <p class="hint">控制 AI 回答时的置信度门控阈值。严格模式下遇到不确定问题更快转人工；宽松模式允许 AI 在检索结果质量较低时仍尝试作答。置信度门控将在 S2 版本激活。</p>
         </div>
       </div>
     `;
