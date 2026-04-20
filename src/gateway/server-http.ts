@@ -28,6 +28,9 @@ import {
   type ControlUiRootState,
 } from "./control-ui.js";
 import { listTenants } from "../db/models/tenant.js";
+import { loadTenantConfig } from "../config/tenant-config.js";
+import { listAgentEntries, resolveAgentEffectiveModelPrimary } from "../agents/agent-scope.js";
+import { readCSConfig } from "./server-methods/cs-admin.js";
 import { applyHookMappings } from "./hooks-mapping.js";
 import {
   extractHookToken,
@@ -343,36 +346,100 @@ export function createGatewayHttpServer(opts: {
   tlsOptions?: TlsOptions;
 }): HttpServer {
   // Lazily resolve the operator tenant ID for CS widget injection into index.html.
-  // Strategy: earliest registered business tenant (created_at ASC, skip the fixed platform tenant).
+  // Strategy: earliest registered business tenant (created_at ASC, skip the fixed platform tenant)
+  // that is ALSO qualified — i.e., has at least one agent with a configured model ref.
+  // Unqualified tenants are skipped so the widget bubble hides cleanly on half-configured
+  // deployments instead of appearing and then failing on first message.
   // Single-tenant deployments work out of the box; multi-tenant deployments can override
-  // via ENCLAWS_CS_WIDGET_TENANT_ID env var.
-  // Cached after first successful lookup — tenants don't change at runtime.
-  // 懒加载运营方租户 ID（注册最早的非平台租户），注入到 index.html，让游客无需登录也能使用客服气泡。
-  // 多租户场景：通过 ENCLAWS_CS_WIDGET_TENANT_ID 环境变量显式指定。
+  // via ENCLAWS_CS_WIDGET_TENANT_ID env var (override skips the qualification check).
+  // Cached after first successful lookup. Note: cache invalidation on config change is
+  // deferred to the future health-check primitive proposal (llm-provider 可用性巡检).
+  // 懒加载运营方租户 ID：注册最早且"合格"（至少有一个配置了模型的 agent）的非平台租户。
+  // 不合格的租户被跳过——避免气泡出现但点进去报 Model Not Exist 的降级坑。
+  // 多租户部署通过 ENCLAWS_CS_WIDGET_TENANT_ID 环境变量显式指定（覆盖合格性检查）。
   const PLATFORM_TENANT_ID_HTTP = "00000000-0000-0000-0000-000000000001";
-  let _csTenantIdCache: string | undefined;
+  // TTL cache: remember both found and not-found results to avoid rescanning
+  // all tenants on every page load when no qualified tenant exists. Short TTL
+  // ensures config changes (add/remove chatId, model, agent) reflect within
+  // CS_TENANT_CACHE_TTL_MS without restart.
+  // TTL 缓存：命中和未命中都缓存，避免无合格租户时每次请求全量扫描；
+  // 短 TTL 保证配置变更（增删 chatId/model/agent）在 TTL 内自动生效，无需重启。
+  const CS_TENANT_CACHE_TTL_MS = 30_000;
+  let _csTenantIdCache: { tenantId: string | undefined; expiresAt: number } | null = null;
+
+  /**
+   * Check whether a tenant is qualified to host the EC-self-use CS widget.
+   *
+   * Qualification = minimum "config exists" check (hotfix scope):
+   *   1. At least one agent with a non-empty model ref (ensures LLM is callable)
+   *   2. CS config has feishu.chatId set (ensures notification path is wired)
+   *
+   * Anything stricter (reachability ping, balance check, expiry) is deferred to
+   * the follow-up "LLM provider 可用性巡检" proposal.
+   *
+   * 合格性 = 最小"配置存在"判断：
+   *   1. 至少一个 agent 配了 model ref
+   *   2. CS 配置的 feishu.chatId 已填
+   * 更严格的可达性/余额/到期检查留给后续的巡检体系提案。
+   */
+  async function isTenantCsQualified(tenantId: string): Promise<boolean> {
+    try {
+      const cfg = await loadTenantConfig(tenantId);
+      const agents = listAgentEntries(cfg);
+      const hasAgentWithModel = agents.some((a) => {
+        const id = a?.id;
+        if (!id) return false;
+        const modelRef = resolveAgentEffectiveModelPrimary(cfg, id);
+        return !!modelRef && modelRef.trim().length > 0;
+      });
+      if (!hasAgentWithModel) return false;
+
+      const csCfg = await readCSConfig(tenantId);
+      const hasChatId = !!csCfg.feishu?.chatId?.trim();
+      return hasChatId;
+    } catch {
+      return false;
+    }
+  }
+
   async function getCsTenantIdCached(): Promise<string | undefined> {
-    if (_csTenantIdCache) return _csTenantIdCache;
+    const now = Date.now();
+    if (_csTenantIdCache && _csTenantIdCache.expiresAt > now) {
+      return _csTenantIdCache.tenantId;
+    }
     // Allow explicit override via env for multi-tenant deployments.
-    // 多租户部署时可通过环境变量显式指定。
+    // Override still goes through cache to preserve TTL semantics; qualification
+    // check is skipped as operator takes responsibility for env-configured value.
+    // 多租户部署时可通过环境变量显式指定；覆盖值跳过合格性检查，由运维负责。
     const envOverride = process.env.ENCLAWS_CS_WIDGET_TENANT_ID;
     if (envOverride) {
-      _csTenantIdCache = envOverride;
-      return _csTenantIdCache;
+      _csTenantIdCache = { tenantId: envOverride, expiresAt: now + CS_TENANT_CACHE_TTL_MS };
+      return envOverride;
     }
+    let result: string | undefined;
     try {
       const { tenants } = await listTenants({ limit: 50 });
-      // Find the earliest registered non-platform tenant (business/operator tenant).
-      // listTenants returns DESC; sort ASC in memory to get the oldest first.
-      // 取注册时间最早的业务租户——业务上保证该租户即运营方。
+      // Earliest registered business tenants first.
+      // 注册时间最早的业务租户优先。
       const sorted = tenants
         .filter((t) => t.id !== PLATFORM_TENANT_ID_HTTP)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      _csTenantIdCache = sorted[0]?.id;
+      // Pick the earliest qualified one. Unqualified ones are skipped so the
+      // widget bubble hides cleanly instead of appearing and failing on use.
+      // 挑最早的合格租户——不合格的跳过，避免气泡出现但点进去报错。
+      for (const t of sorted) {
+        if (await isTenantCsQualified(t.id)) {
+          result = t.id;
+          break;
+        }
+      }
     } catch {
       // DB may not be ready yet; return undefined, widget falls back gracefully.
     }
-    return _csTenantIdCache;
+    // Cache both found and not-found results with TTL.
+    // 命中和未命中都缓存，避免每次请求全量扫描。
+    _csTenantIdCache = { tenantId: result, expiresAt: now + CS_TENANT_CACHE_TTL_MS };
+    return result;
   }
 
   const {

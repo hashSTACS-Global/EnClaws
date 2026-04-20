@@ -18,7 +18,7 @@ import { runCSAgentReply } from "../../customer-service/rag/cs-agent-runner.js";
 import { CS_ROLE_LABELS } from "../../customer-service/types.js";
 import { sendCSNotification } from "../../customer-service/feishu/notify.js";
 import { readCSConfig } from "./cs-admin.js";
-import { resolveRequestConfig } from "../tenant-session-utils.js";
+import { loadTenantConfig } from "../../config/tenant-config.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 
 const log = createSubsystemLogger("cs-widget-handler");
@@ -117,10 +117,17 @@ export const csWidgetHandlers: GatewayRequestHandlers = {
       const { action } = transition(session.state, { type: "customer_message", text });
 
       if (action === "run_rag") {
-        // Load tenant config the same way chat.ts does.
-        // context.deps does not carry cfg; must load via resolveRequestConfig.
-        // 用 resolveRequestConfig 加载租户配置，与 chat.ts 保持一致。
-        const cfg = await resolveRequestConfig(client?.tenant);
+        // Widget is a visitor connection (no authenticated user), so client.tenant
+        // is always undefined. Load tenant config directly by the tenantId sent from
+        // the widget — this is the CS operator tenant whose agent/model we must use.
+        // Using resolveRequestConfig(client?.tenant) here would fall back to the
+        // platform-level config and miss all tenant-configured agents/models,
+        // causing the LLM call to fail with "Model Not Exist".
+        // Widget 是游客连接（无用户 auth），client.tenant 永远 undefined；必须用
+        // params.tenantId 直接加载租户 config（即客服运营方租户的配置），
+        // 否则会 fallback 到平台级 config，找不到租户配置的 agent/model，
+        // 导致 LLM 调用报 "Model Not Exist"。
+        const cfg = await loadTenantConfig(tenantId);
         // Read CS config for skillsEnabled flag (and notify settings used below).
         // 读客服配置获取 skillsEnabled，与飞书通知配置一并加载。
         const csCfg = await readCSConfig(tenantId);

@@ -411,7 +411,14 @@ export function renderApp(state: AppViewState) {
           checkTenantNeedsOnboarding(state);
         }
       }}
-    ></enclaws-login>`;
+    ></enclaws-login>
+    ${(() => {
+      if (typeof document === "undefined") return nothing;
+      const tid = document
+        .querySelector<HTMLMetaElement>('meta[name="ec-cs-tenant-id"]')
+        ?.content;
+      return tid ? html`<cs-widget tenant-id=${tid}></cs-widget>` : nothing;
+    })()}`;
   }
 
   // Phase 1: post-login force-change-password overlay (covers invite + admin reset)
@@ -1680,6 +1687,13 @@ export function renderApp(state: AppViewState) {
           </div>
           ${renderExecApprovalPrompt(state)}
           ${renderGatewayUrlConfirmation(state)}
+          ${(() => {
+            if (typeof document === "undefined") return nothing;
+            const tid = document
+              .querySelector<HTMLMetaElement>('meta[name="ec-cs-tenant-id"]')
+              ?.content;
+            return tid ? html`<cs-widget tenant-id=${tid}></cs-widget>` : nothing;
+          })()}
       </div>
   `;
 }
