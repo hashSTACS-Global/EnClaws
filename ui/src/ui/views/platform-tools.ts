@@ -3,65 +3,17 @@ import { customElement, state } from "lit/decorators.js";
 import { t, I18nController } from "../../i18n/index.ts";
 import { tenantRpc } from "./tenant/rpc.ts";
 import { caretFix } from "../shared-styles.ts";
+import {
+  TOOL_GROUP_DEFS,
+  GROUP_LABEL_KEY,
+  TOOL_LABEL_KEY,
+  TOOL_DESC_KEY,
+} from "./tool-group-defs.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
 type ToolDef = { id: string; label: string; description: string };
 type ToolGroup = { id: string; label: string; tools: ToolDef[] };
-
-// ── Hardcoded fallback (mirrors tenant-agents TOOL_GROUP_DEFS) ─────────
-
-type FallbackToolDef = { id: string; label: string; descKey: string };
-type FallbackToolGroupDef = { id: string; labelKey: string; tools: FallbackToolDef[] };
-
-const FALLBACK_TOOL_GROUP_DEFS: FallbackToolGroupDef[] = [
-  { id: "fs", labelKey: "tenantAgents.toolGroupFs", tools: [
-    { id: "read",        label: "read",        descKey: "tenantAgents.toolRead" },
-    { id: "write",       label: "write",       descKey: "tenantAgents.toolWrite" },
-    { id: "edit",        label: "edit",        descKey: "tenantAgents.toolEdit" },
-    { id: "apply_patch", label: "apply_patch", descKey: "tenantAgents.toolApplyPatch" },
-    { id: "grep",        label: "grep",        descKey: "tenantAgents.toolGrep" },
-    { id: "find",        label: "find",        descKey: "tenantAgents.toolFind" },
-    { id: "ls",          label: "ls",          descKey: "tenantAgents.toolLs" },
-  ]},
-  { id: "runtime", labelKey: "tenantAgents.toolGroupRuntime", tools: [
-    { id: "exec",    label: "exec",    descKey: "tenantAgents.toolExec" },
-    { id: "process", label: "process", descKey: "tenantAgents.toolProcess" },
-  ]},
-  { id: "web", labelKey: "tenantAgents.toolGroupWeb", tools: [
-    { id: "web_search", label: "web_search", descKey: "tenantAgents.toolWebSearch" },
-    { id: "web_fetch",  label: "web_fetch",  descKey: "tenantAgents.toolWebFetch" },
-  ]},
-  { id: "memory", labelKey: "tenantAgents.toolGroupMemory", tools: [
-    { id: "memory_search", label: "memory_search", descKey: "tenantAgents.toolMemorySearch" },
-    { id: "memory_get",    label: "memory_get",    descKey: "tenantAgents.toolMemoryGet" },
-  ]},
-  { id: "sessions", labelKey: "tenantAgents.toolGroupSessions", tools: [
-    { id: "sessions_list",    label: "sessions_list",    descKey: "tenantAgents.toolSessionsList" },
-    { id: "sessions_history", label: "sessions_history", descKey: "tenantAgents.toolSessionsHistory" },
-    { id: "sessions_send",    label: "sessions_send",    descKey: "tenantAgents.toolSessionsSend" },
-    { id: "sessions_spawn",   label: "sessions_spawn",   descKey: "tenantAgents.toolSessionsSpawn" },
-    { id: "subagents",        label: "subagents",        descKey: "tenantAgents.toolSubagents" },
-    { id: "session_status",   label: "session_status",   descKey: "tenantAgents.toolSessionStatus" },
-  ]},
-  { id: "messaging", labelKey: "tenantAgents.toolGroupMessaging", tools: [
-    { id: "message", label: "message", descKey: "tenantAgents.toolMessage" },
-  ]},
-  { id: "automation", labelKey: "tenantAgents.toolGroupAutomation", tools: [
-    { id: "cron",    label: "cron",    descKey: "tenantAgents.toolCron" },
-    { id: "gateway", label: "gateway", descKey: "tenantAgents.toolGateway" },
-  ]},
-  { id: "ui", labelKey: "tenantAgents.toolGroupUi", tools: [
-    { id: "browser", label: "browser", descKey: "tenantAgents.toolBrowser" },
-    { id: "canvas",  label: "canvas",  descKey: "tenantAgents.toolCanvas" },
-  ]},
-  { id: "other", labelKey: "tenantAgents.toolGroupOther", tools: [
-    { id: "nodes",       label: "nodes",       descKey: "tenantAgents.toolNodes" },
-    { id: "agents_list", label: "agents_list", descKey: "tenantAgents.toolAgentsList" },
-    { id: "image",       label: "image",       descKey: "tenantAgents.toolImage" },
-    { id: "tts",         label: "tts",         descKey: "tenantAgents.toolTts" },
-  ]},
-];
 
 @customElement("platform-tools-view")
 export class PlatformToolsView extends LitElement {
@@ -137,21 +89,37 @@ export class PlatformToolsView extends LitElement {
     .tools-section {
       border: 1px solid var(--border, #303030);
       border-radius: var(--radius-md, 6px);
-      padding: 10px; background: var(--bg-elevated, #1f1f1f);
+      padding: 10px; background: var(--bg, #0a0a0a);
     }
+    .tools-section > summary { list-style: none; cursor: pointer; }
+    .tools-section > summary::-webkit-details-marker { display: none; }
+    .tools-section > summary::marker { content: ""; }
+    .tools-section[open] > .tools-list { margin-top: 10px; }
     .tools-section-header {
-      font-weight: 600; font-size: 13px; margin-bottom: 10px;
-      display: flex; align-items: center; justify-content: space-between;
+      font-weight: 600; font-size: 13px;
+      display: flex; align-items: center; gap: 8px;
     }
+    .tools-section-header > .section-count { margin-left: auto; }
+    .tools-section-header::after {
+      content: "\u25B8"; font-size: 12px; color: var(--text-muted, #525252);
+      transition: transform 0.15s ease;
+    }
+    .tools-section[open] > .tools-section-header::after { transform: rotate(90deg); }
     .section-count { font-size: 11px; font-weight: 400; color: var(--text-muted, #525252); }
     .tools-list {
       display: grid; gap: 8px 12px;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    }
+    /* 长描述组：改单列，描述完整展开不截断。 */
+    .tools-list--wide { grid-template-columns: 1fr; }
+    .tools-list--wide .tool-row-desc {
+      display: block; -webkit-line-clamp: unset; line-clamp: unset;
+      white-space: normal; overflow: visible; text-overflow: clip;
     }
     .tool-row {
-      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
       padding: 6px 8px; border: 1px solid var(--border, #303030);
-      border-radius: var(--radius-md, 6px); background: var(--bg, #0a0a0a);
+      border-radius: var(--radius-md, 6px); background: var(--bg-elevated, #1f1f1f);
     }
     .tool-row-info { flex: 1; min-width: 0; overflow: hidden; }
     .tool-row-name {
@@ -164,7 +132,9 @@ export class PlatformToolsView extends LitElement {
     }
     .tool-row-desc {
       color: var(--text-muted, #525252); font-size: 11px; margin-top: 2px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      display: -webkit-box; -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3; line-clamp: 3;
+      overflow: hidden; text-overflow: ellipsis;
     }
 
     /* ── Toggle switch ── */
@@ -243,11 +213,30 @@ export class PlatformToolsView extends LitElement {
   }
 
   private get toolGroups(): ToolGroup[] {
-    if (this.catalogGroups) return this.catalogGroups;
-    return FALLBACK_TOOL_GROUP_DEFS.map((g) => ({
+    const translated = (key: string | undefined, raw: string) => {
+      if (!key) return raw;
+      const v = t(key);
+      return v === key ? raw : v;
+    };
+    if (this.catalogGroups) {
+      return this.catalogGroups.map((g) => ({
+        id: g.id,
+        label: translated(GROUP_LABEL_KEY[g.id], g.label),
+        tools: g.tools.map((tl) => ({
+          id: tl.id,
+          label: translated(TOOL_LABEL_KEY[tl.id], tl.label),
+          description: translated(TOOL_DESC_KEY[tl.id], tl.description),
+        })),
+      }));
+    }
+    return TOOL_GROUP_DEFS.map((g) => ({
       id: g.id,
       label: t(g.labelKey),
-      tools: g.tools.map((td) => ({ id: td.id, label: td.label, description: t(td.descKey) })),
+      tools: g.tools.map((td) => ({
+        id: td.id,
+        label: td.labelKey ? translated(td.labelKey, td.label) : td.label,
+        description: t(td.descKey),
+      })),
     }));
   }
 
@@ -381,21 +370,19 @@ export class PlatformToolsView extends LitElement {
         ${filteredGroups.map((group) => {
           const groupEnabled = group.tools.filter((tl) => !denySet.has(tl.id)).length;
           return html`
-            <div class="tools-section">
-              <div class="tools-section-header">
+            <details class="tools-section" ?open=${!!filter}>
+              <summary class="tools-section-header">
                 <span>${group.label}</span>
                 <span class="section-count">${groupEnabled}/${group.tools.length}</span>
-              </div>
-              <div class="tools-list">
+              </summary>
+              <div class="tools-list tools-list--wide">
                 ${group.tools.map((tool) => {
                   const allowed = !denySet.has(tool.id);
                   return html`
                     <div class="tool-row">
                       <div class="tool-row-info">
-                        <div class="tool-row-name"
-                          title=${`${tool.label} [${t("tenantAgents.toolSourceCore")}]`}>
+                        <div class="tool-row-name" title=${tool.label}>
                           ${tool.label}
-                          <span class="tool-row-source">${t("tenantAgents.toolSourceCore")}</span>
                         </div>
                         <div class="tool-row-desc" title=${tool.description}>${tool.description}</div>
                       </div>
@@ -408,7 +395,7 @@ export class PlatformToolsView extends LitElement {
                   `;
                 })}
               </div>
-            </div>
+            </details>
           `;
         })}
       </div>

@@ -12,10 +12,15 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { emptyPluginConfigSchema } from 'openclaw/plugin-sdk';
 import { feishuPlugin } from './src/channel/plugin';
 import { LarkClient } from './src/core/lark-client';
-import { registerOapiTools } from './src/tools/oapi/index';
-import { registerFeishuMcpDocTools } from './src/tools/mcp/doc/index';
-import { registerFeishuOAuthTool } from './src/tools/oauth';
-import { registerFeishuOAuthBatchAuthTool } from './src/tools/oauth-batch-auth';
+// 只注册与租户飞书 skill（13 个）不重复的 tool；重复能力由 skill 承担。
+// 保留的 tool 均为 skill 未覆盖的独特能力：用户查询、会话管理、IM 发送、
+// 电子表格、知识库结构、Bot 侧图片下载、交互式卡片表单。
+// import { registerGetUserTool } from './src/tools/oapi/common/index';
+import { registerFeishuChatTools } from './src/tools/oapi/chat/index';
+// import { registerFeishuImUserMessageTool } from './src/tools/oapi/im/message';
+import { registerFeishuWikiTools } from './src/tools/oapi/wiki/index';
+import { registerFeishuSheetsTools } from './src/tools/oapi/sheets/index';
+import { registerFeishuImTools as registerFeishuImBotTools } from './src/tools/tat/im/index';
 import { registerAskUserQuestionTool } from './src/tools/ask-user-question';
 import {
   analyzeTrace,
@@ -109,20 +114,29 @@ const plugin = {
     api.registerChannel({ plugin: feishuPlugin });
 
     // ========================================
+    // 仅注册与租户飞书 skill 不重复的 tool。
+    // 已由 skill 接管的能力（文档 CRUD、IM 读取、日历、任务、多维表格、
+    // 云盘、搜索、用户搜索、OAuth 授权）不再注册对应 tool。
 
-    // Register OAPI tools (calendar, task - using Feishu Open API directly)
-    registerOapiTools(api);
+    // 用户查询（skill 只覆盖 search_user，未覆盖按 open_id 直接 get_user）
+    // registerGetUserTool(api);
 
-    // Register MCP doc tools (using Model Context Protocol)
-    registerFeishuMcpDocTools(api);
+    // 会话管理（创建/修改群、成员增删查，skill 未覆盖）
+    registerFeishuChatTools(api);
 
-    // Register OAuth tool (UAT device flow authorization)
-    registerFeishuOAuthTool(api);
+    // IM 发送（feishu-im-read skill 仅只读，不覆盖发送）
+    // registerFeishuImUserMessageTool(api);
 
-    // Register OAuth batch auth tool (batch authorization for all app scopes)
-    registerFeishuOAuthBatchAuthTool(api);
+    // 知识库空间/节点结构（skill 未覆盖）
+    registerFeishuWikiTools(api);
 
-    // Register AskUserQuestion tool (interactive card-based user prompting)
+    // 电子表格（skill 未覆盖）
+    registerFeishuSheetsTools(api);
+
+    // Bot 身份下载图片（feishu-image-ocr 走 OCR，非原图下载）
+    registerFeishuImBotTools(api);
+
+    // AskUserQuestion 交互卡片表单（skill 无法替代）
     registerAskUserQuestionTool(api);
 
     // ---- Tool call hooks (trace Feishu-owned tool invocations only) ----
