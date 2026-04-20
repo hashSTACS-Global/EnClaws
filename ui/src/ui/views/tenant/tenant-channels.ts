@@ -11,7 +11,7 @@ import { customElement, state, property } from "lit/decorators.js";
 import { t, I18nController } from "../../../i18n/index.ts";
 import { tenantRpc, quotaErrorKey } from "./rpc.ts";
 import { pathForTab, inferBasePathFromPathname } from "../../navigation.ts";
-import { CHANNEL_TYPES } from "../../../constants/channels.ts";
+import { CHANNEL_TYPES, CHANNEL_ICON_MAP } from "../../../constants/channels.ts";
 import feishuScopes from "./feishu-scopes.json";
 import { showConfirm } from "../../components/confirm-dialog.ts";
 import { caretFix } from "../../shared-styles.ts";
@@ -42,7 +42,6 @@ interface ChannelApp {
   id?: string;
   appId: string;
   appSecret: string;
-  botName: string;
   groupPolicy: ChannelPolicy;
   isActive?: boolean;
   connectionStatus?: AppConnectionStatus | null;
@@ -118,6 +117,9 @@ export class TenantChannelsView extends LitElement {
       display: flex; align-items: center;
     }
     .channel-header-right { display: flex; align-items: center; gap: 0.5rem; }
+    .channel-logo {
+      width: 28px; height: 28px; object-fit: contain; opacity: 0.9;
+    }
     .channel-type {
       font-size: 0.72rem; padding: 0.18rem 0.55rem; border-radius: 4px;
       background: #1d4ed8; color: #fff; font-weight: 500; letter-spacing: 0.02em;
@@ -145,6 +147,8 @@ export class TenantChannelsView extends LitElement {
       font-weight: 500; min-width: 0;
     }
     .info-value.mono { font-family: monospace; font-size: 0.78rem; }
+    .info-value.agent-link { cursor: pointer; color: var(--accent, #3b82f6); }
+    .info-value.agent-link:hover { text-decoration: underline; }
     .info-muted { font-size: 0.72rem; color: var(--text-muted, #525252); font-weight: 400; }
     .info-divider { height: 0; margin: 0.6rem 0; border-top: 1px solid var(--text-muted, #525252); }
     .connection-badge {
@@ -450,7 +454,6 @@ export class TenantChannelsView extends LitElement {
     this.formApps = [...this.formApps, {
       appId: "",
       appSecret: "",
-      botName: "",
       groupPolicy: "open",
       agent: null,
       formAgentBinding: "",
@@ -666,7 +669,6 @@ export class TenantChannelsView extends LitElement {
     for (const app of this.formApps) {
       app.appId = app.appId.trim();
       app.appSecret = app.appSecret.trim();
-      app.botName = (app.botName ?? "").trim();
     }
     if (!this.formChannelName) {
       this.showError("tenantChannels.channelNameRequired");
@@ -713,7 +715,7 @@ export class TenantChannelsView extends LitElement {
         }
       }
       if (!app.formAgentBinding) {
-        this.showError("tenantChannels.agentRequired", { name: app.botName || app.appId });
+        this.showError("tenantChannels.agentRequired", { name: app.appId });
         return;
       }
     }
@@ -751,7 +753,6 @@ export class TenantChannelsView extends LitElement {
               appDbId: app.id,
               appId: app.appId,
               appSecret: app.appSecret,
-              botName: app.botName,
               groupPolicy: app.groupPolicy,
               agentId: app.formAgentBinding || null,
             });
@@ -760,7 +761,6 @@ export class TenantChannelsView extends LitElement {
               channelId: this.editingId,
               appId: app.appId,
               appSecret: app.appSecret,
-              botName: app.botName,
               groupPolicy: app.groupPolicy,
               agentId: app.formAgentBinding || null,
             });
@@ -777,7 +777,6 @@ export class TenantChannelsView extends LitElement {
           apps: this.formApps.map((a) => ({
             appId: a.appId,
             appSecret: a.appSecret,
-            botName: a.botName,
             groupPolicy: a.groupPolicy,
             agentId: a.formAgentBinding || null,
           })),
@@ -909,28 +908,22 @@ export class TenantChannelsView extends LitElement {
 
   private renderChannelCard(ch: TenantChannel) {
     const typeName = this.channelTypes.find((ct) => ct.value === ch.channelType)?.label ?? ch.channelType;
-    const policyLabel = this.policyOptions.find((p) => p.value === ch.channelPolicy)?.label ?? ch.channelPolicy;
+
     return html`
       <div class="channel-card">
         <div class="channel-header">
           <div class="channel-name">
             <span class="status-dot ${ch.isActive ? "active" : "inactive"}"></span>
-            ${ch.channelName ?? typeName}
+            ${typeName}
           </div>
           <div class="channel-header-right">
-            <span class="channel-type">${typeName}</span>
-            <span class="policy-badge ${ch.channelPolicy}">${policyLabel}</span>
+            ${CHANNEL_ICON_MAP[ch.channelType]
+              ? html`<img class="channel-logo" src=${CHANNEL_ICON_MAP[ch.channelType]} alt=${typeName} />`
+              : html`<span class="channel-type">${typeName}</span>`}
           </div>
         </div>
         <div class="channel-card-body">
           ${ch.apps && ch.apps.length > 0 ? ch.apps.map((app, idx) => html`
-            <div class="info-row">
-              <span class="info-label">${t("tenantChannels.botName")}</span>
-              <span class="info-value">
-                ${app.botName || "-"}
-                <span class="policy-badge ${app.groupPolicy}" style="font-size:0.62rem">${this.policyOptions.find((p) => p.value === app.groupPolicy)?.label ?? app.groupPolicy}</span>
-              </span>
-            </div>
             <div class="info-row">
               <span class="info-label">${ch.channelType === "wecom" ? t("tenantChannels.wecomBotId") : ch.channelType === "dingtalk" ? t("tenantChannels.dingtalkClientId") : t("tenantChannels.appId")}</span>
               <span class="info-value mono">${app.appId}</span>
@@ -961,7 +954,13 @@ export class TenantChannelsView extends LitElement {
             ${app.agent ? html`
               <div class="info-row">
                 <span class="info-label">${t("tenantChannels.agent")}</span>
-                <span class="info-value">
+                <span class="info-value agent-link" @click=${(e: Event) => {
+                  e.stopPropagation();
+                  this.dispatchEvent(new CustomEvent("navigate-to-agent", {
+                    detail: { agentId: app.agent!.agentId },
+                    bubbles: true, composed: true,
+                  }));
+                }}>
                   ${(app.agent.config?.displayName as string) || app.agent.name || app.agent.agentId}
                   <span class="info-muted">(${app.agent.agentId})</span>
                 </span>
@@ -996,13 +995,6 @@ export class TenantChannelsView extends LitElement {
               <input type="text" .placeholder=${t("tenantChannels.channelNamePlaceholder")}
                 .value=${this.formChannelName}
                 @input=${(e: InputEvent) => (this.formChannelName = (e.target as HTMLInputElement).value)} />
-            </div>
-            <div class="form-field">
-              <label>${t("tenantChannels.channelPolicy")}</label>
-              <select
-                @change=${(e: Event) => (this.formChannelPolicy = (e.target as HTMLSelectElement).value as ChannelPolicy)}>
-                ${this.policyOptions.map((p) => html`<option value=${p.value} ?selected=${p.value === this.formChannelPolicy}>${p.label}</option>`)}
-              </select>
             </div>
           </div>
 
@@ -1111,22 +1103,6 @@ export class TenantChannelsView extends LitElement {
           </div>
         </div>
         ` : nothing}
-        <div class="form-row">
-          <div class="form-field">
-            <label>${t("tenantChannels.botName")}</label>
-            <input type="text" .placeholder=${t("tenantChannels.botNamePlaceholder")}
-              .value=${app.botName}
-              @input=${(e: InputEvent) => this.updateApp(i, "botName", (e.target as HTMLInputElement).value)} />
-          </div>
-          <div class="form-field">
-            <label>${t("tenantChannels.groupPolicy")}</label>
-            <select
-              @change=${(e: Event) => this.updateApp(i, "groupPolicy", (e.target as HTMLSelectElement).value)}>
-              ${this.policyOptions.map((p) => html`<option value=${p.value} ?selected=${p.value === app.groupPolicy}>${p.label}</option>`)}
-            </select>
-          </div>
-        </div>
-
         <!-- Agent binding -->
         <div class="form-row">
           <div class="form-field">

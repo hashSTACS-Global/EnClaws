@@ -175,7 +175,6 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
               id: a.id,
               appId: a.appId,
               appSecret: a.appSecret,
-              botName: a.botName,
               groupPolicy: a.groupPolicy,
               isActive: a.isActive,
               connectionStatus: accountSnapshot ? {
@@ -208,7 +207,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
    *   channelType: string
    *   channelName: string
    *   channelPolicy?: "open" | "allowlist" | "disabled"
-   *   apps?: Array<{ appId, appSecret?, botName?, groupPolicy? }>
+   *   apps?: Array<{ appId, appSecret?, groupPolicy? }>
    */
   "tenant.channels.create": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
@@ -232,7 +231,6 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
       apps?: Array<{
         appId: string;
         appSecret?: string;
-        botName?: string;
         groupPolicy?: string;
         agentId?: string;
         agentConfig?: {
@@ -352,14 +350,12 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
             tenantId: ctx.tenantId,
             appId: app.appId,
             appSecret: app.appSecret,
-            botName: app.botName,
             groupPolicy: (app.groupPolicy as ChannelPolicy) ?? "open",
           });
           createdApps.push({
             id: created.id,
             appId: created.appId,
             appSecret: created.appSecret,
-            botName: created.botName,
             groupPolicy: created.groupPolicy,
             isActive: created.isActive,
           });
@@ -389,7 +385,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         if (agentConfig?.agentId) {
           finalAgentId = agentConfig.agentId;
         } else {
-          const rawName = (app.botName || app.appId || "agent")
+          const rawName = (app.appId || "agent")
             .toLowerCase()
             .replace(/[^a-z0-9]/g, "-")
             .replace(/-+/g, "-")
@@ -398,7 +394,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
           finalAgentId = `${channelType}-${suffix}`.slice(0, 64);
         }
 
-        const displayName = agentConfig?.displayName || app.botName || app.appId;
+        const displayName = agentConfig?.displayName || app.appId;
 
         try {
           const agent = await createTenantAgent({
@@ -733,7 +729,6 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         id: a.id,
         appId: a.appId,
         appSecret: a.appSecret,
-        botName: a.botName,
         groupPolicy: a.groupPolicy,
         isActive: a.isActive,
         createdAt: a.createdAt,
@@ -743,7 +738,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
 
   /**
    * Add an app to a channel.
-   * Params: { channelId, appId, appSecret?, botName?, groupPolicy? }
+   * Params: { channelId, appId, appSecret?, groupPolicy? }
    */
   "tenant.channels.apps.add": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
@@ -759,11 +754,10 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { channelId, appId, appSecret, botName, groupPolicy, agentConfig, agentId: bindAgentId } = params as {
+    const { channelId, appId, appSecret, groupPolicy, agentConfig, agentId: bindAgentId } = params as {
       channelId: string;
       appId: string;
       appSecret?: string;
-      botName?: string;
       groupPolicy?: string;
       agentId?: string;
       agentConfig?: {
@@ -810,7 +804,6 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         tenantId: ctx.tenantId,
         appId,
         appSecret,
-        botName,
         groupPolicy: (groupPolicy as ChannelPolicy) ?? "open",
       });
 
@@ -828,14 +821,14 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         if (agentConfig.agentId) {
           finalAgentId = agentConfig.agentId;
         } else {
-          const rawName = (botName || appId || "agent")
+          const rawName = (appId || "agent")
             .toLowerCase()
             .replace(/[^a-z0-9]/g, "-")
             .replace(/-+/g, "-")
             .replace(/^-+|-+$/g, "");
           finalAgentId = `${channel.channelType}-${rawName || "agent"}`.slice(0, 64);
         }
-        const displayName = agentConfig.displayName || botName || appId;
+        const displayName = agentConfig.displayName || appId;
         try {
           const agent = await createTenantAgent({
             tenantId: ctx.tenantId,
@@ -881,14 +874,13 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         userId: ctx.userId,
         action: "channel.app.add",
         resource: `channel:${channelId}`,
-        detail: { appId, botName },
+        detail: { appId },
       });
 
       respond(true, {
         id: app.id,
         appId: app.appId,
         appSecret: app.appSecret,
-        botName: app.botName,
         groupPolicy: app.groupPolicy,
         isActive: app.isActive,
         agent: createdAgent,
@@ -907,7 +899,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
 
   /**
    * Update a channel app.
-   * Params: { appDbId, appId?, appSecret?, botName?, groupPolicy?, isActive? }
+   * Params: { appDbId, appId?, appSecret?, groupPolicy?, isActive? }
    */
   "tenant.channels.apps.update": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
@@ -923,11 +915,10 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { appDbId, appId, appSecret, botName, groupPolicy, isActive, agentConfig, agentId: bindAgentId } = params as {
+    const { appDbId, appId, appSecret, groupPolicy, isActive, agentConfig, agentId: bindAgentId } = params as {
       appDbId: string;
       appId?: string;
       appSecret?: string;
-      botName?: string;
       groupPolicy?: string;
       isActive?: boolean;
       agentId?: string;
@@ -989,7 +980,6 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
     const updated = await updateChannelApp(appDbId, ctx.tenantId, {
       appId,
       appSecret,
-      botName,
       groupPolicy: groupPolicy as ChannelPolicy | undefined,
       isActive,
       ...(bindAgentId !== undefined ? { agentId: bindAgentId || null } : {}),
@@ -1015,7 +1005,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
       const needsConfigReload = agentChanged;
 
       if (!needsReconnect) {
-        // Nothing connection-relevant changed (e.g. only botName) — just reload config
+        // Nothing connection-relevant changed — just reload config
         await context.reloadDbChannels();
       } else {
         const channelEffectivelyActive = channelForApp.isActive && channelForApp.channelPolicy !== "disabled";
@@ -1086,7 +1076,6 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
       id: updated.id,
       appId: updated.appId,
       appSecret: updated.appSecret,
-      botName: updated.botName,
       groupPolicy: updated.groupPolicy,
       isActive: updated.isActive,
     });

@@ -332,7 +332,6 @@ export class TenantUsersView extends LitElement {
         <table>
           <thead>
             <tr>
-              <th>${t("tenantUsers.email")}</th>
               <th>${t("tenantUsers.displayName")}</th>
               <th>${t("tenantUsers.channel")}</th>
               <th>${t("tenantUsers.role")}</th>
@@ -344,7 +343,6 @@ export class TenantUsersView extends LitElement {
           <tbody>
             ${this.users.map(user => html`
               <tr>
-                <td>${user.email ?? "-"}</td>
                 <td>${user.displayName ?? "-"}</td>
                 <td>${this.formatChannelType(user.channelType)}</td>
                 <td>

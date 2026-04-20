@@ -271,7 +271,6 @@ export interface TenantChannelApp {
   tenantId: string;
   appId: string;
   appSecret: string;
-  botName: string;
   groupPolicy: ChannelPolicy;
   agentId: string | null;
   isActive: boolean;

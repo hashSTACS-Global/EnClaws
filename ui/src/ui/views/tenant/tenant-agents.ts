@@ -80,7 +80,6 @@ interface AgentChannelInfo {
   channelType: string;
   channelName: string | null;
   appId: string;
-  botName: string;
   isActive: boolean;
   connected: boolean;
 }
@@ -328,6 +327,8 @@ export class TenantAgentsView extends LitElement {
       border: 1px solid var(--border, #262626);
       border-radius: var(--radius-md, 6px);
     }
+    .channel-item.channel-link { cursor: pointer; }
+    .channel-item.channel-link:hover { border-color: var(--accent, #3b82f6); }
     .channel-type-icon {
       display: flex; align-items: center; flex-shrink: 0;
     }
@@ -764,7 +765,6 @@ export class TenantAgentsView extends LitElement {
               channelType: ch.channelType,
               channelName: ch.channelName,
               appId: app.appId ?? "",
-              botName: app.botName ?? "",
               isActive: (app.isActive ?? true) && ch.isActive,
               connected: app.connectionStatus?.connected ?? false,
             });
@@ -855,6 +855,16 @@ export class TenantAgentsView extends LitElement {
           this.selectedAgentId = this.initialAgentId;
           if (this.initialPanel) {
             this.activePanel = this.initialPanel as typeof this.activePanel;
+            if (this.activePanel === "channels") {
+              void this.loadChannelsForAgent(this.selectedAgentId);
+            } else if (this.activePanel === "skills") {
+              void this.loadSkillsForAgent(this.selectedAgentId);
+            } else if (this.activePanel === "persona") {
+              this.personaFileActive = null;
+              this.personaFileContents = {};
+              this.personaFileDrafts = {};
+              void this.loadPersonaFiles(this.selectedAgentId);
+            }
           }
           this.initialAgentId = null;
           this.initialPanel = null;
@@ -2112,7 +2122,12 @@ export class TenantAgentsView extends LitElement {
     return html`
       <div class="channel-list">
         ${this.agentChannels.map(ch => html`
-          <div class="channel-item">
+          <div class="channel-item channel-link" @click=${() => {
+            this.dispatchEvent(new CustomEvent("navigate-to-channel", {
+              detail: { channelType: ch.channelType },
+              bubbles: true, composed: true,
+            }));
+          }}>
             <span class="channel-type-icon">
               ${iconMap[ch.channelType]
                 ? html`<img src="${iconMap[ch.channelType]}" alt="${ch.channelType}" />`
@@ -2123,7 +2138,7 @@ export class TenantAgentsView extends LitElement {
                 <span class="channel-item-type">${ch.channelType}</span>
                 ${ch.channelName ? html`<span class="channel-item-name">${ch.channelName}</span>` : nothing}
               </div>
-              <div class="channel-item-row2">${ch.botName ? `${ch.botName} · ` : ""}${ch.appId}</div>
+              <div class="channel-item-row2">${ch.appId}</div>
             </div>
             <span class="conn-dot ${ch.connected ? "online" : "offline"}" title="${ch.connected ? t("tenantAgents.channelOnline") : t("tenantAgents.channelOffline")}"></span>
           </div>

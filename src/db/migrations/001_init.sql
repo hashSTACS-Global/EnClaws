@@ -165,7 +165,6 @@ CREATE TABLE tenant_channel_apps (
   tenant_id    UUID         NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   app_id       VARCHAR(255) NOT NULL,
   app_secret   VARCHAR(512) NOT NULL DEFAULT '',
-  bot_name     VARCHAR(255) NOT NULL DEFAULT '',
   group_policy VARCHAR(32)  NOT NULL DEFAULT 'open', -- open | allowlist | disabled
   agent_id     VARCHAR(128),                         -- bound agent logical ID
   is_active    BOOLEAN      NOT NULL DEFAULT true,

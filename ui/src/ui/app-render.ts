@@ -262,6 +262,8 @@ function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
 
 /** Pending cross-tab navigation target (e.g. from tenant-cron → tenant-agents). */
 let _pendingAgentNav: { agentId: string; panel: string } | null = null;
+/** Pending cross-tab navigation target (e.g. from tenant-agents → tenant-channels). */
+let _pendingChannelNav: { channelType?: string } | null = null;
 
 export function renderApp(state: AppViewState) {
   const enClawsVersion =
@@ -1601,11 +1603,22 @@ export function renderApp(state: AppViewState) {
                                               <tenant-agents-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}
                                                       .initialAgentId=${nav?.agentId ?? null}
-                                                      .initialPanel=${nav?.panel ?? null}></tenant-agents-view>`;
+                                                      .initialPanel=${nav?.panel ?? null}
+                                                      @navigate-to-channel=${(e: CustomEvent<{ channelType: string }>) => {
+                                                        _pendingChannelNav = { channelType: e.detail.channelType };
+                                                        state.setTab("tenant-channels" as any);
+                                                      }}></tenant-agents-view>`;
                                           })() : nothing}
-                                          ${state.tab === "tenant-channels" ? html`
+                                          ${state.tab === "tenant-channels" ? (() => {
+                                              _pendingChannelNav = null;
+                                              return html`
                                               <tenant-channels-view
-                                                      .gatewayUrl=${state.settings.gatewayUrl}></tenant-channels-view>` : nothing}
+                                                      .gatewayUrl=${state.settings.gatewayUrl}
+                                                      @navigate-to-agent=${(e: CustomEvent<{ agentId: string }>) => {
+                                                        _pendingAgentNav = { agentId: e.detail.agentId, panel: "channels" };
+                                                        state.setTab("tenant-agents" as any);
+                                                      }}></tenant-channels-view>`;
+                                          })() : nothing}
                                           ${state.tab === "tenant-models" ? html`
                                               <tenant-models-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}></tenant-models-view>` : nothing}

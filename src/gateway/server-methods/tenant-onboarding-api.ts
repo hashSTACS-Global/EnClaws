@@ -168,7 +168,6 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
               tenantId: ctx.tenantId,
               appId,
               appSecret: appSecret ?? "",
-              botName: agent.name,
             });
           }
         }

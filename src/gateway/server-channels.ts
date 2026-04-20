@@ -427,7 +427,7 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
               enabled: true,
               appId: app.appId,
               appSecret: app.appSecret,
-              name: app.botName || app.appId,
+              name: app.appId,
               groupPolicy: app.groupPolicy,
               tenantId,
               // Map channelPolicy → dmPolicy for feishu (openclaw-lark plugin reads dmPolicy)
