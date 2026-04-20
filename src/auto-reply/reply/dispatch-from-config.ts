@@ -234,13 +234,16 @@ export async function dispatchReplyFromConfig(params: {
   }
 
   // ── Pre-LLM auth gate ────────────────────────────────────────
-  // 跨 IM 平台通用：如果某个 provider 注册了 driver、且当前用户的 SenderName
-  // 仍然没拿到（contact API 没权限 / DB 未命中 / 没有存量 UAT），就：
-  //   1. 把这条入站消息暂存到 pending 队列
-  //   2. 通过 driver 给用户发一张轻量授权卡片（飞书是 DM via open_id）
-  //   3. 早退 —— LLM 不跑，token 不消耗
-  //   4. 用户授权后 driver 把名字写 DB，pending 队列重放本消息（这次有名字了）
-  // 没注册 driver 的 provider（slack/discord/telegram 等）会直接放行，互不影响。
+  // Shared across IM platforms: if a provider has a driver registered and the
+  // current user's SenderName is still unresolved (no contact-API permission /
+  // DB miss / no stored UAT):
+  //   1. stash this inbound message into the pending queue
+  //   2. have the driver send a lightweight auth card to the user (Feishu uses DM via open_id)
+  //   3. short-circuit — the LLM does not run, no tokens spent
+  //   4. after the user authorizes, the driver writes the name to DB and the
+  //      pending queue replays this message (which now carries the name)
+  // Providers with no registered driver (slack/discord/telegram, ...) are
+  // passed through untouched.
   const gateResult = await coreAuthGate({
     ctx,
     cfg,

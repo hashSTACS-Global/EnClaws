@@ -2,24 +2,33 @@
  * Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
  * SPDX-License-Identifier: MIT
  *
- * Pre-LLM auth gate 的待重放队列。
+ * Replay queue for the pre-LLM auth gate.
  *
- * 当某个用户因为没授权被 gate 拦下时，他刚发的那条入站消息会被存进这个队列。
- * 等他完成授权（驱动 driver 拿到名字写进 DB 之后），队列会把这条消息按原参数
- * 重新喂给 `dispatchReplyFromConfig`——这次 enrichTenantContext 会从 DB 读到名字、
- * gate 不再触发、LLM 正常处理。
+ * When the gate blocks an inbound message because the user has not been
+ * authorized, that message is stashed here. Once the user completes the
+ * flow (the driver resolves the name and writes it to DB), the queue feeds
+ * the message back into `dispatchReplyFromConfig` with its original params —
+ * this time enrichTenantContext will read the name from DB, the gate no
+ * longer fires, and the LLM handles the message normally.
  *
- * 设计要点：
- *   - **覆盖式**：每个用户只保留最后一条消息（用户授权期间连发多条，授权完
- *     成后只回复最近一条，避免被翻旧账刷屏）
- *   - **跨 IM 平台通用**：key 用 `${provider}:${accountId}:${openId}`，所以飞书
- *     和未来的企业微信、钉钉等共用同一份队列，互不干扰
- *   - **30 分钟 TTL**：device flow 一般 4 分钟过期，30 分钟兜底所有重试场景
- *   - **重放时精确删 dedupe entry**：原 MessageSid 已经在 `inboundDedupeCache` 里，
- *     不删的话二次 dispatch 会被 `shouldSkipDuplicateInbound` 拦截。我们调用
- *     `deleteInboundDedupeEntry(ctx)` 只删这一条 key，不影响其他用户。
- *     **不要改 ctx.MessageSid**——会破坏 tenant-enrich 里 messageId fallback 的 chatId 反查。
- *   - **避免循环依赖**：通过动态 import 拿 `dispatchReplyFromConfig`
+ * Design notes:
+ *   - **Upsert**: only the last message per user is kept. If a user sends
+ *     multiple messages during authorization, we reply only to the most
+ *     recent once they authorize (avoids dredging up stale chatter).
+ *   - **Cross-platform**: the key is `${provider}:${accountId}:${openId}`,
+ *     so Feishu (and future WeCom / DingTalk / ...) share this one queue
+ *     without stepping on each other.
+ *   - **30-minute TTL**: device flow usually expires in ~4 minutes; 30 min
+ *     leaves slack for every retry scenario.
+ *   - **Precise dedupe-entry deletion on replay**: the original MessageSid
+ *     still lives in `inboundDedupeCache`; without deleting it the second
+ *     dispatch would be blocked by `shouldSkipDuplicateInbound`. We call
+ *     `deleteInboundDedupeEntry(ctx)` to remove only this single key,
+ *     leaving other users untouched.
+ *     **Do not mutate ctx.MessageSid** — that would break tenant-enrich's
+ *     messageId-based chatId fallback lookup.
+ *   - **Avoiding circular imports**: `dispatchReplyFromConfig` is obtained
+ *     via dynamic `import()`.
  */
 
 import { createSubsystemLogger } from "../logging/subsystem.js";
@@ -31,10 +40,11 @@ const log = createSubsystemLogger("auth-gate-queue");
 const PENDING_TTL_MS = 30 * 60 * 1000;
 
 /**
- * 重放所需的全部参数。这就是 `dispatchReplyFromConfig` 的入参，**原样存原样取**。
- * 用 `unknown` 类型描述 dispatcher / replyOptions / replyResolver 是为了避免本
- * 模块对 `auto-reply/reply` 子树产生编译期循环依赖（实际类型由 dynamic import
- * 在 replay 时拿到）。
+ * Everything required to replay the dispatch. These are the parameters of
+ * `dispatchReplyFromConfig` **stored and returned verbatim**. dispatcher /
+ * replyOptions / replyResolver are typed as `unknown` to avoid a compile-time
+ * circular dependency on the `auto-reply/reply` subtree (the real types are
+ * recovered via dynamic `import()` at replay time).
  */
 export interface QueuedDispatchParams {
   ctx: FinalizedMsgContext;
@@ -49,7 +59,7 @@ interface Entry {
   expiresAt: number;
 }
 
-/** Key: `${provider}:${accountId}:${openId}`。每个用户只保留 1 条。 */
+/** Key: `${provider}:${accountId}:${openId}`. Only one entry per user is kept. */
 const queue = new Map<string, Entry>();
 
 function makeKey(provider: string, accountId: string, openId: string): string {
@@ -57,7 +67,7 @@ function makeKey(provider: string, accountId: string, openId: string): string {
 }
 
 /**
- * 入队（覆盖式）：同一用户的新消息直接替换之前那条。
+ * Enqueue (upsert): a new message from the same user replaces the previous one.
  */
 export function enqueuePendingAuth(
   provider: string,
@@ -76,17 +86,22 @@ export function enqueuePendingAuth(
 }
 
 /**
- * 取出并重放某用户暂存的最后一条消息。
+ * Pop and replay the last queued message for a given user.
  *
- * 由 driver 在授权完成（名字已写入 DB）后调用。**直接把刚拿到的名字注入
- * ctx.SenderName**，跳过 tenant-enrich 那套早退逻辑：
- *   - tenant-enrich Branch A 要求 `!ctx.TenantUserRole`，但首次 dispatch 已经
- *     设过 TenantUserRole，Branch A 不会重跑 DB lookup
- *   - tenant-enrich Branch B 要求 `!ctx.TenantId`，同理早退
- *   - 如果不预先注入名字，replay 走完 tenant-enrich 名字仍然是空，gate 又触发
+ * Called by the driver once authorization completes (and the name has been
+ * written to DB). **The resolved name is injected directly into
+ * ctx.SenderName**, bypassing tenant-enrich's short-circuit paths:
+ *   - tenant-enrich Branch A requires `!ctx.TenantUserRole`, but the first
+ *     dispatch already set TenantUserRole, so Branch A would not re-run the
+ *     DB lookup.
+ *   - tenant-enrich Branch B requires `!ctx.TenantId`; same story — it
+ *     short-circuits.
+ *   - Without pre-injecting the name, tenant-enrich would leave SenderName
+ *     empty on replay and the gate would fire again.
  *
- * 注入名字后：tenant-enrich 看到 SenderName 已填，不再调 resolveFeishuSenderName；
- * gate 看到 SenderName 已填，不再触发；dispatch 正常进 LLM。
+ * After the injection: tenant-enrich sees SenderName is filled and skips
+ * `resolveFeishuSenderName`; the gate sees SenderName is filled and does
+ * not fire; the dispatch proceeds into the LLM as normal.
  */
 export async function replayPendingAuth(
   provider: string,
@@ -106,7 +121,7 @@ export async function replayPendingAuth(
     return;
   }
 
-  // 直接注入名字到 ctx —— 绕开 tenant-enrich 的早退逻辑
+  // Inject the resolved name directly into ctx — bypasses tenant-enrich's short-circuit paths.
   if (resolvedName) {
     const ctx = entry.params.ctx as FinalizedMsgContext & { SenderName?: string };
     ctx.SenderName = resolvedName;
@@ -116,12 +131,13 @@ export async function replayPendingAuth(
   log.info(`replaying latest pending message for ${provider}:${openId}`);
 
   try {
-    // 删掉这条消息之前留在 dedupe 里的 entry，否则 shouldSkipDuplicateInbound
-    // 会以为是重复消息直接 skip。仅删这一条 key，不影响其他用户。
+    // Remove the dedupe entry left behind by the first dispatch; otherwise
+    // shouldSkipDuplicateInbound would treat this as a duplicate and skip it.
+    // We remove only this single key so other users are unaffected.
     const { deleteInboundDedupeEntry } = await import("../auto-reply/reply/inbound-dedupe.js");
     deleteInboundDedupeEntry(entry.params.ctx);
 
-    // 动态 import 避免循环依赖（auth-gate-queue ↔ dispatch-from-config）
+    // Dynamic import to avoid the circular dependency (auth-gate-queue ↔ dispatch-from-config).
     const mod = await import("../auto-reply/reply/dispatch-from-config.js");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (mod.dispatchReplyFromConfig as any)({
@@ -132,34 +148,39 @@ export async function replayPendingAuth(
       replyResolver: entry.params.replyResolver,
     });
 
-    // 关键：把 dispatcher 推进到完全收尾状态，触发 streaming card 转 complete
-    // 以及 typing emoji 移除。
+    // Important: drive the dispatcher all the way to its idle state so the
+    // streaming card transitions to "complete" and the typing emoji is cleared.
     //
-    // 背景：plugin 的 reply-dispatcher.ts 用一个 streaming card 控制器（StreamingCardController）
-    // 管理"思考中..."卡片的状态机；卡片从 thinking → streaming → complete 的最后一跳
-    // 由 dispatcher 的 `onIdle` 触发，进而调 `controller.onIdle()` 完成 finalizeCard。
+    // Background: the plugin's reply-dispatcher.ts uses a StreamingCardController
+    // to run the state machine for the "thinking…" card. The final hop
+    // thinking → streaming → complete is fired by the dispatcher's `onIdle`,
+    // which in turn calls `controller.onIdle()` to finalize the card.
     //
-    // dispatcher 的 onIdle 何时触发？通过两条路径：
-    //   1. enqueue 的 `.finally()` 检测到 pending===0
-    //   2. 调用方手动调 `markDispatchIdle()` 强制驱动
+    // When does the dispatcher's onIdle fire? Two paths:
+    //   1. enqueue's `.finally()` notices pending===0
+    //   2. the caller explicitly calls `markDispatchIdle()`
     //
-    // Plugin 自己的 dispatch.ts 走第 2 条（在 dispatchReplyFromConfig 之后手动调
-    // markFullyComplete + markDispatchIdle），但 markDispatchIdle 是 plugin 包装的方法，
-    // 不在 core ReplyDispatcher 接口里，我从 core 拿不到。
+    // The plugin's own dispatch.ts takes path 2 (it calls markFullyComplete +
+    // markDispatchIdle right after dispatchReplyFromConfig). But
+    // markDispatchIdle is a plugin-side wrapper — it is not part of the core
+    // ReplyDispatcher interface, so we cannot reach it from core.
     //
-    // 解决：调 `dispatcher.markComplete()`——这是 core 接口提供的方法。它会：
-    //   - 标记 completeCalled=true
-    //   - 调度一个微任务，把 pending 从 reservation=1 减到 0
-    //   - pending===0 → 触发 dispatcher 内部 onIdle
-    //   - 内部 onIdle → 调 typingController.markDispatchIdle()（清理 typing emoji）
-    //                → 调 plugin 的 resolvedOnIdle wrapper
-    //                → wrapper 检查 dispatchFullyComplete（已经在第一次 dispatch
-    //                  被 plugin 设为 true）→ 调 controller.onIdle()
-    //                → controller.onIdle() 把 streaming card 转到 complete 状态
+    // Workaround: call `dispatcher.markComplete()`, which is part of the core
+    // interface. It:
+    //   - sets completeCalled=true
+    //   - schedules a microtask that drops pending from reservation=1 to 0
+    //   - pending===0 → the dispatcher's internal onIdle fires
+    //   - internal onIdle → typingController.markDispatchIdle() (clears typing emoji)
+    //                    → the plugin's resolvedOnIdle wrapper
+    //                    → the wrapper checks dispatchFullyComplete (already set
+    //                      to true by the plugin during the first dispatch)
+    //                    → controller.onIdle()
+    //                    → streaming card flips to complete
     //
-    // 注意：plugin 在它自己的正常路径里**不会**调 dispatcher.markComplete()，所以 replay
-    // 调一次不会和 plugin 的逻辑冲突；markComplete 内部有 idempotent guard
-    // (`if (completeCalled) return;`)，多调也无害。
+    // Note: the plugin's normal path **never** calls dispatcher.markComplete()
+    // itself, so calling it once here does not conflict with the plugin;
+    // markComplete has an internal idempotent guard
+    // (`if (completeCalled) return;`), so multiple calls are harmless.
     const dispatcher = entry.params.dispatcher as
       | {
           waitForIdle?: () => Promise<void>;
@@ -178,8 +199,9 @@ export async function replayPendingAuth(
     if (dispatcher && typeof dispatcher.markComplete === "function") {
       try {
         dispatcher.markComplete();
-        // markComplete 调度的是微任务。等几次 microtask tick + 再 await 一次 waitForIdle，
-        // 让 onIdle 链路有机会跑起来（包括 plugin 异步 finalizeCard 的初始几步）。
+        // markComplete schedules a microtask. Yield for a few microtask ticks
+        // and await waitForIdle once more so the onIdle chain has a chance to
+        // run (including the first few async steps of the plugin's finalizeCard).
         await Promise.resolve();
         await Promise.resolve();
         if (typeof dispatcher.waitForIdle === "function") {
@@ -196,7 +218,7 @@ export async function replayPendingAuth(
   }
 }
 
-/** 清空所有队列（teardown 用）。 */
+/** Clear every queued entry (teardown helper). */
 export function clearPendingAuth(): void {
   queue.clear();
 }

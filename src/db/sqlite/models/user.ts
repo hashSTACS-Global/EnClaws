@@ -179,7 +179,7 @@ export async function listUsers(
   const limit = opts?.limit ?? 50;
   const offset = opts?.offset ?? 0;
 
-  // LEFT JOIN tenant_channels 拿 channel_name；无 channel_id 的用户字段为 null。
+  // LEFT JOIN tenant_channels to fetch channel_name; users without channel_id get null.
   const dataResult = sqliteQuery(
     `SELECT u.*, tc.channel_name, tc.channel_type
        FROM users u
