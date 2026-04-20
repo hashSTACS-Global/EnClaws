@@ -1144,7 +1144,7 @@ export const zh_CN: TranslationMap = {
     sourceManaged: "已安装技能",
     sourceBundled: "系统内置",
     sourceExtra: "扩展技能",
-    sourceTenant: "企业技能",
+    sourceTenant: "自定义",
     sourcePersonal: "个人技能",
     sourceProject: "项目技能",
     sourcePlugin: "插件: {name}",

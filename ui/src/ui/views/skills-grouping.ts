@@ -38,3 +38,45 @@ export function groupSkills(skills: SkillStatusEntry[]): SkillGroup[] {
   }
   return ordered;
 }
+
+// ---------------------------------------------------------------------------
+// Bundled skill sub-categories (mirrors tool group IDs on the tools page)
+// ---------------------------------------------------------------------------
+
+type BundledSkillCategoryDef = {
+  id: string;
+  label: string;
+  match: (skillKey: string) => boolean;
+};
+
+const BUNDLED_SKILL_CATEGORY_DEFS: BundledSkillCategoryDef[] = [
+  { id: "feishu",     label: "飞书 (Feishu)",  match: (k) => k.startsWith("feishu-") },
+  { id: "memory",     label: "Memory",         match: (k) => k === "memory-manager" },
+  { id: "sessions",   label: "Sessions",       match: (k) => k === "session-logs" },
+  { id: "runtime",    label: "Runtime",        match: (k) => ["coding-agent", "healthcheck", "pingtest"].includes(k) },
+  { id: "automation", label: "Automation",     match: (k) => ["skill-creator", "mcporter"].includes(k) },
+  { id: "web",        label: "Web",            match: (k) => k === "weather" },
+];
+
+export function groupBundledSkillsByCategory(skills: SkillStatusEntry[]): SkillGroup[] {
+  const groups = new Map<string, SkillGroup>();
+  for (const def of BUNDLED_SKILL_CATEGORY_DEFS) {
+    groups.set(def.id, { id: def.id, label: def.label, skills: [] });
+  }
+  const other: SkillGroup = { id: "other", label: "Other", skills: [] };
+  for (const skill of skills) {
+    const cat = BUNDLED_SKILL_CATEGORY_DEFS.find((c) => c.match(skill.skillKey));
+    if (cat) {
+      groups.get(cat.id)!.skills.push(skill);
+    } else {
+      other.skills.push(skill);
+    }
+  }
+  const ordered = BUNDLED_SKILL_CATEGORY_DEFS
+    .map((cat) => groups.get(cat.id)!)
+    .filter((g) => g.skills.length > 0);
+  if (other.skills.length > 0) {
+    ordered.push(other);
+  }
+  return ordered;
+}

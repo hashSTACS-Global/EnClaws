@@ -93,6 +93,27 @@ interface AgentChannelInfo {
 
 const DEFAULT_SYSTEM_PROMPT = "";
 
+type SkillEntry = { name: string; description: string; emoji?: string; source: string; disabled: boolean; always: boolean };
+type SkillCategory = { label: string; skills: SkillEntry[] };
+
+function bundledSkillCategories(skills: SkillEntry[]): SkillCategory[] {
+  const defs: Array<{ label: string; match: (n: string) => boolean }> = [
+    { label: "飞书 (Feishu)",  match: (n) => n.startsWith("feishu-") },
+    { label: "Memory",         match: (n) => n === "memory-manager" },
+    { label: "Sessions",       match: (n) => n === "session-logs" },
+    { label: "Runtime",        match: (n) => ["coding-agent", "healthcheck", "pingtest"].includes(n) },
+    { label: "Automation",     match: (n) => ["skill-creator", "mcporter"].includes(n) },
+    { label: "Web",            match: (n) => n === "weather" },
+  ];
+  const groups = defs.map((d) => ({ label: d.label, skills: [] as SkillEntry[], match: d.match }));
+  const other: SkillCategory = { label: "Other", skills: [] };
+  for (const s of skills) {
+    const g = groups.find((x) => x.match(s.name));
+    (g ?? other).skills.push(s);
+  }
+  return [...groups.filter((g) => g.skills.length > 0), ...(other.skills.length ? [other] : [])];
+}
+
 @customElement("tenant-agents-view")
 export class TenantAgentsView extends LitElement {
   private i18nCtrl = new I18nController(this);
@@ -2017,6 +2038,11 @@ export class TenantAgentsView extends LitElement {
         <div class="panel-header-left">
           <div class="panel-title">${t("tenantSkills.skillAccess")} &nbsp;<span style="font-weight:400;font-size:13px;color:var(--text-muted,#525252)"><span class="mono">${enabledCount}/${allSkillNames.length}</span> ${t("tenantAgents.enabled")}</span></div>
         </div>
+        <div class="panel-filter panel-filter--inline">
+          <input .placeholder=${t("tenantSkills.searchPlaceholder")} .value=${this.skillsFilter}
+            @input=${(e: Event) => { this.skillsFilter = (e.target as HTMLInputElement).value; }} />
+          <span class="count">${filter ? t("tenantAgents.toolsShown").replace("{count}", String(shownCount)) : ""}</span>
+        </div>
         <div class="panel-actions">
           <button class="btn btn-outline btn-sm" ?disabled=${this.skillsSaving}
             @click=${() => { this.skillsPendingEnabled = []; }}>${t("tenantAgents.enableAll")}</button>
@@ -2032,40 +2058,54 @@ export class TenantAgentsView extends LitElement {
       </div>
 
       ${this.skillsLoading && allSkills.length === 0 ? html`<div class="loading">${t("tenantSkills.loading")}</div>` : html`
-        <div class="panel-filter">
-          <input .placeholder=${t("tenantSkills.searchPlaceholder")} .value=${this.skillsFilter}
-            @input=${(e: Event) => { this.skillsFilter = (e.target as HTMLInputElement).value; }} />
-          <span class="count">${filter ? t("tenantAgents.toolsShown").replace("{count}", String(shownCount)) : ""}</span>
-        </div>
 
         <div class="skills-groups">
           ${filteredGroups.map(({ source, skills }) => {
             const groupEnabled = skills.filter((s) => !disabledSet.has(s.name)).length;
             const collapsedByDefault = source === "enclaws-bundled";
+            const groupLabel = source === "enclaws-bundled" ? t("tenantSkills.sourceBundled")
+              : source === "enclaws-tenant" ? t("tenantSkills.sourceTenant")
+              : source;
+            const renderSkillRow = (s: typeof skills[0]) => {
+              const allowed = !disabledSet.has(s.name);
+              return html`
+                <div class="tool-row">
+                  <div class="tool-row-info">
+                    <div class="tool-row-name">${s.emoji ? `${s.emoji} ` : ""}${s.name}</div>
+                    <div class="tool-row-desc" title=${s.description}>${s.description}</div>
+                  </div>
+                  <label class="cfg-toggle">
+                    <input type="checkbox" .checked=${allowed} ?disabled=${this.skillsSaving}
+                      @change=${(e: Event) => toggleSkill(s.name, (e.target as HTMLInputElement).checked)} />
+                    <span class="cfg-toggle__track"></span>
+                  </label>
+                </div>
+              `;
+            };
             return html`
               <details class="skills-group" ?open=${!collapsedByDefault}>
                 <summary class="skills-header">
-                  <span>${source}</span>
+                  <span>${groupLabel}</span>
                   <span>${groupEnabled}/${skills.length}</span>
                 </summary>
-                <div class="tools-list" style="grid-template-columns:1fr;margin-top:10px">
-                  ${skills.map((s) => {
-                    const allowed = !disabledSet.has(s.name);
-                    return html`
-                      <div class="tool-row">
-                        <div class="tool-row-info">
-                          <div class="tool-row-name">${s.emoji ? `${s.emoji} ` : ""}${s.name}</div>
-                          <div class="tool-row-desc" title=${s.description}>${s.description}</div>
-                        </div>
-                        <label class="cfg-toggle">
-                          <input type="checkbox" .checked=${allowed} ?disabled=${this.skillsSaving}
-                            @change=${(e: Event) => toggleSkill(s.name, (e.target as HTMLInputElement).checked)} />
-                          <span class="cfg-toggle__track"></span>
-                        </label>
-                      </div>
-                    `;
-                  })}
-                </div>
+                ${source === "enclaws-bundled"
+                  ? html`<div class="skills-groups" style="padding-left:12px;margin-top:10px;">
+                      ${bundledSkillCategories(skills).map((cat) => html`
+                        <details class="skills-group" open>
+                          <summary class="skills-header">
+                            <span>${cat.label}</span>
+                            <span>${cat.skills.filter((s) => !disabledSet.has(s.name)).length}/${cat.skills.length}</span>
+                          </summary>
+                          <div class="tools-list" style="grid-template-columns:1fr;margin-top:10px">
+                            ${cat.skills.map(renderSkillRow)}
+                          </div>
+                        </details>
+                      `)}
+                    </div>`
+                  : html`<div class="tools-list" style="grid-template-columns:1fr;margin-top:10px">
+                      ${skills.map(renderSkillRow)}
+                    </div>`
+                }
               </details>
             `;
           })}

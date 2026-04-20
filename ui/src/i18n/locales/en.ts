@@ -1123,7 +1123,7 @@ export const en: TranslationMap = {
     sourceManaged: "Installed Skills",
     sourceBundled: "System Built-in",
     sourceExtra: "Extension Skills",
-    sourceTenant: "Enterprise Skills",
+    sourceTenant: "Custom",
     sourcePersonal: "Personal Skills",
     sourceProject: "Project Skills",
     sourcePlugin: "Plugin: {name}",
