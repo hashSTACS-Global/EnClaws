@@ -41,51 +41,73 @@ export class CaptchaField extends LitElement {
       gap: 10px;
     }
     .image-btn {
-      width: 128px;
-      height: 44px;
+      flex: 0 0 auto;
+      width: 140px;
       padding: 0;
-      border: 1px solid var(--border, #d0d7de);
-      border-radius: 8px;
-      background: #f4f6f8;
+      border: 1.5px solid var(--input-border, #d1e8ef);
+      border-radius: 10px;
+      background: var(--input-bg, #f8fcfd);
       cursor: pointer;
       overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
-      flex: 0 0 auto;
+      transition: border-color 0.15s, background 0.15s;
     }
-    .image-btn:hover { border-color: #0891b2; }
-    .image-btn svg { width: 100%; height: 100%; }
+    .image-btn:hover {
+      border-color: var(--accent, #0891b2);
+      background: var(--surface, #ffffff);
+    }
+    .image-btn svg { width: 100%; height: 100%; display: block; }
     .placeholder {
-      font-size: 12px;
-      color: #6a737d;
+      font-size: 13px;
+      color: var(--text-3, #94a3b8);
     }
     input {
       flex: 1 1 auto;
-      padding: 0 12px;
-      height: 44px;
-      border: 1px solid var(--border, #d0d7de);
-      border-radius: 8px;
-      font-size: 14px;
+      width: 100%;
+      padding: 13px 16px;
+      border: 1.5px solid var(--input-border, #d1e8ef);
+      border-radius: 10px;
+      font-size: 15px;
       font-family: inherit;
       letter-spacing: 2px;
       text-transform: uppercase;
-      background: var(--surface, #fff);
-      color: var(--text, #111);
+      background: var(--input-bg, #f8fcfd);
+      color: var(--text, #0c1a1f);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
       box-sizing: border-box;
     }
+    input::placeholder {
+      color: var(--text-3, #94a3b8);
+      letter-spacing: normal;
+      text-transform: none;
+    }
     input:focus {
-      outline: none;
-      border-color: #0891b2;
-      box-shadow: 0 0 0 3px rgba(8,145,178,0.15);
+      border-color: var(--accent, #0891b2);
+      box-shadow: 0 0 0 4px var(--accent-light, rgba(8, 145, 178, 0.08));
+      background: var(--surface, #ffffff);
     }
     input.has-error {
-      border-color: #d73a49;
+      border-color: var(--danger, #ef4444);
+    }
+    input.has-error:focus {
+      box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.08);
     }
     .error {
+      display: flex;
+      align-items: center;
+      gap: 5px;
       margin-top: 6px;
-      color: #d73a49;
+      color: var(--danger, #ef4444);
       font-size: 12px;
+    }
+    .error svg {
+      flex-shrink: 0;
+      width: 13px;
+      height: 13px;
+      fill: currentColor;
     }
   `;
 
@@ -182,7 +204,16 @@ export class CaptchaField extends LitElement {
           @input=${this.onInput}
         />
       </div>
-      ${errorText ? html`<div class="error">${errorText}</div>` : nothing}
+      ${errorText
+        ? html`
+          <div class="error">
+            <svg viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1ZM7.25 4.5a.75.75 0 0 1 1.5 0v3.25a.75.75 0 0 1-1.5 0V4.5ZM8 11.5A.875.875 0 1 1 8 9.75a.875.875 0 0 1 0 1.75Z"/>
+            </svg>
+            <span>${errorText}</span>
+          </div>
+        `
+        : nothing}
     `;
   }
 }
