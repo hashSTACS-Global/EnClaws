@@ -441,6 +441,8 @@ export class TenantAgentsView extends LitElement {
       display: flex; align-items: center; gap: 8px;
     }
     details.tools-section > .tools-section-header .tool-row-source { margin-left: auto; }
+    details.tools-section > .tools-section-header .section-actions { display: inline-flex; gap: 6px; }
+    .btn.btn-xs { padding: 2px 8px; font-size: 11px; line-height: 1.4; }
     details.tools-section > .tools-section-header::after {
       content: "\u25B8"; font-size: 12px; color: var(--text-muted, #525252);
       transition: transform 0.15s ease;
@@ -490,11 +492,10 @@ export class TenantAgentsView extends LitElement {
     }
 
     /* Skills groups — mirrors .tools-section / .tools-section-header style */
-    .skills-groups { display: grid; gap: 16px; }
-    .skills-group {
-      border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px);
-      padding: 10px; background: var(--bg, #0a0a0a);
-    }
+    /* Match the tool-panel style: flat details (no box), nesting conveyed
+       purely by indentation, so top-level and sub-groups stay readable. */
+    .skills-groups { display: grid; gap: 14px; }
+    .skills-group { border: none; background: transparent; padding: 0; border-radius: 0; }
     .skills-group summary { list-style: none; cursor: pointer; }
     .skills-group summary::-webkit-details-marker { display: none; }
     .skills-group summary::marker { content: ""; }
@@ -502,7 +503,8 @@ export class TenantAgentsView extends LitElement {
       display: flex; align-items: center; gap: 8px;
       font-weight: 600; font-size: 13px; cursor: pointer;
     }
-    .skills-header > span:last-child { margin-left: auto; }
+    .skills-header .skills-count { margin-left: auto; font-weight: 400; color: var(--text-muted, #525252); font-size: 11px; }
+    .skills-header .section-actions { display: inline-flex; gap: 6px; }
     .skills-header::after {
       content: "\u25B8"; font-size: 12px; color: var(--text-muted, #525252);
       transition: transform 0.15s ease;
@@ -2025,6 +2027,14 @@ export class TenantAgentsView extends LitElement {
       this.skillsPendingEnabled = [...next];
     };
 
+    const setSkillGroupEnabled = (names: string[], enable: boolean) => {
+      const next = new Set(disabledSet);
+      for (const n of names) {
+        enable ? next.delete(n) : next.add(n);
+      }
+      this.skillsPendingEnabled = [...next];
+    };
+
     // Group by source
     const allGrouped = new Map<string, typeof allSkills>();
     for (const s of allSkills) {
@@ -2087,25 +2097,49 @@ export class TenantAgentsView extends LitElement {
                 </div>
               `;
             };
+            const groupNames = skills.map((s) => s.name);
             return html`
               <details class="skills-group" ?open=${!collapsedByDefault || !!filter}>
                 <summary class="skills-header">
                   <span>${groupLabel}</span>
-                  <span>${groupEnabled}/${skills.length}</span>
+                  <span class="skills-count">${groupEnabled}/${skills.length}</span>
+                  <span class="section-actions" @click=${(e: Event) => e.preventDefault()}>
+                    <button type="button" class="btn btn-outline btn-xs" ?disabled=${this.skillsSaving}
+                      @click=${(e: Event) => { e.stopPropagation(); setSkillGroupEnabled(groupNames, true); }}>
+                      ${t("tenantAgents.enableAll")}
+                    </button>
+                    <button type="button" class="btn btn-outline btn-xs" ?disabled=${this.skillsSaving}
+                      @click=${(e: Event) => { e.stopPropagation(); setSkillGroupEnabled(groupNames, false); }}>
+                      ${t("tenantAgents.disableAll")}
+                    </button>
+                  </span>
                 </summary>
                 ${source === "enclaws-bundled"
                   ? html`<div class="skills-groups" style="padding-left:12px;margin-top:10px;">
-                      ${bundledSkillCategories(skills).map((cat) => html`
+                      ${bundledSkillCategories(skills).map((cat) => {
+                        const catNames = cat.skills.map((s) => s.name);
+                        return html`
                         <details class="skills-group" ?open=${!!filter}>
                           <summary class="skills-header">
                             <span>${cat.label}</span>
-                            <span>${cat.skills.filter((s) => !disabledSet.has(s.name)).length}/${cat.skills.length}</span>
+                            <span class="skills-count">${cat.skills.filter((s) => !disabledSet.has(s.name)).length}/${cat.skills.length}</span>
+                            <span class="section-actions" @click=${(e: Event) => e.preventDefault()}>
+                              <button type="button" class="btn btn-outline btn-xs" ?disabled=${this.skillsSaving}
+                                @click=${(e: Event) => { e.stopPropagation(); setSkillGroupEnabled(catNames, true); }}>
+                                ${t("tenantAgents.enableAll")}
+                              </button>
+                              <button type="button" class="btn btn-outline btn-xs" ?disabled=${this.skillsSaving}
+                                @click=${(e: Event) => { e.stopPropagation(); setSkillGroupEnabled(catNames, false); }}>
+                                ${t("tenantAgents.disableAll")}
+                              </button>
+                            </span>
                           </summary>
                           <div class="tools-list" style="grid-template-columns:1fr;margin-top:10px">
                             ${cat.skills.map(renderSkillRow)}
                           </div>
                         </details>
-                      `)}
+                      `;
+                      })}
                     </div>`
                   : html`<div class="tools-list" style="grid-template-columns:1fr;margin-top:10px">
                       ${skills.map(renderSkillRow)}
@@ -2189,6 +2223,16 @@ export class TenantAgentsView extends LitElement {
       this.toolsPendingDeny = [...next];
     };
 
+    const setGroupEnabled = (ids: string[], enable: boolean) => {
+      const next = new Set(denySet);
+      for (const id of ids) {
+        // System-denied tools stay denied regardless of the bulk action.
+        if (this.systemDenySet.has(id)) continue;
+        enable ? next.delete(id) : next.add(id);
+      }
+      this.toolsPendingDeny = [...next];
+    };
+
     const filteredGroups = this.toolGroups.map((group) => ({
       ...group,
       tools: filter ? group.tools.filter((tl) => tl.label.toLowerCase().includes(filter) || tl.description.toLowerCase().includes(filter)) : group.tools,
@@ -2223,7 +2267,20 @@ export class TenantAgentsView extends LitElement {
           const enabledCount = group.tools.filter((tl) => !denySet.has(tl.id) && !this.systemDenySet.has(tl.id)).length;
           return html`
             <details class="tools-section" ?open=${!!filter}>
-              <summary class="tools-section-header"><span>${group.label}</span> <span class="tool-row-source">${enabledCount}/${group.tools.length}</span></summary>
+              <summary class="tools-section-header">
+                <span>${group.label}</span>
+                <span class="tool-row-source">${enabledCount}/${group.tools.length}</span>
+                <span class="section-actions" @click=${(e: Event) => e.preventDefault()}>
+                  <button type="button" class="btn btn-outline btn-xs" ?disabled=${this.toolsSaving}
+                    @click=${(e: Event) => { e.stopPropagation(); setGroupEnabled(group.tools.map((tl) => tl.id), true); }}>
+                    ${t("tenantAgents.enableAll")}
+                  </button>
+                  <button type="button" class="btn btn-outline btn-xs" ?disabled=${this.toolsSaving}
+                    @click=${(e: Event) => { e.stopPropagation(); setGroupEnabled(group.tools.map((tl) => tl.id), false); }}>
+                    ${t("tenantAgents.disableAll")}
+                  </button>
+                </span>
+              </summary>
               <div class="tools-list tools-list--wide">
                 ${group.tools.map((tool) => {
                   const sysDenied = this.systemDenySet.has(tool.id);
