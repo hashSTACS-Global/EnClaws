@@ -1365,6 +1365,17 @@ export const en: TranslationMap = {
     memorySaveFailed: "Failed to save enterprise memory",
     memoryHint: "This content is auto-maintained by AI assistants and can be manually edited. It will be injected as enterprise context into all AI conversations.",
   },
+  captcha: {
+    label: "Captcha",
+    placeholder: "Enter captcha",
+    loading: "Loading…",
+    clickToLoad: "Click to load",
+    loadFailed: "Failed to load captcha",
+    refreshHint: "Click to refresh",
+    refreshAria: "Refresh captcha",
+    errRequired: "Please complete the captcha",
+    errInvalid: "Captcha is incorrect or expired",
+  },
   login: {
     title: "Login to EnClaws",
     titleRegister: "Register EnClaws",

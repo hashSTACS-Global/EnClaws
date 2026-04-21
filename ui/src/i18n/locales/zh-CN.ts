@@ -1386,6 +1386,17 @@ export const zh_CN: TranslationMap = {
     memorySaveFailed: "保存企业记忆失败",
     memoryHint: "该内容由 AI 助手自动维护，也可手动编辑。将作为企业上下文注入到所有 AI 对话中。",
   },
+  captcha: {
+    label: "图形验证码",
+    placeholder: "请输入验证码",
+    loading: "加载中…",
+    clickToLoad: "点击获取",
+    loadFailed: "加载验证码失败",
+    refreshHint: "点击换一张",
+    refreshAria: "刷新验证码",
+    errRequired: "请完成图形验证码",
+    errInvalid: "图形验证码错误或已过期",
+  },
   login: {
     title: "登录 EnClaws",
     titleRegister: "注册 EnClaws",

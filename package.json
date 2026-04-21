@@ -281,6 +281,7 @@
     "sharp": "^0.34.5",
     "shell-quote": "^1.8.3",
     "sqlite-vec": "0.1.7-alpha.2",
+    "svg-captcha": "^1.4.0",
     "tar": "7.5.9",
     "tslog": "^4.10.2",
     "undici": "^7.22.0",
