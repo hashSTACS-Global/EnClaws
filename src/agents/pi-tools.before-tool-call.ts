@@ -1,6 +1,4 @@
-import path from "node:path";
 import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
-import { resolveStateDir } from "../config/paths.js";
 import type { SessionState } from "../logging/diagnostic-session-state.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
@@ -47,13 +45,17 @@ export function setTenantUserRole(tenantId: string, userId: string, role: string
   map.set(key, { role, expiresAt: Date.now() + ROLE_TTL_MS });
   if (map.size > MAX_TENANT_ROLE_ENTRIES) {
     const oldest = map.keys().next().value;
-    if (oldest) map.delete(oldest);
+    if (oldest) {
+      map.delete(oldest);
+    }
   }
 }
 
 export function getTenantUserRole(tenantId: string, userId: string): string | undefined {
   const entry = getTenantUserRoleMap().get(`${tenantId}:${userId}`);
-  if (!entry) return undefined;
+  if (!entry) {
+    return undefined;
+  }
   if (entry.expiresAt < Date.now()) {
     getTenantUserRoleMap().delete(`${tenantId}:${userId}`);
     return undefined;
@@ -71,6 +73,30 @@ type HookOutcome = { blocked: true; reason: string } | { blocked: false; params:
 
 const log = createSubsystemLogger("agents/tools");
 const BEFORE_TOOL_CALL_WRAPPED = Symbol("beforeToolCallWrapped");
+
+/**
+ * Diagnostic: log once per sessionKey whether the path-policy gate fires.
+ * Helps locate where tenantId/userId are dropped in channel flows.
+ * TODO(diagnostic): remove once tenantId propagation is verified on feishu.
+ */
+const PATH_POLICY_GATE_LOGGED = new Set<string>();
+function logPathPolicyGateOnce(ctx: HookContext | undefined, toolName: string): void {
+  const key = ctx?.sessionKey ?? ctx?.agentId ?? "<no-session>";
+  if (PATH_POLICY_GATE_LOGGED.has(key)) {
+    return;
+  }
+  PATH_POLICY_GATE_LOGGED.add(key);
+  if (PATH_POLICY_GATE_LOGGED.size > 512) {
+    const oldest = PATH_POLICY_GATE_LOGGED.values().next().value;
+    if (oldest) {
+      PATH_POLICY_GATE_LOGGED.delete(oldest);
+    }
+  }
+  log.warn(
+    `[path-policy-gate] session=${key} tool=${toolName} tenantId=${ctx?.tenantId ?? "<none>"} userId=${ctx?.userId ?? "<none>"} workspaceDir=${ctx?.workspaceDir ?? "<none>"}`,
+  );
+}
+
 const adjustedParamsByToolCallId = new Map<string, unknown>();
 const MAX_TRACKED_ADJUSTED_PARAMS = 1024;
 const LOOP_WARNING_BUCKET_SIZE = 10;
@@ -139,50 +165,31 @@ const DESTRUCTIVE_EXEC_PATTERN =
   /\b(rm|rmdir|del|mv|cp|unlink|chmod|chown|truncate|shred|Remove-Item|Move-Item|Copy-Item|Rename-Item|Set-Content|Clear-Content|ri|mi|ci|rni)\b/i;
 
 /**
- * Returns true if a shell command string appears to target the EnClaws state directory.
- *
- * Checks two things:
- *  1. The resolved state dir path (honours ENCLAWS_STATE_DIR override).
- *  2. The literal `/.enclaws/` path segment (covers ~ expansions and relative refs).
- *
- * This is a best-effort textual scan — not a full shell parser.
- * The exec approval system is the primary execution gatekeeper; this is an early
- * fast-path block before any approval prompt is shown.
- */
-function isCommandTargetingStateDir(command: string): boolean {
-  const stateDir = resolveStateDir();
-  const normalizedCmd = command.replace(/\\/g, "/");
-  const normalizedState = stateDir.replace(/\\/g, "/");
-
-  // Match the resolved state dir path
-  if (normalizedCmd.includes(normalizedState)) return true;
-
-  // Match literal ~/.enclaws and /.enclaws path segments
-  if (/(?:^|[/~])\.enclaws(?:[/\s"'\\]|$)/.test(normalizedCmd)) return true;
-
-  // Match by basename of the state dir (handles ENCLAWS_STATE_DIR custom paths)
-  const stateDirBase = path.basename(normalizedState);
-  if (stateDirBase && normalizedCmd.includes(`/${stateDirBase}/`)) return true;
-
-  return false;
-}
-
-/**
  * Resolve role for the current tool call.
  * Uses the exact tenantId:userId key — never falls back to "any user in this tenant".
  */
-function resolveRoleForToolCall(toolName: string, params: unknown, ctx?: HookContext): { role: string | undefined; isTenantPath: boolean } {
+function resolveRoleForToolCall(
+  toolName: string,
+  params: unknown,
+  ctx?: HookContext,
+): { role: string | undefined; isTenantPath: boolean } {
   // Static context (set at tool creation time, usually empty for long-lived tools)
-  if (ctx?.tenantUserRole) return { role: ctx.tenantUserRole, isTenantPath: true };
+  if (ctx?.tenantUserRole) {
+    return { role: ctx.tenantUserRole, isTenantPath: true };
+  }
 
   // Extract tenantId from the tool params path
   const p = params as Record<string, unknown> | undefined;
-  if (!p) return { role: undefined, isTenantPath: false };
+  if (!p) {
+    return { role: undefined, isTenantPath: false };
+  }
 
   const pathStr = String(p.file_path ?? p.filePath ?? p.path ?? p.command ?? p.cmd ?? "");
 
   const tenantId = extractTenantIdFromPath(pathStr);
-  if (!tenantId) return { role: undefined, isTenantPath: false };
+  if (!tenantId) {
+    return { role: undefined, isTenantPath: false };
+  }
 
   // Look up role by exact tenantId:userId key
   const map = getTenantUserRoleMap();
@@ -209,9 +216,15 @@ function resolveRoleForToolCall(toolName: string, params: unknown, ctx?: HookCon
  * For exec/process: only destructive commands (rm, mv, etc.) targeting skills
  * paths are blocked. Running a skill script from the skills directory is allowed.
  */
-function checkSkillWritePermission(toolName: string, params: unknown, ctx?: HookContext): string | null {
+function checkSkillWritePermission(
+  toolName: string,
+  params: unknown,
+  ctx?: HookContext,
+): string | null {
   const p = params as Record<string, unknown> | undefined;
-  if (!p) return null;
+  if (!p) {
+    return null;
+  }
 
   let targetsSkills = false;
 
@@ -225,16 +238,22 @@ function checkSkillWritePermission(toolName: string, params: unknown, ctx?: Hook
     targetsSkills = /[/\\]skills[/\\]/i.test(command) && DESTRUCTIVE_EXEC_PATTERN.test(command);
   }
 
-  if (!targetsSkills) return null;
+  if (!targetsSkills) {
+    return null;
+  }
 
   // Targets skills dir — resolve role (fail-closed for tenant paths)
   const { role, isTenantPath } = resolveRoleForToolCall(toolName, params, ctx);
 
   // Non-tenant path (single-user mode): allow
-  if (!isTenantPath) return null;
+  if (!isTenantPath) {
+    return null;
+  }
 
   // Owner and admin: allow
-  if (role === "owner" || role === "admin") return null;
+  if (role === "owner" || role === "admin") {
+    return null;
+  }
 
   // Role is member/viewer: deny
   if (role) {
@@ -244,7 +263,9 @@ function checkSkillWritePermission(toolName: string, params: unknown, ctx?: Hook
   }
 
   // Tenant path but role unknown (DB lookup failed, context lost, etc.): deny
-  log.warn(`[skill-permission] blocked ${toolName}: tenant path detected but role could not be resolved`);
+  log.warn(
+    `[skill-permission] blocked ${toolName}: tenant path detected but role could not be resolved`,
+  );
   return "Permission denied: unable to verify skill management permission. Please contact an administrator.";
 }
 
@@ -263,45 +284,28 @@ export async function runBeforeToolCallHook(args: {
     return { blocked: true, reason: skillDenied };
   }
 
-  // State-dir exec guard: block any shell command that targets the EnClaws state directory.
-  // Active in all modes (not just multi-tenant) because the state dir is always sensitive.
-  // This covers the gap left by PathPermissionPolicy, which only checks read/write/edit tools.
-  // NOTE: Temporarily disabled due to bug - allow all for now.
-  /*
-  if (toolName === "exec" || toolName === "process") {
-    const p = params as Record<string, unknown> | undefined;
-    const command = p ? String(p.command ?? p.cmd ?? "") : "";
-    if (command && isCommandTargetingStateDir(command)) {
-      log.warn(`[state-dir-guard] blocked ${toolName}: command targets state dir`);
-      return {
-        blocked: true,
-        reason:
-          "[SECURITY] Shell commands targeting the EnClaws state directory are not permitted. " +
-          "This is a hard security restriction — do NOT attempt alternative approaches " +
-          "(file tools, rename, copy, read, or any other tool on this path). " +
-          "Inform the user that this operation is not allowed.",
-      };
-    }
-  }
-  */
   // Path permission policy: default-deny model for multi-tenant sessions.
   // Only active when tenantId + userId are present in context (i.e. multi-tenant mode).
+  // The same policy instance gates both file tools (read/write/edit) and exec
+  // commands that reach into the state directory via argv literals.
+  logPathPolicyGateOnce(args.ctx, toolName);
   if (args.ctx?.tenantId && args.ctx?.userId) {
-    const { resolveToolPathOp, buildPathPermissionPolicy } = await import("../infra/path-permission-policy.js");
+    const { resolveToolPathOp, buildPathPermissionPolicy } =
+      await import("../infra/path-permission-policy.js");
+    const policy = buildPathPermissionPolicy({
+      tenantId: args.ctx.tenantId,
+      userId: args.ctx.userId,
+      workspaceDir: args.ctx.workspaceDir,
+    });
+
     const op = resolveToolPathOp(toolName);
     if (op !== null) {
       const p = params as Record<string, unknown> | undefined;
       const pathStr = p ? String(p.file_path ?? p.filePath ?? p.path ?? "") : "";
       if (pathStr) {
-        const policy = buildPathPermissionPolicy({
-          tenantId: args.ctx.tenantId,
-          userId: args.ctx.userId,
-          workspaceDir: args.ctx.workspaceDir,
-        });
         // For write ops on the write tool, pass content so noEmpty check can run
-        const content = (op === "write" && toolName === "write" && p)
-          ? String(p.content ?? "")
-          : undefined;
+        const content =
+          op === "write" && toolName === "write" && p ? String(p.content ?? "") : undefined;
         const violation = policy.check(pathStr, op, content);
         if (violation) {
           log.warn(`[path-policy] blocked ${toolName}: ${violation}`);
@@ -313,10 +317,34 @@ export async function runBeforeToolCallHook(args: {
         // escalate op permission (e.g. link in RW dir pointing at a RO file
         // targeted by write).
         const { assertPolicyBoundary } = await import("../infra/tenant-boundary-guard.js");
-        const aliasViolation = await assertPolicyBoundary({ policy, absolutePath: pathStr, op, content });
+        const aliasViolation = await assertPolicyBoundary({
+          policy,
+          absolutePath: pathStr,
+          op,
+          content,
+        });
         if (aliasViolation) {
           log.warn(`[path-policy] blocked ${toolName} via alias guard: ${aliasViolation}`);
           return { blocked: true, reason: aliasViolation };
+        }
+      }
+    }
+
+    // Exec path guard: parse argv out of exec/process commands and re-run the
+    // same policy against any literal path landing inside the state dir.
+    // Confident-parse-only — ambiguous shells (variables, subshells, globs) pass.
+    if (toolName === "exec" || toolName === "process") {
+      const p = params as Record<string, unknown> | undefined;
+      const command = p ? String(p.command ?? p.cmd ?? "") : "";
+      const cwd = p
+        ? String(p.workdir ?? p.cwd ?? args.ctx.workspaceDir ?? "")
+        : String(args.ctx.workspaceDir ?? "");
+      if (command && cwd) {
+        const { checkExecPathsAgainstPolicy } = await import("../infra/exec-path-policy.js");
+        const execViolation = checkExecPathsAgainstPolicy({ command, cwd, policy });
+        if (execViolation) {
+          log.warn(`[exec-path-policy] blocked ${toolName}: ${execViolation}`);
+          return { blocked: true, reason: execViolation };
         }
       }
     }

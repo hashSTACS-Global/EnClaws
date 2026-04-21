@@ -193,6 +193,9 @@ importers:
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
+      shell-quote:
+        specifier: ^1.8.3
+        version: 1.8.3
       sqlite-vec:
         specifier: 0.1.7-alpha.2
         version: 0.1.7-alpha.2
@@ -248,6 +251,9 @@ importers:
       '@types/qrcode-terminal':
         specifier: ^0.12.2
         version: 0.12.2
+      '@types/shell-quote':
+        specifier: ^1.7.5
+        version: 1.7.5
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -3689,6 +3695,9 @@ packages:
   '@types/serve-static@2.2.0':
     resolution: {integrity: sha512-8mam4H1NHLtu7nmtalF7eyBH14QyOASmcxHhSfEoRyr0nP/YdoesEtU+uSRvMe96TW/HPTtkoKqQLl53N7UXMQ==}
 
+  '@types/shell-quote@1.7.5':
+    resolution: {integrity: sha512-+UE8GAGRPbJVQDdxi16dgadcBfQ+KG2vgZhV1+3A1XmHbmwcdwhCUwIdy+d3pAGrbvgRoVSjeI9vOWyq376Yzw==}
+
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
 
@@ -6660,6 +6669,10 @@ packages:
   shebang-regex@3.0.0:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
+
+  shell-quote@1.8.3:
+    resolution: {integrity: sha512-ObmnIF4hXNg1BqhnHmgbDETF8dLPCggZWBjkQfhZpbszZnYur5DUljTcCHii5LC3J5E0yeO/1LIMyH+UvHQgyw==}
+    engines: {node: '>= 0.4'}
 
   shiki@3.23.0:
     resolution: {integrity: sha512-55Dj73uq9ZXL5zyeRPzHQsK7Nbyt6Y10k5s7OjuFZGMhpp4r/rsLBH0o/0fstIzX1Lep9VxefWljK/SKCzygIA==}
@@ -10758,6 +10771,8 @@ snapshots:
       '@types/http-errors': 2.0.5
       '@types/node': 25.5.0
 
+  '@types/shell-quote@1.7.5': {}
+
   '@types/tough-cookie@4.0.5': {}
 
   '@types/trusted-types@2.0.7': {}
@@ -14260,6 +14275,8 @@ snapshots:
       shebang-regex: 3.0.0
 
   shebang-regex@3.0.0: {}
+
+  shell-quote@1.8.3: {}
 
   shiki@3.23.0:
     dependencies:
