@@ -891,8 +891,13 @@ export async function runEmbeddedAttempt(
         modelRegistry: params.modelRegistry,
         model: params.model,
         thinkingLevel: mapThinkingLevel(params.thinkLevel),
-        tools: builtInTools,
-        customTools: allCustomTools,
+        // Pass undefined (not empty array) when no tools/customTools, so the Pi SDK
+        // drops the `tools` field from the outbound LLM API request. Strict
+        // OpenAI-compatible endpoints (Qwen/DashScope, some DeepSeek routes, Gemini)
+        // reject `tools: []` with 400 "[] is too short - 'tools'".
+        // 空数组会被严校验的 provider 拒掉，传 undefined 让 Pi SDK 整个字段丢弃。
+        tools: builtInTools.length > 0 ? builtInTools : undefined,
+        customTools: allCustomTools.length > 0 ? allCustomTools : undefined,
         sessionManager,
         settingsManager,
         resourceLoader,
