@@ -88,6 +88,7 @@ interface AgentChannelInfo {
   channelType: string;
   channelName: string | null;
   appId: string;
+  botName: string;
   isActive: boolean;
   connected: boolean;
 }
@@ -730,6 +731,7 @@ export class TenantAgentsView extends LitElement {
               channelType: ch.channelType,
               channelName: ch.channelName,
               appId: app.appId ?? "",
+              botName: (app.botName as string) ?? "",
               isActive: (app.isActive ?? true) && ch.isActive,
               connected: app.connectionStatus?.connected ?? false,
             });
@@ -2142,7 +2144,7 @@ export class TenantAgentsView extends LitElement {
             <div class="channel-item-info">
               <div class="channel-item-row1">
                 <span class="channel-item-type">${ch.channelType}</span>
-                ${ch.channelName ? html`<span class="channel-item-name">${ch.channelName}</span>` : nothing}
+                ${ch.botName ? html`<span class="channel-item-name">${ch.botName}</span>` : nothing}
               </div>
               <div class="channel-item-row2">${ch.appId}</div>
             </div>
