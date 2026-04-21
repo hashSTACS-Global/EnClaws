@@ -8,6 +8,9 @@
  */
 
 import { isDbInitialized } from "../db/index.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
+
+const roleTraceLog = createSubsystemLogger("infra/channel-auto-provision");
 
 /** In-memory cache to avoid repeated DB lookups within the same process. */
 const provisionedCache = new Map<string, { userId: string; unionId: string; role: string; displayName?: string; channelId?: string }>(); // key → result
@@ -74,8 +77,12 @@ export async function autoProvisionTenantUser(params: {
   const cached = provisionedCache.get(key);
   const expiry = provisionedExpiry.get(key);
   if (cached && expiry && expiry > Date.now()) {
+    roleTraceLog.warn(
+      `[role-trace] auto-provision.cacheHit key=${key} userId=${cached.userId} role=${cached.role} ttlLeft=${Math.round((expiry - Date.now()) / 1000)}s`,
+    );
     return { userId: cached.userId, unionId: cached.unionId, userCreated: false, role: cached.role, displayName: cached.displayName, channelId: cached.channelId };
   }
+  roleTraceLog.warn(`[role-trace] auto-provision.cacheMiss key=${key}`);
 
   const { findOrCreateUserByOpenId } = await import("../db/models/user.js");
   const { UserQuotaExceededError } = await import("../db/models/user-quota-error.js");
@@ -133,10 +140,15 @@ export function clearAutoProvisionCache(): void {
  * so we iterate and match on the cached value's `userId` (DB primary key).
  */
 export function evictAutoProvisionCacheByUser(tenantId: string, userId: string): void {
+  const evictedKeys: string[] = [];
   for (const [key, entry] of provisionedCache) {
     if (key.startsWith(`${tenantId}:`) && entry.userId === userId) {
       provisionedCache.delete(key);
       provisionedExpiry.delete(key);
+      evictedKeys.push(key);
     }
   }
+  roleTraceLog.warn(
+    `[role-trace] auto-provision.evict tenantId=${tenantId} userId=${userId} evicted=${evictedKeys.length} keys=[${evictedKeys.join(",")}]`,
+  );
 }

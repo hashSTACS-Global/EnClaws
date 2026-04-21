@@ -175,6 +175,9 @@ function resolveRoleForToolCall(
 ): { role: string | undefined; isTenantPath: boolean } {
   // Static context (set at tool creation time, usually empty for long-lived tools)
   if (ctx?.tenantUserRole) {
+    log.warn(
+      `[role-trace] resolve source=ctx tool=${toolName} tenantId=${ctx.tenantId ?? "<none>"} userId=${ctx.userId ?? "<none>"} role=${ctx.tenantUserRole}`,
+    );
     return { role: ctx.tenantUserRole, isTenantPath: true };
   }
 
@@ -194,14 +197,29 @@ function resolveRoleForToolCall(
   // Look up role by exact tenantId:userId key
   const map = getTenantUserRoleMap();
   const now = Date.now();
+  const tenantEntries: string[] = [];
+  let matchedRole: string | undefined;
+  let matchedKey: string | undefined;
   for (const [key, entry] of map) {
     if (key.startsWith(`${tenantId}:`)) {
+      tenantEntries.push(
+        `${key}=${entry.role}(exp=${Math.round((entry.expiresAt - now) / 1000)}s)`,
+      );
       if (entry.expiresAt < now) {
         map.delete(key);
         continue;
       }
-      return { role: entry.role, isTenantPath: true };
+      if (matchedRole === undefined) {
+        matchedRole = entry.role;
+        matchedKey = key;
+      }
     }
+  }
+  log.warn(
+    `[role-trace] resolve source=map tool=${toolName} ctx.userId=${ctx?.userId ?? "<none>"} pathTenant=${tenantId} mapSize=${map.size} tenantEntries=[${tenantEntries.join(",")}] matched=${matchedKey ?? "<none>"} role=${matchedRole ?? "<none>"}`,
+  );
+  if (matchedRole !== undefined) {
+    return { role: matchedRole, isTenantPath: true };
   }
   // Path is under a tenant dir but no role found
   return { role: undefined, isTenantPath: true };
@@ -292,10 +310,14 @@ export async function runBeforeToolCallHook(args: {
   if (args.ctx?.tenantId && args.ctx?.userId) {
     const { resolveToolPathOp, buildPathPermissionPolicy } =
       await import("../infra/path-permission-policy.js");
+    // Role pulled via the same resolver that gates skill writes — keeps both
+    // layers consistent. Unknown/member role → strict policy (no carve-out).
+    const { role: resolvedRole } = resolveRoleForToolCall(toolName, params, args.ctx);
     const policy = buildPathPermissionPolicy({
       tenantId: args.ctx.tenantId,
       userId: args.ctx.userId,
       workspaceDir: args.ctx.workspaceDir,
+      role: resolvedRole,
     });
 
     const op = resolveToolPathOp(toolName);

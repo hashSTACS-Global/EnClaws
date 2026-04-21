@@ -15,13 +15,13 @@
 
 import os from "node:os";
 import path from "node:path";
+import { resolveWorkspaceRoot } from "../agents/workspace-dir.js";
+import { resolveStateDir } from "../config/paths.js";
 import {
   resolveTenantDir,
   resolveTenantSkillsDir,
   resolveTenantUserDir,
 } from "../config/sessions/tenant-paths.js";
-import { resolveStateDir } from "../config/paths.js";
-import { resolveWorkspaceRoot } from "../agents/workspace-dir.js";
 import { isPathInside } from "./path-guards.js";
 
 // ── Op types ────────────────────────────────────────────────────────────────
@@ -132,18 +132,27 @@ export class PathPermissionPolicy {
  * Build the PathPermissionPolicy for a specific tenant session.
  * All allowed paths are derived from existing path-resolution functions —
  * no hardcoded strings, resilient to directory layout changes.
+ *
+ * `role` lifts the tenant-root prefix to read-only for admin/owner so exec
+ * literals referencing `tenants/<id>/` (e.g. install-script cwd, clawhub
+ * --prefix) don't get blanket-denied. Actual write gating for skill files
+ * still runs through `checkSkillWritePermission`; this rule only widens
+ * read/traversal. Missing/unknown role → strict (member-equivalent).
  */
 export function buildPathPermissionPolicy(ctx: {
   tenantId: string;
   userId: string;
   /** Agent workspace dir override (from sandbox config). Falls back to cwd. */
   workspaceDir?: string;
+  /** Tenant user role. `admin`/`owner` unlock a few elevated prefixes. */
+  role?: string;
 }): PathPermissionPolicy {
   const tenantRoot = resolveTenantDir(ctx.tenantId);
   const userRoot = resolveTenantUserDir(ctx.tenantId, ctx.userId);
   const skillsRoot = resolveTenantSkillsDir(ctx.tenantId);
   const workspace = ctx.workspaceDir ?? resolveWorkspaceRoot();
   const extras = parseExtraAllowedPaths(process.env.ENCLAWS_EXTRA_ALLOWED_PATHS ?? "");
+  const isAdmin = ctx.role === "admin" || ctx.role === "owner";
 
   return new PathPermissionPolicy([
     // ── L1: full read + write ──────────────────────────────────────────────
@@ -169,6 +178,13 @@ export function buildPathPermissionPolicy(ctx: {
     { prefix: path.join(userRoot, "credentials"), ops: READ_ONLY },
     { prefix: path.join(userRoot, "devices"), ops: READ_ONLY },
     { prefix: path.join(resolveStateDir(), "logs"), ops: READ_ONLY },
+
+    // ── Admin/owner: read-level traversal of the tenant root ──────────────
+    //    Keeps skill-install scripts that reference `tenants/<id>/` (as cwd,
+    //    --prefix, or a path literal captured by exec-path-policy) from
+    //    hitting default-deny. Writes to nested paths are still governed by
+    //    the specific sub-rules above; this is a last-resort READ_ONLY rule.
+    ...(isAdmin ? [{ prefix: tenantRoot, ops: READ_ONLY }] : []),
 
     // ── User-configured extra paths (ENCLAWS_EXTRA_ALLOWED_PATHS) ──────────
     ...extras,

@@ -18,6 +18,9 @@ import path from "node:path";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { FinalizedMsgContext } from "../templating.js";
 import { logVerbose } from "../../globals.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
+
+const roleTraceLog = createSubsystemLogger("auto-reply/tenant-enrich");
 
 /**
  * Enrich the inbound message context with multi-tenant fields if applicable.
@@ -64,6 +67,9 @@ export async function enrichTenantContext(
           ctx.TenantUserSuspended = true;
         } else if (provisioned && !("quotaExceeded" in provisioned)) {
           ctx.TenantUserRole = provisioned.role;
+          roleTraceLog.warn(
+            `[role-trace] tenant-enrich.branchA tenantId=${ctx.TenantId} userId=${ctx.TenantUserId} role=${provisioned.role}`,
+          );
           // Backfill sender name from DB if plugin didn't resolve it
           if (isMissingSenderName(ctx) && provisioned.displayName && !isPlaceholderName(provisioned.displayName)) {
             ctx.SenderName = provisioned.displayName;
@@ -161,6 +167,9 @@ export async function enrichTenantContext(
       ctx.TenantId = tenantId;
       ctx.TenantUserId = provisioned.unionId;
       ctx.TenantUserRole = provisioned.role;
+      roleTraceLog.warn(
+        `[role-trace] tenant-enrich.branchB tenantId=${tenantId} userId=${provisioned.unionId} role=${provisioned.role} userCreated=${provisioned.userCreated}`,
+      );
       // Backfill sender name from DB if plugin didn't resolve it
       if (isMissingSenderName(ctx) && provisioned.displayName && !isPlaceholderName(provisioned.displayName)) {
         ctx.SenderName = provisioned.displayName;

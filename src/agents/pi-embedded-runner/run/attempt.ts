@@ -556,6 +556,13 @@ export async function runEmbeddedAttempt(
     if (params.tenantId && params.tenantUserId && params.tenantUserRole) {
       const { setTenantUserRole } = await import("../../pi-tools.before-tool-call.js");
       setTenantUserRole(params.tenantId, params.tenantUserId, params.tenantUserRole);
+      log.warn(
+        `[role-trace] attempt.set tenant=${params.tenantId} user=${params.tenantUserId} role=${params.tenantUserRole}`,
+      );
+    } else {
+      log.warn(
+        `[role-trace] attempt.skip tenant=${params.tenantId ?? "<none>"} user=${params.tenantUserId ?? "<none>"} role=${params.tenantUserRole ?? "<none>"}`,
+      );
     }
     // Check if the model supports native image input
     const modelHasVision = params.model.input?.includes("image") ?? false;

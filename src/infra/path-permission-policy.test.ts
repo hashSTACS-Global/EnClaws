@@ -17,11 +17,7 @@ import {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Build a policy with two rules: a read+write dir and a read-only dir. */
-function makePolicy(
-  rwDir: string,
-  roDir: string,
-  noEmptyFile?: string,
-): PathPermissionPolicy {
+function makePolicy(rwDir: string, roDir: string, noEmptyFile?: string): PathPermissionPolicy {
   const rules: Array<{ prefix: string; ops: ReadonlySet<PathOp>; noEmpty?: boolean }> = [
     { prefix: rwDir, ops: new Set(["read", "write"]) },
     { prefix: roDir, ops: new Set(["read"]) },
@@ -337,6 +333,45 @@ describe("buildPathPermissionPolicy()", () => {
     const f = path.join(skillsRoot, "my-skill", "SKILL.md");
     expect(policy.check(f, "read")).toBeNull();
     expect(policy.check(f, "write")).toBeNull();
+  });
+
+  describe("role-aware tenant-root carve-out", () => {
+    // Deny-side assertions omitted here: os.tmpdir() is ALL_OPS and the test
+    // state dir lives under tmpdir, so tenantRoot reads "leak" as allowed
+    // regardless of role in this harness. Cross-tenant deny is covered by the
+    // existing "blocks access to another tenant's directory" test above.
+
+    it("allows read on the tenant root for role=admin", () => {
+      const adminPolicy = buildPathPermissionPolicy({
+        tenantId: TENANT,
+        userId: USER,
+        workspaceDir: WORKSPACE,
+        role: "admin",
+      });
+      expect(adminPolicy.check(tenantRoot, "read")).toBeNull();
+    });
+
+    it("allows read on the tenant root for role=owner", () => {
+      const ownerPolicy = buildPathPermissionPolicy({
+        tenantId: TENANT,
+        userId: USER,
+        workspaceDir: WORKSPACE,
+        role: "owner",
+      });
+      expect(ownerPolicy.check(tenantRoot, "read")).toBeNull();
+    });
+
+    it("leaves skill read+write behavior unchanged for role=admin", () => {
+      const adminPolicy = buildPathPermissionPolicy({
+        tenantId: TENANT,
+        userId: USER,
+        workspaceDir: WORKSPACE,
+        role: "admin",
+      });
+      const skillFile = path.join(skillsRoot, "my-skill", "SKILL.md");
+      expect(adminPolicy.check(skillFile, "read")).toBeNull();
+      expect(adminPolicy.check(skillFile, "write")).toBeNull();
+    });
   });
 
   describe("ENCLAWS_EXTRA_ALLOWED_PATHS", () => {
