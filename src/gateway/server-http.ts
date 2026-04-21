@@ -419,11 +419,14 @@ export function createGatewayHttpServer(opts: {
     let result: string | undefined;
     try {
       const { tenants } = await listTenants({ limit: 50 });
-      // Earliest registered business tenants first.
-      // 注册时间最早的业务租户优先。
+      // Earliest registered business tenants first. Use numeric Date comparison
+      // because SQLite returns createdAt as an ISO string while the pg driver
+      // returns a Date object — localeCompare on a Date throws at runtime.
+      // 业务租户按注册时间升序。SQLite 返回 ISO 字符串，pg 驱动返回 Date 对象，
+      // 用 new Date().getTime() 同时兼容两种类型，避免 localeCompare 对 Date 报错。
       const sorted = tenants
         .filter((t) => t.id !== PLATFORM_TENANT_ID_HTTP)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       // Pick the earliest qualified one. Unqualified ones are skipped so the
       // widget bubble hides cleanly instead of appearing and failing on use.
       // 挑最早的合格租户——不合格的跳过，避免气泡出现但点进去报错。
