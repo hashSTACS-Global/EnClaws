@@ -10,8 +10,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { toConfigAgentsList } from "./tenant-agent.js";
 import type { TenantAgent } from "../types.js";
+import { toConfigAgentsList, generateAgentId } from "./tenant-agent.js";
 
 function makeAgent(overrides: Partial<TenantAgent> = {}): TenantAgent {
   const now = new Date("2026-04-20T00:00:00Z");
@@ -69,5 +69,21 @@ describe("toConfigAgentsList", () => {
 
     expect(entry).not.toHaveProperty("skills");
     expect(entry.tools).toEqual({ deny: ["memory_search"] });
+  });
+});
+
+describe("generateAgentId", () => {
+  it("returns ids matching the `agent_{8 hex chars}` shape", () => {
+    for (let i = 0; i < 50; i++) {
+      expect(generateAgentId()).toMatch(/^agent_[0-9a-f]{8}$/);
+    }
+  });
+
+  it("produces unique ids across repeated calls", () => {
+    const ids = new Set<string>();
+    for (let i = 0; i < 200; i++) {
+      ids.add(generateAgentId());
+    }
+    expect(ids.size).toBe(200);
   });
 });
