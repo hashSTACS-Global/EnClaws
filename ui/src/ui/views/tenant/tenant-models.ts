@@ -728,9 +728,9 @@ export class TenantModelsView extends LitElement {
           </div>
           <button class="btn btn-outline" @click=${() => this.loadConfigs()}>${t("models.refresh")}</button>
           <button class="btn btn-primary" @click=${() => this.openAddModel()}>${t("models.addModel")}</button>
-          <button class="btn btn-outline" @click=${() => this.showForm ? (this.showForm = false) : this.startCreate()}>
-            ${this.showForm ? t("models.cancel") : t("models.addProvider")}
-          </button>
+          ${this.showForm ? html`
+            <button class="btn btn-outline" @click=${() => (this.showForm = false)}>${t("models.cancel")}</button>
+          ` : nothing}
         </div>
       </div>
 
