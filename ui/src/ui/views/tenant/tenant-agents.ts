@@ -428,15 +428,17 @@ export class TenantAgentsView extends LitElement {
     }
     .tier-default-radio > input { margin: 0; }
     /* Overview panel: read-only tier summary */
-    .tier-summary { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.3rem; }
-    .tier-summary-row {
-      display: flex; align-items: center; gap: 0.5rem;
-      padding: 0.4rem 0.6rem;
+    .tier-summary { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.3rem; }
+    .tier-summary-card {
+      padding: 0.5rem 0.7rem;
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       background: var(--card);
     }
-    .tier-summary-row.is-default { border-color: var(--accent); }
+    .tier-summary-card.is-default { border-color: var(--accent); }
+    .tier-summary-head {
+      display: flex; align-items: center; gap: 0.5rem;
+    }
     .tier-summary-mark {
       font-size: 0.72rem;
       color: var(--accent);
@@ -445,6 +447,35 @@ export class TenantAgentsView extends LitElement {
     .tier-summary-backup {
       font-size: 0.72rem;
       color: var(--text-muted, #a3a3a3);
+    }
+    .tier-summary-empty {
+      font-size: 0.75rem;
+      color: var(--text-muted, #a3a3a3);
+      padding: 0.3rem 0 0;
+    }
+    .tier-model-list {
+      display: flex; flex-direction: column; gap: 0.2rem;
+      margin-top: 0.4rem;
+    }
+    .tier-model-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.78rem;
+    }
+    .tier-model-slot {
+      min-width: 4.5rem;
+      font-size: 0.7rem;
+      color: var(--text-muted, #a3a3a3);
+    }
+    .tier-model-slot.is-default { color: var(--accent); font-weight: 600; }
+    .tier-model-id {
+      font-family: monospace;
+      background: var(--bg);
+      padding: 0.05rem 0.4rem;
+      border-radius: 3px;
+    }
+    .tier-model-provider {
+      color: var(--text-muted, #a3a3a3);
+      font-size: 0.72rem;
     }
     .tier-badge {
       display: inline-block;
@@ -1381,6 +1412,28 @@ export class TenantAgentsView extends LitElement {
     const defaultTier = deriveAgentDefaultTier(agent, this.availableModels);
     const defaultTierLabel = defaultTier ? TIER_LABELS[defaultTier] : "-";
 
+    // Look up each modelConfig entry's display name + provider + tier so the
+    // overview can show the actual runtime chain (in-tier default + backups)
+    // per enabled tier. Falls back to modelId / providerId for stale entries.
+    const modelLookup = new Map<string, { modelName: string; providerName: string; tier: ModelTierValue }>();
+    for (const p of this.availableModels) {
+      for (const m of p.models) {
+        modelLookup.set(`${p.id}:${m.id}`, {
+          modelName: m.name,
+          providerName: p.providerName,
+          tier: (m.tier ?? "standard") as ModelTierValue,
+        });
+      }
+    }
+    const entriesInTier = (tier: ModelTierValue) => {
+      const inTier = (agent.modelConfig ?? []).filter((e) => {
+        const lk = modelLookup.get(`${e.providerId}:${e.modelId}`);
+        return (lk?.tier ?? "standard") === tier;
+      });
+      // Default model first, then backups in configured order
+      return inTier.slice().sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
+    };
+
     return html`
       <div class="overview-grid">
         <div class="kv">
@@ -1424,12 +1477,34 @@ export class TenantAgentsView extends LitElement {
           <div class="tier-summary">
             ${TIER_DISPLAY_ORDER.filter((t) => enabledTiers.includes(t)).map((tier) => {
               const isDefault = tier === defaultTier;
+              const entries = entriesInTier(tier);
               return html`
-                <div class="tier-summary-row ${isDefault ? "is-default" : ""}">
-                  <span class="tier-badge tier-${tier}">${TIER_LABELS[tier]}</span>
-                  ${isDefault
-                    ? html`<span class="tier-summary-mark">${t("tenantAgents.tierIsDefault")}</span>`
-                    : html`<span class="tier-summary-backup">${t("tenantAgents.tierBackupLabel")}</span>`}
+                <div class="tier-summary-card ${isDefault ? "is-default" : ""}">
+                  <div class="tier-summary-head">
+                    <span class="tier-badge tier-${tier}">${TIER_LABELS[tier]}</span>
+                    ${isDefault
+                      ? html`<span class="tier-summary-mark">${t("tenantAgents.tierIsDefault")}</span>`
+                      : html`<span class="tier-summary-backup">${t("tenantAgents.tierBackupLabel")}</span>`}
+                  </div>
+                  ${entries.length === 0 ? html`
+                    <div class="tier-summary-empty">${t("tenantAgents.tierEmpty")}</div>
+                  ` : html`
+                    <div class="tier-model-list">
+                      ${entries.map((e, idx) => {
+                        const info = modelLookup.get(`${e.providerId}:${e.modelId}`);
+                        const slotLabel = idx === 0
+                          ? t("tenantAgents.tierSlotDefault")
+                          : t("tenantAgents.tierSlotBackup", { n: String(idx) });
+                        return html`
+                          <div class="tier-model-row">
+                            <span class="tier-model-slot ${idx === 0 ? "is-default" : ""}">${slotLabel}</span>
+                            <code class="tier-model-id">${info?.modelName ?? e.modelId}</code>
+                            <span class="tier-model-provider">${info?.providerName ?? e.providerId}</span>
+                          </div>
+                        `;
+                      })}
+                    </div>
+                  `}
                 </div>
               `;
             })}
