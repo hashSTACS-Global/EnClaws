@@ -1673,6 +1673,7 @@ export const zh_CN: TranslationMap = {
       apiKeyKeepHint: "（留空 = 保持不变）",
       apiKeyEditPlaceholder: "留空 = 保持不变",
       tierChangeConfirm: "该模型被 {count} 个 Agent 使用，改档位会影响这些 Agent 的启用档位。继续？",
+      setAsTierDefault: "同时设为此档默认模型（影响所有启用此档的 Agent）",
     },
   }
 };

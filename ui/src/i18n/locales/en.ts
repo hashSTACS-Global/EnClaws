@@ -1652,6 +1652,7 @@ export const en: TranslationMap = {
       apiKeyKeepHint: "(blank = keep existing)",
       apiKeyEditPlaceholder: "Leave blank to keep existing",
       tierChangeConfirm: "This model is used by {count} agent(s). Changing its tier will affect which tiers those agents can use. Continue?",
+      setAsTierDefault: "Also set as default for this tier (applies to every agent using it)",
     },
   }
 };

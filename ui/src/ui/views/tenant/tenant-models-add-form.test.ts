@@ -86,6 +86,7 @@ function makeDraft(overrides: Partial<AddModelDraft> = {}): AddModelDraft {
     apiKey: "sk-xxx",
     modelId: "claude-sonnet-4-6",
     modelName: "Sonnet",
+    setAsDefault: false,
     ...overrides,
   };
 }
