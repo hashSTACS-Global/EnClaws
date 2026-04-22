@@ -162,13 +162,42 @@ export async function handleAgentChatHttpRequest(
   const turnIndex = 0;
   const runId = `agentchat_${randomUUID()}`;
 
+  // Map each chain entry to its tier so the failover log can point at
+  // 'TIER_FALLBACK: pro → standard' whenever the loop crosses tiers.
+  // Legacy models (tier undefined) are reported as 'standard' — matches
+  // the runtime fallback in resolveTierChain.
+  const entryTier = (entry: { providerId: string; modelId: string }): ModelTier => {
+    const p = tenantModels.find((m) => m.id === entry.providerId);
+    const def = p?.models.find((m) => m.id === entry.modelId);
+    return (def?.tier ?? "standard") as ModelTier;
+  };
+
+  log.info(
+    `tier-chain resolved turn=${turnId} requested=${modelTier ?? "(none)"} agentDefault=${agentDefaultTier ?? "(none)"} chain=[${chain
+      .map((e, i) => `#${i + 1}:${entryTier(e)}/${e.modelId}`)
+      .join(", ")}]`,
+  );
+
   // --- 9. Failover loop: try each entry in chain, skip retriable failures ---
   let lastError: unknown = null;
+  let prevTier: ModelTier | undefined;
 
-  for (const chainEntry of chain) {
+  for (const [idx, chainEntry] of chain.entries()) {
+    const currentTier = entryTier(chainEntry);
+    // Crossed a tier boundary — the prior tier is exhausted. Log at warn
+    // so this shows up in default log filtering (info is often dropped).
+    if (prevTier !== undefined && prevTier !== currentTier) {
+      log.warn(
+        `TIER_FALLBACK turn=${turnId} ${prevTier} → ${currentTier} (prior tier exhausted after ${idx} attempt${idx === 1 ? "" : "s"})`,
+      );
+    }
+    prevTier = currentTier;
     const tenantModel = tenantModels.find((m) => m.id === chainEntry.providerId);
     if (!tenantModel) {
       lastError = new Error(`Model provider not found: providerId=${chainEntry.providerId}`);
+      log.warn(
+        `tier-chain attempt[${idx + 1}/${chain.length}] skip turn=${turnId} tier=${currentTier} model=${chainEntry.modelId} reason=provider_not_found`,
+      );
       continue;
     }
 
@@ -178,8 +207,15 @@ export async function handleAgentChatHttpRequest(
 
     if (!baseUrl) {
       lastError = new Error(`Model provider has no baseUrl: providerId=${chainEntry.providerId}`);
+      log.warn(
+        `tier-chain attempt[${idx + 1}/${chain.length}] skip turn=${turnId} tier=${currentTier} model=${modelId} reason=no_baseurl`,
+      );
       continue;
     }
+
+    log.info(
+      `tier-chain attempt[${idx + 1}/${chain.length}] turn=${turnId} tier=${currentTier} provider=${tenantModel.providerType} model=${modelId}`,
+    );
 
     const startedAt = Date.now();
     try {
@@ -233,6 +269,10 @@ export async function handleAgentChatHttpRequest(
         durationMs,
       }).catch((traceErr) => log.warn(`Failed to record trace: ${String(traceErr)}`));
 
+      log.info(
+        `tier-chain success turn=${turnId} winner=${currentTier}/${modelId} provider=${tenantModel.providerType} attempt=${idx + 1}/${chain.length} durationMs=${durationMs}`,
+      );
+
       sendJson(res, 200, {
         id: runId,
         object: "chat.completion",
@@ -275,11 +315,14 @@ export async function handleAgentChatHttpRequest(
       }).catch((traceErr) => log.warn(`Failed to record error trace: ${String(traceErr)}`));
 
       const { retriable, status } = isRetriableFailover(err);
-      log.warn(
-        `tier=${modelTier ?? "(inferred)"} model=${modelId} status=${status ?? "n/a"} retriable=${retriable} err=${String(err).slice(0, 200)}`,
-      );
-
-      if (!retriable) {
+      if (retriable) {
+        log.warn(
+          `tier-chain attempt[${idx + 1}/${chain.length}] failed turn=${turnId} tier=${currentTier} model=${modelId} status=${status ?? "n/a"} — will fall through to next entry; err=${String(err).slice(0, 200)}`,
+        );
+      } else {
+        log.error(
+          `tier-chain attempt[${idx + 1}/${chain.length}] failed turn=${turnId} tier=${currentTier} model=${modelId} status=${status ?? "n/a"} non-retriable — bailing chain; err=${String(err).slice(0, 200)}`,
+        );
         // Non-retriable (4xx non-429, auth, billing, content-policy) —
         // surface to caller immediately; don't burn the rest of the chain.
         sendError(res, status ?? 502, `LLM request failed: ${String(err).slice(0, 500)}`, "api_error");
@@ -290,6 +333,9 @@ export async function handleAgentChatHttpRequest(
   }
 
   // --- 10. Chain exhausted — all entries failed with retriable errors ---
+  log.error(
+    `TIER_EXHAUSTED turn=${turnId} all ${chain.length} entries failed; last=${String(lastError).slice(0, 200)}`,
+  );
   sendError(
     res,
     503,
