@@ -272,7 +272,9 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
     if (baseUrl !== undefined) updates.baseUrl = baseUrl;
     if (apiProtocol !== undefined) updates.apiProtocol = apiProtocol;
     if (authMode !== undefined) updates.authMode = authMode;
-    if (apiKey !== undefined) updates.apiKeyEncrypted = apiKey;
+    // v4: empty-string apiKey means "keep existing" (edit modal left blank intentionally).
+    // Only overwrite when a non-empty value is supplied.
+    if (apiKey !== undefined && apiKey !== "") updates.apiKeyEncrypted = apiKey;
     if (extraHeaders !== undefined) updates.extraHeaders = extraHeaders;
     if (extraConfig !== undefined) updates.extraConfig = extraConfig;
     if (models !== undefined) updates.models = models;
