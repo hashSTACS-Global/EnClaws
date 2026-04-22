@@ -72,7 +72,6 @@ export class CaptchaField extends LitElement {
       font-size: 15px;
       font-family: inherit;
       letter-spacing: 2px;
-      text-transform: uppercase;
       background: var(--input-bg, #f8fcfd);
       color: var(--text, #0c1a1f);
       outline: none;
@@ -82,7 +81,6 @@ export class CaptchaField extends LitElement {
     input::placeholder {
       color: var(--text-3, #94a3b8);
       letter-spacing: normal;
-      text-transform: none;
     }
     input:focus {
       border-color: var(--accent, #0891b2);
