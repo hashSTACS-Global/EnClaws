@@ -2,10 +2,24 @@
  * Tenant Agent CRUD - stores agent configurations per tenant in PostgreSQL.
  */
 
+import { randomBytes } from "node:crypto";
+import { DEFAULT_DISABLED_BUNDLED_SKILLS } from "../../agents/skills/defaults.js";
 import { query, getDbType, DB_SQLITE } from "../index.js";
 import * as sqliteAgent from "../sqlite/models/tenant-agent.js";
 import type { TenantAgent, ModelConfigEntry } from "../types.js";
-import { DEFAULT_DISABLED_BUNDLED_SKILLS } from "../../agents/skills/defaults.js";
+
+/**
+ * Generate an opaque, collision-resistant agent_id.
+ *
+ * Agents are addressed internally by this id; multi-tenant runtime merges
+ * all tenants' agents into a single cfg.agents.list, so ids must be globally
+ * unique to avoid cross-tenant collisions. The returned shape is
+ * `agent_{8 hex chars}` — 32 bits of entropy, enough for realistic tenant
+ * agent counts, short enough to remain debuggable in logs and session paths.
+ */
+export function generateAgentId(): string {
+  return `agent_${randomBytes(4).toString("hex")}`;
+}
 
 function rowToAgent(row: Record<string, unknown>): TenantAgent {
   return {
@@ -39,17 +53,29 @@ export async function createTenantAgent(params: {
     `INSERT INTO tenant_agents (tenant_id, agent_id, name, config, model_config, tools, skills, created_by)
      VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8)
      RETURNING *`,
-    [params.tenantId, params.agentId, params.name, JSON.stringify(params.config ?? {}), JSON.stringify(params.modelConfig ?? []), JSON.stringify(params.tools ?? { deny: [] }), JSON.stringify(params.skills ?? DEFAULT_DISABLED_BUNDLED_SKILLS), params.createdBy ?? null],
+    [
+      params.tenantId,
+      params.agentId,
+      params.name,
+      JSON.stringify(params.config ?? {}),
+      JSON.stringify(params.modelConfig ?? []),
+      JSON.stringify(params.tools ?? { deny: [] }),
+      JSON.stringify(params.skills ?? DEFAULT_DISABLED_BUNDLED_SKILLS),
+      params.createdBy ?? null,
+    ],
   );
   return rowToAgent(result.rows[0]);
 }
 
-export async function getTenantAgent(tenantId: string, agentId: string): Promise<TenantAgent | null> {
+export async function getTenantAgent(
+  tenantId: string,
+  agentId: string,
+): Promise<TenantAgent | null> {
   if (getDbType() === DB_SQLITE) return sqliteAgent.getTenantAgent(tenantId, agentId);
-  const result = await query(
-    "SELECT * FROM tenant_agents WHERE tenant_id = $1 AND agent_id = $2",
-    [tenantId, agentId],
-  );
+  const result = await query("SELECT * FROM tenant_agents WHERE tenant_id = $1 AND agent_id = $2", [
+    tenantId,
+    agentId,
+  ]);
   return result.rows.length > 0 ? rowToAgent(result.rows[0]) : null;
 }
 
@@ -80,7 +106,9 @@ export async function listTenantAgents(
 export async function updateTenantAgent(
   tenantId: string,
   agentId: string,
-  updates: Partial<Pick<TenantAgent, "name" | "config" | "modelConfig" | "tools" | "skills" | "isActive">>,
+  updates: Partial<
+    Pick<TenantAgent, "name" | "config" | "modelConfig" | "tools" | "skills" | "isActive">
+  >,
 ): Promise<TenantAgent | null> {
   if (getDbType() === DB_SQLITE) return sqliteAgent.updateTenantAgent(tenantId, agentId, updates);
   const sets: string[] = [];
@@ -125,10 +153,10 @@ export async function updateTenantAgent(
 
 export async function deleteTenantAgent(tenantId: string, agentId: string): Promise<boolean> {
   if (getDbType() === DB_SQLITE) return sqliteAgent.deleteTenantAgent(tenantId, agentId);
-  const result = await query(
-    "DELETE FROM tenant_agents WHERE tenant_id = $1 AND agent_id = $2",
-    [tenantId, agentId],
-  );
+  const result = await query("DELETE FROM tenant_agents WHERE tenant_id = $1 AND agent_id = $2", [
+    tenantId,
+    agentId,
+  ]);
   return (result.rowCount ?? 0) > 0;
 }
 
@@ -169,12 +197,11 @@ export function toConfigAgentsList(
     const primary = defaultEntry ? toModelRef(defaultEntry) : undefined;
     const fallbacks = fallbackEntries.map(toModelRef);
 
-    const modelField =
-      primary
-        ? fallbacks.length > 0
-          ? { primary, fallbacks }
-          : primary          // single model — use plain string form
-        : undefined;
+    const modelField = primary
+      ? fallbacks.length > 0
+        ? { primary, fallbacks }
+        : primary // single model — use plain string form
+      : undefined;
 
     const toolsDeny = a.tools?.deny ?? [];
 
@@ -188,7 +215,9 @@ export function toConfigAgentsList(
       name: a.name,
       ...a.config,
       ...(modelField !== undefined ? { model: modelField } : {}),
-      ...(toolsDeny.length > 0 ? { tools: { ...((a.config?.tools as Record<string, unknown>) ?? {}), deny: toolsDeny } } : {}),
+      ...(toolsDeny.length > 0
+        ? { tools: { ...((a.config?.tools as Record<string, unknown>) ?? {}), deny: toolsDeny } }
+        : {}),
     };
   });
 }
