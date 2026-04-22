@@ -265,6 +265,8 @@ export const zh_CN: TranslationMap = {
     apiAddressHint: "模型服务的 API 地址，使用官方服务可留空，使用代理或私有部署需填写。",
     modelId: "模型名称",
     modelHint: "填写你想使用的具体模型 ID，可以稍后修改。",
+    tierLabel: "档位",
+    tierHint: "模型按档位分组；不同场景可自由切换档位，默认走 STANDARD。稍后可在模型管理页调整。",
     agentTitle: "创建 Agent",
     defaultAgentName: "EnClaws AI 助手",
     doneTitle: "配置完成！",

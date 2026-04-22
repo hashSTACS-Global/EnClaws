@@ -306,6 +306,8 @@ export const pt_BR: TranslationMap = {
     apiAddressHint: "Endpoint da API do serviço de modelo. Deixe vazio para serviço oficial, preencha para proxy ou implantação privada.",
     modelId: "Nome do Modelo",
     modelHint: "Insira o ID específico do modelo que deseja usar. Você pode alterar depois.",
+    tierLabel: "Categoria",
+    tierHint: "Modelos sao agrupados por categoria; os chamadores podem trocar por cena. Padrao: STANDARD. Ajuste depois na pagina Modelos.",
     agentTitle: "Criar Agente",
     defaultAgentName: "Assistente EnClaws AI",
     doneTitle: "Configuração Concluída!",

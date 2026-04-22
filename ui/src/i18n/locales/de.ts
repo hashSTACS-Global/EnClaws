@@ -307,6 +307,8 @@ export const de: TranslationMap = {
     apiAddressHint: "API-Endpunkt für den Modelldienst. Für offiziellen Dienst leer lassen, für Proxy oder private Bereitstellung ausfüllen.",
     modelId: "Modellname",
     modelHint: "Geben Sie die gewünschte Modell-ID ein. Sie können dies später ändern.",
+    tierLabel: "Stufe",
+    tierHint: "Modelle sind nach Stufe gruppiert; Aufrufer koennen Stufen je Szenario wechseln. Standard: STANDARD. Spaeter auf der Modelle-Seite anpassen.",
     agentTitle: "Agent erstellen",
     defaultAgentName: "EnClaws AI Assistent",
     doneTitle: "Einrichtung abgeschlossen!",

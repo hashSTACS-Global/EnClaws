@@ -10,7 +10,7 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, i18n, I18nController } from "../../i18n/index.ts";
 import { tenantRpc, quotaErrorKey } from "./tenant/rpc.ts";
-import { PROVIDER_TYPES } from "../../constants/providers.ts";
+import { PROVIDER_TYPES, MODEL_TIERS, TIER_LABELS, type ModelTierValue } from "../../constants/providers.ts";
 import { CHANNEL_TYPES, CHANNEL_ICON_MAP } from "../../constants/channels.ts";
 import { caretFix } from "../shared-styles.ts";
 
@@ -193,6 +193,23 @@ export class OnboardingWizard extends LitElement {
       color: var(--text-muted, #525252);
       margin-top: 0.25rem;
     }
+
+    /* ── Tier picker (v4) ── */
+    .tier-pill-row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .tier-pill {
+      padding: 0.35rem 0.9rem;
+      border-radius: 20px;
+      border: 1px solid var(--border, #e5e7eb);
+      background: transparent;
+      color: var(--text-muted, #a3a3a3);
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    .tier-pill:hover { background: var(--bg, #f5f5f5); }
+    .tier-pill.selected.tier-pro { color: var(--accent); border-color: var(--accent); }
+    .tier-pill.selected.tier-standard { color: var(--ok); border-color: var(--ok); }
+    .tier-pill.selected.tier-lite { color: var(--warn); border-color: var(--warn); }
 
     /* ── Feishu mode toggle ── */
     .feishu-mode-bar {
@@ -391,6 +408,9 @@ export class OnboardingWizard extends LitElement {
   @state() private selectedSharedModelId = ""; // tenant_models.id
   @state() private selectedSharedSubModelId = ""; // model definition id within shared provider
   @state() private selectedProvider = "";
+  // v4: admin picks which tier this model belongs to; defaults to standard so
+  // the onboarded agent routes on STANDARD unless changed.
+  @state() private selectedTier: ModelTierValue = "standard";
   @state() private modelApiKey = "";
   @state() private modelBaseUrl = "";
   @state() private modelName = "";
@@ -662,7 +682,9 @@ export class OnboardingWizard extends LitElement {
           apiProtocol: provider!.protocol,
           apiKeyEncrypted: this.modelApiKey,
           baseUrl: this.modelBaseUrl || undefined,
-          models: this.modelName ? [{ id: this.modelName, name: this.modelName }] : [],
+          models: this.modelName
+            ? [{ id: this.modelName, name: this.modelName, tier: this.selectedTier }]
+            : [],
         },
         sharedModel: isShared ? {
           providerId: this.selectedSharedModelId,
@@ -960,6 +982,19 @@ export class OnboardingWizard extends LitElement {
         </div>
 
         ${this.selectedProvider ? html`
+          <div class="form-group">
+            <label>${t("onboarding.tierLabel")} <span class="required">*</span></label>
+            <div class="tier-pill-row">
+              ${MODEL_TIERS.map((tier) => html`
+                <button type="button"
+                  class="tier-pill tier-${tier} ${this.selectedTier === tier ? 'selected' : ''}"
+                  @click=${() => { this.selectedTier = tier; }}>
+                  ${TIER_LABELS[tier]}
+                </button>
+              `)}
+            </div>
+            <div class="form-hint">${t("onboarding.tierHint")}</div>
+          </div>
           <div class="form-group">
             <label>API ${t("onboarding.apiAddress")} <span class="required">*</span></label>
             <input type="text" .value=${this.modelBaseUrl}
