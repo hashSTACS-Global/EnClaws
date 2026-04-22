@@ -13,6 +13,7 @@ import {
   API_PROTOCOLS as SHARED_PROTOCOLS,
   MODEL_TIERS,
   TIER_LABELS,
+  PROVIDERS_BY_TIER,
   type ModelTierValue,
 } from "../../../constants/providers.ts";
 import { t } from "../../../i18n/index.ts";
@@ -24,6 +25,12 @@ import {
   groupProvidersByTier,
   type TierBucket,
 } from "./tenant-models-tier-view.ts";
+import {
+  suggestDraftFields,
+  validateAddDraft,
+  resolveAddTarget,
+  type AddModelDraft,
+} from "./tenant-models-add-form.ts";
 
 interface ModelDefinition {
   id: string;
@@ -54,6 +61,20 @@ interface TenantModelConfig {
 
 const PROVIDER_TYPES = SHARED_PROVIDERS;
 const API_PROTOCOLS = SHARED_PROTOCOLS;
+
+function emptyAddModelDraft(): AddModelDraft {
+  return {
+    tier: "",
+    provider: "",
+    providerName: "",
+    baseUrl: "",
+    protocol: "",
+    authMode: "api-key",
+    apiKey: "",
+    modelId: "",
+    modelName: "",
+  };
+}
 
 @customElement("tenant-models-view")
 export class TenantModelsView extends LitElement {
@@ -186,6 +207,65 @@ export class TenantModelsView extends LitElement {
       border-radius: var(--radius-md);
       margin-bottom: 0.5rem;
     }
+    /* Add Model modal (tier-cascading) */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      width: min(560px, 92vw);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal-box h3 { margin: 0 0 1rem; font-size: 1rem; font-weight: 600; }
+    .modal-box .form-field { margin-bottom: 0.8rem; }
+    .modal-box .form-field label {
+      display: block; font-size: 0.78rem; color: var(--text-2);
+      margin-bottom: 0.3rem;
+    }
+    .modal-box .form-field input,
+    .modal-box .form-field select {
+      width: 100%;
+      padding: 0.45rem 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg); color: var(--text);
+      font-size: 0.85rem;
+    }
+    .modal-actions {
+      display: flex; justify-content: flex-end; gap: 0.5rem;
+      margin-top: 1.2rem;
+    }
+    .tier-pills { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .tier-pill {
+      padding: 0.4rem 1rem;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-2);
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    .tier-pill:hover { background: var(--bg); }
+    .tier-pill.selected.tier-pro { color: var(--accent); border-color: var(--accent); }
+    .tier-pill.selected.tier-standard { color: var(--ok); border-color: var(--ok); }
+    .tier-pill.selected.tier-lite { color: var(--warn); border-color: var(--warn); }
+    .modal-hint { font-size: 0.78rem; color: var(--muted); padding: 0.3rem 0 0.5rem; }
+    .modal-errors {
+      font-size: 0.78rem; color: var(--danger);
+      background: var(--danger-subtle);
+      padding: 0.5rem 0.7rem;
+      border-radius: var(--radius-md);
+      margin-top: 0.5rem;
+    }
+    .modal-errors > div { margin: 0.15rem 0; }
   `];
 
   private i18nController = new I18nController(this);
@@ -219,6 +299,12 @@ export class TenantModelsView extends LitElement {
   // View switcher: "provider" (default, Provider-container cards) vs
   // "tier" (flat list grouped by model tier)
   @state() private viewMode: "provider" | "tier" = "provider";
+
+  // Tier-cascading Add Model modal state (separate from the legacy
+  // Provider-level showForm flow above).
+  @state() private showAddModel = false;
+  @state() private addModelDraft: AddModelDraft = emptyAddModelDraft();
+  @state() private addModelErrors: string[] = [];
 
   // Cached agent list for model-in-use checks
   private cachedAgents: Array<{ name: string; agentId: string; modelConfig: Array<{ providerId: string; modelId: string }> }> = [];
@@ -274,6 +360,75 @@ export class TenantModelsView extends LitElement {
       this.showError(err instanceof Error ? err.message : "models.loadFailed");
     } finally {
       this.loading = false;
+    }
+  }
+
+  // ─── Tier-cascading Add Model modal ───────────────────────────────────
+
+  private openAddModel() {
+    this.addModelDraft = emptyAddModelDraft();
+    this.addModelErrors = [];
+    this.showAddModel = true;
+  }
+
+  private closeAddModel() {
+    this.showAddModel = false;
+    this.addModelErrors = [];
+  }
+
+  private onAddTierChange(tier: ModelTierValue) {
+    this.addModelDraft = {
+      ...emptyAddModelDraft(),
+      tier,
+      authMode: this.addModelDraft.authMode,
+    };
+    this.addModelErrors = [];
+  }
+
+  private onAddProviderChange(provider: string) {
+    const s = suggestDraftFields(this.addModelDraft.tier, provider);
+    this.addModelDraft = {
+      ...this.addModelDraft,
+      provider,
+      baseUrl: s.baseUrl,
+      protocol: s.protocol,
+      modelId: s.modelId,
+      modelName: s.modelId,
+      providerName: this.addModelDraft.providerName || s.providerNameSuggestion,
+    };
+    this.addModelErrors = [];
+  }
+
+  private patchDraft(patch: Partial<AddModelDraft>) {
+    this.addModelDraft = { ...this.addModelDraft, ...patch };
+    if (this.addModelErrors.length > 0) this.addModelErrors = [];
+  }
+
+  private async submitAddModel() {
+    const errors = validateAddDraft(this.addModelDraft);
+    if (errors.length > 0) {
+      this.addModelErrors = errors;
+      return;
+    }
+    this.saving = true;
+    try {
+      const target = resolveAddTarget(this.addModelDraft, this.configs);
+      if (target.mode === "append") {
+        await this.rpc("tenant.models.update", {
+          id: target.providerId,
+          models: target.nextModels,
+          ...(target.apiKey ? { apiKey: target.apiKey } : {}),
+        });
+      } else {
+        await this.rpc("tenant.models.create", { ...target.payload });
+      }
+      this.showSuccess("models.saved");
+      await this.loadConfigs();
+      this.closeAddModel();
+    } catch (err) {
+      this.showError(err instanceof Error ? err.message : "models.saveFailed");
+    } finally {
+      this.saving = false;
     }
   }
 
@@ -467,7 +622,8 @@ export class TenantModelsView extends LitElement {
             </button>
           </div>
           <button class="btn btn-outline" @click=${() => this.loadConfigs()}>${t("models.refresh")}</button>
-          <button class="btn btn-primary" @click=${() => this.showForm ? (this.showForm = false) : this.startCreate()}>
+          <button class="btn btn-primary" @click=${() => this.openAddModel()}>${t("models.addModel")}</button>
+          <button class="btn btn-outline" @click=${() => this.showForm ? (this.showForm = false) : this.startCreate()}>
             ${this.showForm ? t("models.cancel") : t("models.addProvider")}
           </button>
         </div>
@@ -476,6 +632,7 @@ export class TenantModelsView extends LitElement {
       ${this.errorKey ? html`<div class="error-msg">${this.tr(this.errorKey)}</div>` : nothing}
       ${this.successKey ? html`<div class="success-msg">${this.tr(this.successKey)}</div>` : nothing}
 
+      ${this.showAddModel ? this.renderAddModelModal() : nothing}
       ${this.showForm ? this.renderForm() : nothing}
 
       ${this.loading
@@ -576,6 +733,122 @@ export class TenantModelsView extends LitElement {
             <button class="btn btn-danger btn-sm" @click=${() => this.handleDelete(config)}>${t("models.delete")}</button>
           </div>
         `}
+      </div>
+    `;
+  }
+
+  private renderAddModelModal() {
+    const d = this.addModelDraft;
+    const providerOptions = d.tier
+      ? PROVIDERS_BY_TIER[d.tier]
+          .map((pv) => PROVIDER_TYPES.find((pt) => pt.value === pv))
+          .filter((pt): pt is (typeof PROVIDER_TYPES)[number] => pt !== undefined)
+      : [];
+    const needsApiKey = d.authMode === "api-key" || d.authMode === "token";
+    return html`
+      <div
+        class="modal-overlay"
+        @click=${(e: MouseEvent) => {
+          if (e.target === e.currentTarget) this.closeAddModel();
+        }}>
+        <div class="modal-box">
+          <h3>${t("models.addForm.title")}</h3>
+
+          <div class="form-field">
+            <label>${t("models.addForm.tierLabel")}</label>
+            <div class="tier-pills">
+              ${MODEL_TIERS.map((tier) => html`
+                <button
+                  type="button"
+                  class="tier-pill tier-${tier} ${d.tier === tier ? "selected" : ""}"
+                  @click=${() => this.onAddTierChange(tier)}>
+                  ${TIER_LABELS[tier]}
+                </button>
+              `)}
+            </div>
+          </div>
+
+          ${d.tier ? html`
+            <div class="form-field">
+              <label>${t("models.addForm.providerLabel")}</label>
+              <select
+                .value=${d.provider}
+                @change=${(e: Event) => this.onAddProviderChange((e.target as HTMLSelectElement).value)}>
+                <option value="">—</option>
+                ${providerOptions.map((opt) => html`
+                  <option value=${opt.value} ?selected=${d.provider === opt.value}>${opt.label}</option>
+                `)}
+              </select>
+            </div>
+          ` : html`<div class="modal-hint">${t("models.addForm.pickTierFirst")}</div>`}
+
+          ${d.provider ? html`
+            <div class="form-field">
+              <label>${t("models.addForm.providerNameLabel")}</label>
+              <input
+                type="text"
+                .value=${d.providerName}
+                @input=${(e: Event) => this.patchDraft({ providerName: (e.target as HTMLInputElement).value })} />
+            </div>
+            <div class="form-field">
+              <label>${t("models.addForm.baseUrlLabel")}</label>
+              <input
+                type="text"
+                .value=${d.baseUrl}
+                @input=${(e: Event) => this.patchDraft({ baseUrl: (e.target as HTMLInputElement).value })} />
+            </div>
+            <div class="form-field">
+              <label>${t("models.addForm.modelIdLabel")}</label>
+              <input
+                type="text"
+                style="font-family:monospace"
+                .value=${d.modelId}
+                @input=${(e: Event) => {
+                  const v = (e.target as HTMLInputElement).value;
+                  this.patchDraft({ modelId: v, modelName: d.modelName || v });
+                }} />
+            </div>
+            <div class="form-field">
+              <label>${t("models.addForm.authModeLabel")}</label>
+              <select
+                .value=${d.authMode}
+                @change=${(e: Event) =>
+                  this.patchDraft({ authMode: (e.target as HTMLSelectElement).value as AddModelDraft["authMode"] })}>
+                <option value="api-key" ?selected=${d.authMode === "api-key"}>API Key</option>
+                <option value="token" ?selected=${d.authMode === "token"}>Token</option>
+                <option value="none" ?selected=${d.authMode === "none"}>${t("models.authNone")}</option>
+              </select>
+            </div>
+            ${needsApiKey ? html`
+              <div class="form-field">
+                <label>${t("models.addForm.apiKeyLabel")}</label>
+                <input
+                  type="password"
+                  .value=${d.apiKey}
+                  @input=${(e: Event) => this.patchDraft({ apiKey: (e.target as HTMLInputElement).value })} />
+              </div>
+            ` : nothing}
+          ` : nothing}
+
+          ${this.addModelErrors.length > 0 ? html`
+            <div class="modal-errors">
+              ${this.addModelErrors.map((k) => html`<div>${t(k)}</div>`)}
+            </div>
+          ` : nothing}
+
+          <div class="modal-actions">
+            <button class="btn btn-outline" type="button" @click=${() => this.closeAddModel()}>
+              ${t("models.addForm.cancel")}
+            </button>
+            <button
+              class="btn btn-primary"
+              type="button"
+              ?disabled=${this.saving}
+              @click=${() => this.submitAddModel()}>
+              ${this.saving ? t("models.saving") : t("models.addForm.submit")}
+            </button>
+          </div>
+        </div>
       </div>
     `;
   }
