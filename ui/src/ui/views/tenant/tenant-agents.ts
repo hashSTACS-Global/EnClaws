@@ -40,6 +40,14 @@ import {
   TOOL_DESC_KEY,
 } from "../tool-group-defs.ts";
 import { SKILL_LABEL_KEY, SKILL_DESC_KEY } from "../skill-defs.ts";
+import { TIER_LABELS, type ModelTierValue } from "../../../constants/providers.ts";
+import {
+  tenantTierGroups,
+  deriveEnabledTiers,
+  pickTierDefault,
+  projectModelConfig,
+  TIER_DISPLAY_ORDER,
+} from "./tenant-agents-tier.ts";
 
 
 interface ModelConfigEntry {
@@ -59,7 +67,9 @@ interface TenantModelOption {
   id: string;
   providerType: string;
   providerName: string;
-  models: Array<{ id: string; name: string }>;
+  isActive: boolean;
+  visibility?: string;
+  models: Array<{ id: string; name: string; tier?: ModelTierValue }>;
 }
 
 interface TenantAgent {
@@ -388,6 +398,43 @@ export class TenantAgentsView extends LitElement {
     .divider span { padding: 0 0.75rem; }
 
     /* ── Model table ── */
+    /* Tier-checkbox picker (v4) */
+    .tier-picker { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.3rem; }
+    .tier-option {
+      display: flex; gap: 0.6rem; align-items: flex-start;
+      padding: 0.5rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      background: var(--card);
+    }
+    .tier-option.selected { border-color: var(--accent); background: var(--bg); }
+    .tier-option > input[type="checkbox"] { margin-top: 0.15rem; }
+    .tier-option-body { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
+    .tier-option-head { display: flex; align-items: center; gap: 0.5rem; }
+    .tier-option-count { font-size: 0.72rem; color: var(--muted, #a3a3a3); }
+    .tier-option-meta { font-size: 0.78rem; color: var(--text-2, #d4d4d4); }
+    .tier-option-meta code {
+      font-family: monospace;
+      background: var(--bg);
+      padding: 0.05rem 0.35rem;
+      border-radius: 3px;
+      margin: 0 0.2rem;
+    }
+    .tier-option-meta.tier-warn { color: var(--warn); }
+    .tier-badge {
+      display: inline-block;
+      padding: 0.05rem 0.45rem;
+      border-radius: 3px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      border: 1px solid var(--border);
+    }
+    .tier-badge.tier-pro { color: var(--accent); border-color: var(--accent); }
+    .tier-badge.tier-standard { color: var(--ok); border-color: var(--ok); }
+    .tier-badge.tier-lite { color: var(--warn); border-color: var(--warn); }
+    .tier-legacy-mark { font-size: 0.7rem; color: var(--muted); }
     .model-select-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 0.4rem; }
     .model-select-table th, .model-select-table td {
       text-align: left; padding: 0.35rem 0.45rem;
@@ -601,6 +648,9 @@ export class TenantAgentsView extends LitElement {
   @state() private formName = "";
   @state() private formSystemPrompt = DEFAULT_SYSTEM_PROMPT;
   @state() private formModelConfig: ModelConfigEntry[] = [];
+  // v4: admin picks *tiers* instead of individual models. formModelConfig is
+  // projected from this on save via projectModelConfig().
+  @state() private formEnabledTiers: ModelTierValue[] = [];
   @state() private formToolsDeny: string[] = [];
   @state() private formToolsExpanded = false;
   @state() private formTimeoutMinutes: number | null = null;
@@ -908,6 +958,7 @@ export class TenantAgentsView extends LitElement {
     this.formName = "";
     this.formSystemPrompt = DEFAULT_SYSTEM_PROMPT;
     this.formModelConfig = [];
+    this.formEnabledTiers = [];
     this.formToolsDeny = [];
     this.formToolsExpanded = false;
     this.formTimeoutMinutes = null;
@@ -921,6 +972,7 @@ export class TenantAgentsView extends LitElement {
     this.formName = (agent.config?.displayName as string) ?? agent.name ?? "";
     this.formSystemPrompt = (agent.config?.systemPrompt as string) || DEFAULT_SYSTEM_PROMPT;
     this.formModelConfig = [...(agent.modelConfig ?? [])];
+    this.formEnabledTiers = deriveEnabledTiers(agent.modelConfig, this.availableModels);
     this.formToolsDeny = Array.isArray((agent as any).tools?.deny) && (agent as any).tools.deny.length > 0
       ? [...(agent as any).tools.deny]
       : Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
@@ -959,6 +1011,14 @@ export class TenantAgentsView extends LitElement {
       ...e,
       isDefault: e.providerId === providerId && e.modelId === modelId,
     }));
+  }
+
+  private toggleTier(tier: ModelTierValue, enabled: boolean) {
+    const current = new Set(this.formEnabledTiers);
+    if (enabled) current.add(tier);
+    else current.delete(tier);
+    // Preserve canonical display order (pro → standard → lite)
+    this.formEnabledTiers = TIER_DISPLAY_ORDER.filter((t) => current.has(t));
   }
 
   private toggleTool(toolId: string, enabled: boolean) {
@@ -1034,7 +1094,10 @@ export class TenantAgentsView extends LitElement {
     e.preventDefault();
     if (!this.formName) { this.showError("tenantAgents.nameRequired"); return; }
     if (!this.formAgentId) { this.showError("tenantAgents.agentIdRequired"); return; }
-    if (this.formModelConfig.length === 0) { this.showError("tenantAgents.modelRequired"); return; }
+    if (this.formEnabledTiers.length === 0) {
+      this.showError("tenantAgents.tierNoneEnabled");
+      return;
+    }
 
     this.saving = true;
     this.errorKey = "";
@@ -1050,13 +1113,24 @@ export class TenantAgentsView extends LitElement {
     const deny = this.formToolsDeny.filter(Boolean);
     if (deny.length > 0) {config.tools = { deny };}
 
+    // v4: project the enabled-tier set into the flat modelConfig array.
+    // Preserves any prior per-tier default when editing.
+    const priorConfig = this.editingAgentId
+      ? this.agents.find((a) => a.agentId === this.editingAgentId)?.modelConfig
+      : undefined;
+    const projectedModelConfig = projectModelConfig(
+      this.formEnabledTiers,
+      this.availableModels,
+      priorConfig,
+    );
+
     try {
       if (this.editingAgentId) {
         await this.rpc("tenant.agents.update", {
           agentId: this.editingAgentId,
           name: this.formName,
           config,
-          modelConfig: this.formModelConfig,
+          modelConfig: projectedModelConfig,
         });
         this.showSuccess("tenantAgents.agentUpdated");
       } else {
@@ -1064,7 +1138,7 @@ export class TenantAgentsView extends LitElement {
           agentId: this.formAgentId,
           name: this.formName,
           config,
-          modelConfig: this.formModelConfig,
+          modelConfig: projectedModelConfig,
           locale: i18n.getLocale(),
         });
         this.selectedAgentId = this.formAgentId;
@@ -2355,51 +2429,56 @@ export class TenantAgentsView extends LitElement {
           <div class="divider"><span>${t("tenantAgents.modelBinding")}</span></div>
 
           <div class="form-field" style="margin-bottom:0.75rem">
-            <label style="display:flex;align-items:center;gap:0.4rem">${t("tenantAgents.modelBinding")} <span class="help-icon" title="${t("tenantAgents.fallbackExplain")}">?</span></label>
-            ${this.flatModels.length === 0 ? html`
-              <div class="form-hint" style="padding:0.3rem 0">${t("tenantAgents.noModelsAvailable").split(t("tenantAgents.addModelLink"))[0]}<a href=${this.modelManagePath} style="color:var(--accent,#3b82f6);text-decoration:underline;cursor:pointer">${t("tenantAgents.addModelLink")}</a></div>
-            ` : html`
-              <table class="model-select-table">
-                <thead>
-                  <tr>
-                    <th style="width:2rem"></th>
-                    <th>${t("tenantAgents.modelId")}</th>
-                    <th>${t("tenantAgents.modelName")}</th>
-                    <th>${t("tenantAgents.provider")}</th>
-                    <th style="width:4.5rem;text-align:center">${t("tenantAgents.default")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${this.flatModels.map((m) => {
-                    const selected = this.isModelSelected(m.providerId, m.modelId);
-                    const isDef = this.isModelDefault(m.providerId, m.modelId);
+            <label style="display:flex;align-items:center;gap:0.4rem">${t("tenantAgents.enabledTiers")} <span class="help-icon" title="${t("tenantAgents.fallbackExplain")}">?</span></label>
+            ${(() => {
+              const groups = tenantTierGroups(this.availableModels);
+              if (groups.length === 0) {
+                return html`
+                  <div class="form-hint" style="padding:0.3rem 0">${t("tenantAgents.noModelsAvailable").split(t("tenantAgents.addModelLink"))[0]}<a href=${this.modelManagePath} style="color:var(--accent,#3b82f6);text-decoration:underline;cursor:pointer">${t("tenantAgents.addModelLink")}</a></div>
+                `;
+              }
+              const enabled = new Set(this.formEnabledTiers);
+              return html`
+                <div class="tier-picker">
+                  ${groups.map((g) => {
+                    const isEnabled = enabled.has(g.tier);
+                    const currentDefault = pickTierDefault(g.tier, this.formModelConfig, this.availableModels);
+                    const defaultModel = currentDefault
+                      ? g.models.find((m) => m.modelId === currentDefault.modelId && m.providerId === currentDefault.providerId)
+                      : g.models[0];
+                    const backups = g.models.filter((m) =>
+                      !defaultModel || m.modelId !== defaultModel.modelId || m.providerId !== defaultModel.providerId,
+                    );
                     return html`
-                      <tr>
-                        <td><input type="checkbox" .checked=${selected}
-                          @change=${() => this.toggleModel(m.providerId, m.modelId)} /></td>
-                        <td>${m.modelId}</td>
-                        <td>${m.modelName}</td>
-                        <td style="color:var(--text-secondary,#a3a3a3)">${m.providerName}</td>
-                        <td style="text-align:center">
-                          ${selected ? html`<input type="radio" name="defaultModel" .checked=${isDef}
-                            @change=${() => this.setDefaultModel(m.providerId, m.modelId)} />` : nothing}
-                        </td>
-                      </tr>
+                      <label class="tier-option ${isEnabled ? "selected" : ""}">
+                        <input type="checkbox"
+                          .checked=${isEnabled}
+                          @change=${(e: Event) => this.toggleTier(g.tier, (e.target as HTMLInputElement).checked)} />
+                        <div class="tier-option-body">
+                          <div class="tier-option-head">
+                            <span class="tier-badge tier-${g.tier}">${TIER_LABELS[g.tier]}</span>
+                            <span class="tier-option-count">${t("tenantAgents.tierModelsCount").replace("{count}", String(g.models.length))}</span>
+                          </div>
+                          <div class="tier-option-meta">
+                            ${t("tenantAgents.tierDefaultShort")}<code>${defaultModel?.modelName ?? "-"}</code>${defaultModel?.legacy ? html` <span class="tier-legacy-mark">${t("tenantAgents.tierLegacyMark")}</span>` : nothing}
+                          </div>
+                          ${backups.length > 0 ? html`
+                            <div class="tier-option-meta">
+                              ${t("tenantAgents.tierBackupShort")}${backups.map((b) => html`<code>${b.modelName}</code> `)}
+                            </div>
+                          ` : html`
+                            <div class="tier-option-meta tier-warn">${t("tenantAgents.tierNoBackup")}</div>
+                          `}
+                        </div>
+                      </label>
                     `;
                   })}
-                </tbody>
-              </table>
-              ${this.formModelConfig.length > 0 ? html`
-                <div class="form-hint">
-                  ${t("tenantAgents.selectedCount").replace("{count}", String(this.formModelConfig.length)).replace("{default}", (() => {
-                    const d = this.formModelConfig.find((e) => e.isDefault);
-                    if (!d) {return t("tenantAgents.notSet");}
-                    const fm = this.flatModels.find((m) => m.providerId === d.providerId && m.modelId === d.modelId);
-                    return fm ? `${fm.modelName} (${fm.providerName})` : d.modelId;
-                  })())}
                 </div>
-              ` : nothing}
-            `}
+                <div class="form-hint" style="margin-top:0.4rem">
+                  ${t("tenantAgents.tierPickerHint")}
+                </div>
+              `;
+            })()}
           </div>
 
           <div class="divider"><span>${t("tenantAgents.toolAccess")}</span></div>
