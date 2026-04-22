@@ -17,6 +17,7 @@
  */
 
 import type { ModelConfigEntry, ModelTier, TenantModel } from "../db/types.js";
+import { coerceToFailoverError } from "../agents/failover-error.js";
 
 export type TierChainErrorCode = "TIER_NOT_CONFIGURED" | "NO_DEFAULT";
 
@@ -86,4 +87,41 @@ export function resolveTierChain(
   // Array.prototype.sort is stable in Node 22+ / V8, so equal-key entries
   // keep their input order.
   return chain.slice().sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
+}
+
+/**
+ * Decide whether a failed LLM call within a tier-chain attempt should
+ * trigger a fall-through to the next entry.
+ *
+ * Retriable (move to next model):
+ *   - 5xx, 429, network timeouts, "timeout" reason
+ * Not retriable (bail immediately — user error / config error):
+ *   - 400 format, 401/403 auth, 402 billing, content_policy, unknown
+ *
+ * Returns { retriable, status }: the status is the classified HTTP code
+ * (useful for the non-retriable path to surface back to the caller).
+ */
+export function isRetriableFailover(err: unknown): {
+  retriable: boolean;
+  status: number | undefined;
+} {
+  const rawStatus =
+    typeof (err as { status?: unknown })?.status === "number"
+      ? ((err as { status: number }).status)
+      : undefined;
+  const fe = coerceToFailoverError(err);
+  const status = fe?.status ?? rawStatus;
+
+  // 5xx is always retriable — we want to try the next model regardless of
+  // whether coerceToFailoverError had a mapped reason (500 maps to null;
+  // 502/503/504 map to 'timeout'). Keep this check first.
+  if (typeof status === "number" && status >= 500 && status <= 599) {
+    return { retriable: true, status };
+  }
+
+  if (fe && (fe.reason === "rate_limit" || fe.reason === "timeout")) {
+    return { retriable: true, status };
+  }
+
+  return { retriable: false, status };
 }

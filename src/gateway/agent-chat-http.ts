@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createInteractionTrace } from "../db/models/interaction-trace.js";
 import { getTenantAgent } from "../db/models/tenant-agent.js";
-import { getTenantModel } from "../db/models/tenant-model.js";
-import { isModelTier } from "../db/types.js";
+import { listTenantModels } from "../db/models/tenant-model.js";
+import { isModelTier, type ModelTier } from "../db/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveGatewayToken } from "./gateway-token-cache.js";
 import { readJsonBody } from "./hooks.js";
 import { sendJson, sendMethodNotAllowed } from "./http-common.js";
 import { getHeader } from "./http-utils.js";
+import { resolveTierChain, TierChainError, isRetriableFailover } from "./tier-chain.js";
 
 const log = createSubsystemLogger("agent-chat-api");
 
@@ -60,8 +61,8 @@ export async function handleAgentChatHttpRequest(
   }
 
   // --- 2. Resolve token to sessionKey entry ---
-  const entry = resolveGatewayToken(token);
-  if (!entry) {
+  const tokenEntry = resolveGatewayToken(token);
+  if (!tokenEntry) {
     sendError(res, 401, "Invalid or expired token", "unauthorized");
     return true;
   }
@@ -72,15 +73,15 @@ export async function handleAgentChatHttpRequest(
     sendError(res, 400, "Missing required header: x-enclaws-tenant-id");
     return true;
   }
-  if (headerTenantId !== entry.tenantId) {
+  if (headerTenantId !== tokenEntry.tenantId) {
     sendError(res, 403, "Tenant mismatch between token and header", "forbidden");
     return true;
   }
 
-  const tenantId = entry.tenantId;
-  const agentId = entry.agentSlug;
-  const channel = entry.channel;
-  const userUnionId = entry.userUnionId;
+  const tenantId = tokenEntry.tenantId;
+  const agentId = tokenEntry.agentSlug;
+  const channel = tokenEntry.channel;
+  const userUnionId = tokenEntry.userUnionId;
 
   // --- 4. Parse body ---
   const bodyResult = await readJsonBody(req, MAX_BODY_BYTES);
@@ -124,82 +125,93 @@ export async function handleAgentChatHttpRequest(
     return true;
   }
 
-  // --- 7. Resolve default model (v1: ignore model_tier, use agent default) ---
-  const defaultModelEntry = agent.modelConfig?.find((m) => m.isDefault);
-  if (!defaultModelEntry) {
-    sendError(res, 404, "No default model configured for this agent", "not_found");
-    return true;
-  }
-
-  // --- 8. Load tenant model ---
-  let tenantModel;
+  // --- 7. Resolve tier chain (v4: tier-aware model routing) ---
+  let tenantModels;
   try {
-    tenantModel = await getTenantModel(tenantId, defaultModelEntry.providerId);
+    tenantModels = await listTenantModels(tenantId);
   } catch (err) {
-    log.error(`Failed to query tenant_models: ${String(err)}`);
+    log.error(`Failed to list tenant_models: ${String(err)}`);
     sendError(res, 500, "Internal error querying model config", "api_error");
     return true;
   }
-  if (!tenantModel) {
-    sendError(
-      res,
-      404,
-      `Model provider not found: providerId=${defaultModelEntry.providerId}`,
-      "not_found",
+
+  let chain;
+  try {
+    chain = resolveTierChain(
+      agent.modelConfig ?? [],
+      tenantModels,
+      modelTier as ModelTier | undefined,
     );
-    return true;
+  } catch (err) {
+    if (err instanceof TierChainError) {
+      const status = err.code === "TIER_NOT_CONFIGURED" ? 400 : 404;
+      sendError(res, status, err.message, err.code.toLowerCase());
+      return true;
+    }
+    throw err;
   }
 
-  const baseUrl = tenantModel.baseUrl?.replace(/\/+$/, "") ?? "";
-  const apiKey = tenantModel.apiKeyEncrypted ?? "";
-  const modelId = defaultModelEntry.modelId;
-
-  if (!baseUrl) {
-    sendError(res, 404, "Model provider has no baseUrl configured", "not_found");
-    return true;
-  }
-
-  // --- 9. turnId (no header anymore; always fresh) ---
+  // --- 8. Turn ID (per-request; no header anymore) ---
   const turnId = randomUUID();
   const turnIndex = 0;
-
-  // --- 10. Call LLM ---
   const runId = `agentchat_${randomUUID()}`;
-  const startedAt = Date.now();
-  let llmResponse: Record<string, unknown>;
 
-  try {
-    const llmUrl = `${baseUrl}/chat/completions`;
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (apiKey) {
-      headers["Authorization"] = `Bearer ${apiKey}`;
-    }
-    if (tenantModel.extraHeaders) {
-      Object.assign(headers, tenantModel.extraHeaders);
+  // --- 9. Failover loop: try each entry in chain, skip retriable failures ---
+  let lastError: unknown = null;
+
+  for (const chainEntry of chain) {
+    const tenantModel = tenantModels.find((m) => m.id === chainEntry.providerId);
+    if (!tenantModel) {
+      lastError = new Error(`Model provider not found: providerId=${chainEntry.providerId}`);
+      continue;
     }
 
-    const fetchResponse = await fetch(llmUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: modelId,
-        messages,
-        stream: false,
-      }),
-    });
+    const baseUrl = tenantModel.baseUrl?.replace(/\/+$/, "") ?? "";
+    const apiKey = tenantModel.apiKeyEncrypted ?? "";
+    const modelId = chainEntry.modelId;
 
-    if (!fetchResponse.ok) {
-      const errorText = await fetchResponse.text().catch(() => "unknown error");
-      log.error(`LLM request failed: status=${fetchResponse.status} body=${errorText}`);
-      sendError(res, 502, `LLM request failed: ${fetchResponse.status}`, "api_error");
+    if (!baseUrl) {
+      lastError = new Error(`Model provider has no baseUrl: providerId=${chainEntry.providerId}`);
+      continue;
+    }
 
+    const startedAt = Date.now();
+    try {
+      const llmUrl = `${baseUrl}/chat/completions`;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+      if (tenantModel.extraHeaders) Object.assign(headers, tenantModel.extraHeaders);
+
+      const fetchResponse = await fetch(llmUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ model: modelId, messages, stream: false }),
+      });
+
+      if (!fetchResponse.ok) {
+        const errorText = await fetchResponse.text().catch(() => "unknown error");
+        const httpErr = new Error(
+          `LLM request failed: status=${fetchResponse.status} body=${errorText.slice(0, 500)}`,
+        );
+        (httpErr as Error & { status?: number }).status = fetchResponse.status;
+        throw httpErr;
+      }
+
+      const llmResponse = (await fetchResponse.json()) as Record<string, unknown>;
       const durationMs = Date.now() - startedAt;
+
+      // Success — extract usage, record trace, send response
+      const usage = llmResponse.usage as Record<string, number> | undefined;
+      const choices = llmResponse.choices as Array<Record<string, unknown>> | undefined;
+      const assistantContent = (choices?.[0]?.message as Record<string, unknown>)?.content as
+        | string
+        | undefined;
+      const stopReason = (choices?.[0]?.finish_reason as string) ?? undefined;
+
       void createInteractionTrace({
         tenantId,
         userId: userUnionId,
-        sessionKey: entry.internalSessionKey,
+        sessionKey: tokenEntry.internalSessionKey,
         agentId,
         channel,
         turnId,
@@ -208,86 +220,75 @@ export async function handleAgentChatHttpRequest(
         provider: tenantModel.providerType,
         model: modelId,
         messages,
-        errorMessage: `${fetchResponse.status}: ${errorText.slice(0, 500)}`,
+        response: assistantContent ? [{ type: "text", text: assistantContent }] : null,
+        stopReason,
+        inputTokens: usage?.prompt_tokens ?? 0,
+        outputTokens: usage?.completion_tokens ?? 0,
+        durationMs,
+      }).catch((traceErr) => log.warn(`Failed to record trace: ${String(traceErr)}`));
+
+      sendJson(res, 200, {
+        id: runId,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: modelId,
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: assistantContent ?? "" },
+            finish_reason: stopReason ?? "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: usage?.prompt_tokens ?? 0,
+          completion_tokens: usage?.completion_tokens ?? 0,
+          total_tokens: usage?.total_tokens ?? 0,
+        },
+      });
+
+      return true;
+    } catch (err) {
+      lastError = err;
+      const durationMs = Date.now() - startedAt;
+
+      // Always record the failed attempt so admins see the failover chain
+      void createInteractionTrace({
+        tenantId,
+        userId: userUnionId,
+        sessionKey: tokenEntry.internalSessionKey,
+        agentId,
+        channel,
+        turnId,
+        turnIndex,
+        userInput: messages.find((m) => m.role === "user")?.content,
+        provider: tenantModel.providerType,
+        model: modelId,
+        messages,
+        errorMessage: String(err).slice(0, 500),
         durationMs,
       }).catch((traceErr) => log.warn(`Failed to record error trace: ${String(traceErr)}`));
 
-      return true;
+      const { retriable, status } = isRetriableFailover(err);
+      log.warn(
+        `tier=${modelTier ?? "(inferred)"} model=${modelId} status=${status ?? "n/a"} retriable=${retriable} err=${String(err).slice(0, 200)}`,
+      );
+
+      if (!retriable) {
+        // Non-retriable (4xx non-429, auth, billing, content-policy) —
+        // surface to caller immediately; don't burn the rest of the chain.
+        sendError(res, status ?? 502, `LLM request failed: ${String(err).slice(0, 500)}`, "api_error");
+        return true;
+      }
+      // Retriable — fall through to next entry in chain
     }
-
-    llmResponse = (await fetchResponse.json()) as Record<string, unknown>;
-  } catch (err) {
-    const durationMs = Date.now() - startedAt;
-    log.error(`LLM request error: ${String(err)}`);
-    sendError(res, 502, `LLM request failed: ${String(err)}`, "api_error");
-
-    void createInteractionTrace({
-      tenantId,
-      userId: userUnionId,
-      sessionKey: entry.internalSessionKey,
-      agentId,
-      channel,
-      turnId,
-      turnIndex,
-      userInput: messages.find((m) => m.role === "user")?.content,
-      provider: tenantModel.providerType,
-      model: modelId,
-      messages,
-      errorMessage: String(err).slice(0, 500),
-      durationMs,
-    }).catch((traceErr) => log.warn(`Failed to record error trace: ${String(traceErr)}`));
-
-    return true;
   }
 
-  const durationMs = Date.now() - startedAt;
-
-  // --- 11. Extract usage and record trace ---
-  const usage = llmResponse.usage as Record<string, number> | undefined;
-  const choices = llmResponse.choices as Array<Record<string, unknown>> | undefined;
-  const assistantContent = (choices?.[0]?.message as Record<string, unknown>)?.content as
-    | string
-    | undefined;
-  const stopReason = (choices?.[0]?.finish_reason as string) ?? undefined;
-
-  void createInteractionTrace({
-    tenantId,
-    userId: userUnionId,
-    sessionKey: entry.internalSessionKey,
-    agentId,
-    channel,
-    turnId,
-    turnIndex,
-    userInput: messages.find((m) => m.role === "user")?.content,
-    provider: tenantModel.providerType,
-    model: modelId,
-    messages,
-    response: assistantContent ? [{ type: "text", text: assistantContent }] : null,
-    stopReason,
-    inputTokens: usage?.prompt_tokens ?? 0,
-    outputTokens: usage?.completion_tokens ?? 0,
-    durationMs,
-  }).catch((traceErr) => log.warn(`Failed to record trace: ${String(traceErr)}`));
-
-  // --- 12. Return response ---
-  sendJson(res, 200, {
-    id: runId,
-    object: "chat.completion",
-    created: Math.floor(Date.now() / 1000),
-    model: modelId,
-    choices: [
-      {
-        index: 0,
-        message: { role: "assistant", content: assistantContent ?? "" },
-        finish_reason: stopReason ?? "stop",
-      },
-    ],
-    usage: {
-      prompt_tokens: usage?.prompt_tokens ?? 0,
-      completion_tokens: usage?.completion_tokens ?? 0,
-      total_tokens: usage?.total_tokens ?? 0,
-    },
-  });
-
+  // --- 10. Chain exhausted — all entries failed with retriable errors ---
+  sendError(
+    res,
+    503,
+    `TIER_EXHAUSTED: all models in tier failed (last: ${String(lastError).slice(0, 500)})`,
+    "tier_exhausted",
+  );
   return true;
 }

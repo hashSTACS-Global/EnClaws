@@ -16,8 +16,9 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { resolveTierChain, TierChainError } from "./tier-chain.js";
+import { resolveTierChain, TierChainError, isRetriableFailover } from "./tier-chain.js";
 import type { ModelConfigEntry, ModelTier, TenantModel } from "../db/types.js";
+import { FailoverError } from "../agents/failover-error.js";
 
 function mkModel(
   id: string,
@@ -179,5 +180,58 @@ describe("resolveTierChain", () => {
         ),
       ).toEqual(["sonnet", "legacy"]);
     });
+  });
+});
+
+describe("isRetriableFailover", () => {
+  it("returns retriable=true for 500/502/503/504", () => {
+    for (const status of [500, 502, 503, 504]) {
+      const err = Object.assign(new Error("bad gateway"), { status });
+      expect(isRetriableFailover(err).retriable).toBe(true);
+    }
+  });
+
+  it("returns retriable=true for 429 rate_limit", () => {
+    const err = Object.assign(new Error("rate limited"), { status: 429 });
+    const result = isRetriableFailover(err);
+    expect(result.retriable).toBe(true);
+    expect(result.status).toBe(429);
+  });
+
+  it("returns retriable=true for timeout errors", () => {
+    const err = new FailoverError("timed out", { reason: "timeout" });
+    expect(isRetriableFailover(err).retriable).toBe(true);
+  });
+
+  it("returns retriable=false for 400 format errors", () => {
+    const err = Object.assign(new Error("bad request"), { status: 400 });
+    const result = isRetriableFailover(err);
+    expect(result.retriable).toBe(false);
+    expect(result.status).toBe(400);
+  });
+
+  it("returns retriable=false for auth (401/403)", () => {
+    for (const status of [401, 403]) {
+      const err = Object.assign(new Error("unauthorized"), { status });
+      expect(isRetriableFailover(err).retriable).toBe(false);
+    }
+  });
+
+  it("returns retriable=false for billing (402)", () => {
+    const err = new FailoverError("billing", { reason: "billing", status: 402 });
+    const result = isRetriableFailover(err);
+    expect(result.retriable).toBe(false);
+    expect(result.status).toBe(402);
+  });
+
+  it("returns retriable=false for format errors (malformed request)", () => {
+    const err = new FailoverError("invalid schema", { reason: "format", status: 400 });
+    expect(isRetriableFailover(err).retriable).toBe(false);
+  });
+
+  it("returns retriable=false with status=undefined for unclassifiable errors", () => {
+    const result = isRetriableFailover(new Error("random"));
+    expect(result.retriable).toBe(false);
+    expect(result.status).toBeUndefined();
   });
 });
