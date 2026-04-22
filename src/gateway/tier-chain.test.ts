@@ -262,7 +262,7 @@ describe("resolveTierChain", () => {
 });
 
 describe("isRetriableFailover", () => {
-  it("returns retriable=true for 500/502/503/504", () => {
+  it("returns retriable=true for 500/502/503/504 upstream errors", () => {
     for (const status of [500, 502, 503, 504]) {
       const err = Object.assign(new Error("bad gateway"), { status });
       expect(isRetriableFailover(err).retriable).toBe(true);
@@ -281,35 +281,33 @@ describe("isRetriableFailover", () => {
     expect(isRetriableFailover(err).retriable).toBe(true);
   });
 
-  it("returns retriable=false for 400 format errors", () => {
-    const err = Object.assign(new Error("bad request"), { status: 400 });
-    const result = isRetriableFailover(err);
-    expect(result.retriable).toBe(false);
-    expect(result.status).toBe(400);
-  });
-
-  it("returns retriable=false for auth (401/403)", () => {
+  it("returns retriable=true for auth errors (401/403) — next chain entry has a different api key", () => {
     for (const status of [401, 403]) {
       const err = Object.assign(new Error("unauthorized"), { status });
-      expect(isRetriableFailover(err).retriable).toBe(false);
+      expect(isRetriableFailover(err).retriable).toBe(true);
     }
   });
 
-  it("returns retriable=false for billing (402)", () => {
+  it("returns retriable=true for billing (402) — next entry is a different provider account", () => {
     const err = new FailoverError("billing", { reason: "billing", status: 402 });
     const result = isRetriableFailover(err);
-    expect(result.retriable).toBe(false);
+    expect(result.retriable).toBe(true);
     expect(result.status).toBe(402);
   });
 
-  it("returns retriable=false for format errors (malformed request)", () => {
+  it("returns retriable=true for 400 format errors — fellow providers may accept the same payload", () => {
     const err = new FailoverError("invalid schema", { reason: "format", status: 400 });
-    expect(isRetriableFailover(err).retriable).toBe(false);
+    expect(isRetriableFailover(err).retriable).toBe(true);
   });
 
-  it("returns retriable=false with status=undefined for unclassifiable errors", () => {
+  it("returns retriable=true for generic/unclassifiable errors", () => {
     const result = isRetriableFailover(new Error("random"));
-    expect(result.retriable).toBe(false);
+    expect(result.retriable).toBe(true);
     expect(result.status).toBeUndefined();
+  });
+
+  it("returns retriable=false ONLY for session_expired — caller is gone, nothing to serve", () => {
+    const err = new FailoverError("session torn down", { reason: "session_expired" });
+    expect(isRetriableFailover(err).retriable).toBe(false);
   });
 });

@@ -143,13 +143,16 @@ export function resolveTierChain(
  * Decide whether a failed LLM call within a tier-chain attempt should
  * trigger a fall-through to the next entry.
  *
- * Retriable (move to next model):
- *   - 5xx, 429, network timeouts, "timeout" reason
- * Not retriable (bail immediately — user error / config error):
- *   - 400 format, 401/403 auth, 402 billing, content_policy, unknown
+ * Default: *any* failure retries on the next chain entry. Each chain slot
+ * is a different provider+api_key, so misconfigurations on one slot
+ * (bad key / wrong baseUrl / model-not-found / billing lapsed) may well
+ * be fixed on the next — burning one extra request per slot is cheaper
+ * than silently serving nothing when a tier's primary is misconfigured.
  *
- * Returns { retriable, status }: the status is the classified HTTP code
- * (useful for the non-retriable path to surface back to the caller).
+ * Only two situations stop the chain early:
+ *   - session_expired: the caller's session has been torn down, so there
+ *     is no one left to answer — retrying is wasted work.
+ *   - (future) user-abort signalled via AbortController — not yet wired.
  */
 export function isRetriableFailover(err: unknown): {
   retriable: boolean;
@@ -162,16 +165,9 @@ export function isRetriableFailover(err: unknown): {
   const fe = coerceToFailoverError(err);
   const status = fe?.status ?? rawStatus;
 
-  // 5xx is always retriable — we want to try the next model regardless of
-  // whether coerceToFailoverError had a mapped reason (500 maps to null;
-  // 502/503/504 map to 'timeout'). Keep this check first.
-  if (typeof status === "number" && status >= 500 && status <= 599) {
-    return { retriable: true, status };
+  if (fe?.reason === "session_expired") {
+    return { retriable: false, status };
   }
 
-  if (fe && (fe.reason === "rate_limit" || fe.reason === "timeout")) {
-    return { retriable: true, status };
-  }
-
-  return { retriable: false, status };
+  return { retriable: true, status };
 }
