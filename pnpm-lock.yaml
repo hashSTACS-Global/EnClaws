@@ -199,6 +199,9 @@ importers:
       sqlite-vec:
         specifier: 0.1.7-alpha.2
         version: 0.1.7-alpha.2
+      svg-captcha:
+        specifier: ^1.4.0
+        version: 1.4.0
       tar:
         specifier: 7.5.9
         version: 7.5.9
@@ -6047,6 +6050,10 @@ packages:
       zod:
         optional: true
 
+  opentype.js@0.7.3:
+    resolution: {integrity: sha512-Veui5vl2bLonFJ/SjX/WRWJT3SncgiZNnKUyahmXCc2sa1xXW15u3R/3TN5+JFiP7RsjK5ER4HA5eWaEmV9deA==}
+    hasBin: true
+
   option@0.2.4:
     resolution: {integrity: sha512-pkEqbDyl8ou5cpq+VsnQbe/WlEy5qS7xPzMS1U55OCG9KPvwFD46zDbxQIj3egJSFc3D+XhYOPUzz49zQAVy7A==}
 
@@ -6905,6 +6912,10 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
+  svg-captcha@1.4.0:
+    resolution: {integrity: sha512-/fkkhavXPE57zRRCjNqAP3txRCSncpMx3NnNZL7iEoyAtYwUjPhJxW6FQTQPG5UPEmCrbFoXS10C3YdJlW7PDg==}
+    engines: {node: '>=4.x'}
+
   table-layout@4.1.1:
     resolution: {integrity: sha512-iK5/YhZxq5GO5z8wb0bY1317uDF3Zjpha0QFFLA8/trAoiLbQD0HUbMesEaxyzUgDxi2QlcbM8IvqOlEjgoXBA==}
     engines: {node: '>=12.17'}
@@ -6939,6 +6950,9 @@ packages:
 
   thread-stream@3.1.0:
     resolution: {integrity: sha512-OqyPZ9u96VohAyMfJykzmivOrY2wfMSf3C5TtFJVgN+Hm6aj+voFhlK+kZEIv2FBh1X6Xp3DlnCOfEQ3B2J86A==}
+
+  tiny-inflate@1.0.3:
+    resolution: {integrity: sha512-pkY1fj1cKHb2seWDy0B16HeWyczlJA9/WW3u3c4z/NiWDsO3DOU5D7nhTLE9CF0yXv/QZFY7sEJmj24dK+Rrqw==}
 
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
@@ -13445,6 +13459,10 @@ snapshots:
       ws: 8.20.0
       zod: 4.3.6
 
+  opentype.js@0.7.3:
+    dependencies:
+      tiny-inflate: 1.0.3
+
   option@0.2.4:
     optional: true
 
@@ -14537,6 +14555,10 @@ snapshots:
   supports-preserve-symlinks-flag@1.0.0:
     optional: true
 
+  svg-captcha@1.4.0:
+    dependencies:
+      opentype.js: 0.7.3
+
   table-layout@4.1.1:
     dependencies:
       array-back: 6.2.3
@@ -14594,6 +14616,8 @@ snapshots:
     dependencies:
       real-require: 0.2.0
     optional: true
+
+  tiny-inflate@1.0.3: {}
 
   tinybench@2.9.0: {}
 

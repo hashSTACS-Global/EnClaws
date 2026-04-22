@@ -100,6 +100,8 @@ export class PlatformToolsView extends LitElement {
       display: flex; align-items: center; gap: 8px;
     }
     .tools-section-header > .section-count { margin-left: auto; }
+    .section-actions { display: inline-flex; gap: 6px; }
+    .btn.btn-xs { padding: 2px 8px; font-size: 11px; line-height: 1.4; }
     .tools-section-header::after {
       content: "\u25B8"; font-size: 12px; color: var(--text-muted, #525252);
       transition: transform 0.15s ease;
@@ -258,6 +260,14 @@ export class PlatformToolsView extends LitElement {
     this.pendingDeny = [...next];
   }
 
+  private setGroupEnabled(ids: string[], enable: boolean) {
+    const next = new Set(this.effectiveDeny);
+    for (const id of ids) {
+      enable ? next.delete(id) : next.add(id);
+    }
+    this.pendingDeny = [...next];
+  }
+
   private async handleSave() {
     if (!this.pendingDeny) return;
     this.saving = true;
@@ -374,6 +384,16 @@ export class PlatformToolsView extends LitElement {
               <summary class="tools-section-header">
                 <span>${group.label}</span>
                 <span class="section-count">${groupEnabled}/${group.tools.length}</span>
+                <span class="section-actions" @click=${(e: Event) => e.preventDefault()}>
+                  <button type="button" class="btn btn-outline btn-xs" ?disabled=${this.saving}
+                    @click=${(e: Event) => { e.stopPropagation(); this.setGroupEnabled(group.tools.map((tl) => tl.id), true); }}>
+                    ${t("tenantAgents.enableAll")}
+                  </button>
+                  <button type="button" class="btn btn-outline btn-xs" ?disabled=${this.saving}
+                    @click=${(e: Event) => { e.stopPropagation(); this.setGroupEnabled(group.tools.map((tl) => tl.id), false); }}>
+                    ${t("tenantAgents.disableAll")}
+                  </button>
+                </span>
               </summary>
               <div class="tools-list tools-list--wide">
                 ${group.tools.map((tool) => {

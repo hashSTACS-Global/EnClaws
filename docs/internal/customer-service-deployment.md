@@ -64,11 +64,15 @@ pm2 restart enclaws   # or however the process is managed
 
 ### 4.2 Configure the Embedding Provider (Required for RAG)
 
-> **Why is this step needed?** S1 is intentionally **zero-invasion** — the CS module does not implement its own embedding pipeline and fully reuses EC's existing `memorySearch` infrastructure. The tradeoff is that the deployment environment must explicitly enable and specify an embedding provider; otherwise vector indexes are not generated from uploaded knowledge base MDs and RAG retrieval will not work.
+> **Why is this step needed?** Current design is intentionally **zero-invasion** — the CS module does not implement its own embedding pipeline and fully reuses EC's existing `memorySearch` infrastructure. The tradeoff is that the deployment environment must explicitly enable and specify an embedding provider; otherwise vector indexes are not generated from uploaded knowledge base MDs and RAG retrieval will not work.
 >
-> This configuration step is a **consequence of the architectural tradeoff**, not an omission. S2 will discuss whether EC should auto-derive the embedding provider from the tenant's LLM config at the base layer — if adopted, this section will be simplified or removed. See team discussion `ai-customer-service-integration` topic 2.
+> **Future direction**:
+> 1. All LLM types (text generation, embedding, vision, etc.) will be consolidated into a per-tenant UI-based configuration stored in the database. The deployment-level file config (`enclaws.json`) will no longer be needed for these settings.
+> 2. The vector store path `~/.enclaws/memory/*.sqlite` is currently a global shared directory (reusing EC's existing memorySearch infrastructure). It will be isolated under `~/.enclaws/tenants/{tenantId}/customer-service/vectors/` to avoid cross-tenant pollution and colocate with the knowledge base.
+>
+> UI config + path isolation will land together; detailed rollout plan is pending upcoming proposals.
 
-Create/edit `~/.enclaws/enclaws.json` on the server:
+#### Configure `~/.enclaws/enclaws.json` on the server
 
 ```bash
 mkdir -p ~/.enclaws
@@ -79,26 +83,79 @@ cat > ~/.enclaws/enclaws.json <<'EOF'
       "memorySearch": {
         "enabled": true,
         "provider": "openai",
-        "model": "text-embedding-3-small"
+        "model": "text-embedding-3-small",
+        "remote": {
+          "baseUrl": "https://api.openai.com/v1",
+          "apiKey": "sk-..."
+        }
       }
     }
   }
 }
 EOF
+chmod 600 ~/.enclaws/enclaws.json
 ```
 
-**API Key:** The embedding client automatically reads the LLM-side provider key (e.g. `OPENAI_API_KEY` from `.env`). No separate `apiKey` needed in this config.
+`remote.baseUrl` / `remote.apiKey` **only affect embedding calls, not other LLM paths**. If `remote` is omitted, EC falls back to the LLM-side provider config for the same provider (e.g. `OPENAI_API_KEY` env var).
 
-**Provider choice:** If the server LLM is not OpenAI, pick the matching provider and key:
+#### Provider options
 
-| provider | example model | env var required |
-|----------|---------------|-----------------|
-| `openai` | `text-embedding-3-small` | `OPENAI_API_KEY` |
-| `gemini` | `gemini-embedding-001` | `GEMINI_API_KEY` |
-| `voyage` | `voyage-4-large` | `VOYAGE_API_KEY` |
-| `mistral` | `mistral-embed` | `MISTRAL_API_KEY` |
+| provider | example model | notes |
+|----------|---------------|-------|
+| `openai` | `text-embedding-3-small` | Official OpenAI |
+| `openai` + DashScope baseUrl | `text-embedding-v4` | Qwen embedding via Aliyun Bailian OpenAI-compatible mode (see below) |
+| `gemini` | `gemini-embedding-001` | Google |
+| `voyage` | `voyage-4-large` | Strong for Chinese |
+| `mistral` | `mistral-embed` | Official Mistral |
 
-Restart the server after editing. On the first CS widget access, the server will scan the knowledge base → chunk → embed → write to SQLite (`~/.enclaws/memory/{agentId}.sqlite`).
+#### Example: Qwen / DashScope embedding
+
+Qwen has no native provider entry — use OpenAI-compatible mode:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "enabled": true,
+        "provider": "openai",
+        "model": "text-embedding-v4",
+        "remote": {
+          "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+          "apiKey": "sk-<your-DashScope-key>"
+        }
+      }
+    }
+  }
+}
+```
+
+#### Restart gateway after config changes
+
+```bash
+pm2 restart enclaws   # or however managed
+```
+
+On the first CS widget access, the server scans KB → chunk → embed → writes SQLite (`~/.enclaws/memory/{agentId}.sqlite`).
+
+#### Clearing the vector store after model changes
+
+When switching `provider` / `model`, vector dimensions and semantic space differ, so the old index is incompatible. **Delete the sqlite files** to force a full re-index:
+
+```bash
+rm -rf ~/.enclaws/memory/*.sqlite
+# Restart gateway; next CS conversation rebuilds the index
+```
+
+**When to clear the vector store** (`~/.enclaws/memory/*.sqlite`):
+
+| Scenario | Clear required? |
+|----------|---------------|
+| Changing embedding `provider` / `model` | ✅ Yes |
+| Changing only `remote.baseUrl` / `apiKey` (same model) | ❌ No (auth only, vectors stay valid) |
+| Adding / editing / deleting KB `.md` files | ❌ No (EC auto-detects file changes and incrementally re-indexes) |
+
+**Important**: Do NOT confuse `~/.enclaws/memory/*.sqlite` (vector store) with `~/.enclaws/enclaws.db` (EC business main DB). **Clearing the vector store has no effect on sessions, tenants, agent configs or other business data.**
 
 ### 4.3 Set the Widget Secret
 

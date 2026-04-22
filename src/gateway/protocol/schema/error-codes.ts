@@ -18,6 +18,10 @@ export const ErrorCodes = {
    * so the frontend can render a localized message.
    */
   QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
+  /** Captcha answer missing/wrong/expired on login/register/forgotPassword. */
+  CAPTCHA_INVALID: "CAPTCHA_INVALID",
+  /** Captcha id or answer field absent in the request payload. */
+  CAPTCHA_REQUIRED: "CAPTCHA_REQUIRED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

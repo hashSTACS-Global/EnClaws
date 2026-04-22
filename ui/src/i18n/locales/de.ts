@@ -959,6 +959,17 @@ export const de: TranslationMap = {
     memorySaveFailed: "Unternehmensspeicher konnte nicht gespeichert werden",
     memoryHint: "Dieser Inhalt wird von KI-Assistenten automatisch gepflegt und kann manuell bearbeitet werden.",
   },
+  captcha: {
+    label: "Captcha",
+    placeholder: "Captcha eingeben",
+    loading: "Wird geladen…",
+    clickToLoad: "Zum Laden klicken",
+    loadFailed: "Captcha konnte nicht geladen werden",
+    refreshHint: "Klicken zum Aktualisieren",
+    refreshAria: "Captcha aktualisieren",
+    errRequired: "Bitte Captcha ausfüllen",
+    errInvalid: "Captcha ist falsch oder abgelaufen",
+  },
   login: {
     title: "Bei EnClaws anmelden",
     titleRegister: "EnClaws registrieren",

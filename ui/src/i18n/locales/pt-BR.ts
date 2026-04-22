@@ -958,6 +958,17 @@ export const pt_BR: TranslationMap = {
     memorySaveFailed: "Falha ao salvar memoria da empresa",
     memoryHint: "Este conteudo e mantido automaticamente pelos assistentes de IA e pode ser editado manualmente.",
   },
+  captcha: {
+    label: "Captcha",
+    placeholder: "Digite o captcha",
+    loading: "Carregando…",
+    clickToLoad: "Clique para carregar",
+    loadFailed: "Falha ao carregar o captcha",
+    refreshHint: "Clique para atualizar",
+    refreshAria: "Atualizar captcha",
+    errRequired: "Por favor, preencha o captcha",
+    errInvalid: "Captcha incorreto ou expirado",
+  },
   login: {
     title: "Entrar no EnClaws",
     titleRegister: "Registrar EnClaws",

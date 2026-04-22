@@ -94,7 +94,7 @@ function sha256Hex(message: Uint8Array): string {
     H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
   }
   let hex = "";
-  for (let i = 0; i < 8; i++) hex += H[i].toString(16).padStart(8, "0");
+  for (let i = 0; i < 8; i++) {hex += H[i].toString(16).padStart(8, "0");}
   return hex;
 }
 
@@ -150,6 +150,18 @@ export class RegisterPendingVerificationError extends Error {
   }
 }
 
+/**
+ * Thrown by login / register / requestForgotPassword when the graphic
+ * captcha is missing, wrong, or expired. Callers should refresh the
+ * captcha widget and prompt the user to re-enter.
+ */
+export class CaptchaInvalidError extends Error {
+  constructor(message: string = "图形验证码错误或已过期") {
+    super(message);
+    this.name = "CaptchaInvalidError";
+  }
+}
+
 export interface AuthTenant {
   id: string;
   name: string;
@@ -172,14 +184,14 @@ let currentAuth: AuthState | null = null;
  * Load auth state from localStorage.
  */
 export function loadAuth(): AuthState | null {
-  if (currentAuth) return currentAuth;
+  if (currentAuth) {return currentAuth;}
   try {
     const raw = localStorage.getItem(AUTH_KEY);
-    if (!raw) return null;
+    if (!raw) {return null;}
     const parsed = JSON.parse(raw) as AuthState;
-    if (!parsed.accessToken || !parsed.refreshToken) return null;
+    if (!parsed.accessToken || !parsed.refreshToken) {return null;}
     // Check if expired and no refresh possible
-    if (parsed.expiresAt < Date.now() && !parsed.refreshToken) return null;
+    if (parsed.expiresAt < Date.now() && !parsed.refreshToken) {return null;}
     currentAuth = parsed;
     // Ensure activity listener is running (covers page reload scenario)
     startActivityListener();
@@ -222,8 +234,8 @@ export function isAuthenticated(): boolean {
  */
 export function getAccessToken(): string | null {
   const auth = loadAuth();
-  if (!auth) return null;
-  if (auth.expiresAt > Date.now()) return auth.accessToken;
+  if (!auth) {return null;}
+  if (auth.expiresAt > Date.now()) {return auth.accessToken;}
   return null; // Token expired, needs refresh
 }
 
@@ -237,14 +249,14 @@ let refreshing = false;
  * trigger a refresh (throttled).
  */
 async function onUserActivity(): Promise<void> {
-  if (refreshing) return;
+  if (refreshing) {return;}
   const auth = currentAuth ?? loadAuth();
-  if (!auth?.refreshToken) return;
+  if (!auth?.refreshToken) {return;}
 
   const now = Date.now();
 
   // Throttle: don't refresh too frequently
-  if (now - lastRefreshAttempt < REFRESH_THROTTLE_MS) return;
+  if (now - lastRefreshAttempt < REFRESH_THROTTLE_MS) {return;}
 
   lastRefreshAttempt = now;
   refreshing = true;
@@ -265,7 +277,7 @@ async function onUserActivity(): Promise<void> {
 }
 
 function startActivityListener(): void {
-  if (activityListenerActive) return;
+  if (activityListenerActive) {return;}
   activityListenerActive = true;
   for (const evt of ["click", "keydown", "scroll", "mousemove", "touchstart"]) {
     document.addEventListener(evt, onUserActivity, { passive: true, capture: true });
@@ -273,7 +285,7 @@ function startActivityListener(): void {
 }
 
 function stopActivityListener(): void {
-  if (!activityListenerActive) return;
+  if (!activityListenerActive) {return;}
   activityListenerActive = false;
   for (const evt of ["click", "keydown", "scroll", "mousemove", "touchstart"]) {
     document.removeEventListener(evt, onUserActivity, true);
@@ -287,7 +299,7 @@ function stopActivityListener(): void {
  */
 export async function refreshAccessToken(): Promise<AuthState | null> {
   const auth = loadAuth();
-  if (!auth?.refreshToken) return null;
+  if (!auth?.refreshToken) {return null;}
 
   // Fast path: reuse the existing gateway connection
   if (sharedClient) {
@@ -406,6 +418,8 @@ export async function login(params: {
   gatewayUrl: string;
   email: string;
   password: string;
+  captchaId: string;
+  captchaAnswer: string;
 }): Promise<AuthState> {
   const hashedPassword = await hashPasswordForTransport(params.password);
   return new Promise((resolve, reject) => {
@@ -437,6 +451,8 @@ export async function login(params: {
               params: {
                 email: params.email,
                 password: hashedPassword,
+                captchaId: params.captchaId,
+                captchaAnswer: params.captchaAnswer,
               },
             }),
           );
@@ -477,6 +493,8 @@ export async function login(params: {
             if (code === "RATE_LIMITED") {
               const wait = Number(frame.error?.retryAfterMs ?? 0);
               reject(new LoginRateLimitedError(wait, msg));
+            } else if (code === "CAPTCHA_INVALID" || code === "CAPTCHA_REQUIRED") {
+              reject(new CaptchaInvalidError(msg));
             } else {
               reject(new Error(msg));
             }
@@ -532,7 +550,7 @@ export function callPublicRpc<T = unknown>(
     let handshakeDone = false;
     let settled = false;
     const finish = (r: PublicRpcResult<T>) => {
-      if (settled) return;
+      if (settled) {return;}
       settled = true;
       try { ws.close(); } catch { /* ignore */ }
       resolve(r);
@@ -541,7 +559,7 @@ export function callPublicRpc<T = unknown>(
     ws.onopen = () => {
       const connectParams = buildConnectParams();
       if (jwtToken) {
-        connectParams.auth = { ...(connectParams.auth ?? {}), token: jwtToken };
+        connectParams.auth = { ...connectParams.auth, token: jwtToken };
       }
       ws.send(JSON.stringify({
         type: "req",
@@ -624,21 +642,42 @@ export async function callAuthRpc<T = unknown>(
 
 export async function getAuthCapabilities(gatewayUrl: string): Promise<{ email: boolean }> {
   const r = await callPublicRpc<{ email: boolean }>(gatewayUrl, "auth.capabilities", {});
-  if (!r.ok) throw new Error(r.errorMessage ?? "capabilities failed");
+  if (!r.ok) {throw new Error(r.errorMessage ?? "capabilities failed");}
   return r.payload ?? { email: false };
 }
 
 export async function requestForgotPassword(
   gatewayUrl: string,
   email: string,
+  captcha: { id: string; answer: string },
 ): Promise<{ ok: boolean; email: boolean }> {
   const r = await callPublicRpc<{ ok: boolean; email: boolean }>(
     gatewayUrl,
     "auth.forgotPassword",
-    { email },
+    { email, captchaId: captcha.id, captchaAnswer: captcha.answer },
   );
-  if (!r.ok) throw new Error(r.errorMessage ?? "forgotPassword failed");
+  if (!r.ok) {
+    if (r.errorCode === "CAPTCHA_INVALID" || r.errorCode === "CAPTCHA_REQUIRED") {
+      throw new CaptchaInvalidError(r.errorMessage);
+    }
+    throw new Error(r.errorMessage ?? "forgotPassword failed");
+  }
   return r.payload ?? { ok: false, email: false };
+}
+
+/** Fetch a fresh captcha challenge from the gateway. */
+export async function requestCaptchaChallenge(
+  gatewayUrl: string,
+): Promise<{ id: string; svg: string; expiresAt: number }> {
+  const r = await callPublicRpc<{ id: string; svg: string; expiresAt: number }>(
+    gatewayUrl,
+    "captcha.challenge",
+    {},
+  );
+  if (!r.ok || !r.payload) {
+    throw new Error(r.errorMessage ?? "captcha challenge failed");
+  }
+  return r.payload;
 }
 
 export async function verifyForgotPassword(
@@ -651,7 +690,7 @@ export async function verifyForgotPassword(
     token,
     newPassword: hashedNew,
   });
-  if (!r.ok) throw new Error(r.errorMessage ?? "reset failed");
+  if (!r.ok) {throw new Error(r.errorMessage ?? "reset failed");}
 }
 
 export async function viewTempPassword(
@@ -663,8 +702,8 @@ export async function viewTempPassword(
     "auth.viewTempPassword",
     { token },
   );
-  if (!r.ok) throw new Error(r.errorMessage ?? "view failed");
-  if (!r.payload) throw new Error("empty response");
+  if (!r.ok) {throw new Error(r.errorMessage ?? "view failed");}
+  if (!r.payload) {throw new Error("empty response");}
   return r.payload;
 }
 
@@ -698,6 +737,8 @@ export async function register(params: {
   email: string;
   password: string;
   displayName?: string;
+  captchaId: string;
+  captchaAnswer: string;
 }): Promise<AuthState> {
   const hashedPassword = await hashPasswordForTransport(params.password);
   return new Promise((resolve, reject) => {
@@ -730,6 +771,8 @@ export async function register(params: {
                 email: params.email,
                 password: hashedPassword,
                 displayName: params.displayName,
+                captchaId: params.captchaId,
+                captchaAnswer: params.captchaAnswer,
               },
             }),
           );
@@ -763,7 +806,13 @@ export async function register(params: {
             saveAuth(auth);
             resolve(auth);
           } else {
-            reject(new Error(frame.error?.message ?? "Registration failed"));
+            const code = frame.error?.code;
+            const msg = frame.error?.message ?? "Registration failed";
+            if (code === "CAPTCHA_INVALID" || code === "CAPTCHA_REQUIRED") {
+              reject(new CaptchaInvalidError(msg));
+            } else {
+              reject(new Error(msg));
+            }
           }
         }
       } catch (err) {
