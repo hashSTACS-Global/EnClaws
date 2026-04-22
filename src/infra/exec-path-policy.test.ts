@@ -273,3 +273,136 @@ describe("checkExecPathsAgainstPolicy — lenient (non-linux)", () => {
     });
   });
 });
+
+// ── destructive-args check (Linux strict) ────────────────────────────────────
+
+describe("checkExecPathsAgainstPolicy — destructive-args (linux strict)", () => {
+  describe("blocks destructive ops targeting out-of-allowlist paths", () => {
+    const cases: Array<[string, string]> = [
+      ["rm", "rm /opt/abc"],
+      ["rm -rf", "rm -rf /opt/abc"],
+      ["rmdir", "rmdir /opt/abc"],
+      ["unlink", "unlink /opt/abc"],
+      ["shred", "shred /opt/abc"],
+      ["truncate", "truncate -s 0 /opt/abc"],
+      ["mv", "mv /opt/src /opt/dst"],
+      ["cp (writes to dst)", "cp /tmp/x /opt/abc/y"],
+      ["dd of=", "dd if=/dev/null of=/opt/abc"],
+      ["tee", "tee /opt/abc"],
+      ["find -delete", "find /opt/abc -delete"],
+      ["find -exec rm", "find /opt/abc -exec rm -rf {} ;"],
+      ["rsync --delete", "rsync --delete /a/ /opt/abc/"],
+      ["sed -i", "sed -i s/a/b/ /opt/abc"],
+      ["xargs rm", "xargs rm /opt/abc"],
+      ["redirect >", "echo hi > /opt/abc/f"],
+      ["redirect >>", "echo hi >> /opt/abc/f"],
+      // Note: `>|` (force-truncate) is shell-quote-parsed as `>` + `|`, where
+      // the pipe ends the segment. Known limitation — not covered here.
+    ];
+    for (const [label, cmd] of cases) {
+      it(`blocks ${label}`, () => {
+        expect(strict(cmd)).not.toBeNull();
+      });
+    }
+  });
+
+  describe("allows destructive ops on in-allowlist paths", () => {
+    it("rm -rf inside own workspace", () => {
+      const target = posixPath(path.join(WORKSPACE, "junk"));
+      expect(strict(`rm -rf ${target}`)).toBeNull();
+    });
+    it("mv within workspace", () => {
+      const src = posixPath(path.join(WORKSPACE, "a"));
+      const dst = posixPath(path.join(WORKSPACE, "b"));
+      expect(strict(`mv ${src} ${dst}`)).toBeNull();
+    });
+    it("redirect > into workspace", () => {
+      const target = posixPath(path.join(WORKSPACE, "out.log"));
+      expect(strict(`echo hi > ${target}`)).toBeNull();
+    });
+  });
+
+  describe("safe-device exemptions (destructive mode)", () => {
+    it("allows dd if=/dev/null of=<workspace>", () => {
+      const target = posixPath(path.join(WORKSPACE, "zeroed"));
+      expect(strict(`dd if=/dev/null of=${target}`)).toBeNull();
+    });
+    it("allows redirect to /dev/null", () => {
+      expect(strict("echo noisy > /dev/null")).toBeNull();
+    });
+    it("blocks redirect to /dev/sda (not safe)", () => {
+      expect(strict("echo x > /dev/sda")).not.toBeNull();
+    });
+  });
+
+  describe("non-destructive reads stay free", () => {
+    it("cat /etc/hostname", () => {
+      expect(strict("cat /etc/hostname")).toBeNull();
+    });
+    it("ls /usr/bin", () => {
+      expect(strict("ls /usr/bin")).toBeNull();
+    });
+    it("find / -name foo (no -delete)", () => {
+      expect(strict("find / -name foo")).toBeNull();
+    });
+    it("grep foo /var/log/bar", () => {
+      expect(strict("grep foo /var/log/bar")).toBeNull();
+    });
+  });
+
+  describe("pipeline / segment boundaries", () => {
+    it("blocks destructive in SECOND segment (|)", () => {
+      expect(strict("echo hi | tee /opt/abc")).not.toBeNull();
+    });
+    it("blocks destructive in SECOND segment (&&)", () => {
+      expect(strict("true && rm -rf /opt/abc")).not.toBeNull();
+    });
+    it("allows non-destructive first + destructive-in-workspace second", () => {
+      const target = posixPath(path.join(WORKSPACE, "out"));
+      expect(strict(`cat /etc/hostname | tee ${target}`)).toBeNull();
+    });
+    it("non-destructive read in first segment doesn't get strict-checked", () => {
+      // cat reads /etc/hosts — not destructive, so stays free; tee writes to
+      // /tmp (no workspace overlap here, but /etc is out-of-scope anyway — this
+      // asserts cat isn't accidentally strict-checked because later segment is).
+      const target = posixPath(path.join(WORKSPACE, "out"));
+      expect(strict(`cat /etc/hosts | tee ${target}`)).toBeNull();
+    });
+  });
+
+  describe("skipDestructiveCheck flag (sandbox mode)", () => {
+    it("suppresses the destructive check when set", () => {
+      const policy = buildPolicy();
+      const result = checkExecPathsAgainstPolicy({
+        command: "rm -rf /opt/abc",
+        cwd: WORKSPACE,
+        policy,
+        platform: "linux",
+        skipDestructiveCheck: true,
+      });
+      expect(result).toBeNull();
+    });
+
+    it("still applies state-dir check when sandbox flag is set", () => {
+      const abs = posixPath(path.join(STATE, "enclaws.json"));
+      const policy = buildPolicy();
+      const result = checkExecPathsAgainstPolicy({
+        command: `cat ${abs}`,
+        cwd: WORKSPACE,
+        policy,
+        platform: "linux",
+        skipDestructiveCheck: true,
+      });
+      expect(result).not.toBeNull();
+    });
+  });
+
+  describe("ambiguity → pass (destructive mode respects confident-parse)", () => {
+    it("passes destructive command with $VAR", () => {
+      expect(strict("rm -rf $TARGET")).toBeNull();
+    });
+    it("passes destructive command inside $(...) subshell", () => {
+      expect(strict("echo $(rm -rf /opt/abc)")).toBeNull();
+    });
+  });
+});

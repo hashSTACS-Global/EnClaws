@@ -4,16 +4,28 @@
  * Bridges exec-style tools (Bash, process) to the same path allowlist that
  * already protects read/write/edit tools. Parses argv out of the command
  * string, resolves literal path tokens against the exec cwd, and invokes
- * policy.check() for any token landing inside the enclaws state directory.
+ * policy.check() to decide.
+ *
+ * Two layers of enforcement:
+ *   1. Destructive commands (rm / mv / cp / dd / truncate / find -delete /
+ *      rsync --delete / sed -i / redirect > / tee / shred / unlink / rmdir):
+ *      EVERY path argument is checked against the allowlist with the "write"
+ *      op. Anything outside the allowlist is blocked — defense against the
+ *      AI destroying arbitrary host files.
+ *   2. Non-destructive commands: only paths that land inside the state dir
+ *      get checked (existing behaviour — keeps `ls /usr/bin` and `cat
+ *      /etc/hostname` free).
  *
  * Two modes:
- *   - strict   (default on Linux)  — shell-quote AST + per-token analysis.
- *   - lenient  (default elsewhere) — regex scan for state-dir path literals.
+ *   - strict   (default on Linux)  — shell-quote AST + per-segment analysis.
+ *   - lenient  (default elsewhere) — regex scan; destructive path check not
+ *     available without a reliable parser.
  *
  * Design principle: confident-parse-only. Any parse ambiguity (variables,
- * subshells, globs) is silently skipped. The goal is zero false-positives
- * on legitimate commands; evasion via variables is mitigated by defense in
- * depth (system prompt + L2 path policy on the read tool).
+ * subshells, globs) is silently skipped. Evasion via variables or language
+ * runtimes (node -e 'fs.rmSync…') is accepted as a known limitation and
+ * mitigated by defense in depth (system prompt + PathPermissionPolicy on
+ * file tools + gateway exec denylist).
  */
 
 import path from "node:path";
@@ -29,6 +41,58 @@ const AMBIGUOUS_STRING_MARKERS = /[`$]/;
 const LENIENT_AMBIGUOUS_MARKERS = /\$env:|\$\(|%[A-Za-z_][A-Za-z0-9_]*%|`/;
 const PATHLIKE_PREFIX = /^(?:~[/\\]?|\/|\.\/|\.\.\/|[A-Za-z]:[/\\])/;
 const ASSIGNMENT_REGEX = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/;
+
+/**
+ * Bins whose entire argv list is treated as destructive targets. A strict
+ * allowlist check (op="write") runs on EVERY path argument.
+ */
+const DESTRUCTIVE_BINS: ReadonlySet<string> = new Set([
+  "rm",
+  "rmdir",
+  "unlink",
+  "shred",
+  "truncate",
+  "mv",
+  "cp",
+  "dd",
+  "tee",
+]);
+
+/**
+ * Bins that are only destructive with a specific flag. First match of the
+ * flag pattern (regex against the remainder of the segment's raw string)
+ * elevates the whole segment to destructive.
+ */
+const CONDITIONAL_DESTRUCTIVE_BINS: ReadonlyArray<{ bin: string; flagPattern: RegExp }> = [
+  { bin: "find", flagPattern: /(?:^|\s)(?:-delete\b|-exec\s+rm\b|-execdir\s+rm\b)/ },
+  { bin: "rsync", flagPattern: /(?:^|\s)--delete\b/ },
+  { bin: "sed", flagPattern: /(?:^|\s)-i\b/ },
+  { bin: "xargs", flagPattern: /\brm\b/ },
+];
+
+/**
+ * System devices treated as safe sources/sinks for destructive commands.
+ * `dd if=/dev/null of=…`, `> /dev/null`, etc. shouldn't get flagged as
+ * out-of-allowlist reads.
+ */
+const SAFE_DEVICES: ReadonlySet<string> = new Set([
+  "/dev/null",
+  "/dev/zero",
+  "/dev/random",
+  "/dev/urandom",
+  "/dev/stdin",
+  "/dev/stdout",
+  "/dev/stderr",
+]);
+
+/** Shell operators that end a pipeline segment. */
+const SEGMENT_BREAK_OPS: ReadonlySet<string> = new Set(["|", "||", "&&", ";", "&"]);
+
+/** Shell write-redirect operators — the next string token is the write target.
+ * Note: `>|` is not listed explicitly because shell-quote decomposes it into
+ *       `>` + `|` (the pipe then ends the segment). Accept that as a known
+ *       limitation — it's rarely used in automated agent commands. */
+const WRITE_REDIRECT_OPS: ReadonlySet<string> = new Set([">", ">>"]);
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -48,19 +112,25 @@ export function checkExecPathsAgainstPolicy(args: {
   policy: PathPermissionPolicy;
   /** Override platform for testing. Defaults to process.platform. */
   platform?: NodeJS.Platform;
+  /**
+   * When true, suppresses the destructive-args check (not the state-dir
+   * check). Set this for sandbox-hosted exec where command paths are
+   * container-relative and can't be resolved against the host allowlist.
+   */
+  skipDestructiveCheck?: boolean;
 }): string | null {
-  const { command, cwd, policy } = args;
+  const { command, cwd, policy, skipDestructiveCheck } = args;
   if (!command || !cwd) {
-    return null;
-  }
-  if (!mentionsStateDir(command)) {
     return null;
   }
 
   const platform = args.platform ?? process.platform;
-  return platform === "linux"
-    ? strictCheck(command, cwd, policy)
-    : lenientCheck(command, cwd, policy);
+  if (platform === "linux") {
+    return strictCheck(command, cwd, policy, skipDestructiveCheck === true);
+  }
+  // Non-Linux: destructive-args check requires a reliable parser; fall back
+  // to state-dir-only regex scan (existing behaviour).
+  return lenientCheck(command, cwd, policy);
 }
 
 function mentionsStateDir(command: string): boolean {
@@ -80,7 +150,18 @@ function mentionsStateDir(command: string): boolean {
 
 // ── strict (Linux) ───────────────────────────────────────────────────────────
 
-function strictCheck(command: string, cwd: string, policy: PathPermissionPolicy): string | null {
+type Segment = {
+  tokens: ParseEntry[];
+  /** Indices (relative to `tokens`) of write-redirect target tokens. */
+  redirectTargets: Set<number>;
+};
+
+function strictCheck(
+  command: string,
+  cwd: string,
+  policy: PathPermissionPolicy,
+  skipDestructiveCheck: boolean,
+): string | null {
   let parsed: ParseEntry[];
   try {
     parsed = shellParse(command) as ParseEntry[];
@@ -89,19 +170,102 @@ function strictCheck(command: string, cwd: string, policy: PathPermissionPolicy)
   }
 
   const stateDir = resolveStateDir();
+  const segments = splitIntoSegments(parsed);
+
+  for (const segment of segments) {
+    const destructive = !skipDestructiveCheck && isSegmentDestructive(segment);
+
+    for (let i = 0; i < segment.tokens.length; i++) {
+      const token = segment.tokens[i];
+      if (typeof token !== "string") {
+        continue;
+      }
+      if (AMBIGUOUS_STRING_MARKERS.test(token)) {
+        continue;
+      }
+
+      const extracted = extractPathFromToken(token);
+      if (!extracted) {
+        continue;
+      }
+
+      // Safe-device exemption — matched against the original posix-style token
+      // rather than the resolved absolute path, because `path.resolve` on
+      // Windows rewrites `/dev/null` into `C:\dev\null` and breaks the match.
+      if (SAFE_DEVICES.has(extracted.replace(/\\/g, "/"))) {
+        continue;
+      }
+
+      const abs = resolveTokenPath(extracted, cwd);
+      if (!abs) {
+        continue;
+      }
+
+      const isRedirectTarget = segment.redirectTargets.has(i);
+      const strictHere = destructive || isRedirectTarget;
+
+      if (strictHere) {
+        const violation = policy.check(abs, "write");
+        if (violation) {
+          return violation;
+        }
+      } else if (isPathInside(stateDir, abs)) {
+        const violation = policy.check(abs, "read");
+        if (violation) {
+          return violation;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Break a flat shell-quote token array into pipeline segments.
+ * - Subshell contents (between `(` and `)`) are dropped entirely — we can't
+ *   reason about them confidently (see `confident-parse-only` principle).
+ * - Segment boundaries: `|`, `||`, `&&`, `;`, `&`.
+ * - Write-redirect ops (`>`, `>|`, `>>`) don't split the segment; instead we
+ *   mark the NEXT string token as a destructive write target.
+ */
+function splitIntoSegments(parsed: ParseEntry[]): Segment[] {
+  const segments: Segment[] = [];
+  let current: Segment = { tokens: [], redirectTargets: new Set() };
   let subshellDepth = 0;
+  let pendingRedirect = false;
+
+  const commitSegment = () => {
+    if (current.tokens.length > 0) {
+      segments.push(current);
+    }
+    current = { tokens: [], redirectTargets: new Set() };
+    pendingRedirect = false;
+  };
 
   for (const token of parsed) {
-    // Subshell tracking: `$(...)` expands to tokens `$`, `{op:"("}`, …, `{op:")"}`.
-    // Anything inside the parens runs in a subshell whose cwd/env we cannot see,
-    // so skip those tokens entirely (confident-parse-only principle).
     if (typeof token === "object" && token !== null && "op" in token) {
       const op = (token as { op: string }).op;
       if (op === "(") {
         subshellDepth++;
-      } else if (op === ")") {
-        subshellDepth = Math.max(0, subshellDepth - 1);
+        continue;
       }
+      if (op === ")") {
+        subshellDepth = Math.max(0, subshellDepth - 1);
+        continue;
+      }
+      if (subshellDepth > 0) {
+        continue;
+      }
+      if (SEGMENT_BREAK_OPS.has(op)) {
+        commitSegment();
+        continue;
+      }
+      if (WRITE_REDIRECT_OPS.has(op)) {
+        pendingRedirect = true;
+        continue;
+      }
+      // Other operators (`2>`, `<`, `&>`, etc.) — leave them silent.
       continue;
     }
 
@@ -109,41 +273,52 @@ function strictCheck(command: string, cwd: string, policy: PathPermissionPolicy)
       continue;
     }
 
-    // Non-string tokens (glob objects, variable refs) → skip.
-    if (typeof token !== "string") {
-      continue;
-    }
-
-    // String literals containing $ or backtick → skip (partial expansion).
-    if (AMBIGUOUS_STRING_MARKERS.test(token)) {
-      continue;
-    }
-
-    const extracted = extractPathFromToken(token);
-    if (!extracted) {
-      continue;
-    }
-
-    const abs = resolveTokenPath(extracted, cwd);
-    if (!abs) {
-      continue;
-    }
-
-    if (!isPathInside(stateDir, abs)) {
-      continue;
-    }
-
-    const violation = policy.check(abs, "read");
-    if (violation) {
-      return violation;
+    // Absorb string / pattern / comment tokens into the current segment.
+    const idx = current.tokens.length;
+    current.tokens.push(token);
+    if (pendingRedirect && typeof token === "string") {
+      current.redirectTargets.add(idx);
+      pendingRedirect = false;
     }
   }
 
-  return null;
+  commitSegment();
+  return segments;
+}
+
+function isSegmentDestructive(segment: Segment): boolean {
+  // Find the first string token — that's the bin (argv[0]).
+  let binIndex = -1;
+  for (let i = 0; i < segment.tokens.length; i++) {
+    const token = segment.tokens[i];
+    if (typeof token === "string") {
+      binIndex = i;
+      break;
+    }
+  }
+  if (binIndex === -1) {
+    return false;
+  }
+  const rawBin = segment.tokens[binIndex] as string;
+  // Strip any leading path (`/usr/bin/rm` → `rm`) and env prefix (`env rm`).
+  const bin = path.basename(rawBin).toLowerCase();
+  if (DESTRUCTIVE_BINS.has(bin)) {
+    return true;
+  }
+  const cond = CONDITIONAL_DESTRUCTIVE_BINS.find((c) => c.bin === bin);
+  if (!cond) {
+    return false;
+  }
+  // Reconstruct a string view of the remaining args for the flag regex.
+  const rest = segment.tokens
+    .slice(binIndex + 1)
+    .filter((t): t is string => typeof t === "string")
+    .join(" ");
+  return cond.flagPattern.test(rest);
 }
 
 function extractPathFromToken(token: string): string | null {
-  // Handle VAR=<value> assignments — use the RHS if it is a literal path.
+  // Handle VAR=<value> assignments (e.g. `dd of=/opt/foo`).
   const assignment = token.match(ASSIGNMENT_REGEX);
   if (assignment) {
     const rhs = assignment[2];
@@ -169,6 +344,9 @@ function resolveTokenPath(token: string, cwd: string): string | null {
 // ── lenient (non-Linux) ──────────────────────────────────────────────────────
 
 function lenientCheck(command: string, cwd: string, policy: PathPermissionPolicy): string | null {
+  if (!mentionsStateDir(command)) {
+    return null;
+  }
   if (LENIENT_AMBIGUOUS_MARKERS.test(command)) {
     return null;
   }
