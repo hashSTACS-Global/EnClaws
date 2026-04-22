@@ -40,6 +40,8 @@ export default defineConfig({
       "ui/src/ui/views/agents-utils.test.ts",
       "ui/src/ui/views/usage-render-details.test.ts",
       "ui/src/ui/controllers/agents.test.ts",
+      "ui/src/constants/providers.tier.test.ts",
+      "ui/src/ui/views/tenant/tenant-models-tier-view.test.ts",
     ],
     setupFiles: ["test/setup.ts"],
     exclude: [
