@@ -260,6 +260,8 @@ export const en: TranslationMap = {
     selectSubModel: "Select Model",
     selectedModel: "Selected model",
     selectModel: "Please select a model provider",
+    selectTier: "Please pick a tier first",
+    providerLabel: "Choose provider",
     apiKeyRequired: "API Key is required",
     apiAddress: "Address",
     apiAddressHint: "API endpoint for the model service. Leave empty for official service, fill in for proxy or private deployment.",

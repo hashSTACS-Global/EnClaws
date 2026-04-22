@@ -10,7 +10,13 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, i18n, I18nController } from "../../i18n/index.ts";
 import { tenantRpc, quotaErrorKey } from "./tenant/rpc.ts";
-import { PROVIDER_TYPES, MODEL_TIERS, type ModelTierValue } from "../../constants/providers.ts";
+import {
+  PROVIDER_TYPES,
+  MODEL_TIERS,
+  PROVIDERS_BY_TIER,
+  MODEL_SUGGESTIONS,
+  type ModelTierValue,
+} from "../../constants/providers.ts";
 import { tierLabel } from "../../i18n/tier-labels.ts";
 import { CHANNEL_TYPES, CHANNEL_ICON_MAP } from "../../constants/channels.ts";
 import { caretFix } from "../shared-styles.ts";
@@ -641,11 +647,35 @@ export class OnboardingWizard extends LitElement {
     this.modelApiKey = this.modelApiKey.trim();
     this.modelBaseUrl = this.modelBaseUrl.trim();
     this.modelName = this.modelName.trim();
+    if (!this.selectedTier) { this.error = t("onboarding.selectTier"); return false; }
     if (!this.selectedProvider) { this.error = t("onboarding.selectModel"); return false; }
     if (!this.modelApiKey) { this.error = t("onboarding.apiKeyRequired"); return false; }
     if (!this.modelBaseUrl) { this.error = t("onboarding.baseUrlRequired"); return false; }
     if (!this.modelName) { this.error = t("onboarding.modelNameRequired"); return false; }
     return true;
+  }
+
+  private onTierPick(tier: ModelTierValue) {
+    // Tier change resets downstream pickers — different tiers surface
+    // different provider sets and recommend different modelIds.
+    this.selectedTier = tier;
+    this.selectedProvider = "";
+    this.modelBaseUrl = "";
+    this.modelName = "";
+    this.error = "";
+  }
+
+  private onProviderPick(providerType: string) {
+    this.selectedProvider = providerType;
+    const p = MODEL_PROVIDERS.find((x) => x.type === providerType);
+    if (p) this.modelBaseUrl = p.baseUrl;
+    // Auto-fill the recommended modelId for this (provider, tier) pair.
+    // Admin can still overwrite.
+    if (this.selectedTier) {
+      const suggested = MODEL_SUGGESTIONS[providerType]?.[this.selectedTier];
+      if (suggested) this.modelName = suggested;
+    }
+    this.error = "";
   }
 
   private nextModel() {
@@ -909,7 +939,7 @@ export class OnboardingWizard extends LitElement {
     if (this.modelMode === "shared") {
       return !this.selectedSharedModelId || !this.selectedSharedSubModelId;
     }
-    return !this.selectedProvider || !this.modelApiKey || !this.modelBaseUrl || !this.modelName;
+    return !this.selectedTier || !this.selectedProvider || !this.modelApiKey || !this.modelBaseUrl || !this.modelName;
   }
 
   private renderModel() {
@@ -973,29 +1003,40 @@ export class OnboardingWizard extends LitElement {
           </div>
         ` : nothing}
       ` : html`
-        <div class="options-grid">
-          ${MODEL_PROVIDERS.map(p => html`
-            <div class="option-card ${this.selectedProvider === p.type ? 'selected' : ''}"
-              @click=${() => { this.selectedProvider = p.type; this.modelBaseUrl = p.baseUrl; }}>
-              <span>${p.label}</span>
-            </div>
-          `)}
+        <!-- Step 1: pick a tier -->
+        <div class="form-group">
+          <label>${t("onboarding.tierLabel")} <span class="required">*</span></label>
+          <div class="tier-pill-row">
+            ${MODEL_TIERS.map((tier) => html`
+              <button type="button"
+                class="tier-pill tier-${tier} ${this.selectedTier === tier ? 'selected' : ''}"
+                @click=${() => this.onTierPick(tier)}>
+                ${tierLabel(tier)}
+              </button>
+            `)}
+          </div>
+          <div class="form-hint">${t("onboarding.tierHint")}</div>
         </div>
 
-        ${this.selectedProvider ? html`
+        <!-- Step 2: pick a provider (filtered by the chosen tier) -->
+        ${this.selectedTier ? html`
           <div class="form-group">
-            <label>${t("onboarding.tierLabel")} <span class="required">*</span></label>
-            <div class="tier-pill-row">
-              ${MODEL_TIERS.map((tier) => html`
-                <button type="button"
-                  class="tier-pill tier-${tier} ${this.selectedTier === tier ? 'selected' : ''}"
-                  @click=${() => { this.selectedTier = tier; }}>
-                  ${tierLabel(tier)}
-                </button>
-              `)}
+            <label>${t("onboarding.providerLabel")} <span class="required">*</span></label>
+            <div class="options-grid">
+              ${MODEL_PROVIDERS
+                .filter((p) => PROVIDERS_BY_TIER[this.selectedTier as ModelTierValue]?.includes(p.type))
+                .map((p) => html`
+                  <div class="option-card ${this.selectedProvider === p.type ? 'selected' : ''}"
+                    @click=${() => this.onProviderPick(p.type)}>
+                    <span>${p.label}</span>
+                  </div>
+                `)}
             </div>
-            <div class="form-hint">${t("onboarding.tierHint")}</div>
           </div>
+        ` : nothing}
+
+        <!-- Step 3: config (only after tier + provider are set) -->
+        ${this.selectedTier && this.selectedProvider ? html`
           <div class="form-group">
             <label>API ${t("onboarding.apiAddress")} <span class="required">*</span></label>
             <input type="text" .value=${this.modelBaseUrl}

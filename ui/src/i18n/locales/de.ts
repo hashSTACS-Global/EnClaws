@@ -302,6 +302,8 @@ export const de: TranslationMap = {
     selectSubModel: "Modell auswählen",
     selectedModel: "Ausgewähltes Modell",
     selectModel: "Bitte wählen Sie einen Modellanbieter",
+    selectTier: "Bitte zuerst eine Stufe waehlen",
+    providerLabel: "Anbieter waehlen",
     apiKeyRequired: "API-Schlüssel ist erforderlich",
     apiAddress: "Adresse",
     apiAddressHint: "API-Endpunkt für den Modelldienst. Für offiziellen Dienst leer lassen, für Proxy oder private Bereitstellung ausfüllen.",

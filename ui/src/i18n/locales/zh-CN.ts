@@ -260,6 +260,8 @@ export const zh_CN: TranslationMap = {
     selectSubModel: "选择模型",
     selectedModel: "已选择模型",
     selectModel: "请选择一个模型提供商",
+    selectTier: "请先选择档位",
+    providerLabel: "选择供应商",
     apiKeyRequired: "请填写 API Key",
     apiAddress: "地址",
     apiAddressHint: "模型服务的 API 地址，使用官方服务可留空，使用代理或私有部署需填写。",
