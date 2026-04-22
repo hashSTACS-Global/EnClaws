@@ -156,27 +156,43 @@ export function projectModelConfig(
   const byTier = new Map(groups.map((g) => [g.tier, g.models]));
   const out: ModelConfigEntryLite[] = [];
 
-  for (const tier of enabledTiers) {
+  // Only the first tier in enabledTiers (the agent's default tier; the caller
+  // places it first in orderedTiers) gets an isDefault=true slot — and only
+  // one within that tier, chosen by prior user choice > tenant isTierDefault
+  // > first listed. Every other entry in the flattened array is a fallback
+  // with isDefault=false.
+  //
+  // Why: toConfigAgentsList (src/db/models/tenant-agent.ts) translates the
+  // flattened modelConfig into a {primary, fallbacks[]} shape that pi-
+  // embedded-runner consumes, and that format requires exactly one global
+  // primary. Standing multiple isDefault=true flags collapses the fallback
+  // list because `filter(!isDefault)` drops every other isDefault=true slot
+  // — the very bug this rewrite fixes.
+  for (let tierIdx = 0; tierIdx < enabledTiers.length; tierIdx++) {
+    const tier = enabledTiers[tierIdx];
     const models = byTier.get(tier);
     if (!models || models.length === 0) continue;
 
-    const priorDefault = priorConfig?.find((e) => {
-      if (!e.isDefault) return false;
-      return models.some((m) => m.providerId === e.providerId && m.modelId === e.modelId);
-    });
-    // Precedence: prior user choice > tenant-wide tier default > first listed
-    const tierDefault = models.find((m) => m.isTierDefault);
-    const defaultKey = priorDefault
-      ? key(priorDefault.providerId, priorDefault.modelId)
-      : tierDefault
-        ? key(tierDefault.providerId, tierDefault.modelId)
-        : key(models[0].providerId, models[0].modelId);
+    const isDefaultTier = tierIdx === 0;
+    let chosenKey: string | null = null;
+    if (isDefaultTier) {
+      const priorDefault = priorConfig?.find((e) => {
+        if (!e.isDefault) return false;
+        return models.some((m) => m.providerId === e.providerId && m.modelId === e.modelId);
+      });
+      const tierDefault = models.find((m) => m.isTierDefault);
+      chosenKey = priorDefault
+        ? key(priorDefault.providerId, priorDefault.modelId)
+        : tierDefault
+          ? key(tierDefault.providerId, tierDefault.modelId)
+          : key(models[0].providerId, models[0].modelId);
+    }
 
     for (const m of models) {
       out.push({
         providerId: m.providerId,
         modelId: m.modelId,
-        isDefault: key(m.providerId, m.modelId) === defaultKey,
+        isDefault: isDefaultTier && key(m.providerId, m.modelId) === chosenKey,
       });
     }
   }

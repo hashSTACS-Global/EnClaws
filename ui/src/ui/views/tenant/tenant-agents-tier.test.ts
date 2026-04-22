@@ -262,11 +262,22 @@ describe("projectModelConfig", () => {
     expect(projectModelConfig([], providers, [])).toEqual([]);
   });
 
-  it("handles multiple tiers (each with its own default)", () => {
+  it("marks only the first (default) tier's chosen model as isDefault; other tiers are fallbacks", () => {
     const out = projectModelConfig(["pro", "standard", "lite"], providers, []);
     const defaults = out.filter((e) => e.isDefault).map((e) => e.modelId);
-    expect(defaults).toEqual(["opus", "sonnet", "haiku"]);
+    // Only the default tier (first, 'pro') has an isDefault=true slot.
+    // Everything else is a fallback. toConfigAgentsList can then translate
+    // this cleanly into { primary: opus, fallbacks: [sonnet, qwen, haiku] }.
+    expect(defaults).toEqual(["opus"]);
     expect(out).toHaveLength(4); // opus + sonnet + qwen + haiku
+  });
+
+  it("puts the default-tier entries first in array order (for cross-tier failover)", () => {
+    const out = projectModelConfig(["standard", "pro"], providers, []);
+    // standard first (default), then pro. Within standard, chosen-default
+    // leads; pro tier entries come after as fallbacks.
+    expect(out.map((e) => e.modelId)).toEqual(["sonnet", "qwen", "opus"]);
+    expect(out.filter((e) => e.isDefault).map((e) => e.modelId)).toEqual(["sonnet"]);
   });
 
   it("treats legacy models as standard and includes them in the standard projection", () => {
