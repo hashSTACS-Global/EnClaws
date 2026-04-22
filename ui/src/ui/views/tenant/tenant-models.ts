@@ -299,9 +299,10 @@ export class TenantModelsView extends LitElement {
   @state() private subModelName = "";
   @state() private subModelTier: ModelTierValue | "" = "";
 
-  // View switcher: "provider" (default, Provider-container cards) vs
-  // "tier" (flat list grouped by model tier)
-  @state() private viewMode: "provider" | "tier" = "provider";
+  // View switcher: "tier" (flat list grouped by model tier, default) vs
+  // "provider" (Provider-container cards, currently only reachable
+  // programmatically — switcher UI is hidden per product direction).
+  @state() private viewMode: "provider" | "tier" = "tier";
 
   // Tier-cascading Add/Edit Model modal state (separate from the legacy
   // Provider-level showForm flow above).
@@ -714,18 +715,6 @@ export class TenantModelsView extends LitElement {
       <div class="header">
         <h2>${t("models.title")}</h2>
         <div style="display:flex;gap:0.5rem;align-items:center">
-          <div class="view-switch">
-            <button
-              class="btn btn-sm ${this.viewMode === "provider" ? "active" : ""}"
-              @click=${() => (this.viewMode = "provider")}>
-              ${t("models.viewByProvider")}
-            </button>
-            <button
-              class="btn btn-sm ${this.viewMode === "tier" ? "active" : ""}"
-              @click=${() => (this.viewMode = "tier")}>
-              ${t("models.viewByTier")}
-            </button>
-          </div>
           <button class="btn btn-outline" @click=${() => this.loadConfigs()}>${t("models.refresh")}</button>
           <button class="btn btn-primary" @click=${() => this.openAddModel()}>${t("models.addModel")}</button>
           ${this.showForm ? html`
