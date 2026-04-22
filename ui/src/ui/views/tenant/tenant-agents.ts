@@ -427,6 +427,25 @@ export class TenantAgentsView extends LitElement {
       white-space: nowrap;
     }
     .tier-default-radio > input { margin: 0; }
+    /* Overview panel: read-only tier summary */
+    .tier-summary { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.3rem; }
+    .tier-summary-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.4rem 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--card);
+    }
+    .tier-summary-row.is-default { border-color: var(--accent); }
+    .tier-summary-mark {
+      font-size: 0.72rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .tier-summary-backup {
+      font-size: 0.72rem;
+      color: var(--text-muted, #a3a3a3);
+    }
     .tier-badge {
       display: inline-block;
       padding: 0.05rem 0.45rem;
@@ -1357,18 +1376,10 @@ export class TenantAgentsView extends LitElement {
     const denySet = new Set(Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
       ? (agent.config.tools as { deny: string[] }).deny : []);
     const toolsEnabled = this.allToolIds.filter((id) => !denySet.has(id) && !this.systemDenySet.has(id)).length;
-    const systemPrompt = (agent.config?.systemPrompt as string) || "";
-    const currentConfig = this.getInlineModelConfig(agent);
-    const isDirty = this.inlineModelConfig !== null;
-    // Saved values for KV display (from agent data, not inline edits)
-    const savedConfig = agent.modelConfig ?? [];
-    const savedDefault = savedConfig.find(e => e.isDefault);
-    const savedDefaultLabel = savedDefault
-      ? (() => { const fm = this.flatModels.find(m => m.providerId === savedDefault.providerId && m.modelId === savedDefault.modelId); return fm ? `${fm.modelName} (${fm.providerName})` : savedDefault.modelId; })()
-      : "-";
-    // Inline editing values for the model select section
-    const defaultEntry = currentConfig.find((e) => e.isDefault);
-    const fallbacks = currentConfig.filter(e => !e.isDefault);
+
+    const enabledTiers = deriveEnabledTiers(agent.modelConfig, this.availableModels);
+    const defaultTier = deriveAgentDefaultTier(agent, this.availableModels);
+    const defaultTierLabel = defaultTier ? TIER_LABELS[defaultTier] : "-";
 
     return html`
       <div class="overview-grid">
@@ -1377,8 +1388,8 @@ export class TenantAgentsView extends LitElement {
           <div class="value mono">${agent.agentId}</div>
         </div>
         <div class="kv">
-          <div class="label">${t("tenantAgents.defaultLabel")}</div>
-          <div class="value mono">${savedDefaultLabel}</div>
+          <div class="label">${t("tenantAgents.defaultTierLabel")}</div>
+          <div class="value">${defaultTierLabel}</div>
         </div>
         <div class="kv">
           <div class="label">${t("tenantAgents.tools")}</div>
@@ -1402,57 +1413,27 @@ export class TenantAgentsView extends LitElement {
         `;
       })()}
 
-      ${nothing /* systemPrompt moved to Persona & Standards tab */}
-
       <div class="model-section">
         <div class="label" style="display:flex;align-items:center;gap:0.4rem">
-          ${t("tenantAgents.modelBinding")}
+          ${t("tenantAgents.enabledTiers")}
           <span class="help-icon" title="${t("tenantAgents.fallbackExplain")}">?</span>
         </div>
-        ${this.flatModels.length === 0 ? html`
-          <div class="form-hint">${t("tenantAgents.noModelsAvailable").split(t("tenantAgents.addModelLink"))[0]}<a href=${this.modelManagePath} style="color:var(--accent,#3b82f6);text-decoration:underline;cursor:pointer">${t("tenantAgents.addModelLink")}</a></div>
+        ${enabledTiers.length === 0 ? html`
+          <div class="form-hint">${t("tenantAgents.tierNoneEnabled")}</div>
         ` : html`
-          <div class="model-cards">
-            ${this.flatModels.map(m => {
-              const isSelected = currentConfig.some(c => c.providerId === m.providerId && c.modelId === m.modelId);
-              const isDef = currentConfig.some(c => c.providerId === m.providerId && c.modelId === m.modelId && c.isDefault);
-              const fallbackIdx = isSelected && !isDef
-                ? fallbacks.findIndex(f => f.providerId === m.providerId && f.modelId === m.modelId)
-                : -1;
+          <div class="tier-summary">
+            ${TIER_DISPLAY_ORDER.filter((t) => enabledTiers.includes(t)).map((tier) => {
+              const isDefault = tier === defaultTier;
               return html`
-                <div class="model-card ${isSelected ? "selected" : ""}"
-                  @click=${() => this.inlineToggleModel(agent, m.providerId, m.modelId)}>
-                  <div class="model-card-check">${isSelected ? "✓" : ""}</div>
-                  <div class="model-card-info">
-                    <div class="model-card-name">${m.modelName}</div>
-                    <div class="model-card-provider">${m.providerName}</div>
-                  </div>
-                  ${isDef ? html`
-                    <span class="model-card-badge is-default">${t("tenantAgents.default")}</span>
-                  ` : fallbackIdx >= 0 ? html`
-                    <span class="model-card-badge is-fallback"
-                      @click=${(e: Event) => {
-                        e.stopPropagation();
-                        this.inlineSetDefault(agent, m.providerId, m.modelId);
-                      }}>
-                      ${t("tenantAgents.fallbackN", { n: String(fallbackIdx + 1) })}
-                    </span>
-                  ` : nothing}
+                <div class="tier-summary-row ${isDefault ? "is-default" : ""}">
+                  <span class="tier-badge tier-${tier}">${TIER_LABELS[tier]}</span>
+                  ${isDefault
+                    ? html`<span class="tier-summary-mark">${t("tenantAgents.tierIsDefault")}</span>`
+                    : html`<span class="tier-summary-backup">${t("tenantAgents.tierBackupLabel")}</span>`}
                 </div>
               `;
             })}
           </div>
-          ${isDirty ? html`
-            <div class="model-actions" style="margin-top:0.75rem">
-              <button class="btn btn-outline btn-sm" @click=${() => { this.inlineModelConfig = null; }}>
-                ${t("tenantAgents.cancel")}
-              </button>
-              <button class="btn btn-primary btn-sm" ?disabled=${this.inlineModelSaving || currentConfig.length === 0}
-                @click=${() => this.inlineSaveModelConfig(agent)}>
-                ${this.inlineModelSaving ? t("tenantAgents.saving") : t("tenantAgents.save")}
-              </button>
-            </div>
-          ` : nothing}
         `}
       </div>
     `;

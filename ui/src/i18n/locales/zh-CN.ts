@@ -1019,6 +1019,8 @@ export const zh_CN: TranslationMap = {
     tierModelsCount: "{count} 个模型",
     tierNoneEnabled: "请至少勾选一个档位",
     tierIsDefault: "默认档",
+    tierBackupLabel: "备用档",
+    defaultTierLabel: "默认档位",
     noChannels: "该 Agent 暂未关联任何频道",
     channelActive: "已启用",
     channelInactive: "未启用",

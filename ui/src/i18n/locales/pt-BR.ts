@@ -623,6 +623,8 @@ export const pt_BR: TranslationMap = {
     tierModelsCount: "{count} modelos",
     tierNoneEnabled: "Escolha pelo menos uma categoria",
     tierIsDefault: "Padrao",
+    tierBackupLabel: "Reserva",
+    defaultTierLabel: "Categoria padrao",
     noChannels: "Este agente não está vinculado a nenhum canal",
     channelActive: "Ativo",
     channelInactive: "Inativo",

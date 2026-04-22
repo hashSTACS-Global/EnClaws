@@ -1026,6 +1026,8 @@ export const en: TranslationMap = {
     tierModelsCount: "{count} models",
     tierNoneEnabled: "Please pick at least one tier",
     tierIsDefault: "Default",
+    tierBackupLabel: "Backup",
+    defaultTierLabel: "Default tier",
     noChannels: "This agent is not linked to any channels",
     channelActive: "Active",
     channelInactive: "Inactive",

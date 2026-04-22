@@ -455,6 +455,8 @@ export const zh_TW: TranslationMap = {
     tierModelsCount: "{count} 個模型",
     tierNoneEnabled: "請至少勾選一個檔位",
     tierIsDefault: "預設檔",
+    tierBackupLabel: "備用檔",
+    defaultTierLabel: "預設檔位",
     noChannels: "該 Agent 尚未關聯任何頻道",
     channelActive: "已啟用",
     channelInactive: "未啟用",

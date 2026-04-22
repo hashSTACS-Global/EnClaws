@@ -624,6 +624,8 @@ export const de: TranslationMap = {
     tierModelsCount: "{count} Modelle",
     tierNoneEnabled: "Bitte mindestens eine Stufe waehlen",
     tierIsDefault: "Standard",
+    tierBackupLabel: "Backup",
+    defaultTierLabel: "Standardstufe",
     noChannels: "Dieser Agent ist mit keinem Kanal verknüpft",
     channelActive: "Aktiv",
     channelInactive: "Inaktiv",
