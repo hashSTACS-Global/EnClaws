@@ -10,7 +10,8 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, state, property } from "lit/decorators.js";
 import { t, i18n, I18nController } from "../../i18n/index.ts";
 import { tenantRpc, quotaErrorKey } from "./tenant/rpc.ts";
-import { PROVIDER_TYPES, MODEL_TIERS, TIER_LABELS, type ModelTierValue } from "../../constants/providers.ts";
+import { PROVIDER_TYPES, MODEL_TIERS, type ModelTierValue } from "../../constants/providers.ts";
+import { tierLabel } from "../../i18n/tier-labels.ts";
 import { CHANNEL_TYPES, CHANNEL_ICON_MAP } from "../../constants/channels.ts";
 import { caretFix } from "../shared-styles.ts";
 
@@ -989,7 +990,7 @@ export class OnboardingWizard extends LitElement {
                 <button type="button"
                   class="tier-pill tier-${tier} ${this.selectedTier === tier ? 'selected' : ''}"
                   @click=${() => { this.selectedTier = tier; }}>
-                  ${TIER_LABELS[tier]}
+                  ${tierLabel(tier)}
                 </button>
               `)}
             </div>

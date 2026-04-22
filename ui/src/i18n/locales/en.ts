@@ -1624,6 +1624,11 @@ export const en: TranslationMap = {
     tierUnset: "Unassigned",
     tierUnassigned: "Unassigned",
     tierUnassignedHint: "These models have no tier recorded and run as STANDARD by default. Edit them to assign a tier.",
+    tierLabel: {
+      pro: "High (PRO)",
+      standard: "Mid (STANDARD)",
+      lite: "Low (LITE)",
+    },
     tierCount: "{count}",
     viewByProvider: "By provider",
     viewByTier: "By tier",

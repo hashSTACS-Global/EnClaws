@@ -1184,6 +1184,11 @@ export const pt_BR: TranslationMap = {
     tierUnset: "Sem categoria",
     tierUnassigned: "Sem categoria",
     tierUnassignedHint: "Esses modelos nao tem categoria e rodam como STANDARD por padrao. Edite para atribuir.",
+    tierLabel: {
+      pro: "Alto (PRO)",
+      standard: "Medio (STANDARD)",
+      lite: "Baixo (LITE)",
+    },
     tierCount: "{count}",
     viewByProvider: "Por provedor",
     viewByTier: "Por categoria",

@@ -40,7 +40,8 @@ import {
   TOOL_DESC_KEY,
 } from "../tool-group-defs.ts";
 import { SKILL_LABEL_KEY, SKILL_DESC_KEY } from "../skill-defs.ts";
-import { TIER_LABELS, type ModelTierValue } from "../../../constants/providers.ts";
+import { type ModelTierValue } from "../../../constants/providers.ts";
+import { tierLabel } from "../../../i18n/tier-labels.ts";
 import {
   tenantTierGroups,
   deriveEnabledTiers,
@@ -1478,7 +1479,7 @@ export class TenantAgentsView extends LitElement {
 
     const enabledTiers = deriveEnabledTiers(agent.modelConfig, this.availableModels);
     const defaultTier = deriveAgentDefaultTier(agent, this.availableModels);
-    const defaultTierLabel = defaultTier ? TIER_LABELS[defaultTier] : "-";
+    const defaultTierLabel = defaultTier ? tierLabel(defaultTier) : "-";
 
     return html`
       <div class="overview-grid">
@@ -1526,7 +1527,7 @@ export class TenantAgentsView extends LitElement {
               return html`
                 <div class="tier-summary-card ${isDefault ? "is-default" : ""}">
                   <div class="tier-summary-head">
-                    <span class="tier-badge tier-${tier}">${TIER_LABELS[tier]}</span>
+                    <span class="tier-badge tier-${tier}">${tierLabel(tier)}</span>
                     ${isDefault
                       ? html`<span class="tier-summary-mark">${t("tenantAgents.tierIsDefault")}</span>`
                       : html`<span class="tier-summary-backup">${t("tenantAgents.tierBackupLabel")}</span>`}
@@ -2577,7 +2578,7 @@ export class TenantAgentsView extends LitElement {
                             @change=${(e: Event) => this.toggleTier(g.tier, (e.target as HTMLInputElement).checked)} />
                           <div class="tier-option-body">
                             <div class="tier-option-head-row">
-                              <span class="tier-badge tier-${g.tier}">${TIER_LABELS[g.tier]}</span>
+                              <span class="tier-badge tier-${g.tier}">${tierLabel(g.tier)}</span>
                               <span class="tier-option-count">${t("tenantAgents.tierModelsCount").replace("{count}", String(g.models.length))}</span>
                             </div>
                             ${isEnabled ? this.renderAgentTierModelRows(previewConfig, g.tier) : nothing}

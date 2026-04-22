@@ -12,12 +12,12 @@ import {
   PROVIDER_TYPES as SHARED_PROVIDERS,
   API_PROTOCOLS as SHARED_PROTOCOLS,
   MODEL_TIERS,
-  TIER_LABELS,
   PROVIDERS_BY_TIER,
   type ModelTierValue,
 } from "../../../constants/providers.ts";
 import { t } from "../../../i18n/index.ts";
 import { I18nController } from "../../../i18n/lib/lit-controller.ts";
+import { tierLabel } from "../../../i18n/tier-labels.ts";
 import { showConfirm } from "../../components/confirm-dialog.ts";
 import { caretFix } from "../../shared-styles.ts";
 import {
@@ -740,7 +740,7 @@ export class TenantModelsView extends LitElement {
   /** Small tier badge used on both Provider cards (model tags) and the by-tier rows. */
   private renderTierBadge(tier: ModelTierValue | undefined) {
     if (!tier) return nothing;
-    return html`<span class="tier-badge tier-${tier}">${TIER_LABELS[tier]}</span>`;
+    return html`<span class="tier-badge tier-${tier}">${tierLabel(tier)}</span>`;
   }
 
   /** Flat, tier-grouped view. Shares data with the Provider view — no extra fetch. */
@@ -753,7 +753,7 @@ export class TenantModelsView extends LitElement {
         <div class="tier-section">
           <div class="tier-section-head">
             <span class="tier-badge tier-${tier}">
-              ${tier === "unassigned" ? t("models.tierUnassigned") : TIER_LABELS[tier as ModelTierValue]}
+              ${tier === "unassigned" ? t("models.tierUnassigned") : tierLabel(tier as ModelTierValue)}
             </span>
             <span class="count">${t("models.tierCount", { count: String(buckets[tier].length) })}</span>
           </div>
@@ -862,7 +862,7 @@ export class TenantModelsView extends LitElement {
                   type="button"
                   class="tier-pill tier-${tier} ${d.tier === tier ? "selected" : ""}"
                   @click=${() => this.onAddTierChange(tier)}>
-                  ${TIER_LABELS[tier]}
+                  ${tierLabel(tier)}
                 </button>
               `)}
             </div>
@@ -1042,7 +1042,7 @@ export class TenantModelsView extends LitElement {
                   <tr>
                     <td style="font-family:monospace">${m.id}</td>
                     <td>${m.name}</td>
-                    <td>${m.tier ? TIER_LABELS[m.tier] : html`<span style="color:var(--muted)">${t("models.tierUnset")}</span>`}</td>
+                    <td>${m.tier ? tierLabel(m.tier) : html`<span style="color:var(--muted)">${t("models.tierUnset")}</span>`}</td>
                     <td><button type="button" class="btn btn-danger btn-sm" @click=${() => this.removeModel(idx)}>${t("models.remove")}</button></td>
                   </tr>
                 `)}
@@ -1072,7 +1072,7 @@ export class TenantModelsView extends LitElement {
                     @change=${(e: Event) => (this.subModelTier = (e.target as HTMLSelectElement).value as ModelTierValue | "")}>
                     <option value="">${t("models.tierUnset")}</option>
                     ${MODEL_TIERS.map((tier) => html`
-                      <option value=${tier} ?selected=${this.subModelTier === tier}>${TIER_LABELS[tier]}</option>
+                      <option value=${tier} ?selected=${this.subModelTier === tier}>${tierLabel(tier)}</option>
                     `)}
                   </select>
                 </div>

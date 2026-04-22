@@ -1645,6 +1645,11 @@ export const zh_CN: TranslationMap = {
     tierUnset: "未分档",
     tierUnassigned: "未分档",
     tierUnassignedHint: "这些模型未登记档位，当前按 STANDARD 档运行。建议编辑后选择合适档位。",
+    tierLabel: {
+      pro: "高档 (PRO)",
+      standard: "中档 (STANDARD)",
+      lite: "低档 (LITE)",
+    },
     tierCount: "{count} 个",
     viewByProvider: "按供应商",
     viewByTier: "按档位",

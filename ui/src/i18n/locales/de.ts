@@ -1185,6 +1185,11 @@ export const de: TranslationMap = {
     tierUnset: "Ohne Stufe",
     tierUnassigned: "Ohne Stufe",
     tierUnassignedHint: "Diese Modelle haben keine Stufe und laufen standardmassig als STANDARD. Zum Zuweisen bearbeiten.",
+    tierLabel: {
+      pro: "Hoch (PRO)",
+      standard: "Mittel (STANDARD)",
+      lite: "Niedrig (LITE)",
+    },
     tierCount: "{count}",
     viewByProvider: "Nach Anbieter",
     viewByTier: "Nach Stufe",
