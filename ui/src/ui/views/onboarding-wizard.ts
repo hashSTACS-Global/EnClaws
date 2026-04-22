@@ -240,24 +240,45 @@ export class OnboardingWizard extends LitElement {
       border-color: var(--accent, #3b82f6);
     }
     .added-tier-head {
-      display: flex; align-items: center; gap: 0.5rem;
-      padding: 0.45rem 0.65rem;
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.5rem 0.7rem;
       background: rgba(255,255,255,0.03);
     }
+    .added-tier-head > .tier-pill {
+      flex-shrink: 0;
+      line-height: 1;
+    }
     .added-tier-count {
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       color: var(--text-secondary, #a3a3a3);
+      flex-shrink: 0;
     }
     .tier-default-choice {
       margin-left: auto;
-      display: flex; align-items: center; gap: 0.35rem;
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.25rem 0.55rem;
+      border: 1px solid var(--border, #404040);
+      border-radius: 6px;
       font-size: 0.78rem;
+      line-height: 1;
       color: var(--text-muted, #a3a3a3);
       cursor: pointer;
       white-space: nowrap;
+      flex-shrink: 0;
+      user-select: none;
     }
-    .tier-default-choice > input { margin: 0; accent-color: var(--accent); }
-    .added-tier-group.is-default .tier-default-choice { color: var(--accent); }
+    .tier-default-choice:hover { background: rgba(255,255,255,0.04); }
+    .tier-default-choice > input[type="radio"] {
+      margin: 0;
+      width: 13px; height: 13px;
+      accent-color: var(--accent, #3b82f6);
+      flex-shrink: 0;
+    }
+    .added-tier-group.is-default .tier-default-choice {
+      color: var(--accent, #3b82f6);
+      border-color: var(--accent, #3b82f6);
+      background: rgba(59,130,246,0.08);
+    }
     .added-tier-body {
       display: flex; flex-direction: column; gap: 0.25rem;
       padding: 0.4rem 0.65rem;
