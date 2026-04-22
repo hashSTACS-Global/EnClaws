@@ -76,7 +76,6 @@ function emptyAddModelDraft(): AddModelDraft {
     apiKey: "",
     modelId: "",
     modelName: "",
-    setAsDefault: false,
   };
 }
 
@@ -270,14 +269,6 @@ export class TenantModelsView extends LitElement {
       margin-top: 0.5rem;
     }
     .modal-errors > div { margin: 0.15rem 0; }
-    .set-default-row {
-      display: flex; align-items: center; gap: 0.4rem;
-      margin-top: 0.5rem;
-      font-size: 0.8rem;
-      color: var(--text-2);
-      cursor: pointer;
-      user-select: none;
-    }
   `];
 
   private i18nController = new I18nController(this);
@@ -460,7 +451,6 @@ export class TenantModelsView extends LitElement {
       apiKey: "",
       modelId: def.id,
       modelName: def.name,
-      setAsDefault: false,
     };
     this.addModelErrors = [];
     this.showAddModel = true;
@@ -508,11 +498,6 @@ export class TenantModelsView extends LitElement {
       return;
     }
     this.saving = true;
-    // Resolved identifiers of the model that actually ended up in the DB
-    // (differs from the draft when the modal created a new Provider container).
-    // Populated on each code path so setAsDefault can fan out after loadConfigs.
-    let resolvedProviderId = "";
-    let resolvedModelId = this.addModelDraft.modelId;
     try {
       if (this.modalMode === "edit" && this.editingHandle) {
         const { providerId, modelId } = this.editingHandle;
@@ -530,8 +515,6 @@ export class TenantModelsView extends LitElement {
         }
         const payload = buildEditPayload(this.addModelDraft, this.editingHandle, existing);
         await this.rpc("tenant.models.update", { ...payload });
-        resolvedProviderId = providerId;
-        resolvedModelId = this.addModelDraft.modelId;
       } else {
         const target = resolveAddTarget(this.addModelDraft, this.configs);
         if (target.mode === "append") {
@@ -540,19 +523,12 @@ export class TenantModelsView extends LitElement {
             models: target.nextModels,
             ...(target.apiKey ? { apiKey: target.apiKey } : {}),
           });
-          resolvedProviderId = target.providerId;
         } else {
-          const created = (await this.rpc("tenant.models.create", { ...target.payload })) as { id?: string } | undefined;
-          resolvedProviderId = created?.id ?? "";
+          await this.rpc("tenant.models.create", { ...target.payload });
         }
       }
       this.showSuccess("models.saved");
       await this.loadConfigs();
-      // Fan out "set as tier default" after the catalog is fresh so the
-      // new (providerId, modelId) is looked up correctly by findModelTier.
-      if (this.addModelDraft.setAsDefault && resolvedProviderId && resolvedModelId) {
-        await this.setAsTierDefault(resolvedProviderId, resolvedModelId);
-      }
       this.closeAddModel();
     } catch (err) {
       this.showError(err instanceof Error ? err.message : "models.saveFailed");
@@ -906,14 +882,6 @@ export class TenantModelsView extends LitElement {
                 </button>
               `)}
             </div>
-            ${d.tier ? html`
-              <label class="set-default-row">
-                <input type="checkbox"
-                  .checked=${d.setAsDefault}
-                  @change=${(e: Event) => this.patchDraft({ setAsDefault: (e.target as HTMLInputElement).checked })} />
-                <span>${t("models.addForm.setAsTierDefault")}</span>
-              </label>
-            ` : nothing}
           </div>
 
           ${d.tier ? html`

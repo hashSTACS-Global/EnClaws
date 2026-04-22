@@ -30,10 +30,6 @@ export interface AddModelDraft {
   apiKey: string;
   modelId: string;
   modelName: string;
-  // UI-only flag: if true, after a successful add/edit run
-  // setAsTierDefault so every agent using this tier gets this (providerId,
-  // modelId) as the sole default. Not sent to any server API directly.
-  setAsDefault: boolean;
 }
 
 export interface ModelDefinitionLite {

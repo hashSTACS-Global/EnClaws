@@ -1212,7 +1212,6 @@ export const pt_BR: TranslationMap = {
       apiKeyKeepHint: "(em branco = manter a existente)",
       apiKeyEditPlaceholder: "Deixe em branco para manter",
       tierChangeConfirm: "Este modelo e usado por {count} agente(s). Mudar a categoria afeta as categorias disponiveis. Continuar?",
-      setAsTierDefault: "Tambem definir como padrao desta categoria (afeta todos os agentes que a usam)",
     },
   },
 };

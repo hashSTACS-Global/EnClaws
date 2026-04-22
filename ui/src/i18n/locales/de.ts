@@ -1213,7 +1213,6 @@ export const de: TranslationMap = {
       apiKeyKeepHint: "(leer = bestehenden behalten)",
       apiKeyEditPlaceholder: "Leer lassen, um bestehenden Schluessel zu behalten",
       tierChangeConfirm: "Dieses Modell wird von {count} Agent(en) verwendet. Eine Stufenaenderung betrifft deren verfuegbare Stufen. Fortfahren?",
-      setAsTierDefault: "Zugleich als Standard fuer diese Stufe setzen (gilt fuer alle nutzenden Agenten)",
     },
   },
 };
