@@ -1025,7 +1025,6 @@ export const en: TranslationMap = {
     tierPickerHint: "Pick the tiers this agent can use and mark one as default. When all models in the default tier fail, runtime falls through to the backup tiers in order.",
     tierModelsCount: "{count} models",
     tierNoneEnabled: "Please pick at least one tier",
-    setAsDefault: "Set as default",
     tierIsDefault: "Default",
     noChannels: "This agent is not linked to any channels",
     channelActive: "Active",
@@ -1626,6 +1625,7 @@ export const en: TranslationMap = {
     saved: "Saved",
     setTierDefault: "Set as tier default",
     unassignedCantBeDefault: "Unassigned models can't be set as a tier default",
+    tierIsDefault: "Default",
     addForm: {
       title: "Add model",
       tierLabel: "Tier",

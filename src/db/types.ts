@@ -185,6 +185,12 @@ export interface TenantModelDefinition {
   streaming?: boolean;
   compat?: Record<string, unknown>;
   tier?: ModelTier;
+  // v4: within a tier, at most one TenantModelDefinition per tenant has
+  // isTierDefault=true. Drives both the UI "default" badge and the
+  // per-tier default that flows into Agent.modelConfig.isDefault via
+  // projectModelConfig. Enforced by the client (batch update) rather
+  // than the DB — tenant_models.models is JSONB so no SQL constraint.
+  isTierDefault?: boolean;
 }
 
 export type ModelVisibility = "private" | "shared";

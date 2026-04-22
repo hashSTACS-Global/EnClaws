@@ -31,7 +31,7 @@ export interface TenantModelLite {
   providerName: string;
   isActive: boolean;
   visibility?: string;
-  models: Array<{ id: string; name: string; tier?: ModelTierValue }>;
+  models: Array<{ id: string; name: string; tier?: ModelTierValue; isTierDefault?: boolean }>;
 }
 
 export interface ModelConfigEntryLite {
@@ -47,6 +47,7 @@ export interface TierGroupEntry {
   legacy: boolean;
   providerType: string;
   providerName: string;
+  isTierDefault: boolean;
 }
 
 export interface TierGroup {
@@ -75,6 +76,7 @@ export function tenantTierGroups(tenantModels: TenantModelLite[]): TierGroup[] {
         legacy: def.tier === undefined,
         providerType: tm.providerType,
         providerName: tm.providerName,
+        isTierDefault: def.isTierDefault === true,
       });
     }
   }
@@ -162,9 +164,13 @@ export function projectModelConfig(
       if (!e.isDefault) return false;
       return models.some((m) => m.providerId === e.providerId && m.modelId === e.modelId);
     });
+    // Precedence: prior user choice > tenant-wide tier default > first listed
+    const tierDefault = models.find((m) => m.isTierDefault);
     const defaultKey = priorDefault
       ? key(priorDefault.providerId, priorDefault.modelId)
-      : key(models[0].providerId, models[0].modelId);
+      : tierDefault
+        ? key(tierDefault.providerId, tierDefault.modelId)
+        : key(models[0].providerId, models[0].modelId);
 
     for (const m of models) {
       out.push({

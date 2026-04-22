@@ -62,16 +62,6 @@ export type AddTarget =
   | { mode: "append"; providerId: string; nextModels: ModelDefinitionLite[]; apiKey: string }
   | { mode: "create"; payload: CreateProviderPayload };
 
-export interface AgentLike {
-  id: string;
-  modelConfig: Array<{ providerId: string; modelId: string; isDefault: boolean }>;
-}
-
-export interface AgentConfigUpdate {
-  agentId: string;
-  modelConfig: Array<{ providerId: string; modelId: string; isDefault: boolean }>;
-}
-
 export interface EditPayload {
   id: string;
   providerName: string;
@@ -187,53 +177,6 @@ export function resolveAddTarget(
       models: [newDef],
     },
   };
-}
-
-// ─── buildSetTierDefaultUpdates ───────────────────────────────────────────
-
-const LEGACY_TIER_FALLBACK: ModelTierValue = "standard";
-
-/**
- * Compute the minimal set of tenant.agents.update payloads required to make
- * the (providerId, modelId) entry the sole default within `tier` for every
- * agent that currently has at least one same-tier entry.
- *
- *  - Agents without any same-tier entry are skipped (they don't use this tier).
- *  - Agents already in the desired shape are skipped (no-op).
- *  - Legacy (tier=undefined) models are treated as "standard" via
- *    LEGACY_TIER_FALLBACK — mirrors the server-side tier-chain fallback.
- */
-export function buildSetTierDefaultUpdates(
-  targetProviderId: string,
-  targetModelId: string,
-  tier: ModelTierValue,
-  agents: AgentLike[],
-  findTier: (providerId: string, modelId: string) => ModelTierValue | undefined,
-): AgentConfigUpdate[] {
-  const resolve = (providerId: string, modelId: string): ModelTierValue =>
-    findTier(providerId, modelId) ?? LEGACY_TIER_FALLBACK;
-
-  const updates: AgentConfigUpdate[] = [];
-  for (const agent of agents) {
-    const sameTier = agent.modelConfig.filter(
-      (e) => resolve(e.providerId, e.modelId) === tier,
-    );
-    if (sameTier.length === 0) continue;
-
-    const next = agent.modelConfig.map((e) => {
-      if (resolve(e.providerId, e.modelId) !== tier) return e;
-      const shouldBeDefault =
-        e.providerId === targetProviderId && e.modelId === targetModelId;
-      if (e.isDefault === shouldBeDefault) return e;
-      return { ...e, isDefault: shouldBeDefault };
-    });
-
-    const changed = next.some((e, i) => e.isDefault !== agent.modelConfig[i].isDefault);
-    if (!changed) continue;
-
-    updates.push({ agentId: agent.id, modelConfig: next });
-  }
-  return updates;
 }
 
 // ─── buildEditPayload ─────────────────────────────────────────────────────

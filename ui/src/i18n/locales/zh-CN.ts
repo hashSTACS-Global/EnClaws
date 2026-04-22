@@ -1018,7 +1018,6 @@ export const zh_CN: TranslationMap = {
     tierPickerHint: "勾选 Agent 可用的档位，并选定一个默认档。默认档所有模型挂掉时会依次尝试备用档。",
     tierModelsCount: "{count} 个模型",
     tierNoneEnabled: "请至少勾选一个档位",
-    setAsDefault: "设为默认",
     tierIsDefault: "默认档",
     noChannels: "该 Agent 暂未关联任何频道",
     channelActive: "已启用",
@@ -1647,6 +1646,7 @@ export const zh_CN: TranslationMap = {
     saved: "已保存",
     setTierDefault: "设为档位默认",
     unassignedCantBeDefault: "未分档的模型不能设为档位默认",
+    tierIsDefault: "默认",
     addForm: {
       title: "添加模型",
       tierLabel: "档位",

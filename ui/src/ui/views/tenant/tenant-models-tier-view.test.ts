@@ -142,8 +142,8 @@ describe("groupByTier", () => {
 describe("groupByTier (direct, pre-flattened input)", () => {
   it("accepts an already-flat entry list", () => {
     const buckets = groupByTier([
-      { providerId: "p1", providerName: "A", providerType: "anthropic", isActive: true, isShared: false, modelId: "opus", modelName: "Opus", tier: "pro", reasoning: false },
-      { providerId: "p1", providerName: "A", providerType: "anthropic", isActive: true, isShared: false, modelId: "sonnet", modelName: "Sonnet", tier: "standard", reasoning: false },
+      { providerId: "p1", providerName: "A", providerType: "anthropic", isActive: true, isShared: false, modelId: "opus", modelName: "Opus", tier: "pro", isTierDefault: false, reasoning: false },
+      { providerId: "p1", providerName: "A", providerType: "anthropic", isActive: true, isShared: false, modelId: "sonnet", modelName: "Sonnet", tier: "standard", isTierDefault: false, reasoning: false },
     ]);
     expect(buckets.pro).toHaveLength(1);
     expect(buckets.standard).toHaveLength(1);

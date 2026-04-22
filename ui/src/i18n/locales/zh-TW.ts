@@ -454,7 +454,6 @@ export const zh_TW: TranslationMap = {
     tierPickerHint: "勾選 Agent 可用的檔位，並選定一個預設檔。預設檔所有模型故障時會依次嘗試備用檔。",
     tierModelsCount: "{count} 個模型",
     tierNoneEnabled: "請至少勾選一個檔位",
-    setAsDefault: "設為預設",
     tierIsDefault: "預設檔",
     noChannels: "該 Agent 尚未關聯任何頻道",
     channelActive: "已啟用",
@@ -1183,6 +1182,7 @@ export const zh_TW: TranslationMap = {
     saved: "已儲存",
     setTierDefault: "設為檔位預設",
     unassignedCantBeDefault: "未分檔的模型不能設為檔位預設",
+    tierIsDefault: "預設",
     addForm: {
       title: "新增模型",
       tierLabel: "檔位",

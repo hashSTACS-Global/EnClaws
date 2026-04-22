@@ -23,7 +23,7 @@ import {
 
 function mkProvider(
   id: string,
-  models: Array<{ id: string; name?: string; tier?: "pro" | "standard" | "lite" }>,
+  models: Array<{ id: string; name?: string; tier?: "pro" | "standard" | "lite"; isTierDefault?: boolean }>,
   overrides: Partial<TenantModelLite> = {},
 ): TenantModelLite {
   return {
@@ -32,7 +32,12 @@ function mkProvider(
     providerName: `Provider ${id}`,
     isActive: true,
     visibility: "private",
-    models: models.map((m) => ({ id: m.id, name: m.name ?? m.id, ...(m.tier ? { tier: m.tier } : {}) })),
+    models: models.map((m) => ({
+      id: m.id,
+      name: m.name ?? m.id,
+      ...(m.tier ? { tier: m.tier } : {}),
+      ...(m.isTierDefault ? { isTierDefault: true } : {}),
+    })),
     ...overrides,
   };
 }
@@ -206,6 +211,36 @@ describe("projectModelConfig", () => {
     const out = projectModelConfig(["standard"], providers, prior);
     expect(out.find((e) => e.modelId === "qwen")?.isDefault).toBe(true);
     expect(out.find((e) => e.modelId === "sonnet")?.isDefault).toBe(false);
+  });
+
+  it("uses the tier-default flagged model when no prior config exists", () => {
+    const withTierDefault = [
+      mkProvider("p1", [
+        { id: "sonnet", tier: "standard" },
+        { id: "qwen", tier: "standard", isTierDefault: true },
+      ]),
+    ];
+    const out = projectModelConfig(["standard"], withTierDefault, []);
+    // qwen is marked tier-default, so it should be chosen as isDefault
+    expect(out.find((e) => e.modelId === "qwen")?.isDefault).toBe(true);
+    expect(out.find((e) => e.modelId === "sonnet")?.isDefault).toBe(false);
+  });
+
+  it("prior config beats tier-default flag when both point at different models", () => {
+    // Prior says sonnet is default; provider marks qwen as tier-default.
+    // Prior user selection wins to avoid surprising overrides on edit.
+    const withTierDefault = [
+      mkProvider("p1", [
+        { id: "sonnet", tier: "standard" },
+        { id: "qwen", tier: "standard", isTierDefault: true },
+      ]),
+    ];
+    const prior: ModelConfigEntryLite[] = [
+      { providerId: "p1", modelId: "sonnet", isDefault: true },
+    ];
+    const out = projectModelConfig(["standard"], withTierDefault, prior);
+    expect(out.find((e) => e.modelId === "sonnet")?.isDefault).toBe(true);
+    expect(out.find((e) => e.modelId === "qwen")?.isDefault).toBe(false);
   });
 
   it("falls back to first-in-tier when the prior default is no longer listed", () => {

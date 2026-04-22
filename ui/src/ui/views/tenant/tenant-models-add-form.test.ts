@@ -20,7 +20,6 @@ import {
   suggestDraftFields,
   validateAddDraft,
   resolveAddTarget,
-  buildSetTierDefaultUpdates,
   buildEditPayload,
   countAgentsUsingModel,
   type AddModelDraft,
@@ -231,136 +230,14 @@ describe("resolveAddTarget", () => {
   });
 });
 
-// ─── buildSetTierDefaultUpdates ───────────────────────────────────────────
-
-type AgentLike = Parameters<typeof buildSetTierDefaultUpdates>[3][number];
+// ─── buildEditPayload ─────────────────────────────────────────────────────
 
 function mkAgent(
   id: string,
-  modelConfig: Array<{ providerId: string; modelId: string; isDefault: boolean }>,
-): AgentLike {
+  modelConfig: Array<{ providerId: string; modelId: string }>,
+): { id: string; modelConfig: Array<{ providerId: string; modelId: string }> } {
   return { id, modelConfig };
 }
-
-describe("buildSetTierDefaultUpdates", () => {
-  const findTier = (tiers: Record<string, string>) => (providerId: string, modelId: string) =>
-    (tiers[`${providerId}:${modelId}`] ?? undefined) as
-      | "pro"
-      | "standard"
-      | "lite"
-      | undefined;
-
-  it("marks the target entry isDefault=true and clears other same-tier defaults", () => {
-    const agent = mkAgent("a1", [
-      { providerId: "p-old", modelId: "opus", isDefault: true }, // pro
-      { providerId: "p-new", modelId: "gpt5", isDefault: false }, // pro
-      { providerId: "p-std", modelId: "sonnet", isDefault: true }, // standard — untouched
-    ]);
-    const tiers = {
-      "p-old:opus": "pro",
-      "p-new:gpt5": "pro",
-      "p-std:sonnet": "standard",
-    };
-    const updates = buildSetTierDefaultUpdates(
-      "p-new",
-      "gpt5",
-      "pro",
-      [agent],
-      findTier(tiers),
-    );
-    expect(updates).toHaveLength(1);
-    expect(updates[0].agentId).toBe("a1");
-    expect(updates[0].modelConfig).toEqual([
-      { providerId: "p-old", modelId: "opus", isDefault: false },
-      { providerId: "p-new", modelId: "gpt5", isDefault: true },
-      { providerId: "p-std", modelId: "sonnet", isDefault: true },
-    ]);
-  });
-
-  it("skips agents that don't use the target tier at all", () => {
-    const agent = mkAgent("a1", [
-      { providerId: "p-std", modelId: "sonnet", isDefault: true },
-    ]);
-    const tiers = { "p-std:sonnet": "standard" };
-    const updates = buildSetTierDefaultUpdates(
-      "p-new",
-      "gpt5",
-      "pro",
-      [agent],
-      findTier(tiers),
-    );
-    expect(updates).toEqual([]);
-  });
-
-  it("treats legacy (tier=undefined) entries as standard when tier target is standard", () => {
-    const agent = mkAgent("a1", [
-      { providerId: "p-legacy", modelId: "old", isDefault: true },
-      { providerId: "p-std", modelId: "sonnet", isDefault: false },
-    ]);
-    // p-legacy has no tier recorded → treated as standard
-    const tiers = { "p-std:sonnet": "standard" };
-    const updates = buildSetTierDefaultUpdates(
-      "p-std",
-      "sonnet",
-      "standard",
-      [agent],
-      findTier(tiers),
-    );
-    expect(updates).toHaveLength(1);
-    const [{ modelConfig }] = updates;
-    // legacy got downgraded to isDefault=false
-    expect(modelConfig.find((e) => e.providerId === "p-legacy")?.isDefault).toBe(false);
-    expect(modelConfig.find((e) => e.providerId === "p-std")?.isDefault).toBe(true);
-  });
-
-  it("emits no update when the target entry is already the sole default", () => {
-    const agent = mkAgent("a1", [
-      { providerId: "p-new", modelId: "gpt5", isDefault: true },
-      { providerId: "p-bkp", modelId: "gpt5-mini", isDefault: false },
-    ]);
-    const tiers = {
-      "p-new:gpt5": "pro",
-      "p-bkp:gpt5-mini": "pro",
-    };
-    const updates = buildSetTierDefaultUpdates(
-      "p-new",
-      "gpt5",
-      "pro",
-      [agent],
-      findTier(tiers),
-    );
-    // Already in the desired shape — no-op
-    expect(updates).toEqual([]);
-  });
-
-  it("handles multiple agents, emitting only the ones that actually changed", () => {
-    const a1 = mkAgent("a1", [
-      { providerId: "p-old", modelId: "opus", isDefault: true },
-      { providerId: "p-new", modelId: "gpt5", isDefault: false },
-    ]);
-    const a2 = mkAgent("a2", [
-      { providerId: "p-new", modelId: "gpt5", isDefault: true }, // already correct
-    ]);
-    const a3 = mkAgent("a3", [
-      { providerId: "p-std", modelId: "sonnet", isDefault: true }, // different tier, ignore
-    ]);
-    const tiers = {
-      "p-old:opus": "pro",
-      "p-new:gpt5": "pro",
-      "p-std:sonnet": "standard",
-    };
-    const updates = buildSetTierDefaultUpdates(
-      "p-new",
-      "gpt5",
-      "pro",
-      [a1, a2, a3],
-      findTier(tiers),
-    );
-    expect(updates.map((u) => u.agentId)).toEqual(["a1"]);
-  });
-});
-
-// ─── buildEditPayload ─────────────────────────────────────────────────────
 
 function mkExistingProvider(
   overrides: Parameters<typeof resolveAddTarget>[1][number] extends infer T
@@ -478,23 +355,23 @@ describe("buildEditPayload", () => {
 
 describe("countAgentsUsingModel", () => {
   it("returns 0 when no agent references the pair", () => {
-    const agents = [mkAgent("a1", [{ providerId: "other", modelId: "x", isDefault: true }])];
+    const agents = [mkAgent("a1", [{ providerId: "other", modelId: "x" }])];
     expect(countAgentsUsingModel("p1", "m1", agents)).toBe(0);
   });
 
   it("counts one per matching agent, even if the model appears twice in its config", () => {
     const a1 = mkAgent("a1", [
-      { providerId: "p1", modelId: "m1", isDefault: true },
-      { providerId: "p1", modelId: "m1", isDefault: false }, // dup (shouldn't happen, but be safe)
+      { providerId: "p1", modelId: "m1" },
+      { providerId: "p1", modelId: "m1" }, // dup (shouldn't happen, but be safe)
     ]);
     expect(countAgentsUsingModel("p1", "m1", [a1])).toBe(1);
   });
 
   it("counts distinct matching agents", () => {
     const agents = [
-      mkAgent("a1", [{ providerId: "p1", modelId: "m1", isDefault: true }]),
-      mkAgent("a2", [{ providerId: "p1", modelId: "m1", isDefault: false }]),
-      mkAgent("a3", [{ providerId: "p2", modelId: "m1", isDefault: true }]), // different providerId
+      mkAgent("a1", [{ providerId: "p1", modelId: "m1" }]),
+      mkAgent("a2", [{ providerId: "p1", modelId: "m1" }]),
+      mkAgent("a3", [{ providerId: "p2", modelId: "m1" }]), // different providerId
     ];
     expect(countAgentsUsingModel("p1", "m1", agents)).toBe(2);
   });

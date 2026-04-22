@@ -20,6 +20,7 @@ export interface FlatModelEntry {
   modelId: string;
   modelName: string;
   tier?: ModelTierValue;
+  isTierDefault: boolean;
   reasoning: boolean;
 }
 
@@ -37,6 +38,7 @@ export interface GroupableProvider {
     id: string;
     name: string;
     tier?: ModelTierValue;
+    isTierDefault?: boolean;
     reasoning?: boolean;
   }>;
 }
@@ -56,6 +58,7 @@ export function flattenProviders(providers: GroupableProvider[]): FlatModelEntry
         modelId: m.id,
         modelName: m.name,
         tier: m.tier,
+        isTierDefault: m.isTierDefault === true,
         reasoning: !!m.reasoning,
       });
     }

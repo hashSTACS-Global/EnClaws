@@ -623,7 +623,6 @@ export const de: TranslationMap = {
     tierPickerHint: "Waehle die Stufen und eine als Standard. Wenn alle Modelle der Standardstufe ausfallen, nutzt die Runtime die Ersatzstufen in Reihenfolge.",
     tierModelsCount: "{count} Modelle",
     tierNoneEnabled: "Bitte mindestens eine Stufe waehlen",
-    setAsDefault: "Als Standard setzen",
     tierIsDefault: "Standard",
     noChannels: "Dieser Agent ist mit keinem Kanal verknüpft",
     channelActive: "Aktiv",
@@ -1187,6 +1186,7 @@ export const de: TranslationMap = {
     saved: "Gespeichert",
     setTierDefault: "Als Stufen-Standard setzen",
     unassignedCantBeDefault: "Modelle ohne Stufe koennen nicht als Standard gesetzt werden",
+    tierIsDefault: "Standard",
     addForm: {
       title: "Modell hinzufuegen",
       tierLabel: "Stufe",

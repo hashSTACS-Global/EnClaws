@@ -29,7 +29,6 @@ import {
   suggestDraftFields,
   validateAddDraft,
   resolveAddTarget,
-  buildSetTierDefaultUpdates,
   buildEditPayload,
   countAgentsUsingModel,
   type AddModelDraft,
@@ -44,6 +43,7 @@ interface ModelDefinition {
   maxTokens?: number;
   cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
   tier?: ModelTierValue;
+  isTierDefault?: boolean;
 }
 
 interface TenantModelConfig {
@@ -201,6 +201,16 @@ export class TenantModelsView extends LitElement {
       margin-bottom: 0.4rem;
     }
     .tier-row-main { display: flex; flex-direction: column; gap: 0.15rem; }
+    .tier-default-badge {
+      margin-left: 0.5rem;
+      font-size: 0.7rem;
+      padding: 0.05rem 0.45rem;
+      border-radius: 3px;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      letter-spacing: 0.03em;
+      vertical-align: middle;
+    }
     .tier-row-title { font-size: 0.9rem; font-weight: 500; }
     .tier-row-sub { font-size: 0.75rem; color: var(--muted); }
     .tier-unassigned-hint {
@@ -312,12 +322,12 @@ export class TenantModelsView extends LitElement {
   @state() private modalMode: "add" | "edit" = "add";
   @state() private editingHandle: { providerId: string; modelId: string } | null = null;
 
-  // Cached agent list for model-in-use checks + tier-default fan-out.
-  // Includes isDefault so buildSetTierDefaultUpdates can diff correctly.
+  // Cached agent list — used by countAgentsUsingModel to decide whether
+  // a tier change on a model needs the soft-confirm dialog.
   private cachedAgents: Array<{
     name: string;
     agentId: string;
-    modelConfig: Array<{ providerId: string; modelId: string; isDefault: boolean }>;
+    modelConfig: Array<{ providerId: string; modelId: string }>;
   }> = [];
 
   private showError(key: string, params?: Record<string, string>) {
@@ -354,7 +364,7 @@ export class TenantModelsView extends LitElement {
         agents: Array<{
           name: string;
           agentId: string;
-          modelConfig: Array<{ providerId: string; modelId: string; isDefault: boolean }>;
+          modelConfig: Array<{ providerId: string; modelId: string }>;
         }>;
       };
       this.cachedAgents = result.agents ?? [];
@@ -363,43 +373,52 @@ export class TenantModelsView extends LitElement {
     }
   }
 
-  private findModelTier(providerId: string, modelId: string): ModelTierValue | undefined {
-    return this.configs
-      .find((c) => c.id === providerId)
-      ?.models.find((m) => m.id === modelId)?.tier;
-  }
-
   /**
    * Tenant-wide "make this model the default for its tier" action.
-   * Fans out over every agent that has at least one entry in the target
-   * tier, flipping isDefault flags via buildSetTierDefaultUpdates.
+   *
+   * Walks every Provider container that has at least one model in the
+   * target tier and rewrites the `models` array so that, within that tier,
+   * only the (targetProviderId, targetModelId) entry has isTierDefault=true.
+   * Other tiers on the same Provider pass through unchanged. Only Providers
+   * whose `models` array actually changes get a round trip.
    */
   private async setAsTierDefault(providerId: string, modelId: string) {
-    const tier = this.findModelTier(providerId, modelId);
+    const target = this.configs
+      .find((c) => c.id === providerId)
+      ?.models.find((m) => m.id === modelId);
+    const tier = target?.tier;
     if (!tier) {
       this.showError("models.unassignedCantBeDefault");
       return;
     }
     this.saving = true;
     try {
-      await this.loadAgents();
-      const updates = buildSetTierDefaultUpdates(
-        providerId,
-        modelId,
-        tier,
-        this.cachedAgents.map((a) => ({ id: a.agentId, modelConfig: a.modelConfig })),
-        (pid, mid) => this.findModelTier(pid, mid),
-      );
+      const updates: Array<{ id: string; models: ModelDefinition[] }> = [];
+      for (const cfg of this.configs) {
+        // Skip shared/platform models — tenant admin can't mutate them.
+        if (cfg.visibility === "shared") continue;
+        // Skip containers with no models in the target tier.
+        if (!cfg.models.some((m) => m.tier === tier)) continue;
+
+        let changed = false;
+        const nextModels = cfg.models.map((m) => {
+          if (m.tier !== tier) return m;
+          const shouldBeDefault = cfg.id === providerId && m.id === modelId;
+          if ((m.isTierDefault === true) === shouldBeDefault) return m;
+          changed = true;
+          return { ...m, isTierDefault: shouldBeDefault };
+        });
+        if (changed) updates.push({ id: cfg.id, models: nextModels });
+      }
       if (updates.length === 0) {
+        // Already the tier default across the catalog — no-op success.
         this.showSuccess("models.saved");
         return;
       }
       await Promise.all(
-        updates.map((u) =>
-          this.rpc("tenant.agents.update", { agentId: u.agentId, modelConfig: u.modelConfig }),
-        ),
+        updates.map((u) => this.rpc("tenant.models.update", u)),
       );
-      await this.loadAgents();
+      await this.loadConfigs();
       this.showSuccess("models.saved");
     } catch (err) {
       this.showError(err instanceof Error ? err.message : "models.saveFailed");
@@ -774,6 +793,7 @@ export class TenantModelsView extends LitElement {
                 <div class="tier-row-main">
                   <div class="tier-row-title">
                     ${entry.modelName} <span style="font-family:monospace;color:var(--muted);font-size:0.8rem">(${entry.modelId})</span>
+                    ${entry.isTierDefault ? html`<span class="tier-default-badge">${t("models.tierIsDefault")}</span>` : nothing}
                   </div>
                   <div class="tier-row-sub">
                     ${providerLabel} · ${entry.providerName}
@@ -783,7 +803,7 @@ export class TenantModelsView extends LitElement {
                 </div>
                 ${entry.isShared || !cfg ? nothing : html`
                   <div style="display:flex;gap:0.3rem">
-                    ${entry.tier ? html`
+                    ${entry.tier && !entry.isTierDefault ? html`
                       <button
                         class="btn btn-outline btn-sm"
                         ?disabled=${this.saving}

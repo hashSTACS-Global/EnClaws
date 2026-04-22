@@ -622,7 +622,6 @@ export const pt_BR: TranslationMap = {
     tierPickerHint: "Escolha as categorias e marque uma como padrao. Quando todos os modelos da padrao falham, o runtime usa as categorias reserva na ordem.",
     tierModelsCount: "{count} modelos",
     tierNoneEnabled: "Escolha pelo menos uma categoria",
-    setAsDefault: "Definir como padrao",
     tierIsDefault: "Padrao",
     noChannels: "Este agente não está vinculado a nenhum canal",
     channelActive: "Ativo",
@@ -1186,6 +1185,7 @@ export const pt_BR: TranslationMap = {
     saved: "Salvo",
     setTierDefault: "Definir como padrao da categoria",
     unassignedCantBeDefault: "Modelos sem categoria nao podem ser padrao",
+    tierIsDefault: "Padrao",
     addForm: {
       title: "Adicionar modelo",
       tierLabel: "Categoria",
