@@ -13,29 +13,30 @@
  *   - viewer: can only list agents they created (read-only)
  */
 
-import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
-import { ErrorCodes, errorShape, getPlanUpgradeLink } from "../protocol/index.js";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { bumpSkillsSnapshotVersion } from "../../agents/skills/refresh.js";
+import { seedAgentWorkspaceFiles } from "../../agents/workspace.js";
+import type { TenantContext } from "../../auth/middleware.js";
+import { assertPermission, RbacError } from "../../auth/rbac.js";
+import { resolveTenantAgentDir } from "../../config/sessions/tenant-paths.js";
+import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
 import { isDbInitialized } from "../../db/index.js";
-import { checkTenantQuota } from "../../db/models/tenant.js";
+import { createAuditLog } from "../../db/models/audit-log.js";
 import {
   createTenantAgent,
   listTenantAgents,
   getTenantAgent,
   updateTenantAgent,
   deleteTenantAgent,
+  generateAgentId,
 } from "../../db/models/tenant-agent.js";
 import { listAllTenantChannelApps } from "../../db/models/tenant-channel-app.js";
-import { createAuditLog } from "../../db/models/audit-log.js";
-import { assertPermission, RbacError } from "../../auth/rbac.js";
-import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
-import { bumpSkillsSnapshotVersion } from "../../agents/skills/refresh.js";
-import type { TenantContext } from "../../auth/middleware.js";
-import type { ModelConfigEntry, ModelTier, TenantModel } from "../../db/types.js";
 import { listTenantModels } from "../../db/models/tenant-model.js";
-import { resolveTenantAgentDir } from "../../config/sessions/tenant-paths.js";
-import { seedAgentWorkspaceFiles } from "../../agents/workspace.js";
-import fs from "node:fs/promises";
-import path from "node:path";
+import { checkTenantQuota } from "../../db/models/tenant.js";
+import type { ModelConfigEntry, ModelTier, TenantModel } from "../../db/types.js";
+import { ErrorCodes, errorShape, getPlanUpgradeLink } from "../protocol/index.js";
+import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
 
 const DEFAULT_IDENTITY_FILENAME = "IDENTITY.md";
 
@@ -77,7 +78,11 @@ export function validateModelConfigTiers(
 }
 
 /** Sync config.systemPrompt to the agent's IDENTITY.md file on disk. */
-export async function syncIdentityFile(tenantId: string, agentId: string, config?: Record<string, unknown>): Promise<void> {
+export async function syncIdentityFile(
+  tenantId: string,
+  agentId: string,
+  config?: Record<string, unknown>,
+): Promise<void> {
   const systemPrompt = typeof config?.systemPrompt === "string" ? config.systemPrompt.trim() : "";
   if (!systemPrompt) return;
   const agentDir = resolveTenantAgentDir(tenantId, agentId);
@@ -90,7 +95,11 @@ function getTenantCtx(
   respond: GatewayRequestHandlerOptions["respond"],
 ): TenantContext | null {
   if (!isDbInitialized()) {
-    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Multi-tenant mode not enabled"));
+    respond(
+      false,
+      undefined,
+      errorShape(ErrorCodes.INVALID_REQUEST, "Multi-tenant mode not enabled"),
+    );
     return null;
   }
   const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
@@ -142,7 +151,12 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
     });
   },
 
-  "tenant.agents.create": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
+  "tenant.agents.create": async ({
+    params,
+    client,
+    respond,
+    context,
+  }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
     if (!ctx) return;
 
@@ -156,8 +170,11 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const { agentId, name, config, modelConfig, tools, skills, locale } = params as {
-      agentId: string;
+    // agentId is always generated server-side to guarantee global uniqueness
+    // across tenants (cfg.agents.list is merged tenant-wide at runtime, and
+    // collisions on agent_id cause cross-tenant routing to pick the wrong
+    // agent config — see memory project_cross_tenant_agent_id_collision).
+    const { name, config, modelConfig, tools, skills, locale } = params as {
       name: string;
       config?: Record<string, unknown>;
       modelConfig?: ModelConfigEntry[];
@@ -165,14 +182,19 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       skills?: string[];
       locale?: string;
     };
+    const agentId = generateAgentId();
 
-    if (!agentId || !name) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Missing agentId or name"));
+    if (!name) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Missing name"));
       return;
     }
 
     if (!modelConfig || modelConfig.length === 0) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "modelConfig is required and must not be empty"));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_PARAMS, "modelConfig is required and must not be empty"),
+      );
       return;
     }
 
@@ -186,24 +208,34 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    if (!/^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$/.test(agentId)) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "tenantAgents.agentIdPattern"));
-      return;
-    }
-
     const quota = await checkTenantQuota(ctx.tenantId, "agents");
     if (!quota.allowed) {
-      respond(false, undefined, errorShape(
-        ErrorCodes.QUOTA_EXCEEDED,
-        `Agent quota reached (${quota.current}/${quota.max}). Upgrade your plan.`,
-        { details: { resource: "agents", current: quota.current, max: quota.max, contactLink: getPlanUpgradeLink() } },
-      ));
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.QUOTA_EXCEEDED,
+          `Agent quota reached (${quota.current}/${quota.max}). Upgrade your plan.`,
+          {
+            details: {
+              resource: "agents",
+              current: quota.current,
+              max: quota.max,
+              contactLink: getPlanUpgradeLink(),
+            },
+          },
+        ),
+      );
       return;
     }
 
     const existing = await getTenantAgent(ctx.tenantId, agentId);
     if (existing) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent '${agentId}' already exists`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Agent '${agentId}' already exists`),
+      );
       return;
     }
 
@@ -224,7 +256,10 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
         const skillsCfg = config.skills;
         if (Array.isArray(skillsCfg)) {
           resolvedSkills = skillsCfg as string[];
-        } else if (typeof skillsCfg === "object" && Array.isArray((skillsCfg as Record<string, unknown>).deny)) {
+        } else if (
+          typeof skillsCfg === "object" &&
+          Array.isArray((skillsCfg as Record<string, unknown>).deny)
+        ) {
           resolvedSkills = (skillsCfg as { deny: string[] }).deny;
         }
         const { skills: _s, ...rest } = cleanConfig!;
@@ -269,7 +304,12 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
     });
   },
 
-  "tenant.agents.update": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
+  "tenant.agents.update": async ({
+    params,
+    client,
+    respond,
+    context,
+  }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
     if (!ctx) return;
 
@@ -295,7 +335,11 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
 
     if (modelConfig !== undefined) {
       if (modelConfig.length === 0) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "modelConfig must not be empty"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_PARAMS, "modelConfig must not be empty"),
+        );
         return;
       }
       // v4: per-tier default validation (same contract as create).
@@ -340,7 +384,10 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
         const skillsCfg = config.skills;
         if (Array.isArray(skillsCfg)) {
           resolvedSkills = skillsCfg as string[];
-        } else if (typeof skillsCfg === "object" && Array.isArray((skillsCfg as Record<string, unknown>).deny)) {
+        } else if (
+          typeof skillsCfg === "object" &&
+          Array.isArray((skillsCfg as Record<string, unknown>).deny)
+        ) {
           resolvedSkills = (skillsCfg as { deny: string[] }).deny;
         }
         const { skills: _s, ...rest } = cleanConfig!;
@@ -396,7 +443,12 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
     });
   },
 
-  "tenant.agents.delete": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
+  "tenant.agents.delete": async ({
+    params,
+    client,
+    respond,
+    context,
+  }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
     if (!ctx) return;
 
@@ -429,12 +481,16 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
     const apps = await listAllTenantChannelApps(ctx.tenantId);
     const boundApps = apps.filter((a) => a.agentId === agentId);
     if (boundApps.length > 0) {
-      const channels = boundApps.map((a) => `${a.channelName || a.channelType}/${a.appId}`).join(", ");
-      respond(false, undefined, errorShape(
-        ErrorCodes.INVALID_REQUEST,
-        "tenantAgents.deleteInUse",
-        { details: { channels } },
-      ));
+      const channels = boundApps
+        .map((a) => `${a.channelName || a.channelType}/${a.appId}`)
+        .join(", ");
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "tenantAgents.deleteInUse", {
+          details: { channels },
+        }),
+      );
       return;
     }
 
@@ -465,8 +521,13 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
   "tenant.agents.channel_apps.list": async ({ client, respond }: GatewayRequestHandlerOptions) => {
     const ctx = getTenantCtx(client, respond);
     if (!ctx) return;
-    try { assertPermission(ctx.role, "agent.list"); } catch (err) {
-      if (err instanceof RbacError) { respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, err.message)); return; }
+    try {
+      assertPermission(ctx.role, "agent.list");
+    } catch (err) {
+      if (err instanceof RbacError) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, err.message));
+        return;
+      }
       throw err;
     }
     const apps = await listAllTenantChannelApps(ctx.tenantId);
