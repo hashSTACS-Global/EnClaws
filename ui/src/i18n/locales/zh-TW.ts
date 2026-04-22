@@ -1193,6 +1193,12 @@ export const zh_TW: TranslationMap = {
       errorBaseUrlRequired: "請填 Base URL",
       errorModelIdRequired: "請填 Model ID",
       errorApiKeyRequired: "此認證方式需要 API Key",
+      editTitle: "編輯模型",
+      editSubtitle: "改完點儲存；API Key 留空 = 保持不變",
+      submitEdit: "儲存變更",
+      apiKeyKeepHint: "（留空 = 保持不變）",
+      apiKeyEditPlaceholder: "留空 = 保持不變",
+      tierChangeConfirm: "此模型被 {count} 個 Agent 使用，改檔位會影響這些 Agent 的啟用檔位。繼續？",
     },
   },
 };

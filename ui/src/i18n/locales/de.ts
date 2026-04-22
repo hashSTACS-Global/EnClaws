@@ -1197,6 +1197,12 @@ export const de: TranslationMap = {
       errorBaseUrlRequired: "Base URL ist erforderlich",
       errorModelIdRequired: "Model ID ist erforderlich",
       errorApiKeyRequired: "Dieser Auth-Modus benoetigt einen API-Schluessel",
+      editTitle: "Modell bearbeiten",
+      editSubtitle: "Speichern zum Anwenden; API-Schluessel leer = bestehenden behalten",
+      submitEdit: "Aenderungen speichern",
+      apiKeyKeepHint: "(leer = bestehenden behalten)",
+      apiKeyEditPlaceholder: "Leer lassen, um bestehenden Schluessel zu behalten",
+      tierChangeConfirm: "Dieses Modell wird von {count} Agent(en) verwendet. Eine Stufenaenderung betrifft deren verfuegbare Stufen. Fortfahren?",
     },
   },
 };

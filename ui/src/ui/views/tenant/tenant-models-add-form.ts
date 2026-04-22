@@ -277,11 +277,15 @@ export function buildEditPayload(
  * How many distinct agents reference the (providerId, modelId) pair in
  * their modelConfig. Used for the "N agents use this; change tier?" soft
  * confirm on the edit modal.
+ *
+ * The agent shape is intentionally loose (only modelConfig is read) so
+ * the cached list on the UI component can be passed directly without
+ * adapting its `agentId`/`id` field name.
  */
 export function countAgentsUsingModel(
   providerId: string,
   modelId: string,
-  agents: AgentLike[],
+  agents: Array<{ modelConfig: Array<{ providerId: string; modelId: string }> }>,
 ): number {
   return agents.filter((a) =>
     a.modelConfig.some((e) => e.providerId === providerId && e.modelId === modelId),

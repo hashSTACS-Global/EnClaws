@@ -30,6 +30,8 @@ import {
   validateAddDraft,
   resolveAddTarget,
   buildSetTierDefaultUpdates,
+  buildEditPayload,
+  countAgentsUsingModel,
   type AddModelDraft,
 } from "./tenant-models-add-form.ts";
 
@@ -301,11 +303,13 @@ export class TenantModelsView extends LitElement {
   // "tier" (flat list grouped by model tier)
   @state() private viewMode: "provider" | "tier" = "provider";
 
-  // Tier-cascading Add Model modal state (separate from the legacy
+  // Tier-cascading Add/Edit Model modal state (separate from the legacy
   // Provider-level showForm flow above).
   @state() private showAddModel = false;
   @state() private addModelDraft: AddModelDraft = emptyAddModelDraft();
   @state() private addModelErrors: string[] = [];
+  @state() private modalMode: "add" | "edit" = "add";
+  @state() private editingHandle: { providerId: string; modelId: string } | null = null;
 
   // Cached agent list for model-in-use checks + tier-default fan-out.
   // Includes isDefault so buildSetTierDefaultUpdates can diff correctly.
@@ -423,7 +427,31 @@ export class TenantModelsView extends LitElement {
   // ─── Tier-cascading Add Model modal ───────────────────────────────────
 
   private openAddModel() {
+    this.modalMode = "add";
+    this.editingHandle = null;
     this.addModelDraft = emptyAddModelDraft();
+    this.addModelErrors = [];
+    this.showAddModel = true;
+  }
+
+  private openEditModal(providerId: string, modelId: string) {
+    const provider = this.configs.find((c) => c.id === providerId);
+    const def = provider?.models.find((d) => d.id === modelId);
+    if (!provider || !def) return;
+
+    this.modalMode = "edit";
+    this.editingHandle = { providerId, modelId };
+    this.addModelDraft = {
+      tier: def.tier ?? "",
+      provider: provider.providerType,
+      providerName: provider.providerName,
+      baseUrl: provider.baseUrl ?? "",
+      protocol: provider.apiProtocol,
+      authMode: provider.authMode as AddModelDraft["authMode"],
+      apiKey: "",
+      modelId: def.id,
+      modelName: def.name,
+    };
     this.addModelErrors = [];
     this.showAddModel = true;
   }
@@ -431,6 +459,8 @@ export class TenantModelsView extends LitElement {
   private closeAddModel() {
     this.showAddModel = false;
     this.addModelErrors = [];
+    this.modalMode = "add";
+    this.editingHandle = null;
   }
 
   private onAddTierChange(tier: ModelTierValue) {
@@ -461,7 +491,7 @@ export class TenantModelsView extends LitElement {
     if (this.addModelErrors.length > 0) this.addModelErrors = [];
   }
 
-  private async submitAddModel() {
+  private async submitModal() {
     const errors = validateAddDraft(this.addModelDraft);
     if (errors.length > 0) {
       this.addModelErrors = errors;
@@ -469,15 +499,33 @@ export class TenantModelsView extends LitElement {
     }
     this.saving = true;
     try {
-      const target = resolveAddTarget(this.addModelDraft, this.configs);
-      if (target.mode === "append") {
-        await this.rpc("tenant.models.update", {
-          id: target.providerId,
-          models: target.nextModels,
-          ...(target.apiKey ? { apiKey: target.apiKey } : {}),
-        });
+      if (this.modalMode === "edit" && this.editingHandle) {
+        const { providerId, modelId } = this.editingHandle;
+        const existing = this.configs.find((c) => c.id === providerId);
+        const existingDef = existing?.models.find((m) => m.id === modelId);
+        if (!existing || !existingDef) throw new Error("models.providerNotFound");
+        if (existingDef.tier !== this.addModelDraft.tier) {
+          const count = countAgentsUsingModel(providerId, modelId, this.cachedAgents);
+          if (count > 0) {
+            const ok = window.confirm(
+              t("models.addForm.tierChangeConfirm", { count: String(count) }),
+            );
+            if (!ok) return;
+          }
+        }
+        const payload = buildEditPayload(this.addModelDraft, this.editingHandle, existing);
+        await this.rpc("tenant.models.update", { ...payload });
       } else {
-        await this.rpc("tenant.models.create", { ...target.payload });
+        const target = resolveAddTarget(this.addModelDraft, this.configs);
+        if (target.mode === "append") {
+          await this.rpc("tenant.models.update", {
+            id: target.providerId,
+            models: target.nextModels,
+            ...(target.apiKey ? { apiKey: target.apiKey } : {}),
+          });
+        } else {
+          await this.rpc("tenant.models.create", { ...target.payload });
+        }
       }
       this.showSuccess("models.saved");
       await this.loadConfigs();
@@ -754,7 +802,7 @@ export class TenantModelsView extends LitElement {
                         ${t("models.setTierDefault")}
                       </button>
                     ` : nothing}
-                    <button class="btn btn-outline btn-sm" @click=${() => this.startEdit(cfg)}>${t("models.edit")}</button>
+                    <button class="btn btn-outline btn-sm" @click=${() => this.openEditModal(entry.providerId, entry.modelId)}>${t("models.edit")}</button>
                   </div>
                 `}
               </div>
@@ -817,7 +865,10 @@ export class TenantModelsView extends LitElement {
           if (e.target === e.currentTarget) this.closeAddModel();
         }}>
         <div class="modal-box">
-          <h3>${t("models.addForm.title")}</h3>
+          <h3>${this.modalMode === "edit" ? t("models.addForm.editTitle") : t("models.addForm.title")}</h3>
+          ${this.modalMode === "edit"
+            ? html`<div class="modal-hint">${t("models.addForm.editSubtitle")}</div>`
+            : nothing}
 
           <div class="form-field">
             <label>${t("models.addForm.tierLabel")}</label>
@@ -886,9 +937,10 @@ export class TenantModelsView extends LitElement {
             </div>
             ${needsApiKey ? html`
               <div class="form-field">
-                <label>${t("models.addForm.apiKeyLabel")}</label>
+                <label>${t("models.addForm.apiKeyLabel")}${this.modalMode === "edit" ? html` <span class="modal-hint" style="display:inline">${t("models.addForm.apiKeyKeepHint")}</span>` : nothing}</label>
                 <input
                   type="password"
+                  placeholder=${this.modalMode === "edit" ? t("models.addForm.apiKeyEditPlaceholder") : ""}
                   .value=${d.apiKey}
                   @input=${(e: Event) => this.patchDraft({ apiKey: (e.target as HTMLInputElement).value })} />
               </div>
@@ -909,8 +961,12 @@ export class TenantModelsView extends LitElement {
               class="btn btn-primary"
               type="button"
               ?disabled=${this.saving}
-              @click=${() => this.submitAddModel()}>
-              ${this.saving ? t("models.saving") : t("models.addForm.submit")}
+              @click=${() => this.submitModal()}>
+              ${this.saving
+                ? t("models.saving")
+                : this.modalMode === "edit"
+                  ? t("models.addForm.submitEdit")
+                  : t("models.addForm.submit")}
             </button>
           </div>
         </div>

@@ -1636,6 +1636,12 @@ export const en: TranslationMap = {
       errorBaseUrlRequired: "Base URL is required",
       errorModelIdRequired: "Model ID is required",
       errorApiKeyRequired: "This auth mode requires an API key",
+      editTitle: "Edit model",
+      editSubtitle: "Save to apply; leave API key blank to keep existing",
+      submitEdit: "Save changes",
+      apiKeyKeepHint: "(blank = keep existing)",
+      apiKeyEditPlaceholder: "Leave blank to keep existing",
+      tierChangeConfirm: "This model is used by {count} agent(s). Changing its tier will affect which tiers those agents can use. Continue?",
     },
   }
 };

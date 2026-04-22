@@ -1657,6 +1657,12 @@ export const zh_CN: TranslationMap = {
       errorBaseUrlRequired: "请填 Base URL",
       errorModelIdRequired: "请填 Model ID",
       errorApiKeyRequired: "该认证方式需要 API Key",
+      editTitle: "编辑模型",
+      editSubtitle: "改完点保存；API Key 留空 = 保持不变",
+      submitEdit: "保存修改",
+      apiKeyKeepHint: "（留空 = 保持不变）",
+      apiKeyEditPlaceholder: "留空 = 保持不变",
+      tierChangeConfirm: "该模型被 {count} 个 Agent 使用，改档位会影响这些 Agent 的启用档位。继续？",
     },
   }
 };
