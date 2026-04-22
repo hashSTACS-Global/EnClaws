@@ -30,13 +30,51 @@ import { assertPermission, RbacError } from "../../auth/rbac.js";
 import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
 import { bumpSkillsSnapshotVersion } from "../../agents/skills/refresh.js";
 import type { TenantContext } from "../../auth/middleware.js";
-import type { ModelConfigEntry } from "../../db/types.js";
+import type { ModelConfigEntry, ModelTier, TenantModel } from "../../db/types.js";
+import { listTenantModels } from "../../db/models/tenant-model.js";
 import { resolveTenantAgentDir } from "../../config/sessions/tenant-paths.js";
 import { seedAgentWorkspaceFiles } from "../../agents/workspace.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULT_IDENTITY_FILENAME = "IDENTITY.md";
+
+// v4: legacy models (tier=undefined) are treated as "standard" at runtime.
+// Keep this constant in sync with src/gateway/tier-chain.ts.
+const LEGACY_TIER_FALLBACK: ModelTier = "standard";
+
+/**
+ * Validate that each tier referenced by modelConfig has at most one isDefault=true.
+ * (Zero defaults is allowed — the runtime tier-chain picks a fallback.)
+ *
+ * Entries referencing models that don't exist in tenantModels are skipped
+ * (stale references, e.g., after a model was deleted).
+ */
+export function validateModelConfigTiers(
+  modelConfig: ModelConfigEntry[],
+  tenantModels: TenantModel[],
+): void {
+  const modelTierMap = new Map<string, ModelTier>();
+  for (const tm of tenantModels) {
+    for (const def of tm.models) {
+      modelTierMap.set(`${tm.id}:${def.id}`, def.tier ?? LEGACY_TIER_FALLBACK);
+    }
+  }
+
+  const defaultsByTier = new Map<ModelTier, number>();
+  for (const entry of modelConfig) {
+    if (!entry.isDefault) continue;
+    const tier = modelTierMap.get(`${entry.providerId}:${entry.modelId}`);
+    if (!tier) continue;
+    defaultsByTier.set(tier, (defaultsByTier.get(tier) ?? 0) + 1);
+  }
+
+  for (const [tier, n] of defaultsByTier) {
+    if (n > 1) {
+      throw new Error(`modelConfig invalid: tier '${tier}' has more than one default model`);
+    }
+  }
+}
 
 /** Sync config.systemPrompt to the agent's IDENTITY.md file on disk. */
 export async function syncIdentityFile(tenantId: string, agentId: string, config?: Record<string, unknown>): Promise<void> {
@@ -138,8 +176,13 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    if (!modelConfig.some((e) => e.isDefault)) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Exactly one model must be set as default"));
+    // v4: per-tier default validation (each tier has at most one isDefault=true);
+    // zero defaults is allowed — runtime tier-chain picks a fallback.
+    try {
+      const tenantModelsForValidation = await listTenantModels(ctx.tenantId);
+      validateModelConfigTiers(modelConfig, tenantModelsForValidation);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, (err as Error).message));
       return;
     }
 
@@ -255,8 +298,12 @@ export const tenantAgentsHandlers: GatewayRequestHandlers = {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "modelConfig must not be empty"));
         return;
       }
-      if (!modelConfig.some((e) => e.isDefault)) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "Exactly one model must be set as default"));
+      // v4: per-tier default validation (same contract as create).
+      try {
+        const tenantModelsForValidation = await listTenantModels(ctx.tenantId);
+        validateModelConfigTiers(modelConfig, tenantModelsForValidation);
+      } catch (err) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, (err as Error).message));
         return;
       }
     }
