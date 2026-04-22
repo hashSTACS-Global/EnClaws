@@ -798,6 +798,11 @@ export class OnboardingWizard extends LitElement {
   private async testOnboardingConnection() {
     const provider = MODEL_PROVIDERS.find((p) => p.type === this.selectedProvider);
     if (!provider) return;
+    // Capture the request's target so we can discard the response if the
+    // admin swapped providers / added-another before it resolved.
+    const reqProvider = this.selectedProvider;
+    const reqModelId = this.modelName;
+    const reqBaseUrl = this.modelBaseUrl;
     this.obTestingConnection = true;
     this.obTestResult = null;
     try {
@@ -808,14 +813,37 @@ export class OnboardingWizard extends LitElement {
         apiKey: this.modelApiKey,
         modelId: this.modelName,
       })) as { ok: boolean; status: number; durationMs: number; errorMessage?: string };
-      this.obTestResult = res;
+      // Only surface the result if the form still matches the request —
+      // otherwise it's a stale "success" pinned onto a different config.
+      if (
+        this.selectedProvider === reqProvider &&
+        this.modelName === reqModelId &&
+        this.modelBaseUrl === reqBaseUrl
+      ) {
+        this.obTestResult = res;
+      }
     } catch (err) {
-      this.obTestResult = {
-        ok: false, status: 0, durationMs: 0,
-        errorMessage: err instanceof Error ? err.message : String(err),
-      };
+      if (
+        this.selectedProvider === reqProvider &&
+        this.modelName === reqModelId &&
+        this.modelBaseUrl === reqBaseUrl
+      ) {
+        this.obTestResult = {
+          ok: false, status: 0, durationMs: 0,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        };
+      }
     } finally {
-      this.obTestingConnection = false;
+      if (
+        this.selectedProvider === reqProvider &&
+        this.modelName === reqModelId &&
+        this.modelBaseUrl === reqBaseUrl
+      ) {
+        this.obTestingConnection = false;
+      } else {
+        // Request was superseded; drop the loading spinner regardless.
+        this.obTestingConnection = false;
+      }
     }
   }
 

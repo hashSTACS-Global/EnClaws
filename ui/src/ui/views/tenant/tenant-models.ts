@@ -505,6 +505,17 @@ export class TenantModelsView extends LitElement {
 
   private async testConnection() {
     const d = this.addModelDraft;
+    // Snapshot the draft at request time so we can discard stale results
+    // when the admin edits/closes/submits before the probe returns.
+    const reqProvider = d.provider;
+    const reqModelId = d.modelId;
+    const reqBaseUrl = d.baseUrl;
+    const isCurrent = () =>
+      this.showAddModel &&
+      this.addModelDraft.provider === reqProvider &&
+      this.addModelDraft.modelId === reqModelId &&
+      this.addModelDraft.baseUrl === reqBaseUrl;
+
     this.testingConnection = true;
     this.testResult = null;
     try {
@@ -516,9 +527,11 @@ export class TenantModelsView extends LitElement {
         modelId: d.modelId,
         providerId: this.editingHandle?.providerId,
       })) as { ok: boolean; status: number; durationMs: number; errorMessage?: string };
-      this.testResult = res;
+      if (isCurrent()) this.testResult = res;
     } catch (err) {
-      this.testResult = { ok: false, status: 0, durationMs: 0, errorMessage: err instanceof Error ? err.message : String(err) };
+      if (isCurrent()) {
+        this.testResult = { ok: false, status: 0, durationMs: 0, errorMessage: err instanceof Error ? err.message : String(err) };
+      }
     } finally {
       this.testingConnection = false;
     }
