@@ -487,7 +487,7 @@ export class TenantModelsView extends LitElement {
   }
 
   private async submitModal() {
-    const errors = validateAddDraft(this.addModelDraft);
+    const errors = validateAddDraft(this.addModelDraft, { mode: this.modalMode });
     if (errors.length > 0) {
       this.addModelErrors = errors;
       return;

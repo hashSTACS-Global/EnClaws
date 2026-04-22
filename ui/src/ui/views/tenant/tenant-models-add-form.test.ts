@@ -119,6 +119,12 @@ describe("validateAddDraft", () => {
     );
   });
 
+  it("allows empty apiKey in edit mode (server keeps existing key)", () => {
+    expect(
+      validateAddDraft(makeDraft({ authMode: "api-key", apiKey: "" }), { mode: "edit" }),
+    ).not.toContain("models.addForm.errorApiKeyRequired");
+  });
+
   it("requires apiKey when authMode is token", () => {
     expect(validateAddDraft(makeDraft({ authMode: "token", apiKey: "" }))).toContain(
       "models.addForm.errorApiKeyRequired",

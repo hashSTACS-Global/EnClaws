@@ -104,8 +104,15 @@ export function suggestDraftFields(
 /**
  * Returns a list of i18n keys for each rule violated. An empty list means the
  * draft is submittable. The caller renders the messages in the modal header.
+ *
+ * In edit mode, an empty apiKey is allowed — it means "keep the current key"
+ * (the backend preserves the existing api_key_encrypted when apiKey === "",
+ * see tenant.models.update).
  */
-export function validateAddDraft(draft: AddModelDraft): string[] {
+export function validateAddDraft(
+  draft: AddModelDraft,
+  opts: { mode?: "add" | "edit" } = {},
+): string[] {
   const errors: string[] = [];
   if (!draft.tier) errors.push("models.addForm.errorTierRequired");
   if (!draft.provider) errors.push("models.addForm.errorProviderRequired");
@@ -117,7 +124,9 @@ export function validateAddDraft(draft: AddModelDraft): string[] {
     errors.push("models.addForm.errorBaseUrlRequired");
   }
   if (!draft.modelId.trim()) errors.push("models.addForm.errorModelIdRequired");
-  if ((draft.authMode === "api-key" || draft.authMode === "token") && !draft.apiKey.trim()) {
+  const needsApiKey = draft.authMode === "api-key" || draft.authMode === "token";
+  const isEdit = opts.mode === "edit";
+  if (needsApiKey && !isEdit && !draft.apiKey.trim()) {
     errors.push("models.addForm.errorApiKeyRequired");
   }
   return errors;
