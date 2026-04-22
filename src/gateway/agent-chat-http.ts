@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createInteractionTrace } from "../db/models/interaction-trace.js";
 import { getTenantAgent } from "../db/models/tenant-agent.js";
 import { getTenantModel } from "../db/models/tenant-model.js";
+import { isModelTier } from "../db/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveGatewayToken } from "./gateway-token-cache.js";
 import { readJsonBody } from "./hooks.js";
@@ -12,7 +13,6 @@ import { getHeader } from "./http-utils.js";
 const log = createSubsystemLogger("agent-chat-api");
 
 const MAX_BODY_BYTES = 1024 * 1024;
-const MODEL_TIER_VALUES = new Set(["lite", "standard", "pro"]);
 
 type ChatMessage = { role: string; content: string };
 
@@ -99,7 +99,7 @@ export async function handleAgentChatHttpRequest(
   const modelTierRaw = body.model_tier;
   let modelTier: string | undefined;
   if (modelTierRaw !== undefined && modelTierRaw !== null) {
-    if (typeof modelTierRaw !== "string" || !MODEL_TIER_VALUES.has(modelTierRaw)) {
+    if (!isModelTier(modelTierRaw)) {
       sendError(res, 400, "model_tier must be one of: lite, standard, pro");
       return true;
     }

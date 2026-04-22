@@ -161,6 +161,13 @@ export type ModelApiProtocol =
 
 export type ModelAuthMode = "api-key" | "oauth" | "token" | "none";
 
+export const MODEL_TIER_VALUES = ["lite", "standard", "pro"] as const;
+export type ModelTier = (typeof MODEL_TIER_VALUES)[number];
+
+export function isModelTier(value: unknown): value is ModelTier {
+  return typeof value === "string" && (MODEL_TIER_VALUES as readonly string[]).includes(value);
+}
+
 export interface TenantModelDefinition {
   id: string;
   name: string;
@@ -177,6 +184,7 @@ export interface TenantModelDefinition {
   alias?: string;
   streaming?: boolean;
   compat?: Record<string, unknown>;
+  tier?: ModelTier;
 }
 
 export type ModelVisibility = "private" | "shared";
@@ -207,7 +215,10 @@ export interface TenantModel {
 export interface ModelConfigEntry {
   providerId: string;  // tenant_models.id
   modelId: string;     // tenant_models.models[].id
-  isDefault: boolean;  // true = primary, false = fallback (ordered by array index)
+  isDefault: boolean;
+  // v4: tier-scoped default. Each tier (resolved via TenantModelDefinition.tier)
+  // may have at most one entry with isDefault=true in a single agent's modelConfig.
+  // Models without a tier are treated as "standard" at runtime (legacy fallback).
 }
 
 export interface TenantAgent {
