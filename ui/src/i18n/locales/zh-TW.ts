@@ -1173,6 +1173,8 @@ export const zh_TW: TranslationMap = {
     viewByProvider: "按供應商",
     viewByTier: "按檔位",
     saved: "已儲存",
+    setTierDefault: "設為檔位預設",
+    unassignedCantBeDefault: "未分檔的模型不能設為檔位預設",
     addForm: {
       title: "新增模型",
       tierLabel: "檔位",

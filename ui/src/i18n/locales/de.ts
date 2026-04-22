@@ -1177,6 +1177,8 @@ export const de: TranslationMap = {
     viewByProvider: "Nach Anbieter",
     viewByTier: "Nach Stufe",
     saved: "Gespeichert",
+    setTierDefault: "Als Stufen-Standard setzen",
+    unassignedCantBeDefault: "Modelle ohne Stufe koennen nicht als Standard gesetzt werden",
     addForm: {
       title: "Modell hinzufuegen",
       tierLabel: "Stufe",

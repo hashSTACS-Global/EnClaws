@@ -1616,6 +1616,8 @@ export const en: TranslationMap = {
     viewByProvider: "By provider",
     viewByTier: "By tier",
     saved: "Saved",
+    setTierDefault: "Set as tier default",
+    unassignedCantBeDefault: "Unassigned models can't be set as a tier default",
     addForm: {
       title: "Add model",
       tierLabel: "Tier",

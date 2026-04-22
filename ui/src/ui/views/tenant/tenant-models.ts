@@ -29,6 +29,7 @@ import {
   suggestDraftFields,
   validateAddDraft,
   resolveAddTarget,
+  buildSetTierDefaultUpdates,
   type AddModelDraft,
 } from "./tenant-models-add-form.ts";
 
@@ -306,8 +307,13 @@ export class TenantModelsView extends LitElement {
   @state() private addModelDraft: AddModelDraft = emptyAddModelDraft();
   @state() private addModelErrors: string[] = [];
 
-  // Cached agent list for model-in-use checks
-  private cachedAgents: Array<{ name: string; agentId: string; modelConfig: Array<{ providerId: string; modelId: string }> }> = [];
+  // Cached agent list for model-in-use checks + tier-default fan-out.
+  // Includes isDefault so buildSetTierDefaultUpdates can diff correctly.
+  private cachedAgents: Array<{
+    name: string;
+    agentId: string;
+    modelConfig: Array<{ providerId: string; modelId: string; isDefault: boolean }>;
+  }> = [];
 
   private showError(key: string, params?: Record<string, string>) {
     this.errorKey = key;
@@ -339,10 +345,61 @@ export class TenantModelsView extends LitElement {
 
   private async loadAgents() {
     try {
-      const result = await this.rpc("tenant.agents.list") as { agents: Array<{ name: string; agentId: string; modelConfig: Array<{ providerId: string; modelId: string }> }> };
+      const result = (await this.rpc("tenant.agents.list")) as {
+        agents: Array<{
+          name: string;
+          agentId: string;
+          modelConfig: Array<{ providerId: string; modelId: string; isDefault: boolean }>;
+        }>;
+      };
       this.cachedAgents = result.agents ?? [];
     } catch {
       this.cachedAgents = [];
+    }
+  }
+
+  private findModelTier(providerId: string, modelId: string): ModelTierValue | undefined {
+    return this.configs
+      .find((c) => c.id === providerId)
+      ?.models.find((m) => m.id === modelId)?.tier;
+  }
+
+  /**
+   * Tenant-wide "make this model the default for its tier" action.
+   * Fans out over every agent that has at least one entry in the target
+   * tier, flipping isDefault flags via buildSetTierDefaultUpdates.
+   */
+  private async setAsTierDefault(providerId: string, modelId: string) {
+    const tier = this.findModelTier(providerId, modelId);
+    if (!tier) {
+      this.showError("models.unassignedCantBeDefault");
+      return;
+    }
+    this.saving = true;
+    try {
+      await this.loadAgents();
+      const updates = buildSetTierDefaultUpdates(
+        providerId,
+        modelId,
+        tier,
+        this.cachedAgents.map((a) => ({ id: a.agentId, modelConfig: a.modelConfig })),
+        (pid, mid) => this.findModelTier(pid, mid),
+      );
+      if (updates.length === 0) {
+        this.showSuccess("models.saved");
+        return;
+      }
+      await Promise.all(
+        updates.map((u) =>
+          this.rpc("tenant.agents.update", { agentId: u.agentId, modelConfig: u.modelConfig }),
+        ),
+      );
+      await this.loadAgents();
+      this.showSuccess("models.saved");
+    } catch (err) {
+      this.showError(err instanceof Error ? err.message : "models.saveFailed");
+    } finally {
+      this.saving = false;
     }
   }
 
@@ -689,6 +746,14 @@ export class TenantModelsView extends LitElement {
                 </div>
                 ${entry.isShared || !cfg ? nothing : html`
                   <div style="display:flex;gap:0.3rem">
+                    ${entry.tier ? html`
+                      <button
+                        class="btn btn-outline btn-sm"
+                        ?disabled=${this.saving}
+                        @click=${() => this.setAsTierDefault(entry.providerId, entry.modelId)}>
+                        ${t("models.setTierDefault")}
+                      </button>
+                    ` : nothing}
                     <button class="btn btn-outline btn-sm" @click=${() => this.startEdit(cfg)}>${t("models.edit")}</button>
                   </div>
                 `}

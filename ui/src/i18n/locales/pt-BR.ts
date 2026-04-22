@@ -1176,6 +1176,8 @@ export const pt_BR: TranslationMap = {
     viewByProvider: "Por provedor",
     viewByTier: "Por categoria",
     saved: "Salvo",
+    setTierDefault: "Definir como padrao da categoria",
+    unassignedCantBeDefault: "Modelos sem categoria nao podem ser padrao",
     addForm: {
       title: "Adicionar modelo",
       tierLabel: "Categoria",
