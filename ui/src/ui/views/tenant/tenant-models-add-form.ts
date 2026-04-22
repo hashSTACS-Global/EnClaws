@@ -72,6 +72,16 @@ export interface AgentConfigUpdate {
   modelConfig: Array<{ providerId: string; modelId: string; isDefault: boolean }>;
 }
 
+export interface EditPayload {
+  id: string;
+  providerName: string;
+  baseUrl: string;
+  apiProtocol: string;
+  authMode: string;
+  apiKey: string;
+  models: ModelDefinitionLite[];
+}
+
 // ─── suggestDraftFields ───────────────────────────────────────────────────
 
 /**
@@ -224,4 +234,56 @@ export function buildSetTierDefaultUpdates(
     updates.push({ agentId: agent.id, modelConfig: next });
   }
   return updates;
+}
+
+// ─── buildEditPayload ─────────────────────────────────────────────────────
+
+/**
+ * Produce a tenant.models.update payload for "edit this model in place".
+ *
+ * Replaces the entry at `editingHandle.modelId` within the existing
+ * provider's models array with a fresh def built from the draft (id/name/
+ * tier). Passes provider-level fields straight through; empty apiKey is
+ * forwarded as-is (the backend treats '' as 'keep existing' since v4
+ * step 1.2).
+ */
+export function buildEditPayload(
+  draft: AddModelDraft,
+  editingHandle: { providerId: string; modelId: string },
+  existingProvider: ExistingProviderLite,
+): EditPayload {
+  const newDef: ModelDefinitionLite = {
+    id: draft.modelId,
+    name: draft.modelName || draft.modelId,
+    ...(draft.tier ? { tier: draft.tier as ModelTierValue } : {}),
+  };
+  const nextModels = existingProvider.models.map((m) =>
+    m.id === editingHandle.modelId ? newDef : m,
+  );
+  return {
+    id: editingHandle.providerId,
+    providerName: draft.providerName,
+    baseUrl: draft.baseUrl,
+    apiProtocol: draft.protocol,
+    authMode: draft.authMode,
+    apiKey: draft.apiKey,
+    models: nextModels,
+  };
+}
+
+// ─── countAgentsUsingModel ────────────────────────────────────────────────
+
+/**
+ * How many distinct agents reference the (providerId, modelId) pair in
+ * their modelConfig. Used for the "N agents use this; change tier?" soft
+ * confirm on the edit modal.
+ */
+export function countAgentsUsingModel(
+  providerId: string,
+  modelId: string,
+  agents: AgentLike[],
+): number {
+  return agents.filter((a) =>
+    a.modelConfig.some((e) => e.providerId === providerId && e.modelId === modelId),
+  ).length;
 }

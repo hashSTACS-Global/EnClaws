@@ -21,6 +21,8 @@ import {
   validateAddDraft,
   resolveAddTarget,
   buildSetTierDefaultUpdates,
+  buildEditPayload,
+  countAgentsUsingModel,
   type AddModelDraft,
 } from "./tenant-models-add-form.ts";
 
@@ -355,5 +357,145 @@ describe("buildSetTierDefaultUpdates", () => {
       findTier(tiers),
     );
     expect(updates.map((u) => u.agentId)).toEqual(["a1"]);
+  });
+});
+
+// ─── buildEditPayload ─────────────────────────────────────────────────────
+
+function mkExistingProvider(
+  overrides: Parameters<typeof resolveAddTarget>[1][number] extends infer T
+    ? Partial<T>
+    : never = {},
+): Parameters<typeof resolveAddTarget>[1][number] {
+  return {
+    id: "m-1",
+    providerType: "anthropic",
+    providerName: "My Anthropic",
+    baseUrl: "https://api.anthropic.com",
+    apiProtocol: "anthropic-messages",
+    authMode: "api-key",
+    models: [
+      { id: "claude-opus-4-7", name: "Opus", tier: "pro" },
+      { id: "claude-sonnet-4-6", name: "Sonnet", tier: "standard" },
+    ],
+    ...overrides,
+  };
+}
+
+describe("buildEditPayload", () => {
+  it("replaces the matching def in-place and keeps siblings intact", () => {
+    const provider = mkExistingProvider();
+    const draft = makeDraft({
+      tier: "standard",
+      modelId: "claude-sonnet-4-6",
+      modelName: "Sonnet (renamed)",
+    });
+    const payload = buildEditPayload(
+      draft,
+      { providerId: "m-1", modelId: "claude-sonnet-4-6" },
+      provider,
+    );
+    expect(payload.id).toBe("m-1");
+    expect(payload.models).toHaveLength(2);
+    const opus = payload.models.find((m) => m.id === "claude-opus-4-7");
+    const sonnet = payload.models.find((m) => m.id === "claude-sonnet-4-6");
+    expect(opus).toMatchObject({ id: "claude-opus-4-7", tier: "pro" });
+    expect(sonnet).toMatchObject({
+      id: "claude-sonnet-4-6",
+      name: "Sonnet (renamed)",
+      tier: "standard",
+    });
+  });
+
+  it("handles modelId rename (old id removed, new id inserted in same slot)", () => {
+    const provider = mkExistingProvider();
+    const draft = makeDraft({
+      tier: "standard",
+      modelId: "claude-sonnet-4-7-beta",
+      modelName: "Sonnet beta",
+    });
+    const payload = buildEditPayload(
+      draft,
+      { providerId: "m-1", modelId: "claude-sonnet-4-6" },
+      provider,
+    );
+    expect(payload.models.map((m) => m.id)).toEqual([
+      "claude-opus-4-7",
+      "claude-sonnet-4-7-beta",
+    ]);
+  });
+
+  it("drops tier from the edited def when the draft clears it", () => {
+    const provider = mkExistingProvider();
+    const draft = makeDraft({
+      tier: "",
+      modelId: "claude-sonnet-4-6",
+      modelName: "Sonnet",
+    });
+    const payload = buildEditPayload(
+      draft,
+      { providerId: "m-1", modelId: "claude-sonnet-4-6" },
+      provider,
+    );
+    const sonnet = payload.models.find((m) => m.id === "claude-sonnet-4-6");
+    expect(sonnet?.tier).toBeUndefined();
+  });
+
+  it("passes provider-level fields straight through", () => {
+    const provider = mkExistingProvider();
+    const draft = makeDraft({
+      providerName: "Renamed Anthropic",
+      baseUrl: "https://proxy.example/v1",
+      protocol: "openai-completions",
+      authMode: "token",
+      apiKey: "sk-new",
+    });
+    const payload = buildEditPayload(
+      draft,
+      { providerId: "m-1", modelId: "claude-sonnet-4-6" },
+      provider,
+    );
+    expect(payload.providerName).toBe("Renamed Anthropic");
+    expect(payload.baseUrl).toBe("https://proxy.example/v1");
+    expect(payload.apiProtocol).toBe("openai-completions");
+    expect(payload.authMode).toBe("token");
+    expect(payload.apiKey).toBe("sk-new");
+  });
+
+  it("passes empty apiKey through (backend treats '' as keep-existing)", () => {
+    const provider = mkExistingProvider();
+    const draft = makeDraft({ apiKey: "" });
+    const payload = buildEditPayload(
+      draft,
+      { providerId: "m-1", modelId: "claude-sonnet-4-6" },
+      provider,
+    );
+    expect(payload.apiKey).toBe("");
+  });
+});
+
+// ─── countAgentsUsingModel ────────────────────────────────────────────────
+
+describe("countAgentsUsingModel", () => {
+  it("returns 0 when no agent references the pair", () => {
+    const agents = [mkAgent("a1", [{ providerId: "other", modelId: "x", isDefault: true }])];
+    expect(countAgentsUsingModel("p1", "m1", agents)).toBe(0);
+  });
+
+  it("counts one per matching agent, even if the model appears twice in its config", () => {
+    const a1 = mkAgent("a1", [
+      { providerId: "p1", modelId: "m1", isDefault: true },
+      { providerId: "p1", modelId: "m1", isDefault: false }, // dup (shouldn't happen, but be safe)
+    ]);
+    expect(countAgentsUsingModel("p1", "m1", [a1])).toBe(1);
+  });
+
+  it("counts distinct matching agents", () => {
+    const agents = [
+      mkAgent("a1", [{ providerId: "p1", modelId: "m1", isDefault: true }]),
+      mkAgent("a2", [{ providerId: "p1", modelId: "m1", isDefault: false }]),
+      mkAgent("a3", [{ providerId: "p2", modelId: "m1", isDefault: true }]), // different providerId
+    ];
+    expect(countAgentsUsingModel("p1", "m1", agents)).toBe(2);
   });
 });
