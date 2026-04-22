@@ -306,6 +306,8 @@ export const pt_BR: TranslationMap = {
     addAnother: "+ Adicionar outra categoria",
     addedModelsTitle: "{count} modelo(s) adicionado(s)",
     removeAdded: "Remover",
+    setAsDefault: "Definir como padrao",
+    isDefaultTier: "Categoria padrao",
     apiKeyRequired: "API Key é obrigatória",
     apiAddress: "Endereço",
     apiAddressHint: "Endpoint da API do serviço de modelo. Deixe vazio para serviço oficial, preencha para proxy ou implantação privada.",

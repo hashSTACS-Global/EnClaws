@@ -265,6 +265,8 @@ export const zh_CN: TranslationMap = {
     addAnother: "+ 添加另一档",
     addedModelsTitle: "已添加 {count} 个模型",
     removeAdded: "移除",
+    setAsDefault: "设为默认档",
+    isDefaultTier: "默认档",
     apiKeyRequired: "请填写 API Key",
     apiAddress: "地址",
     apiAddressHint: "模型服务的 API 地址，使用官方服务可留空，使用代理或私有部署需填写。",

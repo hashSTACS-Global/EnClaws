@@ -307,6 +307,8 @@ export const de: TranslationMap = {
     addAnother: "+ Weitere Stufe hinzufuegen",
     addedModelsTitle: "{count} Modell(e) hinzugefuegt",
     removeAdded: "Entfernen",
+    setAsDefault: "Als Standard setzen",
+    isDefaultTier: "Standardstufe",
     apiKeyRequired: "API-Schlüssel ist erforderlich",
     apiAddress: "Adresse",
     apiAddressHint: "API-Endpunkt für den Modelldienst. Für offiziellen Dienst leer lassen, für Proxy oder private Bereitstellung ausfüllen.",

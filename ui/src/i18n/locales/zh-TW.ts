@@ -303,6 +303,8 @@ export const zh_TW: TranslationMap = {
     addAnother: "+ 新增另一檔",
     addedModelsTitle: "已新增 {count} 個模型",
     removeAdded: "移除",
+    setAsDefault: "設為預設檔",
+    isDefaultTier: "預設檔",
     apiKeyRequired: "請填寫 API Key",
     apiAddress: "地址",
     apiAddressHint: "模型服務的 API 地址，使用官方服務可留空，使用代理或私有部署需填寫。",

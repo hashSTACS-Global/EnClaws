@@ -227,15 +227,43 @@ export class OnboardingWizard extends LitElement {
     .test-result.ok { color: var(--ok, #16a34a); background: rgba(22,163,74,0.12); }
     .test-result.fail { color: var(--danger, #ef4444); background: rgba(239,68,68,0.12); }
 
-    .added-models-list {
-      display: flex; flex-direction: column; gap: 0.3rem;
+    .added-tier-groups {
+      display: flex; flex-direction: column; gap: 0.5rem;
       margin-top: 0.3rem;
     }
-    .added-model-row {
-      display: flex; align-items: center; gap: 0.6rem;
-      padding: 0.4rem 0.6rem;
+    .added-tier-group {
       border: 1px solid var(--border, #404040);
       border-radius: 6px;
+      overflow: hidden;
+    }
+    .added-tier-group.is-default {
+      border-color: var(--accent, #3b82f6);
+    }
+    .added-tier-head {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.45rem 0.65rem;
+      background: rgba(255,255,255,0.03);
+    }
+    .added-tier-count {
+      font-size: 0.72rem;
+      color: var(--text-secondary, #a3a3a3);
+    }
+    .tier-default-choice {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 0.35rem;
+      font-size: 0.78rem;
+      color: var(--text-muted, #a3a3a3);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tier-default-choice > input { margin: 0; accent-color: var(--accent); }
+    .added-tier-group.is-default .tier-default-choice { color: var(--accent); }
+    .added-tier-body {
+      display: flex; flex-direction: column; gap: 0.25rem;
+      padding: 0.4rem 0.65rem;
+    }
+    .added-model-row-compact {
+      display: flex; align-items: center; gap: 0.5rem;
       font-size: 0.82rem;
     }
     .added-model-meta { flex: 1; color: var(--text-secondary, #a3a3a3); }
@@ -465,6 +493,9 @@ export class OnboardingWizard extends LitElement {
     apiKey: string;
     modelId: string;
   }> = [];
+  // Which tier the admin wants as the Agent's default. Auto-set to the tier
+  // of the first buffered model, but admin can change it via radio.
+  @state() private obDefaultTier: ModelTierValue | "" = "";
   // v4: admin picks which tier this model belongs to; defaults to standard so
   // the onboarded agent routes on STANDARD unless changed.
   @state() private selectedTier: ModelTierValue | "" = "standard";
@@ -715,8 +746,9 @@ export class OnboardingWizard extends LitElement {
     if (!this.validateModel()) return;
     const p = MODEL_PROVIDERS.find((x) => x.type === this.selectedProvider);
     if (!p || !this.selectedTier) return;
+    const tier = this.selectedTier;
     this.addedModels = [...this.addedModels, {
-      tier: this.selectedTier,
+      tier,
       providerType: p.type,
       providerName: p.label,
       protocol: p.protocol,
@@ -724,6 +756,8 @@ export class OnboardingWizard extends LitElement {
       apiKey: this.modelApiKey,
       modelId: this.modelName,
     }];
+    // First time a model lands in the buffer → pin its tier as the agent's default.
+    if (!this.obDefaultTier) this.obDefaultTier = tier;
     // Reset form for the next entry.
     this.selectedTier = "";
     this.selectedProvider = "";
@@ -736,6 +770,29 @@ export class OnboardingWizard extends LitElement {
 
   private removeAddedModel(idx: number) {
     this.addedModels = this.addedModels.filter((_, i) => i !== idx);
+    // If the removed entry was the last in its tier, move the default pin
+    // to whichever tier still has models.
+    if (this.addedModels.length === 0) {
+      this.obDefaultTier = "";
+    } else if (!this.addedModels.some((m) => m.tier === this.obDefaultTier)) {
+      this.obDefaultTier = this.addedModels[0].tier;
+    }
+  }
+
+  private setObDefaultTier(tier: ModelTierValue) {
+    this.obDefaultTier = tier;
+  }
+
+  private uniqueAddedTiers(): ModelTierValue[] {
+    const seen = new Set<ModelTierValue>();
+    const out: ModelTierValue[] = [];
+    for (const m of this.addedModels) {
+      if (!seen.has(m.tier)) {
+        seen.add(m.tier);
+        out.push(m.tier);
+      }
+    }
+    return out;
   }
 
   private async testOnboardingConnection() {
@@ -822,8 +879,12 @@ export class OnboardingWizard extends LitElement {
         });
       }
       const firstModel = allModels[0];
+      // Default tier the admin pinned via radio (or the first-added tier
+      // as a fallback). Stored on agent.config so runtime resolveTierChain
+      // picks it as the default tier when the caller doesn't specify one.
+      const obDefaultTier = this.obDefaultTier || firstModel?.tier;
 
-      await this.rpc("tenant.onboarding.setup", {
+      const setupResult = (await this.rpc("tenant.onboarding.setup", {
         channel: this.selectedChannel ? {
           channelType: this.selectedChannel,
           channelName: this.selectedChannel,
@@ -845,15 +906,25 @@ export class OnboardingWizard extends LitElement {
           providerId: this.selectedSharedModelId,
           modelId: this.selectedSharedSubModelId,
         } : undefined,
-        agent: { name: t("onboarding.defaultAgentName") },
+        agent: {
+          name: t("onboarding.defaultAgentName"),
+          config: obDefaultTier ? { defaultTier: obDefaultTier } : undefined,
+        },
         locale: i18n.getLocale(),
-      });
+      })) as {
+        agent: { agentId: string };
+        model: { id: string };
+      };
+
+      const agentId = setupResult?.agent?.agentId;
+      const firstProviderId = setupResult?.model?.id;
 
       // Remaining models → independent tenant.models.create calls. Failures
       // here don't revert the primary model; they surface as wizard errors
       // so the admin can re-add the bad one from the Models page later.
+      const extraProviderIds: string[] = [];
       for (const extra of allModels.slice(1)) {
-        await this.rpc("tenant.models.create", {
+        const created = (await this.rpc("tenant.models.create", {
           providerType: extra.providerType,
           providerName: extra.providerName,
           baseUrl: extra.baseUrl || undefined,
@@ -861,7 +932,38 @@ export class OnboardingWizard extends LitElement {
           authMode: "api-key",
           apiKey: extra.apiKey,
           models: [{ id: extra.modelId, name: extra.modelId, tier: extra.tier }],
+        })) as { id: string };
+        extraProviderIds.push(created.id);
+      }
+
+      // If the admin onboarded with more than one model, reshape the newly
+      // created agent's modelConfig to include every model as a fallback
+      // chain entry, with the admin's picked default tier's first slot
+      // carrying isDefault=true. Without this step the agent would only
+      // bind to the first model (what onboarding.setup wired up).
+      if (!isShared && allModels.length > 1 && agentId && firstProviderId && obDefaultTier) {
+        const providerIdByIndex = [firstProviderId, ...extraProviderIds];
+        const tierBuckets = new Map<ModelTierValue, Array<{ providerId: string; modelId: string }>>();
+        allModels.forEach((m, idx) => {
+          const pid = providerIdByIndex[idx];
+          if (!pid) return;
+          if (!tierBuckets.has(m.tier)) tierBuckets.set(m.tier, []);
+          tierBuckets.get(m.tier)!.push({ providerId: pid, modelId: m.modelId });
         });
+        const orderedTiers: ModelTierValue[] = [
+          obDefaultTier,
+          ...Array.from(tierBuckets.keys()).filter((t) => t !== obDefaultTier),
+        ];
+        let markedDefault = false;
+        const modelConfig: Array<{ providerId: string; modelId: string; isDefault: boolean }> = [];
+        for (const tier of orderedTiers) {
+          const entries = tierBuckets.get(tier) ?? [];
+          for (const e of entries) {
+            modelConfig.push({ ...e, isDefault: !markedDefault });
+            markedDefault = true;
+          }
+        }
+        await this.rpc("tenant.agents.update", { agentId, modelConfig });
       }
 
       this.channelCreated = !!this.selectedChannel;
@@ -1236,15 +1338,37 @@ export class OnboardingWizard extends LitElement {
         ${this.addedModels.length > 0 ? html`
           <div class="form-group">
             <label>${t("onboarding.addedModelsTitle").replace("{count}", String(this.addedModels.length))}</label>
-            <div class="added-models-list">
-              ${this.addedModels.map((m, idx) => html`
-                <div class="added-model-row">
-                  <span class="tier-pill tier-${m.tier} selected" style="cursor:default">${tierLabel(m.tier)}</span>
-                  <span class="added-model-meta">${m.providerName} · <code>${m.modelId}</code></span>
-                  <button type="button" class="btn-remove" title="${t("onboarding.removeAdded")}"
-                    @click=${() => this.removeAddedModel(idx)}>✕</button>
-                </div>
-              `)}
+            <div class="added-tier-groups">
+              ${this.uniqueAddedTiers().map((tier) => {
+                const entries = this.addedModels.filter((m) => m.tier === tier);
+                const isDefault = this.obDefaultTier === tier;
+                return html`
+                  <div class="added-tier-group ${isDefault ? "is-default" : ""}">
+                    <div class="added-tier-head">
+                      <span class="tier-pill tier-${tier} selected" style="cursor:default">${tierLabel(tier)}</span>
+                      <span class="added-tier-count">${entries.length}</span>
+                      <label class="tier-default-choice">
+                        <input type="radio" name="ob-default-tier"
+                          .checked=${isDefault}
+                          @change=${() => this.setObDefaultTier(tier)} />
+                        <span>${isDefault ? t("onboarding.isDefaultTier") : t("onboarding.setAsDefault")}</span>
+                      </label>
+                    </div>
+                    <div class="added-tier-body">
+                      ${entries.map((m) => {
+                        const idx = this.addedModels.indexOf(m);
+                        return html`
+                          <div class="added-model-row-compact">
+                            <span class="added-model-meta">${m.providerName} · <code>${m.modelId}</code></span>
+                            <button type="button" class="btn-remove" title="${t("onboarding.removeAdded")}"
+                              @click=${() => this.removeAddedModel(idx)}>✕</button>
+                          </div>
+                        `;
+                      })}
+                    </div>
+                  </div>
+                `;
+              })}
             </div>
           </div>
         ` : nothing}

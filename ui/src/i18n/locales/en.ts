@@ -265,6 +265,8 @@ export const en: TranslationMap = {
     addAnother: "+ Add another tier",
     addedModelsTitle: "{count} model(s) added",
     removeAdded: "Remove",
+    setAsDefault: "Set as default",
+    isDefaultTier: "Default tier",
     apiKeyRequired: "API Key is required",
     apiAddress: "Address",
     apiAddressHint: "API endpoint for the model service. Leave empty for official service, fill in for proxy or private deployment.",
