@@ -1165,5 +1165,12 @@ export const zh_TW: TranslationMap = {
     apiKeyPlaceholder: "輸入 API 密鑰",
     modelIdPlaceholder: "輸入模型 ID",
     displayNamePlaceholder: "輸入顯示名稱",
+    tier: "檔位",
+    tierUnset: "未分檔",
+    tierUnassigned: "未分檔",
+    tierUnassignedHint: "這些模型未登記檔位，當前按 STANDARD 檔執行。建議編輯後選擇合適檔位。",
+    tierCount: "{count} 個",
+    viewByProvider: "按供應商",
+    viewByTier: "按檔位",
   },
 };

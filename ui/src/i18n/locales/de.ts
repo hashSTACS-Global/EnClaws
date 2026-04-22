@@ -1169,5 +1169,12 @@ export const de: TranslationMap = {
     apiKeyPlaceholder: "API-Schlussel eingeben",
     modelIdPlaceholder: "Modell-ID eingeben",
     displayNamePlaceholder: "Anzeigename eingeben",
+    tier: "Stufe",
+    tierUnset: "Ohne Stufe",
+    tierUnassigned: "Ohne Stufe",
+    tierUnassignedHint: "Diese Modelle haben keine Stufe und laufen standardmassig als STANDARD. Zum Zuweisen bearbeiten.",
+    tierCount: "{count}",
+    viewByProvider: "Nach Anbieter",
+    viewByTier: "Nach Stufe",
   },
 };

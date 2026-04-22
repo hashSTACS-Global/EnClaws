@@ -1629,5 +1629,12 @@ export const zh_CN: TranslationMap = {
     apiKeyPlaceholder: "输入 API 密钥",
     modelIdPlaceholder: "输入模型 ID",
     displayNamePlaceholder: "输入显示名称",
+    tier: "档位",
+    tierUnset: "未分档",
+    tierUnassigned: "未分档",
+    tierUnassignedHint: "这些模型未登记档位，当前按 STANDARD 档运行。建议编辑后选择合适档位。",
+    tierCount: "{count} 个",
+    viewByProvider: "按供应商",
+    viewByTier: "按档位",
   }
 };

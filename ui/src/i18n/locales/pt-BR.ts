@@ -1168,5 +1168,12 @@ export const pt_BR: TranslationMap = {
     apiKeyPlaceholder: "Digite a chave API",
     modelIdPlaceholder: "Digite o ID do modelo",
     displayNamePlaceholder: "Digite o nome de exibicao",
+    tier: "Categoria",
+    tierUnset: "Sem categoria",
+    tierUnassigned: "Sem categoria",
+    tierUnassignedHint: "Esses modelos nao tem categoria e rodam como STANDARD por padrao. Edite para atribuir.",
+    tierCount: "{count}",
+    viewByProvider: "Por provedor",
+    viewByTier: "Por categoria",
   },
 };

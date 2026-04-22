@@ -8,11 +8,22 @@
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, state, property } from "lit/decorators.js";
 import { tenantRpc } from "./rpc.ts";
-import { PROVIDER_TYPES as SHARED_PROVIDERS, API_PROTOCOLS as SHARED_PROTOCOLS } from "../../../constants/providers.ts";
+import {
+  PROVIDER_TYPES as SHARED_PROVIDERS,
+  API_PROTOCOLS as SHARED_PROTOCOLS,
+  MODEL_TIERS,
+  TIER_LABELS,
+  type ModelTierValue,
+} from "../../../constants/providers.ts";
 import { t } from "../../../i18n/index.ts";
 import { I18nController } from "../../../i18n/lib/lit-controller.ts";
 import { showConfirm } from "../../components/confirm-dialog.ts";
 import { caretFix } from "../../shared-styles.ts";
+import {
+  TIER_BUCKET_ORDER,
+  groupProvidersByTier,
+  type TierBucket,
+} from "./tenant-models-tier-view.ts";
 
 interface ModelDefinition {
   id: string;
@@ -22,6 +33,7 @@ interface ModelDefinition {
   contextWindow?: number;
   maxTokens?: number;
   cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  tier?: ModelTierValue;
 }
 
 interface TenantModelConfig {
@@ -133,6 +145,47 @@ export class TenantModelsView extends LitElement {
     .sub-model-row .form-field { flex: 1; }
     .sub-model-row .form-field label { font-size: 0.72rem; }
     .sub-model-row .form-field input { font-size: 0.8rem; padding: 0.35rem 0.5rem; }
+    /* Tier badge used on model tags and in the "by tier" view rows. */
+    .tier-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      padding: 0.05rem 0.4rem;
+      border-radius: 3px;
+      margin-left: 0.35rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text-2);
+    }
+    .tier-badge.tier-pro { color: var(--accent); border-color: var(--accent); }
+    .tier-badge.tier-standard { color: var(--ok); border-color: var(--ok); }
+    .tier-badge.tier-lite { color: var(--warn); border-color: var(--warn); }
+    .tier-badge.tier-unassigned { color: var(--muted); }
+    /* View switcher */
+    .view-switch { display: inline-flex; gap: 0.25rem; margin-right: 0.5rem; }
+    .view-switch .btn { border: 1px solid var(--border); background: transparent; color: var(--text-2); }
+    .view-switch .btn.active { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+    /* By-tier view */
+    .tier-section { margin-bottom: 1.5rem; }
+    .tier-section-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.9rem; font-weight: 600; color: var(--text); }
+    .tier-section-head .count { font-size: 0.75rem; color: var(--muted); font-weight: 400; }
+    .tier-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.6rem 0.9rem; border: 1px solid var(--border);
+      border-radius: var(--radius-md); background: var(--card);
+      margin-bottom: 0.4rem;
+    }
+    .tier-row-main { display: flex; flex-direction: column; gap: 0.15rem; }
+    .tier-row-title { font-size: 0.9rem; font-weight: 500; }
+    .tier-row-sub { font-size: 0.75rem; color: var(--muted); }
+    .tier-unassigned-hint {
+      font-size: 0.75rem; color: var(--warn);
+      padding: 0.4rem 0.6rem;
+      background: var(--warn-subtle, var(--bg));
+      border-radius: var(--radius-md);
+      margin-bottom: 0.5rem;
+    }
   `];
 
   private i18nController = new I18nController(this);
@@ -161,6 +214,11 @@ export class TenantModelsView extends LitElement {
   @state() private showModelForm = false;
   @state() private subModelId = "";
   @state() private subModelName = "";
+  @state() private subModelTier: ModelTierValue | "" = "";
+
+  // View switcher: "provider" (default, Provider-container cards) vs
+  // "tier" (flat list grouped by model tier)
+  @state() private viewMode: "provider" | "tier" = "provider";
 
   // Cached agent list for model-in-use checks
   private cachedAgents: Array<{ name: string; agentId: string; modelConfig: Array<{ providerId: string; modelId: string }> }> = [];
@@ -271,6 +329,7 @@ export class TenantModelsView extends LitElement {
   private startAddModel() {
     this.subModelId = "";
     this.subModelName = "";
+    this.subModelTier = "";
     this.showModelForm = true;
   }
 
@@ -296,6 +355,7 @@ export class TenantModelsView extends LitElement {
         input: ["text"],
         contextWindow: 128000,
         maxTokens: 128000,
+        ...(this.subModelTier ? { tier: this.subModelTier } : {}),
       },
     ];
     this.showModelForm = false;
@@ -393,7 +453,19 @@ export class TenantModelsView extends LitElement {
     return html`
       <div class="header">
         <h2>${t("models.title")}</h2>
-        <div style="display:flex;gap:0.5rem">
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <div class="view-switch">
+            <button
+              class="btn btn-sm ${this.viewMode === "provider" ? "active" : ""}"
+              @click=${() => (this.viewMode = "provider")}>
+              ${t("models.viewByProvider")}
+            </button>
+            <button
+              class="btn btn-sm ${this.viewMode === "tier" ? "active" : ""}"
+              @click=${() => (this.viewMode = "tier")}>
+              ${t("models.viewByTier")}
+            </button>
+          </div>
           <button class="btn btn-outline" @click=${() => this.loadConfigs()}>${t("models.refresh")}</button>
           <button class="btn btn-primary" @click=${() => this.showForm ? (this.showForm = false) : this.startCreate()}>
             ${this.showForm ? t("models.cancel") : t("models.addProvider")}
@@ -410,11 +482,64 @@ export class TenantModelsView extends LitElement {
         ? html`<div class="loading">${t("models.loading")}</div>`
         : this.configs.length === 0
           ? html`<div class="empty">${t("models.empty")}</div>`
-          : html`
-            <div class="card-grid">
-              ${this.configs.map((c) => this.renderCard(c))}
-            </div>
-          `}
+          : this.viewMode === "tier"
+            ? this.renderTierView()
+            : html`
+              <div class="card-grid">
+                ${this.configs.map((c) => this.renderCard(c))}
+              </div>
+            `}
+    `;
+  }
+
+  /** Small tier badge used on both Provider cards (model tags) and the by-tier rows. */
+  private renderTierBadge(tier: ModelTierValue | undefined) {
+    if (!tier) return nothing;
+    return html`<span class="tier-badge tier-${tier}">${TIER_LABELS[tier]}</span>`;
+  }
+
+  /** Flat, tier-grouped view. Shares data with the Provider view — no extra fetch. */
+  private renderTierView() {
+    const buckets = groupProvidersByTier(this.configs);
+    const visibleTiers: TierBucket[] = TIER_BUCKET_ORDER.filter((t) => buckets[t].length > 0);
+
+    return html`
+      ${visibleTiers.map((tier) => html`
+        <div class="tier-section">
+          <div class="tier-section-head">
+            <span class="tier-badge tier-${tier}">
+              ${tier === "unassigned" ? t("models.tierUnassigned") : TIER_LABELS[tier as ModelTierValue]}
+            </span>
+            <span class="count">${t("models.tierCount", { count: String(buckets[tier].length) })}</span>
+          </div>
+          ${tier === "unassigned" ? html`
+            <div class="tier-unassigned-hint">${t("models.tierUnassignedHint")}</div>
+          ` : nothing}
+          ${buckets[tier].map((entry) => {
+            const providerLabel = PROVIDER_TYPES.find((p) => p.value === entry.providerType)?.label ?? entry.providerType;
+            const cfg = this.configs.find((c) => c.id === entry.providerId);
+            return html`
+              <div class="tier-row">
+                <div class="tier-row-main">
+                  <div class="tier-row-title">
+                    ${entry.modelName} <span style="font-family:monospace;color:var(--muted);font-size:0.8rem">(${entry.modelId})</span>
+                  </div>
+                  <div class="tier-row-sub">
+                    ${providerLabel} · ${entry.providerName}
+                    ${entry.isShared ? html`<span class="shared-badge">${t("platformModels.shared")}</span>` : nothing}
+                    ${!entry.isActive ? html`<span style="color:var(--danger);margin-left:0.5rem">${t("models.disable")}</span>` : nothing}
+                  </div>
+                </div>
+                ${entry.isShared || !cfg ? nothing : html`
+                  <div style="display:flex;gap:0.3rem">
+                    <button class="btn btn-outline btn-sm" @click=${() => this.startEdit(cfg)}>${t("models.edit")}</button>
+                  </div>
+                `}
+              </div>
+            `;
+          })}
+        </div>
+      `)}
     `;
   }
 
@@ -428,7 +553,7 @@ export class TenantModelsView extends LitElement {
             <div class="model-name">
               <span class="status-dot ${config.isActive ? "active" : "inactive"}"></span>
               ${config.providerName}
-              ${isShared ? html`<span class="shared-badge">${t("platformModels.shared", {}, "Shared")}</span>` : nothing}
+              ${isShared ? html`<span class="shared-badge">${t("platformModels.shared")}</span>` : nothing}
               ${!config.isActive ? html`<span style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:var(--danger-subtle);color:var(--danger);margin-left:0.4rem">${t("models.disable")}</span>` : nothing}
             </div>
             <div class="model-provider">${providerLabel} | ${config.apiProtocol}</div>
@@ -440,7 +565,9 @@ export class TenantModelsView extends LitElement {
         </div>
         <div class="model-tags">
           ${config.models.map((m) => html`
-            <span class="model-tag ${m.reasoning ? "reasoning" : ""}">${m.name} (${m.id})</span>
+            <span class="model-tag ${m.reasoning ? "reasoning" : ""}">
+              ${m.name} (${m.id})${this.renderTierBadge(m.tier)}
+            </span>
           `)}
         </div>
         ${isShared ? nothing : html`
@@ -528,6 +655,7 @@ export class TenantModelsView extends LitElement {
                 <tr>
                   <th>${t("models.modelId")}</th>
                   <th>${t("models.modelName")}</th>
+                  <th>${t("models.tier")}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -536,6 +664,7 @@ export class TenantModelsView extends LitElement {
                   <tr>
                     <td style="font-family:monospace">${m.id}</td>
                     <td>${m.name}</td>
+                    <td>${m.tier ? TIER_LABELS[m.tier] : html`<span style="color:var(--muted)">${t("models.tierUnset")}</span>`}</td>
                     <td><button type="button" class="btn btn-danger btn-sm" @click=${() => this.removeModel(idx)}>${t("models.remove")}</button></td>
                   </tr>
                 `)}
@@ -557,6 +686,17 @@ export class TenantModelsView extends LitElement {
                   <input type="text" .placeholder=${t("models.displayNamePlaceholder")}
                     .value=${this.subModelName}
                     @input=${(e: InputEvent) => (this.subModelName = (e.target as HTMLInputElement).value)} />
+                </div>
+                <div class="form-field">
+                  <label>${t("models.tier")}</label>
+                  <select
+                    .value=${this.subModelTier}
+                    @change=${(e: Event) => (this.subModelTier = (e.target as HTMLSelectElement).value as ModelTierValue | "")}>
+                    <option value="">${t("models.tierUnset")}</option>
+                    ${MODEL_TIERS.map((tier) => html`
+                      <option value=${tier} ?selected=${this.subModelTier === tier}>${TIER_LABELS[tier]}</option>
+                    `)}
+                  </select>
                 </div>
                 <div style="display:flex;align-items:flex-end">
                   <button type="button" class="btn btn-primary btn-sm" @click=${() => this.addModel()}>${t("models.add")}</button>

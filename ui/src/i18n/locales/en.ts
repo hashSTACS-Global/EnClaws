@@ -1608,5 +1608,12 @@ export const en: TranslationMap = {
     apiKeyPlaceholder: "Enter API key",
     modelIdPlaceholder: "Enter model ID",
     displayNamePlaceholder: "Enter display name",
+    tier: "Tier",
+    tierUnset: "Unassigned",
+    tierUnassigned: "Unassigned",
+    tierUnassignedHint: "These models have no tier recorded and run as STANDARD by default. Edit them to assign a tier.",
+    tierCount: "{count}",
+    viewByProvider: "By provider",
+    viewByTier: "By tier",
   }
 };
