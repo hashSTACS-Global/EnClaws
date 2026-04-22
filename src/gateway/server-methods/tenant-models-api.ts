@@ -10,7 +10,7 @@
 
 import type { GatewayRequestHandlers, GatewayRequestHandlerOptions } from "./types.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
-import { isDbInitialized } from "../../db/index.js";
+import { isDbInitialized, withTransaction, getDbType, DB_SQLITE } from "../../db/index.js";
 import {
   createTenantModel,
   listTenantModels,
@@ -23,7 +23,7 @@ import { assertPermission, RbacError } from "../../auth/rbac.js";
 import { invalidateTenantConfigCache } from "../../config/tenant-config.js";
 import { listTenantAgents } from "../../db/models/tenant-agent.js";
 import type { TenantContext } from "../../auth/middleware.js";
-import type { TenantModelDefinition } from "../../db/types.js";
+import { isModelTier, type ModelTier, type TenantModelDefinition } from "../../db/types.js";
 
 function getTenantCtx(
   client: GatewayRequestHandlerOptions["client"],
@@ -310,6 +310,115 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
       models: updated.models,
       isActive: updated.isActive,
     }));
+  },
+
+  /**
+   * Atomically set the tenant-wide default model for a tier.
+   *
+   * Walks every private `tenant_models` row that has at least one model in the
+   * target tier and rewrites its `models` JSONB so that, within the tier, only
+   * the target (providerId, modelId) carries `isTierDefault=true`. The fan-out
+   * runs inside a single transaction so partial failures cannot leave the
+   * catalog with two (or zero) tier-default markers.
+   */
+  "tenant.models.setTierDefault": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {
+    const ctx = getTenantCtx(client, respond);
+    if (!ctx) return;
+
+    try {
+      assertPermission(ctx.role, "model.update");
+    } catch (err) {
+      if (err instanceof RbacError) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, err.message));
+        return;
+      }
+      throw err;
+    }
+
+    const { tier, providerId, modelId } = params as {
+      tier?: unknown;
+      providerId?: unknown;
+      modelId?: unknown;
+    };
+    if (!isModelTier(tier)) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "tier must be lite|standard|pro"));
+      return;
+    }
+    if (typeof providerId !== "string" || !providerId || typeof modelId !== "string" || !modelId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "providerId and modelId required"));
+      return;
+    }
+    const targetTier: ModelTier = tier;
+
+    // Load tenant's own catalog (shared platform models are read-only here).
+    const all = await listTenantModels(ctx.tenantId, { activeOnly: false, includeShared: false });
+    const targetProvider = all.find((p) => p.id === providerId);
+    const targetModel = targetProvider?.models.find((m) => m.id === modelId);
+    if (!targetProvider || !targetModel) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Target model not found"));
+      return;
+    }
+    if ((targetModel.tier ?? "standard") !== targetTier) {
+      respond(false, undefined, errorShape(
+        ErrorCodes.INVALID_PARAMS,
+        `Target model tier (${targetModel.tier ?? "unassigned"}) does not match requested tier '${targetTier}'`,
+      ));
+      return;
+    }
+
+    // Compute the rewrite per provider container. Skip providers whose
+    // serialized models array doesn't need to change (idempotent call).
+    type PendingUpdate = { id: string; models: TenantModelDefinition[] };
+    const updatesToApply: PendingUpdate[] = [];
+    for (const p of all) {
+      if (!p.models.some((m) => m.tier === targetTier)) continue;
+
+      let changed = false;
+      const next: TenantModelDefinition[] = p.models.map((m) => {
+        if (m.tier !== targetTier) return m;
+        const shouldBeDefault = p.id === providerId && m.id === modelId;
+        const currentIsDefault = m.isTierDefault === true;
+        if (currentIsDefault === shouldBeDefault) return m;
+        changed = true;
+        return { ...m, isTierDefault: shouldBeDefault };
+      });
+      if (changed) updatesToApply.push({ id: p.id, models: next });
+    }
+
+    if (updatesToApply.length === 0) {
+      respond(true, { updated: 0 });
+      return;
+    }
+
+    // Atomic fan-out. SQLite: withTransaction holds BEGIN/COMMIT on the
+    // singleton connection, so updateTenantModel participates via sqliteQuery.
+    // PG: go through the transaction client directly; updateTenantModel would
+    // otherwise pull a fresh pool connection outside the TX.
+    await withTransaction(async (txClient) => {
+      for (const u of updatesToApply) {
+        if (getDbType() === DB_SQLITE) {
+          await updateTenantModel(ctx.tenantId, u.id, { models: u.models });
+        } else {
+          await txClient.query(
+            `UPDATE tenant_models SET models = $1 WHERE tenant_id = $2 AND id = $3`,
+            [JSON.stringify(u.models), ctx.tenantId, u.id],
+          );
+        }
+      }
+    });
+
+    invalidateTenantConfigCache(ctx.tenantId);
+    await context.reloadDbChannels();
+
+    await createAuditLog({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      action: "model.update",
+      resource: `tier:${targetTier}`,
+      detail: { tierDefault: `${providerId}:${modelId}`, affected: updatesToApply.length },
+    });
+
+    respond(true, { updated: updatesToApply.length });
   },
 
   "tenant.models.delete": async ({ params, client, respond, context }: GatewayRequestHandlerOptions) => {

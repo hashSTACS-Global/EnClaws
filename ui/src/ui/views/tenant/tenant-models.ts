@@ -376,11 +376,10 @@ export class TenantModelsView extends LitElement {
   /**
    * Tenant-wide "make this model the default for its tier" action.
    *
-   * Walks every Provider container that has at least one model in the
-   * target tier and rewrites the `models` array so that, within that tier,
-   * only the (targetProviderId, targetModelId) entry has isTierDefault=true.
-   * Other tiers on the same Provider pass through unchanged. Only Providers
-   * whose `models` array actually changes get a round trip.
+   * Delegates to the transactional server RPC `tenant.models.setTierDefault`,
+   * which walks every private `tenant_models` row in the target tier and
+   * flips isTierDefault flags inside a single DB transaction. No concurrent-
+   * request race window like the old per-provider Promise.all client fan-out.
    */
   private async setAsTierDefault(providerId: string, modelId: string) {
     const target = this.configs
@@ -393,31 +392,7 @@ export class TenantModelsView extends LitElement {
     }
     this.saving = true;
     try {
-      const updates: Array<{ id: string; models: ModelDefinition[] }> = [];
-      for (const cfg of this.configs) {
-        // Skip shared/platform models — tenant admin can't mutate them.
-        if (cfg.visibility === "shared") continue;
-        // Skip containers with no models in the target tier.
-        if (!cfg.models.some((m) => m.tier === tier)) continue;
-
-        let changed = false;
-        const nextModels = cfg.models.map((m) => {
-          if (m.tier !== tier) return m;
-          const shouldBeDefault = cfg.id === providerId && m.id === modelId;
-          if ((m.isTierDefault === true) === shouldBeDefault) return m;
-          changed = true;
-          return { ...m, isTierDefault: shouldBeDefault };
-        });
-        if (changed) updates.push({ id: cfg.id, models: nextModels });
-      }
-      if (updates.length === 0) {
-        // Already the tier default across the catalog — no-op success.
-        this.showSuccess("models.saved");
-        return;
-      }
-      await Promise.all(
-        updates.map((u) => this.rpc("tenant.models.update", u)),
-      );
+      await this.rpc("tenant.models.setTierDefault", { tier, providerId, modelId });
       await this.loadConfigs();
       this.showSuccess("models.saved");
     } catch (err) {
