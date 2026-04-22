@@ -227,6 +227,33 @@ export class OnboardingWizard extends LitElement {
     .test-result.ok { color: var(--ok, #16a34a); background: rgba(22,163,74,0.12); }
     .test-result.fail { color: var(--danger, #ef4444); background: rgba(239,68,68,0.12); }
 
+    .added-models-list {
+      display: flex; flex-direction: column; gap: 0.3rem;
+      margin-top: 0.3rem;
+    }
+    .added-model-row {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.4rem 0.6rem;
+      border: 1px solid var(--border, #404040);
+      border-radius: 6px;
+      font-size: 0.82rem;
+    }
+    .added-model-meta { flex: 1; color: var(--text-secondary, #a3a3a3); }
+    .added-model-meta code {
+      font-family: monospace;
+      background: rgba(255,255,255,0.05);
+      padding: 0.05rem 0.3rem;
+      border-radius: 3px;
+    }
+    .btn-remove {
+      background: transparent;
+      border: none;
+      color: var(--text-muted, #525252);
+      cursor: pointer;
+      padding: 0.2rem 0.4rem;
+    }
+    .btn-remove:hover { color: var(--danger, #ef4444); }
+
     /* ── Feishu mode toggle ── */
     .feishu-mode-bar {
       display: flex; gap: 0.5rem; margin-bottom: 1rem;
@@ -426,9 +453,21 @@ export class OnboardingWizard extends LitElement {
   @state() private selectedProvider = "";
   @state() private obTestingConnection = false;
   @state() private obTestResult: { ok: boolean; status: number; durationMs: number; errorMessage?: string } | null = null;
+  // Multi-model buffer: admin can add several (tier, provider, key, modelId)
+  // rows before finishing the wizard. The first goes through
+  // tenant.onboarding.setup, the rest via tenant.models.create.
+  @state() private addedModels: Array<{
+    tier: ModelTierValue;
+    providerType: string;
+    providerName: string;
+    protocol: string;
+    baseUrl: string;
+    apiKey: string;
+    modelId: string;
+  }> = [];
   // v4: admin picks which tier this model belongs to; defaults to standard so
   // the onboarded agent routes on STANDARD unless changed.
-  @state() private selectedTier: ModelTierValue = "standard";
+  @state() private selectedTier: ModelTierValue | "" = "standard";
   @state() private modelApiKey = "";
   @state() private modelBaseUrl = "";
   @state() private modelName = "";
@@ -658,12 +697,45 @@ export class OnboardingWizard extends LitElement {
     this.modelApiKey = this.modelApiKey.trim();
     this.modelBaseUrl = this.modelBaseUrl.trim();
     this.modelName = this.modelName.trim();
+    // If there's already something in the buffer and the current form is
+    // untouched, skip per-field checks — admin can proceed directly.
+    if (this.addedModels.length > 0 && !this.selectedTier && !this.selectedProvider
+        && !this.modelApiKey && !this.modelBaseUrl && !this.modelName) {
+      return true;
+    }
     if (!this.selectedTier) { this.error = t("onboarding.selectTier"); return false; }
     if (!this.selectedProvider) { this.error = t("onboarding.selectModel"); return false; }
     if (!this.modelApiKey) { this.error = t("onboarding.apiKeyRequired"); return false; }
     if (!this.modelBaseUrl) { this.error = t("onboarding.baseUrlRequired"); return false; }
     if (!this.modelName) { this.error = t("onboarding.modelNameRequired"); return false; }
     return true;
+  }
+
+  private addAnotherModel() {
+    if (!this.validateModel()) return;
+    const p = MODEL_PROVIDERS.find((x) => x.type === this.selectedProvider);
+    if (!p || !this.selectedTier) return;
+    this.addedModels = [...this.addedModels, {
+      tier: this.selectedTier,
+      providerType: p.type,
+      providerName: p.label,
+      protocol: p.protocol,
+      baseUrl: this.modelBaseUrl,
+      apiKey: this.modelApiKey,
+      modelId: this.modelName,
+    }];
+    // Reset form for the next entry.
+    this.selectedTier = "";
+    this.selectedProvider = "";
+    this.modelBaseUrl = "";
+    this.modelApiKey = "";
+    this.modelName = "";
+    this.obTestResult = null;
+    this.error = "";
+  }
+
+  private removeAddedModel(idx: number) {
+    this.addedModels = this.addedModels.filter((_, i) => i !== idx);
   }
 
   private async testOnboardingConnection() {
@@ -732,7 +804,24 @@ export class OnboardingWizard extends LitElement {
 
     try {
       const isShared = this.modelMode === "shared";
-      const provider = isShared ? null : MODEL_PROVIDERS.find(p => p.type === this.selectedProvider)!;
+
+      // Multi-model support (custom mode only): admin may have added extra
+      // models via "Add another". The first one seeds onboarding.setup; the
+      // rest are created afterwards via tenant.models.create.
+      const allModels = isShared ? [] : [...this.addedModels];
+      if (!isShared && this.selectedTier && this.selectedProvider && this.modelName && this.modelApiKey) {
+        const pCurrent = MODEL_PROVIDERS.find((p) => p.type === this.selectedProvider)!;
+        allModels.push({
+          tier: this.selectedTier,
+          providerType: pCurrent.type,
+          providerName: pCurrent.label,
+          protocol: pCurrent.protocol,
+          baseUrl: this.modelBaseUrl,
+          apiKey: this.modelApiKey,
+          modelId: this.modelName,
+        });
+      }
+      const firstModel = allModels[0];
 
       await this.rpc("tenant.onboarding.setup", {
         channel: this.selectedChannel ? {
@@ -744,16 +833,14 @@ export class OnboardingWizard extends LitElement {
             botName: this.channelBotName || undefined,
           },
         } : undefined,
-        model: isShared ? undefined : {
-          providerType: provider!.type,
-          providerName: provider!.label,
-          apiProtocol: provider!.protocol,
-          apiKeyEncrypted: this.modelApiKey,
-          baseUrl: this.modelBaseUrl || undefined,
-          models: this.modelName
-            ? [{ id: this.modelName, name: this.modelName, tier: this.selectedTier }]
-            : [],
-        },
+        model: isShared ? undefined : (firstModel ? {
+          providerType: firstModel.providerType,
+          providerName: firstModel.providerName,
+          apiProtocol: firstModel.protocol,
+          apiKeyEncrypted: firstModel.apiKey,
+          baseUrl: firstModel.baseUrl || undefined,
+          models: [{ id: firstModel.modelId, name: firstModel.modelId, tier: firstModel.tier }],
+        } : undefined),
         sharedModel: isShared ? {
           providerId: this.selectedSharedModelId,
           modelId: this.selectedSharedSubModelId,
@@ -761,6 +848,21 @@ export class OnboardingWizard extends LitElement {
         agent: { name: t("onboarding.defaultAgentName") },
         locale: i18n.getLocale(),
       });
+
+      // Remaining models → independent tenant.models.create calls. Failures
+      // here don't revert the primary model; they surface as wizard errors
+      // so the admin can re-add the bad one from the Models page later.
+      for (const extra of allModels.slice(1)) {
+        await this.rpc("tenant.models.create", {
+          providerType: extra.providerType,
+          providerName: extra.providerName,
+          baseUrl: extra.baseUrl || undefined,
+          apiProtocol: extra.protocol,
+          authMode: "api-key",
+          apiKey: extra.apiKey,
+          models: [{ id: extra.modelId, name: extra.modelId, tier: extra.tier }],
+        });
+      }
 
       this.channelCreated = !!this.selectedChannel;
       this.modelCreated = true;
@@ -976,6 +1078,9 @@ export class OnboardingWizard extends LitElement {
     if (this.modelMode === "shared") {
       return !this.selectedSharedModelId || !this.selectedSharedSubModelId;
     }
+    // If at least one model is already buffered, allow Next even when the
+    // current form is empty/partial — admin is done stacking.
+    if (this.addedModels.length > 0) return false;
     return !this.selectedTier || !this.selectedProvider || !this.modelApiKey || !this.modelBaseUrl || !this.modelName;
   }
 
@@ -1101,14 +1206,21 @@ export class OnboardingWizard extends LitElement {
             <div class="form-hint">${t("onboarding.modelHint")}</div>
           </div>
 
-          <div class="form-group">
+          <div class="form-group" style="display:flex;gap:0.5rem;flex-wrap:wrap">
             <button type="button" class="btn btn-ghost"
               ?disabled=${this.obTestingConnection || !this.modelBaseUrl || !this.modelApiKey || !this.modelName}
               @click=${() => this.testOnboardingConnection()}>
               ${this.obTestingConnection ? t("models.addForm.testing") : t("models.addForm.testConnection")}
             </button>
-            ${this.obTestResult ? html`
-              <div class="test-result ${this.obTestResult.ok ? "ok" : "fail"}" style="margin-top:0.5rem">
+            <button type="button" class="btn btn-outline"
+              ?disabled=${!this.selectedTier || !this.selectedProvider || !this.modelApiKey || !this.modelBaseUrl || !this.modelName}
+              @click=${() => this.addAnotherModel()}>
+              ${t("onboarding.addAnother")}
+            </button>
+          </div>
+          ${this.obTestResult ? html`
+            <div class="form-group">
+              <div class="test-result ${this.obTestResult.ok ? "ok" : "fail"}">
                 ${this.obTestResult.ok
                   ? t("models.addForm.testOk", { ms: String(this.obTestResult.durationMs) })
                   : t("models.addForm.testFailed", {
@@ -1117,7 +1229,23 @@ export class OnboardingWizard extends LitElement {
                       msg: this.obTestResult.errorMessage ?? "",
                     })}
               </div>
-            ` : nothing}
+            </div>
+          ` : nothing}
+        ` : nothing}
+
+        ${this.addedModels.length > 0 ? html`
+          <div class="form-group">
+            <label>${t("onboarding.addedModelsTitle").replace("{count}", String(this.addedModels.length))}</label>
+            <div class="added-models-list">
+              ${this.addedModels.map((m, idx) => html`
+                <div class="added-model-row">
+                  <span class="tier-pill tier-${m.tier} selected" style="cursor:default">${tierLabel(m.tier)}</span>
+                  <span class="added-model-meta">${m.providerName} · <code>${m.modelId}</code></span>
+                  <button type="button" class="btn-remove" title="${t("onboarding.removeAdded")}"
+                    @click=${() => this.removeAddedModel(idx)}>✕</button>
+                </div>
+              `)}
+            </div>
           </div>
         ` : nothing}
       `}
