@@ -988,15 +988,16 @@ export class TenantModelsView extends LitElement {
           ` : nothing}
 
           <div class="modal-actions">
-            <button class="btn btn-outline" type="button" @click=${() => this.closeAddModel()}>
-              ${t("models.addForm.cancel")}
-            </button>
             <button
               class="btn btn-outline"
               type="button"
+              style="margin-right:auto"
               ?disabled=${this.testingConnection || !this.addModelDraft.modelId || !this.addModelDraft.baseUrl}
               @click=${() => this.testConnection()}>
               ${this.testingConnection ? t("models.addForm.testing") : t("models.addForm.testConnection")}
+            </button>
+            <button class="btn btn-outline" type="button" @click=${() => this.closeAddModel()}>
+              ${t("models.addForm.cancel")}
             </button>
             <button
               class="btn btn-primary"
