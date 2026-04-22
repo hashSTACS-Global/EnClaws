@@ -43,6 +43,7 @@ export default defineConfig({
       "ui/src/constants/providers.tier.test.ts",
       "ui/src/ui/views/tenant/tenant-models-tier-view.test.ts",
       "ui/src/ui/views/tenant/tenant-models-add-form.test.ts",
+      "ui/src/ui/views/tenant/tenant-agents-tier.test.ts",
     ],
     setupFiles: ["test/setup.ts"],
     exclude: [
