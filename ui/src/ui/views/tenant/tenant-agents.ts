@@ -44,7 +44,7 @@ import { TIER_LABELS, type ModelTierValue } from "../../../constants/providers.t
 import {
   tenantTierGroups,
   deriveEnabledTiers,
-  pickTierDefault,
+  deriveAgentDefaultTier,
   projectModelConfig,
   TIER_DISPLAY_ORDER,
 } from "./tenant-agents-tier.ts";
@@ -413,15 +413,20 @@ export class TenantAgentsView extends LitElement {
     .tier-option-body { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
     .tier-option-head { display: flex; align-items: center; gap: 0.5rem; }
     .tier-option-count { font-size: 0.72rem; color: var(--muted, #a3a3a3); }
-    .tier-option-meta { font-size: 0.78rem; color: var(--text-2, #d4d4d4); }
-    .tier-option-meta code {
-      font-family: monospace;
-      background: var(--bg);
-      padding: 0.05rem 0.35rem;
-      border-radius: 3px;
-      margin: 0 0.2rem;
+    .tier-default-mark {
+      font-size: 0.7rem;
+      color: var(--accent);
+      font-weight: 600;
+      margin-left: auto;
     }
-    .tier-option-meta.tier-warn { color: var(--warn); }
+    .tier-default-radio {
+      display: flex; align-items: center; gap: 0.3rem;
+      font-size: 0.72rem; color: var(--text-muted, #a3a3a3);
+      padding-left: 1rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tier-default-radio > input { margin: 0; }
     .tier-badge {
       display: inline-block;
       padding: 0.05rem 0.45rem;
@@ -434,7 +439,6 @@ export class TenantAgentsView extends LitElement {
     .tier-badge.tier-pro { color: var(--accent); border-color: var(--accent); }
     .tier-badge.tier-standard { color: var(--ok); border-color: var(--ok); }
     .tier-badge.tier-lite { color: var(--warn); border-color: var(--warn); }
-    .tier-legacy-mark { font-size: 0.7rem; color: var(--muted); }
     .model-select-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 0.4rem; }
     .model-select-table th, .model-select-table td {
       text-align: left; padding: 0.35rem 0.45rem;
@@ -651,6 +655,9 @@ export class TenantAgentsView extends LitElement {
   // v4: admin picks *tiers* instead of individual models. formModelConfig is
   // projected from this on save via projectModelConfig().
   @state() private formEnabledTiers: ModelTierValue[] = [];
+  // Default tier inside the enabled set. Runtime tries this tier first; the
+  // other enabled tiers are backups used when the default tier is exhausted.
+  @state() private formDefaultTier: ModelTierValue | "" = "";
   @state() private formToolsDeny: string[] = [];
   @state() private formToolsExpanded = false;
   @state() private formTimeoutMinutes: number | null = null;
@@ -959,6 +966,7 @@ export class TenantAgentsView extends LitElement {
     this.formSystemPrompt = DEFAULT_SYSTEM_PROMPT;
     this.formModelConfig = [];
     this.formEnabledTiers = [];
+    this.formDefaultTier = "";
     this.formToolsDeny = [];
     this.formToolsExpanded = false;
     this.formTimeoutMinutes = null;
@@ -973,6 +981,7 @@ export class TenantAgentsView extends LitElement {
     this.formSystemPrompt = (agent.config?.systemPrompt as string) || DEFAULT_SYSTEM_PROMPT;
     this.formModelConfig = [...(agent.modelConfig ?? [])];
     this.formEnabledTiers = deriveEnabledTiers(agent.modelConfig, this.availableModels);
+    this.formDefaultTier = deriveAgentDefaultTier(agent, this.availableModels) ?? "";
     this.formToolsDeny = Array.isArray((agent as any).tools?.deny) && (agent as any).tools.deny.length > 0
       ? [...(agent as any).tools.deny]
       : Array.isArray((agent.config?.tools as { deny?: string[] })?.deny)
@@ -1019,6 +1028,20 @@ export class TenantAgentsView extends LitElement {
     else current.delete(tier);
     // Preserve canonical display order (pro → standard → lite)
     this.formEnabledTiers = TIER_DISPLAY_ORDER.filter((t) => current.has(t));
+
+    // Keep the default-tier selection consistent with the enabled set.
+    if (!current.has(this.formDefaultTier as ModelTierValue)) {
+      // Default was just unchecked → promote the first remaining enabled tier.
+      this.formDefaultTier = this.formEnabledTiers[0] ?? "";
+    } else if (!this.formDefaultTier && enabled) {
+      // First tier ever enabled → make it the default.
+      this.formDefaultTier = tier;
+    }
+  }
+
+  private setDefaultTier(tier: ModelTierValue) {
+    if (!this.formEnabledTiers.includes(tier)) return;
+    this.formDefaultTier = tier;
   }
 
   private toggleTool(toolId: string, enabled: boolean) {
@@ -1110,16 +1133,25 @@ export class TenantAgentsView extends LitElement {
     if (this.formTimeoutMinutes != null) {
       config.timeoutSeconds = this.formTimeoutMinutes * 60;
     }
+    // v4: persist the agent's preferred default tier so runtime
+    // resolveTierChain knows which enabled tier to try first.
+    if (this.formDefaultTier) {
+      config.defaultTier = this.formDefaultTier;
+    }
     const deny = this.formToolsDeny.filter(Boolean);
     if (deny.length > 0) {config.tools = { deny };}
 
     // v4: project the enabled-tier set into the flat modelConfig array.
-    // Preserves any prior per-tier default when editing.
+    // Default tier first so legacy isDefault-based lookups still pick a
+    // sensible model.
     const priorConfig = this.editingAgentId
       ? this.agents.find((a) => a.agentId === this.editingAgentId)?.modelConfig
       : undefined;
+    const orderedTiers = this.formDefaultTier
+      ? [this.formDefaultTier, ...this.formEnabledTiers.filter((t) => t !== this.formDefaultTier)]
+      : this.formEnabledTiers;
     const projectedModelConfig = projectModelConfig(
-      this.formEnabledTiers,
+      orderedTiers,
       this.availableModels,
       priorConfig,
     );
@@ -2442,13 +2474,7 @@ export class TenantAgentsView extends LitElement {
                 <div class="tier-picker">
                   ${groups.map((g) => {
                     const isEnabled = enabled.has(g.tier);
-                    const currentDefault = pickTierDefault(g.tier, this.formModelConfig, this.availableModels);
-                    const defaultModel = currentDefault
-                      ? g.models.find((m) => m.modelId === currentDefault.modelId && m.providerId === currentDefault.providerId)
-                      : g.models[0];
-                    const backups = g.models.filter((m) =>
-                      !defaultModel || m.modelId !== defaultModel.modelId || m.providerId !== defaultModel.providerId,
-                    );
+                    const isDefault = this.formDefaultTier === g.tier;
                     return html`
                       <label class="tier-option ${isEnabled ? "selected" : ""}">
                         <input type="checkbox"
@@ -2458,18 +2484,17 @@ export class TenantAgentsView extends LitElement {
                           <div class="tier-option-head">
                             <span class="tier-badge tier-${g.tier}">${TIER_LABELS[g.tier]}</span>
                             <span class="tier-option-count">${t("tenantAgents.tierModelsCount").replace("{count}", String(g.models.length))}</span>
+                            ${isDefault ? html`<span class="tier-default-mark">${t("tenantAgents.tierIsDefault")}</span>` : nothing}
                           </div>
-                          <div class="tier-option-meta">
-                            ${t("tenantAgents.tierDefaultShort")}<code>${defaultModel?.modelName ?? "-"}</code>${defaultModel?.legacy ? html` <span class="tier-legacy-mark">${t("tenantAgents.tierLegacyMark")}</span>` : nothing}
-                          </div>
-                          ${backups.length > 0 ? html`
-                            <div class="tier-option-meta">
-                              ${t("tenantAgents.tierBackupShort")}${backups.map((b) => html`<code>${b.modelName}</code> `)}
-                            </div>
-                          ` : html`
-                            <div class="tier-option-meta tier-warn">${t("tenantAgents.tierNoBackup")}</div>
-                          `}
                         </div>
+                        ${isEnabled ? html`
+                          <label class="tier-default-radio" @click=${(e: Event) => e.stopPropagation()}>
+                            <input type="radio" name="agent-default-tier"
+                              .checked=${isDefault}
+                              @change=${() => this.setDefaultTier(g.tier)} />
+                            <span>${t("tenantAgents.setAsDefault")}</span>
+                          </label>
+                        ` : nothing}
                       </label>
                     `;
                   })}

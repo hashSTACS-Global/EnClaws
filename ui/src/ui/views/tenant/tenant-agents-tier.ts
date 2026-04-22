@@ -177,6 +177,34 @@ export function projectModelConfig(
   return out;
 }
 
+// ─── deriveAgentDefaultTier ───────────────────────────────────────────────
+
+/**
+ * Read the agent's preferred default tier for cross-tier fallback.
+ *
+ * Source of truth: `agent.config.defaultTier`. When that's missing/invalid
+ * we fall back to the tier of the first isDefault=true entry in modelConfig
+ * so legacy agents (pre-v4 where no config.defaultTier was ever written)
+ * keep a sensible default without a migration. Returns undefined only when
+ * both sources are empty.
+ *
+ * Accepts a loose shape so the Lit component can pass its internal agent
+ * record directly without conversion.
+ */
+export function deriveAgentDefaultTier(
+  agent: { config?: Record<string, unknown>; modelConfig?: ModelConfigEntryLite[] },
+  tenantModels: TenantModelLite[],
+): ModelTierValue | undefined {
+  const candidate = agent.config?.defaultTier;
+  if (candidate === "pro" || candidate === "standard" || candidate === "lite") {
+    return candidate;
+  }
+  const tierByKey = buildTierIndex(tenantModels);
+  const firstDefault = agent.modelConfig?.find((e) => e.isDefault);
+  if (!firstDefault) return undefined;
+  return tierByKey.get(key(firstDefault.providerId, firstDefault.modelId));
+}
+
 // ─── internals ────────────────────────────────────────────────────────────
 
 function key(providerId: string, modelId: string): string {

@@ -72,11 +72,12 @@ describe("resolveTierChain", () => {
     expect(chain[0].isDefault).toBe(true);
   });
 
-  it("falls back to the tier of the first isDefault when no tier requested", () => {
+  it("falls back to the tier of the first isDefault when no tier requested (multi-tier chain)", () => {
     const chain = resolveTierChain(fullCfg, models, undefined);
-    // p1 (opus, pro) is the first default in the array
+    // default tier derived from first isDefault entry (p1 opus = pro);
+    // backup tiers appended in modelConfig appearance order (standard, lite)
     expect(chain[0].modelId).toBe("opus");
-    expect(chain).toHaveLength(1);
+    expect(chain.map((e) => e.modelId)).toEqual(["opus", "sonnet", "qwen", "haiku"]);
   });
 
   it("puts the default entry first even when it isn't first in modelConfig", () => {
@@ -135,6 +136,83 @@ describe("resolveTierChain", () => {
     ];
     const chain = resolveTierChain(withStale, models, "standard");
     expect(chain.map((x) => x.modelId)).toEqual(["sonnet"]);
+  });
+
+  describe("cross-tier fallback (requestedTier=undefined, multi-tier agent)", () => {
+    it("puts the agent's default tier first, backup tiers after", () => {
+      // Agent has standard (default) + lite (backup)
+      const cfg: ModelConfigEntry[] = [
+        { providerId: "p4", modelId: "haiku", isDefault: false }, // lite
+        { providerId: "p2", modelId: "sonnet", isDefault: true }, // standard default
+      ];
+      // No requestedTier, agentDefaultTier=standard → standard chain first, lite after
+      const chain = resolveTierChain(cfg, models, undefined, "standard");
+      expect(chain.map((e) => e.modelId)).toEqual(["sonnet", "haiku"]);
+    });
+
+    it("respects the agent's default tier override even when it's not the first isDefault", () => {
+      // Agent has pro (legacy default via isDefault) + standard (declared default)
+      const cfg: ModelConfigEntry[] = [
+        { providerId: "p1", modelId: "opus", isDefault: true }, // pro
+        { providerId: "p2", modelId: "sonnet", isDefault: false }, // standard
+      ];
+      // agentDefaultTier=standard (explicit override)
+      const chain = resolveTierChain(cfg, models, undefined, "standard");
+      expect(chain.map((e) => e.modelId)).toEqual(["sonnet", "opus"]);
+    });
+
+    it("orders multiple backup tiers by modelConfig appearance order", () => {
+      // Agent enables pro + standard + lite; default = standard; backup order = pro then lite
+      const cfg: ModelConfigEntry[] = [
+        { providerId: "p1", modelId: "opus", isDefault: false }, // pro
+        { providerId: "p2", modelId: "sonnet", isDefault: true }, // standard default
+        { providerId: "p4", modelId: "haiku", isDefault: false }, // lite
+      ];
+      const chain = resolveTierChain(cfg, models, undefined, "standard");
+      expect(chain.map((e) => e.modelId)).toEqual(["sonnet", "opus", "haiku"]);
+    });
+
+    it("within each tier, the default model is still tried first", () => {
+      // standard tier has 2 models: qwen first, sonnet default
+      const cfg: ModelConfigEntry[] = [
+        { providerId: "p3", modelId: "qwen", isDefault: false },
+        { providerId: "p2", modelId: "sonnet", isDefault: true }, // standard default
+        { providerId: "p4", modelId: "haiku", isDefault: false }, // lite backup
+      ];
+      const chain = resolveTierChain(cfg, models, undefined, "standard");
+      // standard default first, then standard backup, then lite
+      expect(chain.map((e) => e.modelId)).toEqual(["sonnet", "qwen", "haiku"]);
+    });
+
+    it("falls back to isDefault-derived tier when agentDefaultTier is not supplied (backward compat)", () => {
+      const cfg: ModelConfigEntry[] = [
+        { providerId: "p1", modelId: "opus", isDefault: true }, // pro default
+        { providerId: "p2", modelId: "sonnet", isDefault: false }, // standard backup
+      ];
+      // Old caller (no agentDefaultTier) — should still work, default tier derived
+      // from first isDefault entry. Multi-tier chain retains the rest as backup.
+      const chain = resolveTierChain(cfg, models, undefined);
+      expect(chain.map((e) => e.modelId)).toEqual(["opus", "sonnet"]);
+    });
+
+    it("throws NO_DEFAULT when agentDefaultTier points at a tier with no configured entries", () => {
+      const cfg: ModelConfigEntry[] = [
+        { providerId: "p2", modelId: "sonnet", isDefault: true }, // standard only
+      ];
+      expect(() => resolveTierChain(cfg, models, undefined, "pro")).toThrow(
+        /NO_DEFAULT/,
+      );
+    });
+
+    it("when requestedTier is explicit, agentDefaultTier is ignored (strict scene routing)", () => {
+      // Agent default=standard; caller explicitly asks for lite → only lite chain
+      const cfg: ModelConfigEntry[] = [
+        { providerId: "p2", modelId: "sonnet", isDefault: true }, // standard default
+        { providerId: "p4", modelId: "haiku", isDefault: false }, // lite backup
+      ];
+      const chain = resolveTierChain(cfg, models, "lite", "standard");
+      expect(chain.map((e) => e.modelId)).toEqual(["haiku"]);
+    });
   });
 
   describe("legacy tier fallback (tier=undefined → 'standard')", () => {

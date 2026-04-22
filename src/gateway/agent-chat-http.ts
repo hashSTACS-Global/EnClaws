@@ -135,12 +135,18 @@ export async function handleAgentChatHttpRequest(
     return true;
   }
 
+  // Agent's preferred default tier for cross-tier fallback when the caller
+  // didn't pin a tier. Stored in agent.config by the tenant-agents UI.
+  const rawAgentDefaultTier = (agent.config as Record<string, unknown> | undefined)?.defaultTier;
+  const agentDefaultTier = isModelTier(rawAgentDefaultTier) ? rawAgentDefaultTier : undefined;
+
   let chain;
   try {
     chain = resolveTierChain(
       agent.modelConfig ?? [],
       tenantModels,
       modelTier as ModelTier | undefined,
+      agentDefaultTier,
     );
   } catch (err) {
     if (err instanceof TierChainError) {

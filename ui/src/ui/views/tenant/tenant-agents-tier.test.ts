@@ -16,6 +16,7 @@ import {
   deriveEnabledTiers,
   pickTierDefault,
   projectModelConfig,
+  deriveAgentDefaultTier,
   type TenantModelLite,
   type ModelConfigEntryLite,
 } from "./tenant-agents-tier.ts";
@@ -241,5 +242,62 @@ describe("projectModelConfig", () => {
     const out = projectModelConfig(["standard"], mixed, []);
     expect(out.map((e) => e.modelId)).toEqual(["sonnet", "legacy"]);
     expect(out.find((e) => e.modelId === "sonnet")?.isDefault).toBe(true);
+  });
+});
+
+// ─── deriveAgentDefaultTier ───────────────────────────────────────────────
+
+describe("deriveAgentDefaultTier", () => {
+  const providers = [
+    mkProvider("p1", [{ id: "opus", tier: "pro" }]),
+    mkProvider("p2", [{ id: "sonnet", tier: "standard" }]),
+  ];
+
+  it("reads agent.config.defaultTier when present (explicit override)", () => {
+    const agent = {
+      config: { defaultTier: "pro" },
+      modelConfig: [{ providerId: "p2", modelId: "sonnet", isDefault: true }],
+    };
+    expect(deriveAgentDefaultTier(agent, providers)).toBe("pro");
+  });
+
+  it("falls back to the tier of the first isDefault entry when config is empty", () => {
+    const agent = {
+      config: {},
+      modelConfig: [
+        { providerId: "p2", modelId: "sonnet", isDefault: false },
+        { providerId: "p1", modelId: "opus", isDefault: true },
+      ],
+    };
+    expect(deriveAgentDefaultTier(agent, providers)).toBe("pro");
+  });
+
+  it("returns undefined when config has no defaultTier and modelConfig has no default", () => {
+    const agent = {
+      config: {},
+      modelConfig: [{ providerId: "p1", modelId: "opus", isDefault: false }],
+    };
+    expect(deriveAgentDefaultTier(agent, providers)).toBeUndefined();
+  });
+
+  it("ignores invalid defaultTier values from config", () => {
+    const agent = {
+      config: { defaultTier: "bogus" },
+      modelConfig: [{ providerId: "p1", modelId: "opus", isDefault: true }],
+    };
+    // invalid → fall back to isDefault-derived tier
+    expect(deriveAgentDefaultTier(agent, providers)).toBe("pro");
+  });
+
+  it("handles missing config object entirely", () => {
+    const agent = {
+      modelConfig: [{ providerId: "p2", modelId: "sonnet", isDefault: true }],
+    };
+    expect(deriveAgentDefaultTier(agent, providers)).toBe("standard");
+  });
+
+  it("returns undefined when modelConfig is empty and no config.defaultTier", () => {
+    const agent = { config: {}, modelConfig: [] };
+    expect(deriveAgentDefaultTier(agent, providers)).toBeUndefined();
   });
 });
