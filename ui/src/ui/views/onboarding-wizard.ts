@@ -218,6 +218,15 @@ export class OnboardingWizard extends LitElement {
     .tier-pill.selected.tier-standard { color: var(--ok); border-color: var(--ok); }
     .tier-pill.selected.tier-lite { color: var(--warn); border-color: var(--warn); }
 
+    .test-result {
+      font-size: 0.8rem;
+      padding: 0.5rem 0.7rem;
+      border-radius: 6px;
+      word-break: break-word;
+    }
+    .test-result.ok { color: var(--ok, #16a34a); background: rgba(22,163,74,0.12); }
+    .test-result.fail { color: var(--danger, #ef4444); background: rgba(239,68,68,0.12); }
+
     /* ── Feishu mode toggle ── */
     .feishu-mode-bar {
       display: flex; gap: 0.5rem; margin-bottom: 1rem;
@@ -415,6 +424,8 @@ export class OnboardingWizard extends LitElement {
   @state() private selectedSharedModelId = ""; // tenant_models.id
   @state() private selectedSharedSubModelId = ""; // model definition id within shared provider
   @state() private selectedProvider = "";
+  @state() private obTestingConnection = false;
+  @state() private obTestResult: { ok: boolean; status: number; durationMs: number; errorMessage?: string } | null = null;
   // v4: admin picks which tier this model belongs to; defaults to standard so
   // the onboarded agent routes on STANDARD unless changed.
   @state() private selectedTier: ModelTierValue = "standard";
@@ -655,6 +666,30 @@ export class OnboardingWizard extends LitElement {
     return true;
   }
 
+  private async testOnboardingConnection() {
+    const provider = MODEL_PROVIDERS.find((p) => p.type === this.selectedProvider);
+    if (!provider) return;
+    this.obTestingConnection = true;
+    this.obTestResult = null;
+    try {
+      const res = (await this.rpc("tenant.models.testConnection", {
+        baseUrl: this.modelBaseUrl,
+        apiProtocol: provider.protocol,
+        authMode: "api-key",
+        apiKey: this.modelApiKey,
+        modelId: this.modelName,
+      })) as { ok: boolean; status: number; durationMs: number; errorMessage?: string };
+      this.obTestResult = res;
+    } catch (err) {
+      this.obTestResult = {
+        ok: false, status: 0, durationMs: 0,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      this.obTestingConnection = false;
+    }
+  }
+
   private onTierPick(tier: ModelTierValue) {
     // Tier change resets downstream pickers — different tiers surface
     // different provider sets and recommend different modelIds.
@@ -662,6 +697,7 @@ export class OnboardingWizard extends LitElement {
     this.selectedProvider = "";
     this.modelBaseUrl = "";
     this.modelName = "";
+    this.obTestResult = null;
     this.error = "";
   }
 
@@ -675,6 +711,7 @@ export class OnboardingWizard extends LitElement {
       const suggested = MODEL_SUGGESTIONS[providerType]?.[this.selectedTier];
       if (suggested) this.modelName = suggested;
     }
+    this.obTestResult = null;
     this.error = "";
   }
 
@@ -1062,6 +1099,25 @@ export class OnboardingWizard extends LitElement {
               @input=${(e: InputEvent) => { this.modelName = (e.target as HTMLInputElement).value; }}
               placeholder="gpt-4o / claude-sonnet-4 / deepseek-chat" />
             <div class="form-hint">${t("onboarding.modelHint")}</div>
+          </div>
+
+          <div class="form-group">
+            <button type="button" class="btn btn-ghost"
+              ?disabled=${this.obTestingConnection || !this.modelBaseUrl || !this.modelApiKey || !this.modelName}
+              @click=${() => this.testOnboardingConnection()}>
+              ${this.obTestingConnection ? t("models.addForm.testing") : t("models.addForm.testConnection")}
+            </button>
+            ${this.obTestResult ? html`
+              <div class="test-result ${this.obTestResult.ok ? "ok" : "fail"}" style="margin-top:0.5rem">
+                ${this.obTestResult.ok
+                  ? t("models.addForm.testOk", { ms: String(this.obTestResult.durationMs) })
+                  : t("models.addForm.testFailed", {
+                      status: String(this.obTestResult.status),
+                      ms: String(this.obTestResult.durationMs),
+                      msg: this.obTestResult.errorMessage ?? "",
+                    })}
+              </div>
+            ` : nothing}
           </div>
         ` : nothing}
       `}
