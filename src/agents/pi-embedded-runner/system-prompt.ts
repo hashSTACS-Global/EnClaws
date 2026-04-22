@@ -52,6 +52,10 @@ export function buildEmbeddedSystemPrompt(params: {
   userTimeFormat?: ResolvedTimeFormat;
   contextFiles?: EmbeddedContextFile[];
   memoryCitationsMode?: MemoryCitationsMode;
+  /** Tenant ID of the current session (for the Session Identity block). */
+  tenantId?: string;
+  /** Tenant user role — admin/owner unlocks the skills-management carve-out. */
+  tenantUserRole?: string;
 }): string {
   return buildAgentSystemPrompt({
     workspaceDir: params.workspaceDir,
@@ -81,6 +85,8 @@ export function buildEmbeddedSystemPrompt(params: {
     userTimeFormat: params.userTimeFormat,
     contextFiles: params.contextFiles,
     memoryCitationsMode: params.memoryCitationsMode,
+    tenantId: params.tenantId,
+    tenantUserRole: params.tenantUserRole,
   });
 }
 

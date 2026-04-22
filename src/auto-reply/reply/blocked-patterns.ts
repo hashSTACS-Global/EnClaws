@@ -215,8 +215,10 @@ export const BLOCKED_PATTERN_SOURCES: readonly string[] = [
   "\\bdelete\\b.*\\.db\\b|\\bremove\\b.*\\.db\\b|\\berase\\b.*\\.db\\b",
 
   // ── English destructive operations ──
-  "\\bdelete\\s+(user|tenant|agent|database|admin)\\b",
-  "\\bremove\\s+(user|tenant|agent)\\b",
+  // Negative lookahead so "delete tenant skill X" / "remove tenant agent Y" (where the
+  // second word is an attributive) aren't blocked — those are legit admin actions.
+  "\\bdelete\\s+(user|tenant|agent|database|admin)\\b(?!\\s+(skill|agent|assistant|bot|channel|user|member|config|credential|token|secret|webhook|api))",
+  "\\bremove\\s+(user|tenant|agent)\\b(?!\\s+(skill|agent|assistant|bot|channel|user|member|config|credential|token|secret|webhook|api))",
   "\\bwipe\\s+(data|tenant|user|system|database)\\b",
   "\\bdrop\\s+(database|table|schema)\\b",
   "\\btruncate\\s+(table|database)\\b",
@@ -235,8 +237,13 @@ export const BLOCKED_PATTERN_SOURCES: readonly string[] = [
   "添加.*(租户|tenant|工作空间|workspace)",
   "创建.*(租户|tenant|工作空间|workspace)",
   "开通.*(租户|tenant)",
-  "删除.*(租户|tenant|工作空间|workspace)",
-  "移除.*(租户|tenant|工作空间|workspace)",
+  // Negative lookahead: 租户/tenant here must be the object itself, not an
+  // attributive. Covers:
+  //   ❌ attributive: 租户skill / 租户级all-skills / 租户的X / 租户下的X / 租户内的X /
+  //                  租户所有X / 租户全部X / 租户范围 / 租户方面
+  //   ✅ object:     删除租户 / 删除这个租户 / 删除租户 xxx-id
+  "删除.*(租户|tenant|工作空间|workspace)(?!\\s*(?:的|'s|级(?:别)?|范围|方面|内|中|里|下|所有|全部)?\\s*(?:skill|技能|agent|助手|机器人|bot|channel|频道|渠道|通道|user|用户|成员|member|ai|数字员工|员工|配置|设置|api|key|token|secret|凭证|credential|webhook|所有|全部))(?!\\s*(?:级(?:别)?|范围|方面|下|内|中|里))",
+  "移除.*(租户|tenant|工作空间|workspace)(?!\\s*(?:的|'s|级(?:别)?|范围|方面|内|中|里|下|所有|全部)?\\s*(?:skill|技能|agent|助手|机器人|bot|channel|频道|渠道|通道|user|用户|成员|member|ai|数字员工|员工|配置|设置|api|key|token|secret|凭证|credential|webhook|所有|全部))(?!\\s*(?:级(?:别)?|范围|方面|下|内|中|里))",
   "停用.*(租户|tenant)",
   "禁用.*(租户|tenant)",
   "冻结.*(租户|tenant|用户)",
@@ -337,7 +344,8 @@ export const BLOCKED_PATTERN_SOURCES: readonly string[] = [
 
   // ── EnClaws resource mutation (English) ──
   "\\b(create|add|register|onboard|provision)\\s+(?:a\\s+)?(tenant|workspace|organization|org)\\b",
-  "\\b(delete|remove|drop|disable|suspend|freeze|offboard|deprovision)\\s+(?:a\\s+)?(tenant|workspace|organization|org)\\b",
+  // Negative lookahead: tenant must be the object itself. "delete tenant skill X" = allow.
+  "\\b(delete|remove|drop|disable|suspend|freeze|offboard|deprovision)\\s+(?:a\\s+)?(tenant|workspace|organization|org)\\b(?!\\s*(?:'s\\s+)?(?:skill|agent|assistant|bot|channel|user|member|config|credential|token|secret|webhook|api))",
   "\\b(upgrade|downgrade|switch)\\s+(?:the\\s+)?(tenant|workspace)\\s+(plan|quota|tier)\\b",
   "\\b(create|add|invite|register|promote|grant)\\s+(?:a\\s+)?(user|member|admin|owner|root)\\b",
   "\\b(demote|revoke|ban|kick|deactivate|suspend)\\s+(?:the\\s+)?(user|member|admin|owner)\\b",

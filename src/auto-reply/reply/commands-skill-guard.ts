@@ -61,3 +61,61 @@ export const handleSkillInstallGuard: CommandHandler = async (params) => {
     },
   };
 };
+
+/**
+ * Natural-language skill-mutation intent patterns (中/英).
+ *
+ * Covers destructive/mutating verbs (delete/remove/uninstall/clear/disable)
+ * paired with a skill noun. Pair with a role check: admin/owner pass through
+ * to the agent (which has its own path/policy carve-outs for skill dirs);
+ * member/viewer are short-circuited with a friendly refusal BEFORE the LLM,
+ * so we don't depend on the model correctly applying safety exceptions.
+ */
+const SKILL_MUTATE_INTENT_PATTERNS: RegExp[] = [
+  // 中文动词 + 技能名词（20 字内近邻）
+  /(?:删除|移除|卸载|清除|清空|去掉|下架|禁用|停用|删掉|移走|撤下|撤销|取消)[^。！？\n]{0,20}(?:技能|技能包|技能集|skill)/i,
+  // 技能名词 + 中文动词
+  /(?:技能|技能包|技能集|skill)[^。！？\n]{0,20}(?:删除|移除|卸载|清除|清空|去掉|下架|禁用|停用|删掉)/i,
+  // English verb + skill(s)
+  /\b(?:uninstall|remove|delete|drop|purge|disable|deactivate|tear\s*down|unregister)\b[^.!?\n]{0,40}\bskills?\b/i,
+  // skill(s) + English verb
+  /\bskills?\b[^.!?\n]{0,40}\b(?:uninstall|remove|delete|drop|disabled?|gone|removed)\b/i,
+];
+
+function hasSkillMutateIntent(text: string): boolean {
+  if (!text) return false;
+  return SKILL_MUTATE_INTENT_PATTERNS.some((p) => p.test(text));
+}
+
+/**
+ * Layer-2 guard for destructive skill operations (delete/uninstall/disable).
+ *
+ * Runs BEFORE the LLM; purpose is twofold:
+ *   - Member/viewer: short-circuit with a friendly refusal here rather than
+ *     letting them reach the agent and watch it refuse with a safety-policy
+ *     message.
+ *   - Admin/owner: pass through — the system prompt's admin carve-out plus the
+ *     path/exec-policy gates allow the operation downstream.
+ *
+ * Undefined role (CLI / single-user) → never blocks here.
+ */
+export const handleSkillMutateGuard: CommandHandler = async (params) => {
+  const tenantRole = params.ctx.TenantUserRole;
+  if (!tenantRole) return null;
+  if (tenantRole === "owner" || tenantRole === "admin") return null;
+
+  const raw = params.command.rawBodyNormalized || params.command.commandBodyNormalized || "";
+  if (raw.startsWith("/")) return null;
+
+  if (!hasSkillMutateIntent(raw)) return null;
+
+  logVerbose(
+    `Blocking NL skill-mutate intent: tenantRole=${tenantRole} sender=${params.command.senderId || "<unknown>"}`,
+  );
+  return {
+    shouldContinue: false,
+    reply: {
+      text: "权限不足：仅管理员（owner/admin）可删除或卸载技能。如需调整，请联系管理员。",
+    },
+  };
+};

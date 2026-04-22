@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../../config/config.js";
 import { buildCommandTestParams } from "./commands.test-harness.js";
 import { handleInstallSkillCommand } from "./commands-install-skill.js";
-import { handleSkillInstallGuard } from "./commands-skill-guard.js";
+import { handleSkillInstallGuard, handleSkillMutateGuard } from "./commands-skill-guard.js";
 
 const cfg = {
   commands: { text: true },
@@ -130,6 +130,78 @@ describe("handleSkillInstallGuard (Fix 3)", () => {
     for (const input of allowed) {
       it(`allows: ${input}`, async () => {
         const result = await handleSkillInstallGuard(paramsFor(input, "member"), true);
+        expect(result).toBeNull();
+      });
+    }
+  });
+});
+
+describe("handleSkillMutateGuard (delete/uninstall NL intent)", () => {
+  describe("role gating", () => {
+    it("returns null when tenantRole is absent (single-user / CLI)", async () => {
+      const result = await handleSkillMutateGuard(paramsFor("删除租户级所有skill", undefined), true);
+      expect(result).toBeNull();
+    });
+
+    it("returns null for owner", async () => {
+      const result = await handleSkillMutateGuard(paramsFor("删除租户级所有skill", "owner"), true);
+      expect(result).toBeNull();
+    });
+
+    it("returns null for admin", async () => {
+      const result = await handleSkillMutateGuard(paramsFor("uninstall the feishu skill", "admin"), true);
+      expect(result).toBeNull();
+    });
+
+    it("ignores slash commands", async () => {
+      const result = await handleSkillMutateGuard(
+        paramsFor("/uninstall-skill feishu", "member"),
+        true,
+      );
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("intent detection (member role)", () => {
+    const blocked = [
+      "删除租户级所有skill",
+      "删除这个技能",
+      "卸载飞书技能包",
+      "移除feishu-skills这个技能",
+      "清除所有技能",
+      "下架这个 skill",
+      "禁用飞书技能",
+      "技能删除掉",
+      "uninstall the feishu skill",
+      "please remove all skills from the tenant",
+      "delete this skill pack",
+      "disable feishu skills",
+    ];
+
+    for (const input of blocked) {
+      it(`blocks: ${input}`, async () => {
+        const result = await handleSkillMutateGuard(paramsFor(input, "member"), true);
+        expect(result).not.toBeNull();
+        expect(result?.shouldContinue).toBe(false);
+        expect(result?.reply?.text).toContain("权限不足");
+      });
+    }
+  });
+
+  describe("false-positive guard (member role)", () => {
+    const allowed = [
+      "今天天气怎么样",
+      "这个技能怎么用？",
+      "帮我调用 feishu-chat 技能",
+      "技能列表里有什么",
+      "skill 为什么执行失败",
+      "重新运行一下这个技能",
+      "查一下技能有没有调用日志",
+    ];
+
+    for (const input of allowed) {
+      it(`allows: ${input}`, async () => {
+        const result = await handleSkillMutateGuard(paramsFor(input, "member"), true);
         expect(result).toBeNull();
       });
     }

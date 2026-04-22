@@ -755,6 +755,8 @@ export async function runEmbeddedAttempt(
       userTimeFormat,
       contextFiles,
       memoryCitationsMode: params.config?.memory?.citations,
+      tenantId: params.tenantId,
+      tenantUserRole: params.tenantUserRole,
     });
     const systemPromptReport = buildSystemPromptReport({
       source: "run",

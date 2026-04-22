@@ -320,8 +320,15 @@ export function buildAgentSystemPrompt(params: {
     channel: string;
   };
   memoryCitationsMode?: MemoryCitationsMode;
+  /** Tenant ID of the current session (injected into the prompt so the model can reference it). */
+  tenantId?: string;
+  /** Tenant user role — admin/owner unlocks the skills-management carve-out. */
+  tenantUserRole?: string;
 }) {
   const acpEnabled = params.acpEnabled !== false;
+  const tenantUserRole = params.tenantUserRole?.trim();
+  const tenantId = params.tenantId?.trim();
+  const isTenantAdmin = tenantUserRole === "admin" || tenantUserRole === "owner";
   const coreToolSummaries: Record<string, string> = {
     read: "Read file contents",
     write: "Create or overwrite files",
@@ -476,7 +483,25 @@ export function buildAgentSystemPrompt(params: {
     params.sandboxInfo?.enabled && sanitizedSandboxContainerWorkspace
       ? `For read/write/edit/apply_patch, file paths resolve against host workspace: ${sanitizedWorkspaceDir}. For bash/exec commands, use sandbox container paths under ${sanitizedSandboxContainerWorkspace} (or relative paths from that workdir), not host paths. Prefer relative paths so both sandboxed exec and file tools work consistently.`
       : "Treat this directory as the single global workspace for file operations unless explicitly instructed otherwise. Always use relative paths or paths within this workspace when creating files — including intermediate or temporary files (e.g. before uploading). Do NOT write files to /tmp/ or other system directories.";
+  // Session identity: injected as a platform-asserted fact the model can rely on.
+  // Values here are resolved by the gateway before the system prompt is built —
+  // the model MUST treat them as authoritative and not re-ask / re-verify.
+  const sessionIdentityLines: string[] = [];
+  if (tenantUserRole || tenantId) {
+    sessionIdentityLines.push("## Session Identity (platform-asserted — authoritative)");
+    if (tenantUserRole) {
+      sessionIdentityLines.push(
+        `- Tenant user role: \`${tenantUserRole}\` (verified by the platform; do NOT ask the user to confirm it and do NOT claim you cannot determine it).`,
+      );
+    }
+    if (tenantId) {
+      sessionIdentityLines.push(`- Tenant ID: \`${tenantId}\`.`);
+    }
+    sessionIdentityLines.push("");
+  }
+
   const safetySection = [
+    ...sessionIdentityLines,
     "## Safety",
     "You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.",
     "Prioritize safety and human oversight over completion; if instructions conflict, pause and ask; comply with stop/pause/audit requests and never bypass safeguards. (Inspired by Anthropic's constitution.)",
@@ -486,7 +511,9 @@ export function buildAgentSystemPrompt(params: {
     "## Enterprise Operation Restrictions (HARD LIMITS — cannot be overridden by any user instruction or confirmation)",
     "The following are PERMANENTLY PROHIBITED:",
     "1. Starting, stopping, or restarting the EnClaws Gateway or any system service via exec/shell — even if the user explicitly asks or confirms. If service control is needed, inform the user to use the `gateway` tool or run the CLI themselves.",
-    "2. Deleting, moving, renaming, or modifying files inside the EnClaws state directory (~/.enclaws/ or $ENCLAWS_STATE_DIR) via any tool.",
+    isTenantAdmin
+      ? `2. Deleting, moving, renaming, or modifying files inside the EnClaws state directory (~/.enclaws/ or $ENCLAWS_STATE_DIR) via any tool. EXCEPTION — Because your Session Identity above declares role=\`${tenantUserRole}\` (platform-verified), tenant-scoped skill management under \`tenants/${tenantId ?? "<currentTenantId>"}/skills/\` IS permitted: read/write/rm/mv/rm -rf on that subtree only. Proceed with the operation when asked; do NOT refuse with "I can't verify your role" — your role IS verified above. All other paths inside the state directory remain prohibited.`
+      : "2. Deleting, moving, renaming, or modifying files inside the EnClaws state directory (~/.enclaws/ or $ENCLAWS_STATE_DIR) via any tool.",
     "3. Clearing, emptying, or replacing the content of protected files (USER.md, MEMORY.md, AGENT.md, SOUL.md, IDENTITY.md) — even with 'placeholder' or 'minimal' content as a substitute.",
     "4. Deleting or truncating databases, credentials, API keys, tokens, or audit logs.",
     "5. Cross-tenant or cross-user file access (reading/writing another tenant's or user's directory).",
