@@ -1426,6 +1426,35 @@ export class TenantAgentsView extends LitElement {
   }
 
   /**
+   * Renders the in-tier model list straight from the catalog (no modelConfig
+   * dependency). Used by the edit form so admins can see which models sit
+   * in each tier *before* ticking the checkbox. Tenant-level isTierDefault
+   * sorts first; the rest stay in catalog order.
+   */
+  private renderTierCatalogModels(g: import("./tenant-agents-tier.ts").TierGroup) {
+    if (g.models.length === 0) {
+      return html`<div class="tier-summary-empty">${t("tenantAgents.tierEmpty")}</div>`;
+    }
+    const sorted = g.models.slice().sort((a, b) => Number(b.isTierDefault) - Number(a.isTierDefault));
+    return html`
+      <div class="tier-model-list">
+        ${sorted.map((m, idx) => {
+          const slotLabel = idx === 0
+            ? t("tenantAgents.tierSlotDefault")
+            : t("tenantAgents.tierSlotBackup", { n: String(idx) });
+          return html`
+            <div class="tier-model-row">
+              <span class="tier-model-slot ${idx === 0 ? "is-default" : ""}">${slotLabel}</span>
+              <code class="tier-model-id">${m.modelName}</code>
+              <span class="tier-model-provider">${m.providerName}</span>
+            </div>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  /**
    * Shared renderer for the "default + backup N" in-tier model list used by
    * both the overview panel and the edit form's tier picker. Looks up each
    * (providerId, modelId) in the tenant catalog for display; degrades to raw
@@ -2581,7 +2610,7 @@ export class TenantAgentsView extends LitElement {
                               <span class="tier-badge tier-${g.tier}">${tierLabel(g.tier)}</span>
                               <span class="tier-option-count">${t("tenantAgents.tierModelsCount").replace("{count}", String(g.models.length))}</span>
                             </div>
-                            ${isEnabled ? this.renderAgentTierModelRows(previewConfig, g.tier) : nothing}
+                            ${this.renderTierCatalogModels(g)}
                           </div>
                         </label>
                         <div class="tier-option-side">
