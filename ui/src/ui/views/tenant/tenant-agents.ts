@@ -401,27 +401,38 @@ export class TenantAgentsView extends LitElement {
     /* Tier-checkbox picker (v4) */
     .tier-picker { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.3rem; }
     .tier-option {
-      padding: 0.55rem 0.7rem;
+      display: flex; align-items: center; gap: 0.8rem;
+      padding: 0.55rem 0.8rem;
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       background: var(--card);
     }
     .tier-option.selected { border-color: var(--accent); background: var(--bg); }
-    .tier-option-head-row {
-      display: flex; align-items: center; gap: 0.5rem;
+    .tier-option-main {
+      flex: 1;
+      display: flex; gap: 0.6rem; align-items: flex-start;
       cursor: pointer;
       user-select: none;
     }
-    .tier-option-head-row > input[type="checkbox"] {
+    .tier-option-main > input[type="checkbox"] {
       margin: 0;
+      margin-top: 0.2rem;
       width: 14px; height: 14px;
       accent-color: var(--accent);
       flex-shrink: 0;
     }
+    .tier-option-body { flex: 1; display: flex; flex-direction: column; gap: 0.3rem; }
+    .tier-option-head-row {
+      display: flex; align-items: center; gap: 0.5rem;
+    }
     .tier-option-count { font-size: 0.72rem; color: var(--muted, #a3a3a3); }
-    .tier-option-head-spacer { flex: 1; }
+    .tier-option-side {
+      flex-shrink: 0;
+      display: flex; align-items: center;
+      min-width: 5.5rem; justify-content: flex-end;
+    }
     .tier-default-mark {
-      font-size: 0.7rem;
+      font-size: 0.72rem;
       color: var(--accent);
       font-weight: 600;
     }
@@ -2560,24 +2571,30 @@ export class TenantAgentsView extends LitElement {
                     const isDefault = this.formDefaultTier === g.tier;
                     return html`
                       <div class="tier-option ${isEnabled ? "selected" : ""}">
-                        <label class="tier-option-head-row">
+                        <label class="tier-option-main">
                           <input type="checkbox"
                             .checked=${isEnabled}
                             @change=${(e: Event) => this.toggleTier(g.tier, (e.target as HTMLInputElement).checked)} />
-                          <span class="tier-badge tier-${g.tier}">${TIER_LABELS[g.tier]}</span>
-                          <span class="tier-option-count">${t("tenantAgents.tierModelsCount").replace("{count}", String(g.models.length))}</span>
-                          <span class="tier-option-head-spacer"></span>
-                          ${isDefault ? html`<span class="tier-default-mark">${t("tenantAgents.tierIsDefault")}</span>` : nothing}
-                          ${isEnabled && !isDefault ? html`
-                            <label class="tier-default-radio" @click=${(e: Event) => e.stopPropagation()}>
+                          <div class="tier-option-body">
+                            <div class="tier-option-head-row">
+                              <span class="tier-badge tier-${g.tier}">${TIER_LABELS[g.tier]}</span>
+                              <span class="tier-option-count">${t("tenantAgents.tierModelsCount").replace("{count}", String(g.models.length))}</span>
+                            </div>
+                            ${isEnabled ? this.renderAgentTierModelRows(previewConfig, g.tier) : nothing}
+                          </div>
+                        </label>
+                        <div class="tier-option-side">
+                          ${isDefault ? html`
+                            <span class="tier-default-mark">${t("tenantAgents.tierIsDefault")}</span>
+                          ` : isEnabled ? html`
+                            <label class="tier-default-radio">
                               <input type="radio" name="agent-default-tier"
                                 .checked=${isDefault}
                                 @change=${() => this.setDefaultTier(g.tier)} />
                               <span>${t("tenantAgents.setAsDefault")}</span>
                             </label>
                           ` : nothing}
-                        </label>
-                        ${isEnabled ? this.renderAgentTierModelRows(previewConfig, g.tier) : nothing}
+                        </div>
                       </div>
                     `;
                   })}
