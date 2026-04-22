@@ -313,6 +313,86 @@ export const tenantModelsHandlers: GatewayRequestHandlers = {
   },
 
   /**
+   * Probe whether a provider config actually works. Sends a minimal
+   * "hi" prompt and reports status + duration. Does not write DB.
+   *
+   * apiKey == "" + providerId given → reuse the stored key (edit mode).
+   * Supports openai-completions and anthropic-messages; other protocols
+   * return an "unsupported protocol" error without calling out.
+   */
+  "tenant.models.testConnection": async ({ params, client, respond }: GatewayRequestHandlerOptions) => {
+    const ctx = getTenantCtx(client, respond);
+    if (!ctx) return;
+    try {
+      assertPermission(ctx.role, "model.update");
+    } catch (err) {
+      if (err instanceof RbacError) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, err.message));
+        return;
+      }
+      throw err;
+    }
+
+    const {
+      baseUrl, apiProtocol, authMode, apiKey, modelId, providerId, extraHeaders,
+    } = params as {
+      baseUrl?: string; apiProtocol?: string; authMode?: string;
+      apiKey?: string; modelId?: string; providerId?: string;
+      extraHeaders?: Record<string, string>;
+    };
+
+    if (!baseUrl || !apiProtocol || !modelId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "baseUrl, apiProtocol, modelId required"));
+      return;
+    }
+
+    // Resolve key: blank + providerId → load from DB
+    let effectiveKey = apiKey ?? "";
+    if (!effectiveKey && providerId) {
+      const existing = await getTenantModel(ctx.tenantId, providerId);
+      effectiveKey = existing?.apiKeyEncrypted ?? "";
+    }
+    if ((authMode === "api-key" || authMode === "token") && !effectiveKey) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "apiKey required for this auth mode"));
+      return;
+    }
+
+    const trimmedBase = baseUrl.replace(/\/+$/, "");
+    const startedAt = Date.now();
+    try {
+      let url: string;
+      let headers: Record<string, string> = { "Content-Type": "application/json" };
+      let body: Record<string, unknown>;
+      if (apiProtocol === "anthropic-messages") {
+        url = `${trimmedBase}/v1/messages`;
+        headers["x-api-key"] = effectiveKey;
+        headers["anthropic-version"] = "2023-06-01";
+        body = { model: modelId, max_tokens: 4, messages: [{ role: "user", content: "ping" }] };
+      } else if (apiProtocol === "openai-completions" || apiProtocol === "openai-responses" || apiProtocol === "ollama") {
+        url = `${trimmedBase}/chat/completions`;
+        if (effectiveKey) headers["Authorization"] = `Bearer ${effectiveKey}`;
+        body = { model: modelId, messages: [{ role: "user", content: "ping" }], max_tokens: 4, stream: false };
+      } else {
+        respond(true, { ok: false, status: 0, durationMs: 0, errorMessage: `Unsupported protocol for test: ${apiProtocol}` });
+        return;
+      }
+      if (extraHeaders) Object.assign(headers, extraHeaders);
+
+      const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+      const durationMs = Date.now() - startedAt;
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        respond(true, { ok: false, status: resp.status, durationMs, errorMessage: text.slice(0, 300) });
+        return;
+      }
+      respond(true, { ok: true, status: resp.status, durationMs });
+    } catch (err) {
+      const durationMs = Date.now() - startedAt;
+      respond(true, { ok: false, status: 0, durationMs, errorMessage: String(err).slice(0, 300) });
+    }
+  },
+
+  /**
    * Atomically set the tenant-wide default model for a tier.
    *
    * Walks every private `tenant_models` row that has at least one model in the

@@ -1221,6 +1221,10 @@ export const de: TranslationMap = {
       apiKeyKeepHint: "(leer = bestehenden behalten)",
       apiKeyEditPlaceholder: "Leer lassen, um bestehenden Schluessel zu behalten",
       tierChangeConfirm: "Dieses Modell wird von {count} Agent(en) verwendet. Eine Stufenaenderung betrifft deren verfuegbare Stufen. Fortfahren?",
+      testConnection: "Verbindung testen",
+      testing: "Teste...",
+      testOk: "Verbunden ({ms}ms)",
+      testFailed: "Fehlgeschlagen: HTTP {status} ({ms}ms) {msg}",
     },
   },
 };

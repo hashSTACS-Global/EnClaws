@@ -1217,6 +1217,10 @@ export const zh_TW: TranslationMap = {
       apiKeyKeepHint: "（留空 = 保持不變）",
       apiKeyEditPlaceholder: "留空 = 保持不變",
       tierChangeConfirm: "此模型被 {count} 個 Agent 使用，改檔位會影響這些 Agent 的啟用檔位。繼續？",
+      testConnection: "測試連線",
+      testing: "測試中...",
+      testOk: "連線成功（{ms}ms）",
+      testFailed: "連線失敗：HTTP {status}（{ms}ms） {msg}",
     },
   },
 };

@@ -279,6 +279,15 @@ export class TenantModelsView extends LitElement {
       margin-top: 0.5rem;
     }
     .modal-errors > div { margin: 0.15rem 0; }
+    .test-result {
+      font-size: 0.78rem;
+      padding: 0.5rem 0.7rem;
+      border-radius: var(--radius-md);
+      margin-top: 0.5rem;
+      word-break: break-word;
+    }
+    .test-result.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+    .test-result.fail { color: var(--danger); background: var(--danger-subtle); }
   `];
 
   private i18nController = new I18nController(this);
@@ -321,6 +330,8 @@ export class TenantModelsView extends LitElement {
   @state() private addModelErrors: string[] = [];
   @state() private modalMode: "add" | "edit" = "add";
   @state() private editingHandle: { providerId: string; modelId: string } | null = null;
+  @state() private testingConnection = false;
+  @state() private testResult: { ok: boolean; status: number; durationMs: number; errorMessage?: string } | null = null;
 
   // Cached agent list — used by countAgentsUsingModel to decide whether
   // a tier change on a model needs the soft-confirm dialog.
@@ -451,7 +462,13 @@ export class TenantModelsView extends LitElement {
     this.showAddModel = true;
   }
 
+  private resetTest() {
+    this.testResult = null;
+  }
+
   private closeAddModel() {
+    this.testResult = null;
+    this.testingConnection = false;
     this.showAddModel = false;
     this.addModelErrors = [];
     this.modalMode = "add";
@@ -484,6 +501,27 @@ export class TenantModelsView extends LitElement {
   private patchDraft(patch: Partial<AddModelDraft>) {
     this.addModelDraft = { ...this.addModelDraft, ...patch };
     if (this.addModelErrors.length > 0) this.addModelErrors = [];
+  }
+
+  private async testConnection() {
+    const d = this.addModelDraft;
+    this.testingConnection = true;
+    this.testResult = null;
+    try {
+      const res = (await this.rpc("tenant.models.testConnection", {
+        baseUrl: d.baseUrl,
+        apiProtocol: d.protocol,
+        authMode: d.authMode,
+        apiKey: d.apiKey,
+        modelId: d.modelId,
+        providerId: this.editingHandle?.providerId,
+      })) as { ok: boolean; status: number; durationMs: number; errorMessage?: string };
+      this.testResult = res;
+    } catch (err) {
+      this.testResult = { ok: false, status: 0, durationMs: 0, errorMessage: err instanceof Error ? err.message : String(err) };
+    } finally {
+      this.testingConnection = false;
+    }
   }
 
   private async submitModal() {
@@ -937,9 +975,28 @@ export class TenantModelsView extends LitElement {
             </div>
           ` : nothing}
 
+          ${this.testResult ? html`
+            <div class="test-result ${this.testResult.ok ? "ok" : "fail"}">
+              ${this.testResult.ok
+                ? t("models.addForm.testOk", { ms: String(this.testResult.durationMs) })
+                : t("models.addForm.testFailed", {
+                    status: String(this.testResult.status),
+                    ms: String(this.testResult.durationMs),
+                    msg: this.testResult.errorMessage ?? "",
+                  })}
+            </div>
+          ` : nothing}
+
           <div class="modal-actions">
             <button class="btn btn-outline" type="button" @click=${() => this.closeAddModel()}>
               ${t("models.addForm.cancel")}
+            </button>
+            <button
+              class="btn btn-outline"
+              type="button"
+              ?disabled=${this.testingConnection || !this.addModelDraft.modelId || !this.addModelDraft.baseUrl}
+              @click=${() => this.testConnection()}>
+              ${this.testingConnection ? t("models.addForm.testing") : t("models.addForm.testConnection")}
             </button>
             <button
               class="btn btn-primary"

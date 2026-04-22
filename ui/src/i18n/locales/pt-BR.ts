@@ -1220,6 +1220,10 @@ export const pt_BR: TranslationMap = {
       apiKeyKeepHint: "(em branco = manter a existente)",
       apiKeyEditPlaceholder: "Deixe em branco para manter",
       tierChangeConfirm: "Este modelo e usado por {count} agente(s). Mudar a categoria afeta as categorias disponiveis. Continuar?",
+      testConnection: "Testar conexao",
+      testing: "Testando...",
+      testOk: "Conectado ({ms}ms)",
+      testFailed: "Falhou: HTTP {status} ({ms}ms) {msg}",
     },
   },
 };

@@ -1681,6 +1681,10 @@ export const zh_CN: TranslationMap = {
       apiKeyKeepHint: "（留空 = 保持不变）",
       apiKeyEditPlaceholder: "留空 = 保持不变",
       tierChangeConfirm: "该模型被 {count} 个 Agent 使用，改档位会影响这些 Agent 的启用档位。继续？",
+      testConnection: "测试连接",
+      testing: "测试中...",
+      testOk: "连接成功（{ms}ms）",
+      testFailed: "连接失败：HTTP {status}（{ms}ms） {msg}",
     },
   }
 };
