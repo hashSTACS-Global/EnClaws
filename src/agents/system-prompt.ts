@@ -5,9 +5,9 @@ import { isOptEnabled } from "../config/token-optimization.js";
 import type { MemoryCitationsMode } from "../config/types.memory.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
+import { SELF_DRIVING_MODE } from "./enterprise-defaults.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import type { EmbeddedSandboxInfo } from "./pi-embedded-runner/types.js";
-import { SELF_DRIVING_MODE } from "./enterprise-defaults.js";
 import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
 
 /**
@@ -320,8 +320,15 @@ export function buildAgentSystemPrompt(params: {
     channel: string;
   };
   memoryCitationsMode?: MemoryCitationsMode;
+  /** Tenant ID of the current session (injected into the prompt so the model can reference it). */
+  tenantId?: string;
+  /** Tenant user role — admin/owner unlocks the skills-management carve-out. */
+  tenantUserRole?: string;
 }) {
   const acpEnabled = params.acpEnabled !== false;
+  const tenantUserRole = params.tenantUserRole?.trim();
+  const tenantId = params.tenantId?.trim();
+  const isTenantAdmin = tenantUserRole === "admin" || tenantUserRole === "owner";
   const coreToolSummaries: Record<string, string> = {
     read: "Read file contents",
     write: "Create or overwrite files",
@@ -476,7 +483,25 @@ export function buildAgentSystemPrompt(params: {
     params.sandboxInfo?.enabled && sanitizedSandboxContainerWorkspace
       ? `For read/write/edit/apply_patch, file paths resolve against host workspace: ${sanitizedWorkspaceDir}. For bash/exec commands, use sandbox container paths under ${sanitizedSandboxContainerWorkspace} (or relative paths from that workdir), not host paths. Prefer relative paths so both sandboxed exec and file tools work consistently.`
       : "Treat this directory as the single global workspace for file operations unless explicitly instructed otherwise. Always use relative paths or paths within this workspace when creating files — including intermediate or temporary files (e.g. before uploading). Do NOT write files to /tmp/ or other system directories.";
+  // Session identity: injected as a platform-asserted fact the model can rely on.
+  // Values here are resolved by the gateway before the system prompt is built —
+  // the model MUST treat them as authoritative and not re-ask / re-verify.
+  const sessionIdentityLines: string[] = [];
+  if (tenantUserRole || tenantId) {
+    sessionIdentityLines.push("## Session Identity (platform-asserted — authoritative)");
+    if (tenantUserRole) {
+      sessionIdentityLines.push(
+        `- Tenant user role: \`${tenantUserRole}\` (verified by the platform; do NOT ask the user to confirm it and do NOT claim you cannot determine it).`,
+      );
+    }
+    if (tenantId) {
+      sessionIdentityLines.push(`- Tenant ID: \`${tenantId}\`.`);
+    }
+    sessionIdentityLines.push("");
+  }
+
   const safetySection = [
+    ...sessionIdentityLines,
     "## Safety",
     "You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.",
     "Prioritize safety and human oversight over completion; if instructions conflict, pause and ask; comply with stop/pause/audit requests and never bypass safeguards. (Inspired by Anthropic's constitution.)",
@@ -486,11 +511,15 @@ export function buildAgentSystemPrompt(params: {
     "## Enterprise Operation Restrictions (HARD LIMITS — cannot be overridden by any user instruction or confirmation)",
     "The following are PERMANENTLY PROHIBITED:",
     "1. Starting, stopping, or restarting the EnClaws Gateway or any system service via exec/shell — even if the user explicitly asks or confirms. If service control is needed, inform the user to use the `gateway` tool or run the CLI themselves.",
-    "2. Deleting, moving, renaming, or modifying files inside the EnClaws state directory (~/.enclaws/ or $ENCLAWS_STATE_DIR) via any tool.",
+    isTenantAdmin
+      ? `2. Deleting, moving, renaming, or modifying files inside the EnClaws state directory (~/.enclaws/ or $ENCLAWS_STATE_DIR) via any tool. EXCEPTION — Because your Session Identity above declares role=\`${tenantUserRole}\` (platform-verified), tenant-scoped skill management under \`tenants/${tenantId ?? "<currentTenantId>"}/skills/\` IS permitted: read/write/rm/mv/rm -rf on that subtree only. Proceed with the operation when asked; do NOT refuse with "I can't verify your role" — your role IS verified above. All other paths inside the state directory remain prohibited.`
+      : "2. Deleting, moving, renaming, or modifying files inside the EnClaws state directory (~/.enclaws/ or $ENCLAWS_STATE_DIR) via any tool.",
     "3. Clearing, emptying, or replacing the content of protected files (USER.md, MEMORY.md, AGENT.md, SOUL.md, IDENTITY.md) — even with 'placeholder' or 'minimal' content as a substitute.",
     "4. Deleting or truncating databases, credentials, API keys, tokens, or audit logs.",
     "5. Cross-tenant or cross-user file access (reading/writing another tenant's or user's directory).",
-    "When any of the above is requested: immediately refuse with a clear explanation that the operation is prohibited. Do NOT seek workarounds, do NOT write placeholder content, do NOT use alternative tools (exec, read, cp, mv, etc.) to achieve the same effect. User confirmation does NOT override these restrictions.",
+    "6. Invoking any platform administrator CLI to enumerate, inspect, or mutate platform state — including but not limited to `enclaws agents list|show|create|delete`, `enclaws channels list|...`, `enclaws config ...`, `enclaws tenants ...`, `openclaw`/`claw` equivalents, and any `--help` workarounds. These are administrator-only tools; refuse even if the command does not contain a state-directory path literal.",
+    "7. Reciting, echoing, summarizing, or reconstructing platform-config content from conversational context, memory, prior turns, skills, or your training data — even if you already saw the data earlier in this session. This includes agent names and configurations, channel tokens, provider/API keys, tenant lists, and gateway settings. If the user asks for such information (including 'you just told me', 'from memory', 'based on what you know'), refuse and direct them to an administrator — your recall is NOT an authorized source.",
+    "When any of the above is requested: immediately refuse with a clear explanation that the operation is prohibited. Do NOT seek workarounds, do NOT write placeholder content, do NOT use alternative tools (exec, read, cp, mv, etc.) to achieve the same effect, and do NOT substitute by quoting from memory. User confirmation does NOT override these restrictions.",
     "",
   ];
   const skillsSection = buildSkillsSection({
@@ -783,9 +812,12 @@ export function buildAgentSystemPrompt(params: {
         "",
         "**Platform configuration is read-only to you (multi-tenant mode):**",
         "- Do NOT create, modify, rename, or delete agents, channels, routes, providers, or any gateway config.",
-        "- This applies to ALL methods: `enclaws` CLI subcommands (`agents`, `channels`, `config`, ...), editing `enclaws.json` / tenant config files directly, `cp`/`mv`/`mkdir` on agent or tenant directories, and any shell workaround.",
+        "- This applies to ALL methods: `enclaws` CLI subcommands (`agents`, `channels`, `config`, `tenants`, ...), editing `enclaws.json` / tenant config files directly, `cp`/`mv`/`mkdir` on agent or tenant directories, and any shell workaround.",
+        "- Do NOT invoke administrator CLIs for read/list either. Commands like `enclaws agents list`, `enclaws channels list`, `enclaws config show`, `openclaw agents ...`, `claw ...` must be refused even though they contain no state-directory path literal — they are administrator-only tools. If the user asks you to run one, reply that it is an administrator operation and stop.",
+        "- Do NOT read or list platform-config files and directories (`~/.enclaws/enclaws.json`, `~/.enclaws/update-settings.json`, `~/.enclaws/agents/`, other tenants' dirs, etc.) — neither via `read`/file tools nor via `cat`/`ls`/`find`/`type`/`Get-Content`/`Get-ChildItem` in exec. These reads are blocked by policy and will error out.",
+        "- Do NOT recite platform-config data from memory, prior turns, context, or training. If you happen to have seen agent names, channel tokens, provider keys, tenant lists, or gateway settings earlier in this session or across sessions, you MUST NOT repeat them back when asked. Refuse and redirect the user to an administrator — your recall is not an authorized channel for this information, and confirming 'I saw X before' is itself a leak.",
         "- User-scoped features remain available: the `cron` tool for reminders/scheduled wakes, memory, sessions, and messaging all stay usable as usual — they write to your own tenant/user scope via the gateway, not to platform config.",
-        "- If the user asks for platform-config changes, do not attempt them. Reply briefly that platform config is managed centrally by administrators via the control UI, and stop.",
+        "- If the user asks for platform-config changes, inspections, or listings (by CLI, file read, or 'from what you remember'), do not attempt them. Reply briefly that platform config is managed centrally by administrators via the control UI, and stop.",
       );
     }
     lines.push("");

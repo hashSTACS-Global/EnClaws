@@ -139,6 +139,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
           const userConfig = (channel.config ?? {}) as Record<string, unknown>;
           const appId = (userConfig.appId as string) ?? "";
           const appSecret = (userConfig.appSecret as string) ?? "";
+          const botName = (userConfig.botName as string) ?? "";
           const defaultConfig = {
             enabled: true,
             appId,
@@ -168,6 +169,7 @@ export const tenantOnboardingHandlers: GatewayRequestHandlers = {
               tenantId: ctx.tenantId,
               appId,
               appSecret: appSecret ?? "",
+              botName: botName || undefined,
             });
           }
         }

@@ -28,12 +28,67 @@ const LARK_ENV_URLS: Record<string, string> = {
   pre: "https://accounts.larksuite-pre.com",
 };
 
+// Open API hosts for tenant_access_token + application info — different from
+// the accounts host used for OAuth device registration.
+const FEISHU_OPEN_API_URLS: Record<string, string> = {
+  feishu: "https://open.feishu.cn",
+  lark: "https://open.larksuite.com",
+};
+
 function resolveBaseUrl(domain?: string, env?: string): string {
   const e = env ?? "prod";
   if (domain === "lark") {
     return LARK_ENV_URLS[e] ?? LARK_ENV_URLS.prod;
   }
   return FEISHU_ENV_URLS[e] ?? FEISHU_ENV_URLS.prod;
+}
+
+function resolveOpenApiBase(domain?: string): string {
+  return domain === "lark"
+    ? FEISHU_OPEN_API_URLS.lark
+    : FEISHU_OPEN_API_URLS.feishu;
+}
+
+/**
+ * Fetch the application's display name using the freshly-issued credentials.
+ *
+ * Used after scan registration to auto-fill the botName input. Failures are
+ * swallowed — the UI simply falls back to letting the user type the name.
+ */
+async function fetchFeishuAppName(
+  appId: string,
+  appSecret: string,
+  domain: string,
+): Promise<string | null> {
+  const base = resolveOpenApiBase(domain);
+  try {
+    const tokenRes = await fetch(`${base}/open-apis/auth/v3/tenant_access_token/internal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
+    });
+    const tokenJson = (await tokenRes.json()) as {
+      code?: number;
+      tenant_access_token?: string;
+    };
+    if (tokenJson.code !== 0 || !tokenJson.tenant_access_token) return null;
+
+    const infoRes = await fetch(
+      `${base}/open-apis/application/v6/applications/${appId}?lang=zh_cn`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${tokenJson.tenant_access_token}` },
+      },
+    );
+    const infoJson = (await infoRes.json()) as {
+      code?: number;
+      data?: { app?: { app_name?: string } };
+    };
+    if (infoJson.code !== 0) return null;
+    return infoJson.data?.app?.app_name ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -218,12 +273,15 @@ export const feishuRegisterHandlers: GatewayRequestHandlers = {
 
       if (clientId && clientSecret) {
         const openId = (pollRes.user_info as Record<string, unknown> | undefined)?.open_id as string | undefined;
+        // Best-effort: fetch the app's display name so the UI can pre-fill botName.
+        const botName = await fetchFeishuAppName(clientId, clientSecret, effectiveDomain);
         respond(true, {
           status: "completed",
           appId: clientId,
           appSecret: clientSecret,
           openId,
           domain: effectiveDomain,
+          botName: botName ?? undefined,
         });
         return;
       }

@@ -383,6 +383,7 @@ export class OnboardingWizard extends LitElement {
   private wecomPollTimer?: ReturnType<typeof setInterval>;
   @state() private channelAppId = "";
   @state() private channelAppSecret = "";
+  @state() private channelBotName = "";
 
   // Model step
   @state() private modelMode: "shared" | "custom" = "shared";
@@ -498,12 +499,13 @@ export class OnboardingWizard extends LitElement {
           env: this.feishuEnv,
         }) as {
           status: "completed" | "pending" | "error";
-          appId?: string; appSecret?: string; error?: string; errorDescription?: string;
+          appId?: string; appSecret?: string; botName?: string; error?: string; errorDescription?: string;
         };
         if (result.status === "completed" && result.appId && result.appSecret) {
           this.stopFeishuPoll();
           this.channelAppId = result.appId;
           this.channelAppSecret = result.appSecret;
+          if (result.botName) this.channelBotName = result.botName;
           this.feishuPolling = false;
           this.feishuMode = "manual"; // show filled fields
         } else if (result.status === "error") {
@@ -602,6 +604,7 @@ export class OnboardingWizard extends LitElement {
     if (!this.selectedChannel) { this.error = t("onboarding.selectChannel"); return false; }
     this.channelAppId = this.channelAppId.trim();
     this.channelAppSecret = this.channelAppSecret.trim();
+    this.channelBotName = this.channelBotName.trim();
     if (!this.channelAppId) { this.error = t("onboarding.appIdRequired"); return false; }
     if (!this.channelAppSecret) { this.error = t("onboarding.appSecretRequired"); return false; }
     return true;
@@ -650,6 +653,7 @@ export class OnboardingWizard extends LitElement {
           config: {
             appId: this.channelAppId || undefined,
             appSecret: this.channelAppSecret || undefined,
+            botName: this.channelBotName || undefined,
           },
         } : undefined,
         model: isShared ? undefined : {
@@ -761,17 +765,23 @@ export class OnboardingWizard extends LitElement {
           <div class="option-card ${this.selectedChannel === ch.type ? 'selected' : ''}"
             @click=${() => {
               const prev = this.selectedChannel;
+              if (prev === ch.type) return;
+              // Switching channel type invalidates any credentials the user
+              // started entering (or that were scanned for a different type).
+              this.channelAppId = "";
+              this.channelAppSecret = "";
+              this.channelBotName = "";
               this.selectedChannel = ch.type;
-              if (ch.type === "feishu" && prev !== "feishu") {
+              if (ch.type === "feishu") {
                 this.feishuMode = "scan";
                 void this.startFeishuScan();
-              } else if (ch.type !== "feishu") {
+              } else {
                 this.stopFeishuPoll();
               }
-              if (ch.type === "wecom" && prev !== "wecom") {
+              if (ch.type === "wecom") {
                 this.wecomMode = "scan";
                 void this.startWecomScan();
-              } else if (ch.type !== "wecom") {
+              } else {
                 this.stopWecomPoll();
               }
             }}>
@@ -849,6 +859,12 @@ export class OnboardingWizard extends LitElement {
               @mouseleave=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "password"; }}
             ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
           </div>
+        </div>
+        <div class="form-group">
+          <label>${t("tenantChannels.botName")}</label>
+          <input type="text" .placeholder=${t("tenantChannels.botNamePlaceholder")}
+            .value=${this.channelBotName}
+            @input=${(e: InputEvent) => { this.channelBotName = (e.target as HTMLInputElement).value; }} />
         </div>
       ` : nothing}
 

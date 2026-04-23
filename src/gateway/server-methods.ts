@@ -6,6 +6,7 @@ import { isRoleAuthorizedForMethod, parseGatewayRole } from "./role-policy.js";
 import { agentHandlers } from "./server-methods/agent.js";
 import { agentsHandlers } from "./server-methods/agents.js";
 import { authHandlers } from "./server-methods/auth-api.js";
+import { captchaHandlers } from "./server-methods/captcha-api.js";
 import { memoryHandlers } from "./server-methods/memory.js";
 import { browserHandlers } from "./server-methods/browser.js";
 import { channelsHandlers } from "./server-methods/channels.js";
@@ -56,7 +57,7 @@ import { webHandlers } from "./server-methods/web.js";
 import { wizardHandlers } from "./server-methods/wizard.js";
 
 /** Auth methods that don't require JWT authentication. */
-const AUTH_BYPASS_METHODS = new Set(["auth.register", "auth.login", "auth.refresh", "health"]);
+const AUTH_BYPASS_METHODS = new Set(["auth.register", "auth.login", "auth.refresh", "health", "captcha.challenge"]);
 
 const CONTROL_PLANE_WRITE_METHODS = new Set(["config.apply", "config.patch", "update.run"]);
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
@@ -127,6 +128,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...browserHandlers,
   ...taskPlanHandlers,
   ...authHandlers,
+  ...captchaHandlers,
   ...tenantHandlers,
   ...tenantAgentsHandlers,
   ...tenantChannelsHandlers,

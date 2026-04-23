@@ -926,12 +926,11 @@ export function registerAskUserQuestionTool(api: OpenClawPluginApi): void {
     name: toolName,
     label: 'Ask User Question',
     description:
-      'Ask the user a question via an interactive Feishu card. ' +
-      'Returns immediately after sending the card. ' +
-      "The user's answers will arrive as a new message in the conversation. " +
-      'Do NOT poll or re-call this tool — just wait for the response message. ' +
-      'For selection questions, provide options (renders as dropdown). ' +
-      'For free-text input, set options to an empty array.',
+      '通过交互式飞书卡片向用户提问。' +
+      '发送卡片后立即返回，用户的回答会作为新消息进入对话。' +
+      '不要轮询或重复调用此工具——只需等待响应消息即可。' +
+      '对于选择题，提供 options（渲染为下拉选单）；' +
+      '对于自由文本输入，将 options 设为空数组。',
     parameters: AskUserQuestionSchema,
 
     async execute(_toolCallId: string, params: unknown) {

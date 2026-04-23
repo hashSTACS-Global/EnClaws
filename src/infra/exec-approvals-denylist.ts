@@ -23,7 +23,11 @@ export type DenylistDecision =
 const DEFAULT_DENYLIST_SOURCES: readonly string[] = [
   // ── Recursive / force remove ──
   // `rm -rf`, `rm -fr`, `rm -Rf`, `rm -r --force`, …
-  "rm:-[rRf]+",
+  // Carve-out: `rm -rf <state-dir>/tenants/<id>/skills/...` is admin skill
+  // management (role already gated by checkSkillWritePermission + PathPolicy).
+  // `\\b` anchors the flag run so the engine can't backtrack to a shorter
+  // flag prefix that would bypass the negative lookahead.
+  "rm:-[rRf]+\\b(?!\\s+[^\\s]*\\.(?:enclaws\\|openclaw)[/\\\\]tenants[/\\\\][^/\\\\]+[/\\\\]skills\\b)",
 
   // ── System shutdown / reboot family ──
   "shutdown",
@@ -77,10 +81,15 @@ const DEFAULT_DENYLIST_SOURCES: readonly string[] = [
   "ssh-copy-id",
 
   // ── EnClaws / OpenClaw state directory & config files ──
-  // Matches `rm ~/.enclaws/...`, `rm .../.openclaw/...`, etc.
-  "rm:\\.(?:enclaws\\|openclaw)\\b",
-  "unlink:\\.(?:enclaws\\|openclaw)\\b",
-  "mv:\\.(?:enclaws\\|openclaw)\\b",
+  // Matches `rm ~/.enclaws/...`, `rm .../.openclaw/...`, etc. — except paths
+  // under `tenants/<id>/skills/` which admin/owner may manage (the upstream
+  // `checkSkillWritePermission` + `PathPermissionPolicy` gates already enforce
+  // that role requirement; this layer just stops being blanket-restrictive).
+  // NOTE: `\\|` inside the negative lookahead must stay escaped (the DSL
+  //       splits top-level entries on unescaped `|`).
+  "rm:\\.(?:enclaws\\|openclaw)\\b(?![/\\\\]tenants[/\\\\][^/\\\\]+[/\\\\]skills(?:[/\\\\]\\|$\\|\\s))",
+  "unlink:\\.(?:enclaws\\|openclaw)\\b(?![/\\\\]tenants[/\\\\][^/\\\\]+[/\\\\]skills(?:[/\\\\]\\|$\\|\\s))",
+  "mv:\\.(?:enclaws\\|openclaw)\\b(?![/\\\\]tenants[/\\\\][^/\\\\]+[/\\\\]skills(?:[/\\\\]\\|$\\|\\s))",
 ];
 
 /**

@@ -7,7 +7,9 @@
 
 import { html, css, LitElement, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { login, register, LoginRateLimitedError, LoginMfaRequiredError, RegisterPendingVerificationError, type AuthState } from "../auth-store.ts";
+import { login, register, LoginRateLimitedError, LoginMfaRequiredError, RegisterPendingVerificationError, CaptchaInvalidError, type AuthState } from "../auth-store.ts";
+import "../components/captcha-field.ts";
+import type { CaptchaField } from "../components/captcha-field.ts";
 import { loadSettings, saveSettings } from "../storage.ts";
 import { t, i18n, I18nController, SUPPORTED_LOCALES } from "../../i18n/index.ts";
 import type { Locale } from "../../i18n/index.ts";
@@ -712,16 +714,16 @@ export class EnClawsLogin extends LitElement {
 
   /** Map raw server error to i18n at render time so language switches take effect. */
   private translateServerError(raw: string): string {
-    if (raw === "__rate_limited__") return t("login.rateLimited");
-    if (raw.includes("Invalid credentials")) return t("login.invalidCredentials");
-    if (raw.includes("已注册") || raw.includes("already registered") || raw.includes("duplicate key") || raw.includes("unique constraint")) return t("login.emailAlreadyRegistered");
-    if (raw.includes("verify your email") || raw.includes("pendingVerification")) return t("login.pendingVerification");
-    if (raw.includes("该企业账号已被禁用") || raw.includes("tenant suspended") || raw.includes("Tenant is suspended")) return t("login.tenantSuspended");
+    if (raw === "__rate_limited__") {return t("login.rateLimited");}
+    if (raw.includes("Invalid credentials")) {return t("login.invalidCredentials");}
+    if (raw.includes("已注册") || raw.includes("already registered") || raw.includes("duplicate key") || raw.includes("unique constraint")) {return t("login.emailAlreadyRegistered");}
+    if (raw.includes("verify your email") || raw.includes("pendingVerification")) {return t("login.pendingVerification");}
+    if (raw.includes("该企业账号已被禁用") || raw.includes("tenant suspended") || raw.includes("Tenant is suspended")) {return t("login.tenantSuspended");}
     return raw;
   }
 
   private resolveGatewayUrl(): string {
-    if (this.gatewayUrl) return this.gatewayUrl;
+    if (this.gatewayUrl) {return this.gatewayUrl;}
     const settings = loadSettings();
     return settings.gatewayUrl;
   }
@@ -736,25 +738,25 @@ export class EnClawsLogin extends LitElement {
 
   private validateLoginForm(): FieldErrors {
     const errors: FieldErrors = {};
-    if (!this.email) errors.email = t("login.errRequired", { field: t("login.email") });
-    else if (!this.validateEmail(this.email)) errors.email = t("login.errEmailInvalid");
-    if (!this.password) errors.password = t("login.errRequired", { field: t("login.password") });
+    if (!this.email) {errors.email = t("login.errRequired", { field: t("login.email") });}
+    else if (!this.validateEmail(this.email)) {errors.email = t("login.errEmailInvalid");}
+    if (!this.password) {errors.password = t("login.errRequired", { field: t("login.password") });}
     return errors;
   }
 
   private validateRegisterForm(): FieldErrors {
     const errors: FieldErrors = {};
-    if (!this.regTenantName) errors.tenantName = t("login.errRequired", { field: t("login.tenantName") });
-    if (!this.regEmail) errors.regEmail = t("login.errRequired", { field: t("login.email") });
-    else if (!this.validateEmail(this.regEmail)) errors.regEmail = t("login.errEmailInvalid");
-    if (!this.regPassword) errors.regPassword = t("login.errRequired", { field: t("login.password") });
-    else if (!this.validatePasswordStrength(this.regPassword)) errors.regPassword = t("login.errPasswordWeak");
+    if (!this.regTenantName) {errors.tenantName = t("login.errRequired", { field: t("login.tenantName") });}
+    if (!this.regEmail) {errors.regEmail = t("login.errRequired", { field: t("login.email") });}
+    else if (!this.validateEmail(this.regEmail)) {errors.regEmail = t("login.errEmailInvalid");}
+    if (!this.regPassword) {errors.regPassword = t("login.errRequired", { field: t("login.password") });}
+    else if (!this.validatePasswordStrength(this.regPassword)) {errors.regPassword = t("login.errPasswordWeak");}
     return errors;
   }
 
   private renderFieldError(field: string) {
     const msg = this.fieldErrors[field];
-    if (!msg) return nothing;
+    if (!msg) {return nothing;}
     return html`
       <div class="field-error">
         <svg viewBox="0 0 16 16" fill="currentColor">
@@ -786,16 +788,16 @@ export class EnClawsLogin extends LitElement {
       delete next[field];
       this.fieldErrors = next;
     }
-    if (this.serverError) this.serverError = "";
+    if (this.serverError) {this.serverError = "";}
   }
 
   private startRateLimitCountdown(retryAfterMs: number): void {
-    if (this.rateLimitTimer) clearInterval(this.rateLimitTimer);
+    if (this.rateLimitTimer) {clearInterval(this.rateLimitTimer);}
     this.rateLimitCountdown = Math.max(1, Math.ceil(retryAfterMs / 1000));
     this.rateLimitTimer = setInterval(() => {
       this.rateLimitCountdown -= 1;
       if (this.rateLimitCountdown <= 0) {
-        if (this.rateLimitTimer) clearInterval(this.rateLimitTimer);
+        if (this.rateLimitTimer) {clearInterval(this.rateLimitTimer);}
         this.rateLimitTimer = null;
         this.rateLimitCountdown = 0;
       }
@@ -804,7 +806,11 @@ export class EnClawsLogin extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    if (this.rateLimitTimer) clearInterval(this.rateLimitTimer);
+    if (this.rateLimitTimer) {clearInterval(this.rateLimitTimer);}
+  }
+
+  private getCaptchaField(name: "login" | "register"): CaptchaField | null {
+    return this.renderRoot.querySelector(`captcha-field[data-scope="${name}"]`);
   }
 
   private async handleLogin(e: Event) {
@@ -812,13 +818,17 @@ export class EnClawsLogin extends LitElement {
     this.fieldErrors = {};
     this.serverError = "";
 
+    const captcha = this.getCaptchaField("login");
     const errors = this.validateLoginForm();
+    if (!captcha?.captchaId || !captcha.value) {
+      errors.captcha = t("captcha.errRequired");
+    }
     if (Object.keys(errors).length > 0) {
       this.fieldErrors = errors;
       return;
     }
 
-    if (this.rateLimitCountdown > 0) return;
+    if (this.rateLimitCountdown > 0) {return;}
 
     this.loading = true;
 
@@ -827,6 +837,8 @@ export class EnClawsLogin extends LitElement {
         gatewayUrl: this.resolveGatewayUrl(),
         email: this.email,
         password: this.password,
+        captchaId: captcha!.captchaId,
+        captchaAnswer: captcha!.value,
       });
       this.dispatchEvent(new CustomEvent("auth-success", {
         detail: { ...auth, forceChangePassword: auth.user.forceChangePassword === true },
@@ -834,11 +846,16 @@ export class EnClawsLogin extends LitElement {
         composed: true,
       }));
     } catch (err) {
+      // Any failure invalidates the used captcha on the server. Refresh
+      // so the user isn't left with a stale/empty image.
+      void this.getCaptchaField("login")?.refresh();
       if (err instanceof LoginRateLimitedError) {
         this.startRateLimitCountdown(err.retryAfterMs);
         this.serverError = "__rate_limited__";
       } else if (err instanceof LoginMfaRequiredError) {
         this.mfaChallengeToken = err.challengeToken;
+      } else if (err instanceof CaptchaInvalidError) {
+        this.fieldErrors = { ...this.fieldErrors, captcha: t("captcha.errInvalid") };
       } else {
         this.serverError = err instanceof Error ? err.message : t("login.loginFailed");
       }
@@ -852,7 +869,11 @@ export class EnClawsLogin extends LitElement {
     this.fieldErrors = {};
     this.serverError = "";
 
+    const captcha = this.getCaptchaField("register");
     const errors = this.validateRegisterForm();
+    if (!captcha?.captchaId || !captcha.value) {
+      errors.captcha = t("captcha.errRequired");
+    }
     if (Object.keys(errors).length > 0) {
       this.fieldErrors = errors;
       return;
@@ -867,12 +888,17 @@ export class EnClawsLogin extends LitElement {
         email: this.regEmail,
         password: this.regPassword,
         displayName: this.regDisplayName || undefined,
+        captchaId: captcha!.captchaId,
+        captchaAnswer: captcha!.value,
       });
       this.dispatchEvent(new CustomEvent("auth-success", { detail: { ...auth, isNewRegistration: true }, bubbles: true, composed: true }));
     } catch (err) {
+      void this.getCaptchaField("register")?.refresh();
       if (err instanceof RegisterPendingVerificationError) {
         // Phase 3: email verification required — show the pending view
         this.pendingVerificationEmail = err.email;
+      } else if (err instanceof CaptchaInvalidError) {
+        this.fieldErrors = { ...this.fieldErrors, captcha: t("captcha.errInvalid") };
       } else {
         this.serverError = err instanceof Error ? err.message : "register_failed";
       }
@@ -1090,6 +1116,15 @@ export class EnClawsLogin extends LitElement {
           ${this.renderFieldError("password")}
         </div>
 
+        <div class="form-group">
+          <label class="form-label">${t("captcha.label")}</label>
+          <captcha-field
+            data-scope="login"
+            gateway-url=${this.resolveGatewayUrl()}
+            .error=${this.fieldErrors.captcha ?? ""}
+          ></captcha-field>
+        </div>
+
         <div class="form-meta">
           <button type="button" class="form-forgot"
             @click=${() => { window.location.hash = "#/auth/forgot-password"; }}
@@ -1168,6 +1203,15 @@ export class EnClawsLogin extends LitElement {
             </button>
           </div>
           ${this.regPasswordFocused ? html`<div class="form-hint">${t("login.passwordHint")}</div>` : this.renderFieldError("regPassword")}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">${t("captcha.label")}</label>
+          <captcha-field
+            data-scope="register"
+            gateway-url=${this.resolveGatewayUrl()}
+            .error=${this.fieldErrors.captcha ?? ""}
+          ></captcha-field>
         </div>
 
         ${this.serverError ? this.renderFormError(this.translateServerError(this.serverError)) : nothing}

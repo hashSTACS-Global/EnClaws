@@ -298,7 +298,7 @@ export async function listInteractionTurns(
        ORDER BY MIN(created_at) DESC
        LIMIT $${idx++} OFFSET $${idx}
      ) g
-     LEFT JOIN tenant_agents ta ON ta.agent_id = g.agent_id AND ta.tenant_id = g.tenant_id`,
+     LEFT JOIN tenant_agents ta ON ta.agent_id = g.agent_id AND ta.tenant_id = g.tenant_id::uuid`,
     values,
   );
 

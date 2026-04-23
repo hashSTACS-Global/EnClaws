@@ -195,6 +195,52 @@ describe("getExecDenylist defaults", () => {
     expect(
       evaluateDenylist({ command: "mv ~/.enclaws/exec-approvals.json /tmp/x", denylist }).blocked,
     ).toBe(true);
+    // Non-skills subpaths still blocked
+    expect(
+      evaluateDenylist({ command: "rm -rf ~/.enclaws/logs", denylist }).blocked,
+    ).toBe(true);
+    expect(
+      evaluateDenylist({
+        command: "rm ~/.enclaws/tenants/abc/users/x/credentials/gh.json",
+        denylist,
+      }).blocked,
+    ).toBe(true);
+    expect(
+      evaluateDenylist({ command: "rm -rf ~/.enclaws/tenants/abc/agents", denylist }).blocked,
+    ).toBe(true);
+  });
+
+  it("allows rm/unlink/mv on tenants/<id>/skills subpath (admin skill management)", () => {
+    // Role-aware gating happens upstream (checkSkillWritePermission +
+    // PathPermissionPolicy). The gateway denylist must not blanket-block here.
+    expect(
+      evaluateDenylist({
+        command: "rm -rf ~/.enclaws/tenants/abc/skills/feishu-skills",
+        denylist,
+      }).blocked,
+    ).toBe(false);
+    expect(
+      evaluateDenylist({ command: "rm -rf ~/.enclaws/tenants/abc/skills", denylist }).blocked,
+    ).toBe(false);
+    expect(
+      evaluateDenylist({
+        command: "unlink ~/.enclaws/tenants/abc/skills/foo/SKILL.md",
+        denylist,
+      }).blocked,
+    ).toBe(false);
+    expect(
+      evaluateDenylist({
+        command: "mv ~/.enclaws/tenants/abc/skills/old ~/.enclaws/tenants/abc/skills/new",
+        denylist,
+      }).blocked,
+    ).toBe(false);
+    // skills-lookalike paths (skills-foo, skillset) are NOT carved out
+    expect(
+      evaluateDenylist({
+        command: "rm -rf ~/.enclaws/tenants/abc/skills-foo",
+        denylist,
+      }).blocked,
+    ).toBe(true);
   });
 
   it("blocks redirect-write to ~/.enclaws/enclaws.json via protected-path guard", () => {

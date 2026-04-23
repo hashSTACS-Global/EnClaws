@@ -42,6 +42,7 @@ interface ChannelApp {
   id?: string;
   appId: string;
   appSecret: string;
+  botName: string;
   groupPolicy: ChannelPolicy;
   isActive?: boolean;
   connectionStatus?: AppConnectionStatus | null;
@@ -147,8 +148,8 @@ export class TenantChannelsView extends LitElement {
       font-weight: 500; min-width: 0;
     }
     .info-value.mono { font-family: monospace; font-size: 0.78rem; }
-    .info-value.agent-link { cursor: pointer; color: var(--accent, #3b82f6); }
-    .info-value.agent-link:hover { text-decoration: underline; }
+    .agent-link { cursor: pointer; color: var(--accent, #3b82f6); }
+    .agent-link:hover { text-decoration: underline; }
     .info-muted { font-size: 0.72rem; color: var(--text-muted, #525252); font-weight: 400; }
     .info-divider { height: 0; margin: 0.6rem 0; border-top: 1px solid var(--text-muted, #525252); }
     .connection-badge {
@@ -184,8 +185,8 @@ export class TenantChannelsView extends LitElement {
       border-radius: var(--radius-lg, 8px); padding: 1.25rem; margin-bottom: 1.5rem;
     }
     .form-card h3 { margin: 0 0 1rem; font-size: 0.95rem; font-weight: 600; }
-    .form-row { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; }
-    .form-field { flex: 1; }
+    .form-row { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 0.75rem; }
+    .form-field { width: 100%; }
     .form-field label { display: block; font-size: 0.8rem; margin-bottom: 0.3rem; color: var(--text-secondary, #a3a3a3); }
     .form-field input, .form-field select, .form-field textarea {
       width: 100%; padding: 0.45rem 0.65rem; background: var(--bg, #0a0a0a);
@@ -206,13 +207,6 @@ export class TenantChannelsView extends LitElement {
       border-radius: var(--radius-md, 6px); padding: 0.75rem; margin-bottom: 0.5rem;
       position: relative;
     }
-    .app-form-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-    .app-form-header span { font-size: 0.8rem; font-weight: 500; color: var(--text-secondary, #a3a3a3); }
-    .remove-app {
-      background: none; border: none; color: var(--text-destructive, #fca5a5);
-      cursor: pointer; font-size: 0.8rem; padding: 0.2rem 0.4rem;
-    }
-    .remove-app:hover { opacity: 0.7; }
     .secret-wrap { position: relative; display: flex; align-items: center; }
     .secret-wrap input { flex: 1; padding-right: 2rem; }
     .eye-btn {
@@ -434,8 +428,35 @@ export class TenantChannelsView extends LitElement {
     this.formChannelType = CHANNEL_TYPES[0]?.value ?? "feishu";
     this.formChannelName = "";
     this.formChannelPolicy = "open";
-    this.formApps = [];
+    // One channel = one app. Pre-seed a single empty app row so the user
+    // never needs an explicit "add app" action.
+    this.formApps = [{
+      appId: "",
+      appSecret: "",
+      botName: "",
+      groupPolicy: "open",
+      agent: null,
+      formAgentBinding: "",
+    }];
     this.showForm = true;
+  }
+
+  private handleChannelTypeChange(nextType: string) {
+    if (nextType === this.formChannelType) return;
+    // Switching type invalidates any in-flight scan state and any credentials
+    // the user started typing — reset to a clean single-row form.
+    this.clearAllFeishuTimers();
+    this.clearAllWecomTimers();
+    this.formChannelType = nextType;
+    this.formChannelName = "";
+    this.formApps = [{
+      appId: "",
+      appSecret: "",
+      botName: "",
+      groupPolicy: "open",
+      agent: null,
+      formAgentBinding: "",
+    }];
   }
 
   private startEdit(channel: TenantChannel) {
@@ -448,27 +469,6 @@ export class TenantChannelsView extends LitElement {
       formAgentBinding: a.agent?.agentId ?? "",
     }));
     this.showForm = true;
-  }
-
-  private addApp() {
-    this.formApps = [...this.formApps, {
-      appId: "",
-      appSecret: "",
-      groupPolicy: "open",
-      agent: null,
-      formAgentBinding: "",
-    }];
-  }
-
-  private removeApp(index: number) {
-    const removed = this.formApps[index];
-    if (removed?.feishuPollTimer) {
-      clearInterval(removed.feishuPollTimer);
-    }
-    if (removed?.wecomPollTimer) {
-      clearInterval(removed.wecomPollTimer);
-    }
-    this.formApps = this.formApps.filter((_, i) => i !== index);
   }
 
   private setFeishuMode(index: number, mode: "scan" | "manual") {
@@ -537,6 +537,7 @@ export class TenantChannelsView extends LitElement {
           appSecret?: string;
           openId?: string;
           domain?: string;
+          botName?: string;
           slowDown?: boolean;
           error?: string;
           errorDescription?: string;
@@ -547,6 +548,7 @@ export class TenantChannelsView extends LitElement {
           const a = apps[currentIndex];
           a.appId = result.appId;
           a.appSecret = result.appSecret;
+          if (result.botName) a.botName = result.botName;
           a.feishuPolling = false;
           a.feishuPollTimer = undefined;
           a.feishuMode = "manual"; // Switch to manual view to show filled fields
@@ -669,10 +671,7 @@ export class TenantChannelsView extends LitElement {
     for (const app of this.formApps) {
       app.appId = app.appId.trim();
       app.appSecret = app.appSecret.trim();
-    }
-    if (!this.formChannelName) {
-      this.showError("tenantChannels.channelNameRequired");
-      return;
+      app.botName = (app.botName ?? "").trim();
     }
 
     if (this.formApps.length === 0) {
@@ -753,6 +752,7 @@ export class TenantChannelsView extends LitElement {
               appDbId: app.id,
               appId: app.appId,
               appSecret: app.appSecret,
+              botName: app.botName,
               groupPolicy: app.groupPolicy,
               agentId: app.formAgentBinding || null,
             });
@@ -761,6 +761,7 @@ export class TenantChannelsView extends LitElement {
               channelId: this.editingId,
               appId: app.appId,
               appSecret: app.appSecret,
+              botName: app.botName,
               groupPolicy: app.groupPolicy,
               agentId: app.formAgentBinding || null,
             });
@@ -769,19 +770,26 @@ export class TenantChannelsView extends LitElement {
 
         this.showSuccess("tenantChannels.channelUpdated");
       } else {
-        // Create channel with apps + agent bindings
+        // Create channel with apps + agent bindings.
+        // channelName is no longer user-editable and the DB column is nullable;
+        // passing null avoids colliding with the UNIQUE(tenant, type, name)
+        // constraint when adding a second channel of the same type.
+        const displayName =
+          this.channelTypes.find((ct) => ct.value === this.formChannelType)?.label
+          ?? this.formChannelType;
         await this.rpc("tenant.channels.create", {
           channelType: this.formChannelType,
-          channelName: this.formChannelName,
+          channelName: this.formChannelName || null,
           channelPolicy: this.formChannelPolicy,
           apps: this.formApps.map((a) => ({
             appId: a.appId,
             appSecret: a.appSecret,
+            botName: a.botName,
             groupPolicy: a.groupPolicy,
             agentId: a.formAgentBinding || null,
           })),
         });
-        this.showSuccess("tenantChannels.channelCreated", { name: this.formChannelName });
+        this.showSuccess("tenantChannels.channelCreated", { name: displayName });
       }
       // Show auth guide for any new feishu app (scan or manual)
       const scannedAppId = this.formChannelType === "feishu"
@@ -924,6 +932,12 @@ export class TenantChannelsView extends LitElement {
         </div>
         <div class="channel-card-body">
           ${ch.apps && ch.apps.length > 0 ? ch.apps.map((app, idx) => html`
+            ${app.botName ? html`
+              <div class="info-row">
+                <span class="info-label">${t("tenantChannels.botName")}</span>
+                <span class="info-value">${app.botName}</span>
+              </div>
+            ` : nothing}
             <div class="info-row">
               <span class="info-label">${ch.channelType === "wecom" ? t("tenantChannels.wecomBotId") : ch.channelType === "dingtalk" ? t("tenantChannels.dingtalkClientId") : t("tenantChannels.appId")}</span>
               <span class="info-value mono">${app.appId}</span>
@@ -954,14 +968,14 @@ export class TenantChannelsView extends LitElement {
             ${app.agent ? html`
               <div class="info-row">
                 <span class="info-label">${t("tenantChannels.agent")}</span>
-                <span class="info-value agent-link" @click=${(e: Event) => {
-                  e.stopPropagation();
-                  this.dispatchEvent(new CustomEvent("navigate-to-agent", {
-                    detail: { agentId: app.agent!.agentId },
-                    bubbles: true, composed: true,
-                  }));
-                }}>
-                  ${(app.agent.config?.displayName as string) || app.agent.name || app.agent.agentId}
+                <span class="info-value">
+                  <span class="agent-link" @click=${(e: Event) => {
+                    e.stopPropagation();
+                    this.dispatchEvent(new CustomEvent("navigate-to-agent", {
+                      detail: { agentId: app.agent!.agentId },
+                      bubbles: true, composed: true,
+                    }));
+                  }}>${(app.agent.config?.displayName as string) || app.agent.name || app.agent.agentId}</span>
                   <span class="info-muted">(${app.agent.agentId})</span>
                 </span>
               </div>
@@ -986,25 +1000,15 @@ export class TenantChannelsView extends LitElement {
             <div class="form-field">
               <label>${t("tenantChannels.channelType")}</label>
               <select ?disabled=${!!this.editingId}
-                @change=${(e: Event) => (this.formChannelType = (e.target as HTMLSelectElement).value)}>
+                @change=${(e: Event) => this.handleChannelTypeChange((e.target as HTMLSelectElement).value)}>
                 ${this.channelTypes.map((ct) => html`<option value=${ct.value} ?selected=${ct.value === this.formChannelType}>${ct.label}</option>`)}
               </select>
-            </div>
-            <div class="form-field">
-              <label>${t("tenantChannels.channelName")}</label>
-              <input type="text" .placeholder=${t("tenantChannels.channelNamePlaceholder")}
-                .value=${this.formChannelName}
-                @input=${(e: InputEvent) => (this.formChannelName = (e.target as HTMLInputElement).value)} />
             </div>
           </div>
 
           <div class="divider"><span>${t("tenantChannels.appsAndAgents")}</span></div>
 
           ${this.formApps.map((app, i) => this.renderAppFormCard(app, i))}
-
-          <button type="button" class="btn btn-outline btn-sm" style="margin-bottom:1rem" @click=${() => this.addApp()}>
-            ${t("tenantChannels.addApp")}
-          </button>
 
           <div style="display:flex;gap:0.5rem">
             <button class="btn btn-primary" type="submit" ?disabled=${this.saving}>
@@ -1020,10 +1024,6 @@ export class TenantChannelsView extends LitElement {
   private renderAppFormCard(app: ChannelApp, i: number) {
     return html`
       <div class="app-form-card">
-        <div class="app-form-header">
-          <span>${t("tenantChannels.appLabel").replace("{index}", String(i + 1))}</span>
-          <button type="button" class="remove-app" @click=${() => this.removeApp(i)}>${t("tenantChannels.removeApp")}</button>
-        </div>
 
         <!-- Feishu mode selector (only for feishu channel without existing app) -->
         ${this.formChannelType === "feishu" && !app.id ? html`
@@ -1100,6 +1100,14 @@ export class TenantChannelsView extends LitElement {
                 @mouseleave=${(e: Event) => { const wrap = (e.target as HTMLElement).closest('.secret-wrap')!; (wrap.querySelector('input') as HTMLInputElement).type = "password"; }}
               ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
             </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label>${t("tenantChannels.botName")}</label>
+            <input type="text" .placeholder=${t("tenantChannels.botNamePlaceholder")}
+              .value=${app.botName ?? ""}
+              @input=${(e: InputEvent) => this.updateApp(i, "botName", (e.target as HTMLInputElement).value)} />
           </div>
         </div>
         ` : nothing}

@@ -306,9 +306,9 @@ export async function runCSAgentReply(params: {
     // Step 6: Extract reply text
     // 步骤 6：提取回复文本
     const result = fallbackResult.result;
-    const replyText = result.payloads?.[0]?.text?.trim();
+    const rawReply = result.payloads?.[0]?.text?.trim();
 
-    if (!replyText) {
+    if (!rawReply) {
       log.warn(`cs agent returned empty reply for session ${sessionId}`);
       return {
         reply: "抱歉，我暂时无法回答这个问题。我会通知负责人为您跟进。",
@@ -317,6 +317,16 @@ export async function runCSAgentReply(params: {
         isFallback: true,
       };
     }
+
+    // Strip the model-injected "Skills Reporting" trailer (from origin/main fix).
+    // Even with promptMode:"none" excluding the Skills Reporting instruction,
+    // some models (e.g. qwen) carry this pattern as training prior and emit
+    // a trailing `> Skills used: ...` line that's irrelevant for CS customers.
+    // 剥掉模型脑补的 Skills Reporting 末尾行——CS 场景下客户看到 meta 信息很突兀。
+    const replyText = rawReply
+      .replace(/\s*\n+\s*>\s*Skills\s*used\s*:[^\n]*$/i, "")
+      .replace(/\s*>\s*Skills\s*used\s*:[^\n]*$/i, "")
+      .trimEnd();
 
     return { reply: replyText, sourceChunks, confidence };
   } catch (err) {

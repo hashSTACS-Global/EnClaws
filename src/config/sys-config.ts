@@ -3,7 +3,7 @@
  */
 
 import { loadAllSysConfig } from "../db/models/sys-config.js";
-import { getRuntimeConfigSnapshot, setRuntimeConfigSnapshot } from "./io.js";
+import { getRuntimeConfigSnapshot, setRuntimeConfigSnapshot, loadConfig } from "./io.js";
 import type { OpenClawConfig } from "./types.openclaw.js";
 import type { GatewayConfig } from "./types.gateway.js";
 import type { LoggingConfig } from "./types.base.js";
@@ -178,13 +178,24 @@ function buildToolsConfig(row: SysToolsConfigRow): ToolsConfig {
 /**
  * Load sys config from DB, build EnClawsConfig, and merge it into the runtime snapshot.
  * Only updates gateway/logging/plugins/tools fields — preserves existing channels, agents,
- * bindings, and other runtime state that was populated by loadDbChannels.
+ * bindings, and other runtime state.
+ *
+ * At gateway startup, loadAndActivateSysConfig may be called before any loadConfig()
+ * populates the runtime snapshot. In that case `getRuntimeConfigSnapshot()` returns
+ * null and spreading it contributes nothing, silently dropping file-based config
+ * (e.g. agents.defaults.memorySearch from ~/.enclaws/enclaws.json). To preserve
+ * file-based config across startup, fall back to loadConfig() as the base when the
+ * snapshot has not been seeded yet.
+ *
+ * 启动时 loadAndActivateSysConfig 可能先于 loadConfig() 跑，snapshot 为 null，
+ * spread null 会丢掉文件配置（如 agents.defaults.memorySearch）。
+ * 为此，snapshot 为空时 fallback 到 loadConfig() 作为 base。
  */
 export async function loadAndActivateSysConfig(): Promise<void> {
   const sysConfig = await buildSysConfig();
-  const existing = getRuntimeConfigSnapshot();
+  const base = getRuntimeConfigSnapshot() ?? loadConfig();
   const merged: OpenClawConfig = {
-    ...existing,
+    ...base,
     ...sysConfig,
   };
   setRuntimeConfigSnapshot(merged);

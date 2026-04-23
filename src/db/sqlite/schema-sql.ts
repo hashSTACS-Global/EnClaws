@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS tenant_channel_apps (
   tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   app_id       TEXT NOT NULL,
   app_secret   TEXT NOT NULL DEFAULT '',
+  bot_name     TEXT,
   group_policy TEXT NOT NULL DEFAULT 'open',
   agent_id     TEXT,
   is_active    INTEGER NOT NULL DEFAULT 1,

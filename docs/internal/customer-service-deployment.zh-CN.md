@@ -64,11 +64,15 @@ pm2 restart enclaws   # 按实际进程管理方式重启
 
 ### 4.2 配置 Embedding 向量索引（RAG 必需）
 
-> **为什么需要这一步？** S1 采用**零侵入**设计——CS 模块不自己实现 embedding 调用链路，完全复用 EC 已有的 `memorySearch` 基础设施。代价是需要在部署环境显式启用并指定 embedding provider，否则知识库 MD 上传后向量索引不会生成，RAG 检索无法工作。
+> **为什么需要这一步？** 当前采用**零侵入**设计——CS 模块不自己实现 embedding 调用链路，完全复用 EC 已有的 `memorySearch` 基础设施。代价是需要在部署环境显式启用并指定 embedding provider，否则知识库 MD 上传后向量索引不会生成，RAG 检索无法工作。
 >
-> 这一步配置是**架构权衡的产物**，不是遗漏。S2 已计划讨论是否由 EC 底层自动从租户 LLM 配置推导 embedding provider，届时本节将简化或移除。详见团队讨论 `ai-customer-service-integration` 话题二。
+> **未来方向**：
+> 1. 将把所有 LLM 类型（含文本生成、embedding、vision 等）统一迁移到租户后台 UI 配置，按租户维度管理 API Key 和模型，deployment 层不再需要 enclaws.json 这类文件级配置。
+> 2. 向量库存储路径 `~/.enclaws/memory/*.sqlite` 目前是全局共享目录（复用 EC 已有 memorySearch 基础设施），未来需隔离到 `~/.enclaws/tenants/{tenantId}/customer-service/vectors/`，避免跨租户污染并与知识库同目录管理。
+>
+> UI 配置 + 路径隔离一并调整落地，具体实施细节以后续 proposal 为准。
 
-在服务器的 `~/.enclaws/enclaws.json` 中配置（文件不存在则创建）：
+#### 在服务器的 `~/.enclaws/enclaws.json` 中配置
 
 ```bash
 mkdir -p ~/.enclaws
@@ -79,26 +83,81 @@ cat > ~/.enclaws/enclaws.json <<'EOF'
       "memorySearch": {
         "enabled": true,
         "provider": "openai",
-        "model": "text-embedding-3-small"
+        "model": "text-embedding-3-small",
+        "remote": {
+          "baseUrl": "https://api.openai.com/v1",
+          "apiKey": "sk-..."
+        }
       }
     }
   }
 }
 EOF
+chmod 600 ~/.enclaws/enclaws.json
 ```
 
-**API Key：** embedding 会自动读取 LLM 侧已配置的 provider key（即 `.env` 中的 `OPENAI_API_KEY` 等），无需在此处重复配置 apiKey。
+`remote.baseUrl` / `remote.apiKey` **只影响 embedding 调用，不影响其他 LLM 路径**。若省略 `remote` 块，会 fallback 读 LLM 侧同 provider 的配置（如 `OPENAI_API_KEY` 环境变量）。
 
-**Provider 选择：** 如服务器 LLM 使用的不是 OpenAI，请改用对应 provider 和 key：
+#### Provider 选择
 
-| provider | model 示例 | 所需环境变量 |
-|----------|-----------|-------------|
-| `openai` | `text-embedding-3-small` | `OPENAI_API_KEY` |
-| `gemini` | `gemini-embedding-001` | `GEMINI_API_KEY` |
-| `voyage` | `voyage-4-large` | `VOYAGE_API_KEY` |
-| `mistral` | `mistral-embed` | `MISTRAL_API_KEY` |
+| provider | model 示例 | 说明 |
+|----------|-----------|------|
+| `openai` | `text-embedding-3-small` | OpenAI 官方 |
+| `openai` + DashScope baseUrl | `text-embedding-v4` | 走阿里云百炼 OpenAI 兼容模式调 Qwen embedding（见下文） |
+| `gemini` | `gemini-embedding-001` | Google |
+| `voyage` | `voyage-4-large` | 中文效果好 |
+| `mistral` | `mistral-embed` | Mistral 官方 |
 
-配置完成后重启服务器。首次访问 CS widget 时会触发知识库扫描 → 切片 → 向量化 → 写入 SQLite（`~/.enclaws/memory/{agentId}.sqlite`）。
+#### 用 Qwen / DashScope embedding 的配置示例
+
+Qwen 无原生 provider 支持，通过 OpenAI 兼容模式接入：
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "enabled": true,
+        "provider": "openai",
+        "model": "text-embedding-v4",
+        "remote": {
+          "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+          "apiKey": "sk-<你的-DashScope-Key>"
+        }
+      }
+    }
+  }
+}
+```
+
+#### 配置完成后必须重启 gateway
+
+```bash
+pm2 restart enclaws   # 或按实际方式重启
+```
+
+首次访问 CS widget 时会触发知识库扫描 → 切片 → 向量化 → 写入 SQLite（`~/.enclaws/memory/{agentId}.sqlite`）。
+
+#### 修改 embedding 模型后必须清空向量库
+
+切换 `provider` / `model` 时向量维度和语义空间不同，旧索引无法兼容，**必须删除 sqlite** 让 EC 重建：
+
+```bash
+# 删除所有 agent 的向量索引
+rm -rf ~/.enclaws/memory/*.sqlite
+
+# 重启 gateway 后，下次 CS 对话自动重建
+```
+
+**什么时候要清空向量库**（`~/.enclaws/memory/*.sqlite`）：
+
+| 场景 | 是否需要清空 |
+|------|------------|
+| 切换 embedding provider / model | ✅ 必须 |
+| 修改 `remote.baseUrl` / `apiKey`（不换 model） | ❌ 不用（仅鉴权信息，向量结果一致） |
+| 新增 / 修改 / 删除知识库 .md 文件 | ❌ 不用（EC 自动检测文件变更并增量重建） |
+
+**重要**：不要混淆 `~/.enclaws/memory/*.sqlite`（向量库）和 `~/.enclaws/enclaws.db`（EC 业务主库）。**清空向量库不影响会话、租户、Agent 配置等业务数据**。
 
 ### 4.3 设置 Widget 密钥
 

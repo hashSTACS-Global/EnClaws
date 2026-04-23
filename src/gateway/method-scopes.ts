@@ -36,6 +36,7 @@ export const SCOPE_BYPASS_METHODS = new Set([
   "auth.register",
   "auth.login",
   "auth.refresh",
+  "captcha.challenge",
   "auth.logout",
   "auth.me",
   // Auth Phase 1

@@ -13,6 +13,7 @@ function rowToApp(row: Record<string, unknown>): TenantChannelApp {
     tenantId: row.tenant_id as string,
     appId: row.app_id as string,
     appSecret: row.app_secret as string,
+    botName: (row.bot_name as string) ?? "",
     groupPolicy: (row.group_policy as ChannelPolicy) ?? "open",
     agentId: (row.agent_id as string) ?? null,
     isActive: row.is_active as boolean,
@@ -26,19 +27,21 @@ export async function createChannelApp(params: {
   tenantId: string;
   appId: string;
   appSecret?: string;
+  botName?: string;
   groupPolicy?: ChannelPolicy;
   agentId?: string | null;
 }): Promise<TenantChannelApp> {
   if (getDbType() === DB_SQLITE) return sqliteChannelApp.createChannelApp(params);
   const result = await query(
-    `INSERT INTO tenant_channel_apps (channel_id, tenant_id, app_id, app_secret, group_policy, agent_id)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO tenant_channel_apps (channel_id, tenant_id, app_id, app_secret, bot_name, group_policy, agent_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
     [
       params.channelId,
       params.tenantId,
       params.appId,
       params.appSecret ?? "",
+      params.botName ?? null,
       params.groupPolicy ?? "open",
       params.agentId ?? null,
     ],
@@ -58,7 +61,7 @@ export async function listChannelApps(channelId: string): Promise<TenantChannelA
 export async function updateChannelApp(
   appDbId: string,
   tenantId: string,
-  updates: Partial<Pick<TenantChannelApp, "appId" | "appSecret" | "groupPolicy" | "agentId" | "isActive">>,
+  updates: Partial<Pick<TenantChannelApp, "appId" | "appSecret" | "botName" | "groupPolicy" | "agentId" | "isActive">>,
 ): Promise<TenantChannelApp | null> {
   if (getDbType() === DB_SQLITE) return sqliteChannelApp.updateChannelApp(appDbId, tenantId, updates);
   const sets: string[] = [];
@@ -72,6 +75,10 @@ export async function updateChannelApp(
   if (updates.appSecret !== undefined) {
     sets.push(`app_secret = $${idx++}`);
     values.push(updates.appSecret);
+  }
+  if (updates.botName !== undefined) {
+    sets.push(`bot_name = $${idx++}`);
+    values.push(updates.botName);
   }
   if (updates.groupPolicy !== undefined) {
     sets.push(`group_policy = $${idx++}`);
@@ -167,10 +174,10 @@ export async function agentChannelBindingExists(
 export async function findChannelAppByAgent(
   tenantId: string,
   agentId: string,
-): Promise<{ channelType: string; appId: string; appSecret: string } | null> {
+): Promise<{ channelType: string; appId: string; appSecret: string; botName: string } | null> {
   if (getDbType() === DB_SQLITE) return sqliteChannelApp.findChannelAppByAgent(tenantId, agentId);
   const result = await query(
-    `SELECT tc.channel_type, ca.app_id, ca.app_secret
+    `SELECT tc.channel_type, ca.app_id, ca.app_secret, ca.bot_name
      FROM tenant_channel_apps ca
      JOIN tenant_channels tc ON tc.id = ca.channel_id
      WHERE ca.tenant_id = $1
@@ -186,6 +193,7 @@ export async function findChannelAppByAgent(
     channelType: row.channel_type as string,
     appId: row.app_id as string,
     appSecret: row.app_secret as string,
+    botName: (row.bot_name as string) ?? "",
   };
 }
 
@@ -208,16 +216,17 @@ export async function listAllTenantChannelApps(tenantId: string): Promise<Array<
   channelType: string;
   channelName: string | null;
   appId: string;
+  botName: string;
   agentId: string | null;
 }>> {
   if (getDbType() === DB_SQLITE) return sqliteChannelApp.listAllTenantChannelApps(tenantId);
   const result = await query(
     `SELECT ca.id, ca.channel_id, tc.channel_type, tc.channel_name,
-            ca.app_id, ca.agent_id
+            ca.app_id, ca.bot_name, ca.agent_id
      FROM tenant_channel_apps ca
      JOIN tenant_channels tc ON tc.id = ca.channel_id
      WHERE ca.tenant_id = $1 AND ca.is_active = true AND tc.is_active = true
-     ORDER BY tc.channel_type, ca.app_id ASC`,
+     ORDER BY tc.channel_type, ca.bot_name ASC`,
     [tenantId],
   );
   return result.rows.map((r) => ({
@@ -226,6 +235,7 @@ export async function listAllTenantChannelApps(tenantId: string): Promise<Array<
     channelType: r.channel_type as string,
     channelName: (r.channel_name as string) ?? null,
     appId: r.app_id as string,
+    botName: (r.bot_name as string) ?? "",
     agentId: (r.agent_id as string) ?? null,
   }));
 }

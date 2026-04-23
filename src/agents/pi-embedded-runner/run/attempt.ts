@@ -556,6 +556,13 @@ export async function runEmbeddedAttempt(
     if (params.tenantId && params.tenantUserId && params.tenantUserRole) {
       const { setTenantUserRole } = await import("../../pi-tools.before-tool-call.js");
       setTenantUserRole(params.tenantId, params.tenantUserId, params.tenantUserRole);
+      log.warn(
+        `[role-trace] attempt.set tenant=${params.tenantId} user=${params.tenantUserId} role=${params.tenantUserRole}`,
+      );
+    } else {
+      log.warn(
+        `[role-trace] attempt.skip tenant=${params.tenantId ?? "<none>"} user=${params.tenantUserId ?? "<none>"} role=${params.tenantUserRole ?? "<none>"}`,
+      );
     }
     // Check if the model supports native image input
     const modelHasVision = params.model.input?.includes("image") ?? false;
@@ -748,6 +755,8 @@ export async function runEmbeddedAttempt(
       userTimeFormat,
       contextFiles,
       memoryCitationsMode: params.config?.memory?.citations,
+      tenantId: params.tenantId,
+      tenantUserRole: params.tenantUserRole,
     });
     const systemPromptReport = buildSystemPromptReport({
       source: "run",
@@ -884,8 +893,13 @@ export async function runEmbeddedAttempt(
         modelRegistry: params.modelRegistry,
         model: params.model,
         thinkingLevel: mapThinkingLevel(params.thinkLevel),
-        tools: builtInTools,
-        customTools: allCustomTools,
+        // Pass undefined (not empty array) when no tools/customTools, so the Pi SDK
+        // drops the `tools` field from the outbound LLM API request. Strict
+        // OpenAI-compatible endpoints (Qwen/DashScope, some DeepSeek routes, Gemini)
+        // reject `tools: []` with 400 "[] is too short - 'tools'".
+        // 空数组会被严校验的 provider 拒掉，传 undefined 让 Pi SDK 整个字段丢弃。
+        tools: builtInTools.length > 0 ? builtInTools : undefined,
+        customTools: allCustomTools.length > 0 ? allCustomTools : undefined,
         sessionManager,
         settingsManager,
         resourceLoader,

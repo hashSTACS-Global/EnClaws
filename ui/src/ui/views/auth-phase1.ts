@@ -29,12 +29,15 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   callAuthRpc,
   changePasswordAuthed,
+  CaptchaInvalidError,
   getAuthCapabilities,
   requestForgotPassword,
   verifyForgotPassword,
   viewTempPassword,
   clearAuth,
 } from "../auth-store.ts";
+import "../components/captcha-field.ts";
+import type { CaptchaField } from "../components/captcha-field.ts";
 import { t, I18nController } from "../../i18n/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -45,18 +48,18 @@ import { t, I18nController } from "../../i18n/index.ts";
 
 function classCount(p: string): number {
   let n = 0;
-  if (/[a-z]/.test(p)) n++;
-  if (/[A-Z]/.test(p)) n++;
-  if (/[0-9]/.test(p)) n++;
-  if (/[^a-zA-Z0-9]/.test(p)) n++;
+  if (/[a-z]/.test(p)) {n++;}
+  if (/[A-Z]/.test(p)) {n++;}
+  if (/[0-9]/.test(p)) {n++;}
+  if (/[^a-zA-Z0-9]/.test(p)) {n++;}
   return n;
 }
 
 function clientValidatePasswordKey(pw: string): string | null {
-  if (!pw || pw.length < 8) return "auth.policy.tooShort";
-  if (pw.length > 128) return "auth.policy.tooLong";
-  if (classCount(pw) < 3) return "auth.policy.missingClasses";
-  if (/(.)\1\1/.test(pw)) return "auth.policy.repeatedChars";
+  if (!pw || pw.length < 8) {return "auth.policy.tooShort";}
+  if (pw.length > 128) {return "auth.policy.tooLong";}
+  if (classCount(pw) < 3) {return "auth.policy.missingClasses";}
+  if (/(.)\1\1/.test(pw)) {return "auth.policy.repeatedChars";}
   return null;
 }
 
@@ -299,16 +302,33 @@ export class EnClawsForgotPassword extends LitElement {
     }
   }
 
+  private getCaptcha(): CaptchaField | null {
+    return this.renderRoot.querySelector("captcha-field");
+  }
+
   private async submit(e: Event) {
     e.preventDefault();
-    if (!this.email) return;
+    if (!this.email) {return;}
+    const captcha = this.getCaptcha();
+    if (!captcha?.captchaId || !captcha.value) {
+      this.error = t("captcha.errRequired");
+      return;
+    }
     this.submitting = true;
     this.error = "";
     try {
-      await requestForgotPassword(this.gatewayUrl, this.email);
+      await requestForgotPassword(this.gatewayUrl, this.email, {
+        id: captcha.captchaId,
+        answer: captcha.value,
+      });
       this.done = true;
     } catch (err) {
-      this.error = err instanceof Error ? err.message : t("auth.forgot.requestFailed");
+      void this.getCaptcha()?.refresh();
+      if (err instanceof CaptchaInvalidError) {
+        this.error = t("captcha.errInvalid");
+      } else {
+        this.error = err instanceof Error ? err.message : t("auth.forgot.requestFailed");
+      }
     } finally {
       this.submitting = false;
     }
@@ -351,6 +371,8 @@ export class EnClawsForgotPassword extends LitElement {
             @input=${(e: InputEvent) => { this.email = (e.target as HTMLInputElement).value; }}
             required
           />
+          <label>${t("captcha.label")}</label>
+          <captcha-field gateway-url=${this.gatewayUrl}></captcha-field>
           ${this.error ? html`<div class="error">${this.error}</div>` : nothing}
           <button class="primary" type="submit" ?disabled=${this.submitting}>
             ${this.submitting ? t("auth.forgot.sending") : t("auth.forgot.submit")}
@@ -369,7 +391,7 @@ export class EnClawsForgotPassword extends LitElement {
 function readHashParam(name: string): string {
   const hash = window.location.hash || "";
   const qIndex = hash.indexOf("?");
-  if (qIndex < 0) return "";
+  if (qIndex < 0) {return "";}
   const params = new URLSearchParams(hash.slice(qIndex + 1));
   return params.get(name) ?? "";
 }
@@ -495,7 +517,7 @@ export class EnClawsTempPasswordView extends LitElement {
   }
 
   private copy() {
-    if (!this.tempPassword) return;
+    if (!this.tempPassword) {return;}
     void navigator.clipboard?.writeText(this.tempPassword).catch(() => undefined);
   }
 
