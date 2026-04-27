@@ -241,6 +241,9 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
           modelConfig?: ModelConfigEntry[];
           systemPrompt?: string;
           feishuOpenId?: string;
+          /** Boss's Feishu open_id (scanner from OAuth). Stored on agent.config
+           * so OPC notification push can DM them. */
+          bossOpenId?: string;
           tools?: { deny?: string[] };
         };
       }>;
@@ -284,17 +287,64 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
         seen.set(key, app.appId);
       }
 
-      // Reject duplicates against existing channels of the same type in this tenant.
+      // Duplicate handling. Two cases to distinguish:
+      //
+      //   a) ALL apps in this request are already bound to the same existing
+      //      channel in this tenant → treat as idempotent success, return the
+      //      existing channel. This covers OPC onboarding re-runs (same bot
+      //      scanned twice), portal hot-reloads mid-flow, etc. — the caller
+      //      just wants what's already there.
+      //
+      //   b) Any app in this request conflicts with a DIFFERENT channel, or
+      //      only some of the apps are duplicates → still a real conflict
+      //      (caller is trying to mix new + existing in a confusing way).
+      //      Keep the original reject behavior.
+      const conflicts: Array<{ appId: string; existingChannelId: string; existingChannelName: string | null }> = [];
       for (const app of apps) {
         const conflict = await findConflictingAppId(ctx.tenantId, channelType, app.appId);
         if (conflict) {
-          respond(false, undefined, errorShape(
-            ErrorCodes.INVALID_REQUEST,
-            DUPLICATE_APP_ID_ACROSS_CHANNELS,
-            { details: { appId: app.appId, channelName: conflict.channelName } },
-          ));
+          conflicts.push({
+            appId: app.appId,
+            existingChannelId: conflict.channelId,
+            existingChannelName: conflict.channelName,
+          });
+        }
+      }
+      if (conflicts.length === apps.length && conflicts.length > 0) {
+        const channelIds = new Set(conflicts.map(c => c.existingChannelId));
+        if (channelIds.size === 1) {
+          // All apps already live on the same existing channel — idempotent success.
+          const existingChannelId = conflicts[0].existingChannelId;
+          const existingChannel = await getTenantChannelById(existingChannelId, ctx.tenantId);
+          const existingApps = await listChannelApps(existingChannelId);
+          respond(true, {
+            id: existingChannelId,
+            channelType,
+            channelName: existingChannel?.channelName ?? conflicts[0].existingChannelName,
+            channelPolicy: existingChannel?.channelPolicy ?? "open",
+            config: existingChannel?.config ?? {},
+            apps: existingApps.map(a => ({
+              id: a.id,
+              appId: a.appId,
+              appSecret: a.appSecret,
+              botName: a.botName,
+              groupPolicy: a.groupPolicy,
+              isActive: a.isActive,
+            })),
+            agents: [],
+            reused: true,
+          });
           return;
         }
+      }
+      if (conflicts.length > 0) {
+        const first = conflicts[0];
+        respond(false, undefined, errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          DUPLICATE_APP_ID_ACROSS_CHANNELS,
+          { details: { appId: first.appId, channelName: first.existingChannelName } },
+        ));
+        return;
       }
     }
 
@@ -404,6 +454,7 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
               displayName,
               ...(agentConfig?.systemPrompt ? { systemPrompt: agentConfig.systemPrompt } : {}),
               ...(agentConfig?.feishuOpenId ? { feishuOpenId: agentConfig.feishuOpenId } : {}),
+              ...(agentConfig?.bossOpenId ? { bossOpenId: agentConfig.bossOpenId } : {}),
               ...(agentConfig?.tools ? { tools: agentConfig.tools } : {}),
             },
             modelConfig: agentConfig?.modelConfig ?? [],
@@ -413,6 +464,18 @@ export const tenantChannelsHandlers: GatewayRequestHandlers = {
             agentId: agent.agentId,
             name: agent.name,
           });
+
+          // Bind the newly-created agent back to this channel app. Without this
+          // step, tenant_channel_apps.agent_id stays NULL and the admin UI shows
+          // "该 Agent 暂未关联任何频道"; inbound messages also have no routing
+          // target. The existing "bind existing agent" branch above already does
+          // this — we just mirror it here for the auto-create branch.
+          try {
+            await updateChannelApp(app.id, ctx.tenantId, { agentId: agent.agentId });
+          } catch (bindErr: unknown) {
+            const bindMsg = bindErr instanceof Error ? bindErr.message : "unknown";
+            console.warn(`[tenant.channels.create] Bind auto-created agent ${agent.agentId} to app ${app.appId} failed: ${bindMsg}`);
+          }
 
           // Initialize tenant + agent directory and bootstrap files on disk
           // (skip user-level dirs — they are created on-demand when a user starts a session)

@@ -32,6 +32,11 @@ import { toolsCatalogHandlers } from "./server-methods/tools-catalog.js";
 import { sysToolsHandlers } from "./server-methods/sys-tools-api.js";
 import { tenantHandlers } from "./server-methods/tenant-api.js";
 import { tenantAgentsHandlers } from "./server-methods/tenant-agents-api.js";
+import { tenantWorkspaceHandlers } from "./server-methods/tenant-workspace-api.js";
+import { tenantCompanyTemplateHandlers } from "./server-methods/tenant-company-template-api.js";
+import { tenantOpcEmployeeHandlers } from "./server-methods/tenant-opc-employee-api.js";
+import { opcNotificationHandlers } from "./server-methods/opc-notification-api.js";
+import { opcInboxHandlers } from "./server-methods/opc-inbox-api.js";
 import { tenantChannelsHandlers } from "./server-methods/tenant-channels-api.js";
 import { feishuRegisterHandlers } from "./server-methods/feishu-register-api.js";
 import { wecomRegisterHandlers } from "./server-methods/wecom-register-api.js";
@@ -131,6 +136,11 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...captchaHandlers,
   ...tenantHandlers,
   ...tenantAgentsHandlers,
+  ...tenantWorkspaceHandlers,
+  ...tenantCompanyTemplateHandlers,
+  ...tenantOpcEmployeeHandlers,
+  ...opcNotificationHandlers,
+  ...opcInboxHandlers,
   ...tenantChannelsHandlers,
   ...feishuRegisterHandlers,
   ...wecomRegisterHandlers,

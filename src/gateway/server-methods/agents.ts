@@ -27,6 +27,7 @@ import {
   pruneAgentConfig,
 } from "../../commands/agents.config.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
+import { loadTenantConfig } from "../../config/tenant-config.js";
 import { resolveSessionTranscriptsDirForAgent } from "../../config/sessions/paths.js";
 import { resolveTenantAgentDir } from "../../config/sessions/tenant-paths.js";
 import type { TenantContext } from "../../auth/middleware.js";
@@ -77,17 +78,35 @@ const AGENT_DIR_FILES = new Set([
   DEFAULT_BOOTSTRAP_FILENAME,
 ]);
 
-function resolveAgentWorkspaceFileOrRespondError(
+/**
+ * Load the right config view for the caller: tenant-aware when a tenant
+ * context is present (so tenant-only agents created via tenant.agents.create
+ * or opcEmployee.activate are visible in admin endpoints), falling back to
+ * the global config otherwise.
+ */
+async function loadConfigForClient(
+  tenant?: TenantContext | null,
+): Promise<ReturnType<typeof loadConfig>> {
+  if (tenant?.tenantId) {
+    return (await loadTenantConfig(tenant.tenantId, {
+      userId: tenant.userId,
+      userRole: tenant.role,
+    })) as ReturnType<typeof loadConfig>;
+  }
+  return loadConfig();
+}
+
+async function resolveAgentWorkspaceFileOrRespondError(
   params: Record<string, unknown>,
   respond: RespondFn,
   tenant?: TenantContext | null,
-): {
+): Promise<{
   cfg: ReturnType<typeof loadConfig>;
   agentId: string;
   workspaceDir: string;
   name: string;
-} | null {
-  const cfg = loadConfig();
+} | null> {
+  const cfg = await loadConfigForClient(tenant);
   const rawAgentId = params.agentId;
   const agentId = resolveAgentIdOrError(
     typeof rawAgentId === "string" || typeof rawAgentId === "number" ? String(rawAgentId) : "",
@@ -362,7 +381,7 @@ async function moveToTrashBestEffort(pathname: string): Promise<void> {
 }
 
 export const agentsHandlers: GatewayRequestHandlers = {
-  "agents.list": ({ params, respond }) => {
+  "agents.list": async ({ params, respond, client }) => {
     if (!validateAgentsListParams(params)) {
       respond(
         false,
@@ -375,7 +394,8 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const cfg = loadConfig();
+    const tenant = (client as unknown as { tenant?: TenantContext })?.tenant ?? null;
+    const cfg = await loadConfigForClient(tenant);
     const result = listAgentsForGateway(cfg);
     respond(true, result, undefined);
   },
@@ -576,13 +596,13 @@ export const agentsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const cfg = loadConfig();
+    const tenant = (client as unknown as { tenant?: TenantContext })?.tenant ?? null;
+    const cfg = await loadConfigForClient(tenant);
     const agentId = resolveAgentIdOrError(String(params.agentId ?? ""), cfg);
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
       return;
     }
-    const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
     // Multi-tenant: list files from the agent directory instead of workspace
     const workspaceDir = tenant?.tenantId
       ? resolveTenantAgentDir(tenant.tenantId, agentId)
@@ -611,7 +631,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
     const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
-    const resolved = resolveAgentWorkspaceFileOrRespondError(params, respond, tenant);
+    const resolved = await resolveAgentWorkspaceFileOrRespondError(params, respond, tenant);
     if (!resolved) {
       return;
     }
@@ -704,7 +724,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
     const tenant = (client as unknown as { tenant?: TenantContext })?.tenant;
-    const resolved = resolveAgentWorkspaceFileOrRespondError(params, respond, tenant);
+    const resolved = await resolveAgentWorkspaceFileOrRespondError(params, respond, tenant);
     if (!resolved) {
       return;
     }

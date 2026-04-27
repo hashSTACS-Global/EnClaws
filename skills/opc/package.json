@@ -1,0 +1,6 @@
+{
+  "name": "enclaws-opc-skills",
+  "private": true,
+  "type": "commonjs",
+  "description": "OPC (一人公司) differentiation skills for EnClaws — compliance/classify/rank/format/roi/publish."
+}

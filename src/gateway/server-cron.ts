@@ -2,6 +2,7 @@ import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import type { CliDeps } from "../cli/deps.js";
 import { createOutboundSendDeps } from "../cli/outbound-send-deps.js";
 import { loadConfig } from "../config/config.js";
+import { peekTenantConfigCache } from "../config/tenant-config.js";
 import { callGateway } from "./call.js";
 import {
   canonicalizeMainSessionAlias,
@@ -431,8 +432,14 @@ export function buildTenantCronService(params: {
   const defaultAgentId = resolveDefaultAgentId(params.cfg);
   const runLogPrune = resolveCronRunLogPruneOptions(params.cfg.cron?.runLog);
 
+  // Prefer cached tenant config when available so tenant-only agents (e.g. those
+  // created via tenant.agents.create or opcEmployee.activate) and their model
+  // refs are visible to the cron isolated runner. Without this, falls back to
+  // loadConfig() (global) which doesn't know about tenant agents — causing the
+  // runner to substitute the default agent + DEFAULT_PROVIDER ("deepseek-web"),
+  // which then fails with "Unknown model: deepseek-web/deepseek-chat".
   const resolveCronAgent = (requested?: string | null) => {
-    const runtimeConfig = loadConfig();
+    const runtimeConfig = peekTenantConfigCache(params.tenantId) ?? loadConfig();
     const normalized =
       typeof requested === "string" && requested.trim() ? normalizeAgentId(requested) : undefined;
     const hasAgent =

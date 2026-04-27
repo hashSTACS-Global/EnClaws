@@ -13,6 +13,7 @@ import { createGatewayTool } from "./tools/gateway-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
+import { createOpcTool } from "./tools/opc-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
 import { createSessionsEvaluateTool } from "./tools/sessions-evaluate-tool.js";
 import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
@@ -118,6 +119,11 @@ export function createOpenClawTools(options?: {
         requireExplicitTarget: options?.requireExplicitMessageTarget,
         requesterSenderId: options?.requesterSenderId ?? undefined,
       });
+  // Derive OPC employee role from agent id (convention: `opc-{role}`) so the
+  // opc.notify tool's `from` param can auto-fill.
+  const opcAgentId = options?.requesterAgentIdOverride?.trim() ?? "";
+  const opcDefaultFrom = opcAgentId.startsWith("opc-") ? opcAgentId.slice(4) : undefined;
+
   const tools: AnyAgentTool[] = [
     createBrowserTool({
       sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,
@@ -145,6 +151,22 @@ export function createOpenClawTools(options?: {
     createGatewayTool({
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,
+    }),
+    // OPC notification dispatch + inbox reply routing. Available to every
+    // tenant agent, but only the opc-notify facade agent typically uses
+    // route_reply (others just use notify when their workflow finishes).
+    //
+    // Tool runs in-process for `notify` so it doesn't need gateway auth — we
+    // capture tenantId/userId here and pass straight to dispatchNotificationCore.
+    // `defaultFrom` is derived from the agent id (convention: `opc-{role}`)
+    // so LLMs don't have to remember to pass `from:` every time.
+    createOpcTool({
+      tenantId: options?.tenantId,
+      userId: options?.tenantUserId,
+      defaultFrom: opcDefaultFrom,
+      // Agent-scoped cron runs set tenantUserId=undefined on purpose; use the
+      // agent id as the audit author so `created_by` isn't empty.
+      fallbackAuthorId: options?.requesterAgentIdOverride ?? undefined,
     }),
     createAgentsListTool({
       agentSessionKey: options?.agentSessionKey,

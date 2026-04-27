@@ -154,6 +154,19 @@ async function buildTenantConfig(
 }
 
 /**
+ * Synchronously read the cached tenant config without triggering a DB load.
+ * Returns null if not cached or expired. Useful in sync code paths (e.g. cron
+ * resolveCronAgent) that need tenant-aware data when available.
+ */
+export function peekTenantConfigCache(tenantId: string): OpenClawConfig | null {
+  const cached = tenantConfigCache.get(tenantId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.config;
+  }
+  return null;
+}
+
+/**
  * Invalidate cached config for a tenant (e.g., after config update).
  */
 export function invalidateTenantConfigCache(tenantId: string): void {

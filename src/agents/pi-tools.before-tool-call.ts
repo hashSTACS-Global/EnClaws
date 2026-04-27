@@ -302,6 +302,27 @@ export async function runBeforeToolCallHook(args: {
     return { blocked: true, reason: skillDenied };
   }
 
+  // OPC-specific guard: the `_notifications/` directory is owned by the opc
+  // notification dispatcher. Agents sometimes try to write markdown files there
+  // directly instead of calling opc({action:"notify"}) — which has ZERO side
+  // effects on IM (no REST push). Block that with a helpful redirect so the
+  // LLM learns to use the right tool on retry.
+  if (toolName === "write" || toolName === "edit") {
+    const p = params as Record<string, unknown> | undefined;
+    const rawPath = p ? String(p.file_path ?? p.filePath ?? p.path ?? "") : "";
+    // Normalize both Windows and POSIX separators for the check
+    const norm = rawPath.replace(/\\/g, "/");
+    if (/(?:^|\/)_notifications\//.test(norm) || /\b_notifications[\\/]/.test(rawPath)) {
+      return {
+        blocked: true,
+        reason:
+          "写入 _notifications/ 被禁止。要通知老板请**发起 tool_call**：" +
+          'opc({ action: "notify", from: "<你的 role>", message: "<内容>", priority: "normal" })。' +
+          "这个目录只由 opc.notify 工具内部写入；你手写文件不会触发 IM 推送，老板收不到消息。",
+      };
+    }
+  }
+
   // Path permission policy: default-deny model for multi-tenant sessions.
   // Only active when tenantId + userId are present in context (i.e. multi-tenant mode).
   // The same policy instance gates both file tools (read/write/edit) and exec

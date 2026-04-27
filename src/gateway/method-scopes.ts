@@ -89,6 +89,27 @@ export const SCOPE_BYPASS_METHODS = new Set([
   "tenant.usage.quota",
   // Tenant onboarding
   "tenant.onboarding.setup",
+  // Tenant workspace (OPC data store; multi-tenant RBAC handles auth)
+  "workspace.read",
+  "workspace.write",
+  "workspace.list",
+  "workspace.query",
+  "workspace.delete",
+  "workspace.stat",
+  // OPC company template
+  "tenant.companyTemplate.list",
+  "tenant.companyTemplate.apply",
+  "tenant.companyTemplate.current",
+  // OPC employee lifecycle
+  "tenant.opcEmployee.list",
+  "tenant.opcEmployee.activationSpec",
+  "tenant.opcEmployee.activate",
+  "tenant.opcEmployee.deactivate",
+  "tenant.opcEmployee.reconfigure",
+  // OPC notification dispatch
+  "notification.dispatch",
+  // OPC inbound IM reply routing (called by opc-notify agent's route-reply skill)
+  "tenant.opcInbox.routeReply",
   // Tenant cron (cross-agent)
   "cron.listAll",
   // Platform overview (handled by platform-admin RBAC)

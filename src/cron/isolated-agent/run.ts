@@ -46,6 +46,7 @@ import {
   resolveTenantSessionTranscriptPath,
 } from "../../config/sessions/tenant-paths.js";
 import type { AgentDefaultsConfig } from "../../config/types.js";
+import { resolveUserPath } from "../../utils.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
 import { logWarn } from "../../logger.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
@@ -74,6 +75,7 @@ import {
 import { resolveCronAgentSessionKey } from "./session-key.js";
 import { resolveCronSession } from "./session.js";
 import { resolveCronSkillsSnapshot } from "./skills-snapshot.js";
+import { getTenantAgent } from "../../db/models/tenant-agent.js";
 
 export type RunCronAgentTurnResult = {
   /** Last non-empty agent text output (not truncated). */
@@ -126,9 +128,38 @@ export async function runCronIsolatedAgentTurn(params: {
         ? params.job.agentId
         : undefined;
   const normalizedRequested = requestedAgentId ? normalizeAgentId(requestedAgentId) : undefined;
-  const agentConfigOverride = normalizedRequested
+  let agentConfigOverride = normalizedRequested
     ? resolveAgentConfig(params.cfg, normalizedRequested)
     : undefined;
+  // Belt-and-suspenders: when running under a tenant, merge in the DB's
+  // tenant_agents.config whenever the cfg-derived override is missing the
+  // workspace field. Previously we only fell back when agentConfigOverride was
+  // totally undefined, but `resolveAgentConfig` can return a half-populated
+  // object (e.g. entry exists in cfg.agents.list but `workspace` wasn't set
+  // during config build — observed when the entry came from global loadConfig
+  // rather than tenant cache). The result: OPC employees silently wrote to the
+  // per-user workspace dir and couldn't see tenant-level files like topics/.
+  const hasWorkspace =
+    typeof agentConfigOverride?.workspace === "string" && agentConfigOverride.workspace.trim().length > 0;
+  if (!hasWorkspace && params.tenantId && normalizedRequested) {
+    try {
+      const dbAgent = await getTenantAgent(params.tenantId, normalizedRequested);
+      if (dbAgent?.config && typeof dbAgent.config === "object") {
+        // Merge: keep any fields from cfg-derived override, but let DB config
+        // fill in missing ones (especially workspace).
+        agentConfigOverride = {
+          ...(dbAgent.config as typeof agentConfigOverride),
+          ...agentConfigOverride,
+          workspace:
+            (agentConfigOverride && typeof agentConfigOverride.workspace === "string" && agentConfigOverride.workspace.trim())
+              ? agentConfigOverride.workspace
+              : ((dbAgent.config as Record<string, unknown>).workspace as string | undefined),
+        } as typeof agentConfigOverride;
+      }
+    } catch {
+      // Non-fatal.
+    }
+  }
   const { model: overrideModel, ...agentOverrideRest } = agentConfigOverride ?? {};
   // Use the requested agentId even when there is no explicit agent config entry.
   // This ensures auth-profiles, workspace, and agentDir all resolve to the
@@ -161,9 +192,19 @@ export async function runCronIsolatedAgentTurn(params: {
   // (USER.md, workspace MEMORY.md) to avoid ENOENT noise and orphan data.
   const isAgentScopedUser = params.userId != null && params.userId === agentId;
 
-  const workspaceDirRaw = params.tenantId
-    ? resolveTenantAgentWorkspaceDir(params.tenantId, agentId, params.userId)
-    : resolveAgentWorkspaceDir(params.cfg, agentId);
+  // Allow the agent's config to override the default workspace path. Used by
+  // OPC so the 6 employee agents share a tenant-level workspace dir (for
+  // cross-agent file collaboration like topics/ → drafts/ → published/) rather
+  // than each writing to its own per-user workspace.
+  const configuredWorkspace =
+    typeof agentConfigOverride?.workspace === "string" && agentConfigOverride.workspace.trim()
+      ? resolveUserPath(agentConfigOverride.workspace.trim())
+      : null;
+  const workspaceDirRaw = configuredWorkspace
+    ? configuredWorkspace
+    : params.tenantId
+      ? resolveTenantAgentWorkspaceDir(params.tenantId, agentId, params.userId)
+      : resolveAgentWorkspaceDir(params.cfg, agentId);
   const agentDir = params.tenantId
     ? resolveTenantAgentDir(params.tenantId, agentId)
     : resolveAgentDir(params.cfg, agentId);
