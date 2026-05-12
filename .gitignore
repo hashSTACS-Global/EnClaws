@@ -149,3 +149,6 @@ installer/rcedit-x64.exe
 docs/superpowers/
 .superpowers
 .vscode/
+
+# npm pack artifacts
+*.tgz
