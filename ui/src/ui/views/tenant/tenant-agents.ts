@@ -40,6 +40,14 @@ import {
   TOOL_DESC_KEY,
 } from "../tool-group-defs.ts";
 import { SKILL_LABEL_KEY, SKILL_DESC_KEY } from "../skill-defs.ts";
+import { renderAgentKnowledge } from "../agents-panels-knowledge.ts";
+import type {
+  AgentFileEntry,
+  AgentsMemoryGetResult,
+  AgentsMemoryListResult,
+  AgentsMemorySetResult,
+  AgentsMemoryStatusResult,
+} from "../../types.ts";
 
 
 interface ModelConfigEntry {
@@ -218,6 +226,43 @@ export class TenantAgentsView extends LitElement {
       background: var(--card, #141414); border: 1px solid var(--border, #262626);
       border-radius: var(--radius, 8px); padding: 1.25rem;
     }
+    .card {
+      background: var(--card, #141414); border: 1px solid var(--border, #262626);
+      border-radius: var(--radius, 8px); padding: 1.25rem;
+    }
+    .card-title { font-size: 15px; font-weight: 600; color: var(--text, #e5e5e5); }
+    .card-sub { color: var(--text-muted, #525252); font-size: 13px; line-height: 1.5; }
+    .row { display: flex; align-items: center; gap: 8px; }
+    .muted { color: var(--text-muted, #525252); }
+    .mono { font-family: monospace; }
+    .btn--sm { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+    .btn--primary { background: var(--accent, #3b82f6); color: white; }
+    .btn--icon {
+      width: 32px; height: 32px; padding: 0; display: inline-grid; place-items: center;
+    }
+    .danger { color: var(--text-destructive, #fca5a5); }
+    .input {
+      width: 100%; padding: 0.45rem 0.65rem; background: var(--bg, #0a0a0a);
+      border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px);
+      color: var(--text, #e5e5e5); font-size: 0.85rem; outline: none; box-sizing: border-box;
+    }
+    .list { display: grid; gap: 8px; }
+    .list-item {
+      display: flex; justify-content: space-between; gap: 12px;
+      padding: 0.7rem 0.8rem; border: 1px solid var(--border, #262626);
+      border-radius: var(--radius-md, 6px); background: var(--bg, #0a0a0a);
+    }
+    .list-item.clickable { cursor: pointer; }
+    .list-item.clickable:hover, .list-item.active { border-color: var(--accent, #3b82f6); }
+    .list-main { min-width: 0; display: grid; gap: 2px; }
+    .list-title { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .list-sub { font-size: 0.75rem; color: var(--text-muted, #525252); }
+    .stat-grid { display: grid; gap: 0.85rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+    .stat { padding: 0.75rem; background: var(--bg, #0a0a0a); border: 1px solid var(--border, #262626); border-radius: var(--radius-md, 6px); }
+    .stat-label { color: var(--text-muted, #525252); font-size: 0.75rem; }
+    .stat-value { margin-top: 4px; font-size: 1.1rem; font-weight: 600; }
+    .callout { padding: 0.65rem 0.75rem; border-radius: var(--radius-md, 6px); font-size: 0.85rem; }
+    .callout.danger { background: var(--bg-destructive, #2d1215); border: 1px solid var(--border-destructive, #7f1d1d); }
     .detail-header {
       display: flex; justify-content: space-between; align-items: center;
     }
@@ -622,6 +667,16 @@ export class TenantAgentsView extends LitElement {
   @state() private personaFileDrafts: Record<string, string> = {};
   @state() private personaFileSaving = false;
 
+  // Agent knowledge base state
+  @state() private agentKnowledgeLoading = false;
+  @state() private agentKnowledgeError: string | null = null;
+  @state() private agentKnowledgeList: AgentsMemoryListResult | null = null;
+  @state() private agentKnowledgeStatus: AgentsMemoryStatusResult | null = null;
+  @state() private agentKnowledgeFileContents: Record<string, string> = {};
+  @state() private agentKnowledgeFileDrafts: Record<string, string> = {};
+  @state() private agentKnowledgeFileActive: string | null = null;
+  @state() private agentKnowledgeSaving = false;
+
   // Cron panel state
   @state() private cronJobs: CronJob[] = [];
   @state() private cronLoading = false;
@@ -762,6 +817,131 @@ export class TenantAgentsView extends LitElement {
     }
   }
 
+  private resetKnowledgeState() {
+    this.agentKnowledgeLoading = false;
+    this.agentKnowledgeError = null;
+    this.agentKnowledgeList = null;
+    this.agentKnowledgeStatus = null;
+    this.agentKnowledgeFileActive = null;
+    this.agentKnowledgeFileContents = {};
+    this.agentKnowledgeFileDrafts = {};
+  }
+
+  private normalizeKnowledgeFileName(raw: string): string | null {
+    const clean = raw.trim().replace(/\\/g, "/");
+    if (!clean) {return null;}
+    if (clean === "MEMORY.md" || clean === "memory.md") {
+      return clean;
+    }
+    const withoutPrefix = clean.startsWith("memory/") ? clean.slice("memory/".length) : clean;
+    const safeName = withoutPrefix
+      .split("/")
+      .filter(Boolean)
+      .map((part) => part.replace(/[^a-zA-Z0-9\-_.]/g, ""))
+      .filter(Boolean)
+      .join("/");
+    if (!safeName) {return null;}
+    return `memory/${safeName.endsWith(".md") ? safeName : `${safeName}.md`}`;
+  }
+
+  private mergeKnowledgeFileEntry(entry: AgentFileEntry) {
+    if (!this.agentKnowledgeList) {return;}
+    const files = this.agentKnowledgeList.files.some((file) => file.name === entry.name)
+      ? this.agentKnowledgeList.files.map((file) => (file.name === entry.name ? entry : file))
+      : [...this.agentKnowledgeList.files, entry];
+    this.agentKnowledgeList = { ...this.agentKnowledgeList, files };
+  }
+
+  private async loadAgentKnowledge(agentId: string) {
+    if (this.agentKnowledgeLoading) {return;}
+    this.agentKnowledgeLoading = true;
+    this.agentKnowledgeError = null;
+    try {
+      const result = await this.rpc("agents.memory.list", { agentId }) as AgentsMemoryListResult | null;
+      if (result) {
+        this.agentKnowledgeList = result;
+        if (this.agentKnowledgeFileActive && !result.files.some((file) => file.name === this.agentKnowledgeFileActive)) {
+          this.agentKnowledgeFileActive = null;
+        }
+      }
+    } catch (err) {
+      this.agentKnowledgeError = String(err);
+    } finally {
+      this.agentKnowledgeLoading = false;
+    }
+  }
+
+  private async loadAgentKnowledgeStatus(agentId: string) {
+    try {
+      const result = await this.rpc("agents.memory.status", { agentId }) as AgentsMemoryStatusResult | null;
+      if (result) {
+        this.agentKnowledgeStatus = result;
+      }
+    } catch {
+      // Status is supplemental; keep the editor usable if the index probe fails.
+    }
+  }
+
+  private async loadAgentKnowledgeFileContent(agentId: string, name: string) {
+    if (this.agentKnowledgeLoading || Object.hasOwn(this.agentKnowledgeFileContents, name)) {return;}
+    this.agentKnowledgeLoading = true;
+    this.agentKnowledgeError = null;
+    try {
+      const result = await this.rpc("agents.memory.get", { agentId, name }) as AgentsMemoryGetResult | null;
+      if (result?.file) {
+        const content = result.file.content ?? "";
+        this.mergeKnowledgeFileEntry(result.file);
+        this.agentKnowledgeFileContents = { ...this.agentKnowledgeFileContents, [name]: content };
+        this.agentKnowledgeFileDrafts = { ...this.agentKnowledgeFileDrafts, [name]: content };
+      }
+    } catch (err) {
+      this.agentKnowledgeError = String(err);
+    } finally {
+      this.agentKnowledgeLoading = false;
+    }
+  }
+
+  private async saveAgentKnowledgeFile(agentId: string, name: string) {
+    const content = this.agentKnowledgeFileDrafts[name] ?? this.agentKnowledgeFileContents[name] ?? "";
+    this.agentKnowledgeSaving = true;
+    this.agentKnowledgeError = null;
+    try {
+      const result = await this.rpc("agents.memory.set", { agentId, name, content }) as AgentsMemorySetResult | null;
+      if (result?.file) {
+        this.mergeKnowledgeFileEntry(result.file);
+        this.agentKnowledgeFileContents = { ...this.agentKnowledgeFileContents, [name]: content };
+        this.agentKnowledgeFileDrafts = { ...this.agentKnowledgeFileDrafts, [name]: content };
+        void this.loadAgentKnowledgeStatus(agentId);
+      }
+    } catch (err) {
+      this.agentKnowledgeError = String(err);
+    } finally {
+      this.agentKnowledgeSaving = false;
+    }
+  }
+
+  private async deleteAgentKnowledgeFile(agentId: string, name: string) {
+    this.agentKnowledgeSaving = true;
+    this.agentKnowledgeError = null;
+    try {
+      await this.rpc("agents.memory.delete", { agentId, name });
+      if (this.agentKnowledgeList) {
+        this.agentKnowledgeList = {
+          ...this.agentKnowledgeList,
+          files: this.agentKnowledgeList.files.filter((file) => file.name !== name),
+        };
+      }
+      if (this.agentKnowledgeFileActive === name) {
+        this.agentKnowledgeFileActive = null;
+      }
+      void this.loadAgentKnowledgeStatus(agentId);
+    } catch (err) {
+      this.agentKnowledgeError = String(err);
+    } finally {
+      this.agentKnowledgeSaving = false;
+    }
+  }
+
   private async loadPersonaFileContent(agentId: string, name: string) {
     if (Object.hasOwn(this.personaFileContents, name)) { return; }
     this.personaFilesLoading = true;
@@ -833,6 +1013,10 @@ export class TenantAgentsView extends LitElement {
               this.personaFileContents = {};
               this.personaFileDrafts = {};
               void this.loadPersonaFiles(this.selectedAgentId);
+            } else if (this.activePanel === "knowledge") {
+              this.resetKnowledgeState();
+              void this.loadAgentKnowledge(this.selectedAgentId);
+              void this.loadAgentKnowledgeStatus(this.selectedAgentId);
             }
           }
           this.initialAgentId = null;
@@ -1154,7 +1338,7 @@ export class TenantAgentsView extends LitElement {
     const isSelected = this.selectedAgentId === agent.agentId;
     return html`
       <button type="button" class="agent-row ${isSelected ? "active" : ""}"
-        @click=${() => { this.selectedAgentId = agent.agentId; this.activePanel = "overview"; this.showForm = false; this.inlineModelConfig = null; this.toolsPendingDeny = null; this.skillsPendingEnabled = null; this.cronLoaded = false; }}>
+        @click=${() => { this.selectedAgentId = agent.agentId; this.activePanel = "overview"; this.showForm = false; this.inlineModelConfig = null; this.toolsPendingDeny = null; this.skillsPendingEnabled = null; this.cronLoaded = false; this.resetKnowledgeState(); }}>
         <div class="agent-avatar">${initial}</div>
         <div class="agent-info">
           <div class="agent-title">${displayName}</div>
@@ -1205,7 +1389,7 @@ export class TenantAgentsView extends LitElement {
         ${this.activePanel === "skills" ? this.renderPanelSkills(agent) : nothing}
         ${this.activePanel === "channels" ? this.renderPanelChannels() : nothing}
         ${this.activePanel === "cron" ? this.renderPanelCron(agent) : nothing}
-        ${this.activePanel === "knowledge" ? this.renderPanelEmpty() : nothing}
+        ${this.activePanel === "knowledge" ? this.renderPanelKnowledge(agent) : nothing}
       </div>
     `;
   }
@@ -1238,6 +1422,13 @@ export class TenantAgentsView extends LitElement {
               }
               if (tab.id === "skills" && this.selectedAgentId) {
                 void this.loadSkillsForAgent(this.selectedAgentId);
+              }
+              if (tab.id === "knowledge" && this.selectedAgentId) {
+                if (this.agentKnowledgeList?.agentId !== this.selectedAgentId) {
+                  this.resetKnowledgeState();
+                  void this.loadAgentKnowledge(this.selectedAgentId);
+                  void this.loadAgentKnowledgeStatus(this.selectedAgentId);
+                }
               }
             }}>
             ${tab.label}
@@ -1992,6 +2183,47 @@ export class TenantAgentsView extends LitElement {
 
   private renderPanelEmpty() {
     return html`<div class="empty">${t("common.comingSoon")}</div>`;
+  }
+
+  private renderPanelKnowledge(agent: TenantAgent) {
+    return renderAgentKnowledge({
+      agentId: agent.agentId,
+      agentKnowledgeList: this.agentKnowledgeList,
+      agentKnowledgeStatus: this.agentKnowledgeStatus,
+      agentKnowledgeLoading: this.agentKnowledgeLoading,
+      agentKnowledgeError: this.agentKnowledgeError,
+      agentKnowledgeFileActive: this.agentKnowledgeFileActive,
+      agentKnowledgeFileContents: this.agentKnowledgeFileContents,
+      agentKnowledgeFileDrafts: this.agentKnowledgeFileDrafts,
+      agentKnowledgeSaving: this.agentKnowledgeSaving,
+      onLoadFiles: (agentId) => {
+        void this.loadAgentKnowledge(agentId);
+        void this.loadAgentKnowledgeStatus(agentId);
+      },
+      onSelectFile: (name) => {
+        const normalized = this.normalizeKnowledgeFileName(name);
+        if (!normalized) {
+          this.agentKnowledgeError = "Invalid memory file path";
+          return;
+        }
+        this.agentKnowledgeFileActive = normalized;
+        if (!Object.hasOwn(this.agentKnowledgeFileContents, normalized)) {
+          this.agentKnowledgeFileDrafts = { ...this.agentKnowledgeFileDrafts, [normalized]: "" };
+          void this.loadAgentKnowledgeFileContent(agent.agentId, normalized);
+        }
+      },
+      onFileDraftChange: (name, content) => {
+        this.agentKnowledgeFileDrafts = { ...this.agentKnowledgeFileDrafts, [name]: content };
+      },
+      onFileReset: (name) => {
+        this.agentKnowledgeFileDrafts = {
+          ...this.agentKnowledgeFileDrafts,
+          [name]: this.agentKnowledgeFileContents[name] ?? "",
+        };
+      },
+      onFileSave: (name) => void this.saveAgentKnowledgeFile(agent.agentId, name),
+      onFileDelete: (name) => void this.deleteAgentKnowledgeFile(agent.agentId, name),
+    });
   }
 
   private async saveSkillsDisabled(agent: TenantAgent, disabled: string[]) {
