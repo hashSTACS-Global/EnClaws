@@ -120,11 +120,11 @@ function normalizeSources(
   return Array.from(normalized);
 }
 
-function resolveStorePath(agentId: string, raw?: string): string {
+function resolveStorePath(agentId: string, raw?: string, defaultPath?: string): string {
   const stateDir = resolveStateDir(process.env, os.homedir);
   const fallback = path.join(stateDir, "memory", `${agentId}.sqlite`);
   if (!raw) {
-    return fallback;
+    return defaultPath ? resolveUserPath(defaultPath) : fallback;
   }
   const withToken = raw.includes("{agentId}") ? raw.replaceAll("{agentId}", agentId) : raw;
   return resolveUserPath(withToken);
@@ -134,6 +134,7 @@ function mergeConfig(
   defaults: MemorySearchConfig | undefined,
   overrides: MemorySearchConfig | undefined,
   agentId: string,
+  options?: { defaultStorePath?: string },
 ): ResolvedMemorySearchConfig {
   const enabled = overrides?.enabled ?? defaults?.enabled ?? true;
   const sessionMemory =
@@ -204,7 +205,11 @@ function mergeConfig(
   };
   const store = {
     driver: overrides?.store?.driver ?? defaults?.store?.driver ?? "sqlite",
-    path: resolveStorePath(agentId, overrides?.store?.path ?? defaults?.store?.path),
+    path: resolveStorePath(
+      agentId,
+      overrides?.store?.path ?? defaults?.store?.path,
+      options?.defaultStorePath,
+    ),
     vector,
   };
   const chunking = {
@@ -350,10 +355,11 @@ function mergeConfig(
 export function resolveMemorySearchConfig(
   cfg: OpenClawConfig,
   agentId: string,
+  options?: { defaultStorePath?: string },
 ): ResolvedMemorySearchConfig | null {
   const defaults = cfg.agents?.defaults?.memorySearch;
   const overrides = resolveAgentConfig(cfg, agentId)?.memorySearch;
-  const resolved = mergeConfig(defaults, overrides, agentId);
+  const resolved = mergeConfig(defaults, overrides, agentId, options);
   if (!resolved.enabled) {
     return null;
   }

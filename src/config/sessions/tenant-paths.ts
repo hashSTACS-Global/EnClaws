@@ -31,12 +31,12 @@
  * Sessions and workspace belong to the user, not to any specific agent.
  */
 
-import path from "node:path";
-import os from "node:os";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { resolveRequiredHomeDir } from "../../infra/home-dir.js";
-import { resolveStateDir } from "../paths.js";
 import { DEFAULT_AGENT_ID, normalizeAgentId } from "../../routing/session-key.js";
+import { resolveStateDir } from "../paths.js";
 
 // ============================================================================
 // Tenant-level paths
@@ -61,12 +61,36 @@ export function resolveTenantDir(
  *
  * ~/.enclaws/tenants/{tenantId}/agents/{agentId}/
  */
-export function resolveTenantAgentDir(
-  tenantId: string,
-  agentId?: string,
-): string {
+export function resolveTenantAgentDir(tenantId: string, agentId?: string): string {
   const id = normalizeAgentId(agentId ?? DEFAULT_AGENT_ID);
   return path.join(resolveTenantDir(tenantId), "agents", id);
+}
+
+/**
+ * Resolve the tenant-level agent knowledge directory.
+ *
+ * ~/.enclaws/tenants/{tenantId}/agents/{agentId}/knowledge/
+ */
+export function resolveTenantAgentKnowledgeDir(tenantId: string, agentId?: string): string {
+  return path.join(resolveTenantAgentDir(tenantId, agentId), "knowledge");
+}
+
+/**
+ * Resolve the tenant-level agent memory search index path.
+ *
+ * ~/.enclaws/tenants/{tenantId}/agents/{agentId}/indexes/memory.sqlite
+ */
+export function resolveTenantAgentMemoryIndexPath(tenantId: string, agentId?: string): string {
+  return path.join(resolveTenantAgentDir(tenantId, agentId), "indexes", "memory.sqlite");
+}
+
+/**
+ * Resolve the tenant-level enterprise memory search index path.
+ *
+ * ~/.enclaws/tenants/{tenantId}/indexes/memory.sqlite
+ */
+export function resolveTenantMemoryIndexPath(tenantId: string): string {
+  return path.join(resolveTenantDir(tenantId), "indexes", "memory.sqlite");
 }
 
 /**
@@ -95,7 +119,9 @@ export function resolveTenantUserDir(
 ): string {
   const root = resolveStateDir(env, homedir);
   if (!userId) {
-    throw new Error(`resolveTenantUserDir: userId is required for tenant '${tenantId}'. Cannot fall back to _shared.`);
+    throw new Error(
+      `resolveTenantUserDir: userId is required for tenant '${tenantId}'. Cannot fall back to _shared.`,
+    );
   }
   return path.join(root, "tenants", tenantId, "users", userId);
 }
@@ -133,7 +159,10 @@ export function resolveTenantSessionStorePath(
   agentId?: string,
   userId?: string,
 ): string {
-  return path.join(resolveTenantAgentSessionsDir(tenantId, agentId, undefined, undefined, userId), "sessions.json");
+  return path.join(
+    resolveTenantAgentSessionsDir(tenantId, agentId, undefined, undefined, userId),
+    "sessions.json",
+  );
 }
 
 /**
@@ -146,16 +175,21 @@ export function resolveTenantSessionTranscriptPath(
   topicId?: string | number,
   userId?: string,
 ): string {
-  const sessionsDir = resolveTenantAgentSessionsDir(tenantId, agentId, undefined, undefined, userId);
+  const sessionsDir = resolveTenantAgentSessionsDir(
+    tenantId,
+    agentId,
+    undefined,
+    undefined,
+    userId,
+  );
   const safeTopicId =
     typeof topicId === "string"
       ? encodeURIComponent(topicId)
       : typeof topicId === "number"
         ? String(topicId)
         : undefined;
-  const fileName = safeTopicId !== undefined
-    ? `${sessionId}-topic-${safeTopicId}.jsonl`
-    : `${sessionId}.jsonl`;
+  const fileName =
+    safeTopicId !== undefined ? `${sessionId}-topic-${safeTopicId}.jsonl` : `${sessionId}.jsonl`;
   return path.join(sessionsDir, fileName);
 }
 

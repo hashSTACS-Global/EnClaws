@@ -22,6 +22,8 @@ export async function getMemorySearchManager(params: {
   purpose?: "default" | "status";
   /** Override workspace dir (multi-tenant: tenants/{tid}/users/{uid}/workspace/). */
   workspaceDir?: string;
+  /** Override the default SQLite index path when memorySearch.store.path is not configured. */
+  defaultStorePath?: string;
 }): Promise<MemorySearchManagerResult> {
   const resolved = resolveMemoryBackendConfig(params);
   if (resolved.backend === "qmd" && resolved.qmd) {
@@ -50,7 +52,11 @@ export async function getMemorySearchManager(params: {
             primary,
             fallbackFactory: async () => {
               const { MemoryIndexManager } = await import("./manager.js");
-              return await MemoryIndexManager.get({ ...params, workspaceDir: params.workspaceDir });
+              return await MemoryIndexManager.get({
+                ...params,
+                workspaceDir: params.workspaceDir,
+                defaultStorePath: params.defaultStorePath,
+              });
             },
           },
           () => QMD_MANAGER_CACHE.delete(cacheKey),
@@ -66,7 +72,11 @@ export async function getMemorySearchManager(params: {
 
   try {
     const { MemoryIndexManager } = await import("./manager.js");
-    const manager = await MemoryIndexManager.get({ ...params, workspaceDir: params.workspaceDir });
+    const manager = await MemoryIndexManager.get({
+      ...params,
+      workspaceDir: params.workspaceDir,
+      defaultStorePath: params.defaultStorePath,
+    });
     return { manager };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

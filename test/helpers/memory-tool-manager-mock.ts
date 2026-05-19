@@ -11,6 +11,8 @@ let readFileImpl: (params: MemoryReadParams) => Promise<MemoryReadResult> = asyn
   text: "",
   path: params.relPath,
 });
+let lastManagerParams: unknown;
+let managerParamCalls: unknown[] = [];
 
 const stubManager = {
   search: vi.fn(async () => await searchImpl()),
@@ -34,7 +36,11 @@ const stubManager = {
 };
 
 vi.mock("../../src/memory/index.js", () => ({
-  getMemorySearchManager: async () => ({ manager: stubManager }),
+  getMemorySearchManager: async (params: unknown) => {
+    lastManagerParams = params;
+    managerParamCalls.push(params);
+    return { manager: stubManager };
+  },
 }));
 
 export function setMemoryBackend(next: MemoryBackend): void {
@@ -61,5 +67,15 @@ export function resetMemoryToolMockState(overrides?: {
   readFileImpl =
     overrides?.readFileImpl ??
     (async (params: MemoryReadParams) => ({ text: "", path: params.relPath }));
+  lastManagerParams = undefined;
+  managerParamCalls = [];
   vi.clearAllMocks();
+}
+
+export function getLastMemoryManagerParams<T = unknown>(): T | undefined {
+  return lastManagerParams as T | undefined;
+}
+
+export function getMemoryManagerParamCalls<T = unknown>(): T[] {
+  return managerParamCalls as T[];
 }

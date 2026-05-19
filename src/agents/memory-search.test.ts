@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveMemorySearchConfig } from "./memory-search.js";
@@ -61,6 +62,43 @@ describe("memory search config", () => {
     const resolved = resolveMemorySearchConfig(cfg, "main");
     expect(resolved?.provider).toBe("auto");
     expect(resolved?.fallback).toBe("none");
+  });
+
+  it("uses a caller-provided default store path when store.path is not configured", () => {
+    const cfg = asConfig({
+      agents: {
+        defaults: {
+          memorySearch: {
+            enabled: true,
+          },
+        },
+      },
+    });
+    const defaultStorePath = path.join("tenant", "agents", "main", "indexes", "memory.sqlite");
+    const resolved = resolveMemorySearchConfig(cfg, "main", {
+      defaultStorePath,
+    });
+    expect(resolved?.store.path).toBe(path.resolve(defaultStorePath));
+  });
+
+  it("keeps explicit store.path ahead of a caller-provided default store path", () => {
+    const explicitStorePath = path.join("custom", "{agentId}.sqlite");
+    const cfg = asConfig({
+      agents: {
+        defaults: {
+          memorySearch: {
+            store: {
+              path: explicitStorePath,
+            },
+          },
+        },
+      },
+    });
+    const defaultStorePath = path.join("tenant", "agents", "main", "indexes", "memory.sqlite");
+    const resolved = resolveMemorySearchConfig(cfg, "main", {
+      defaultStorePath,
+    });
+    expect(resolved?.store.path).toBe(path.resolve("custom", "main.sqlite"));
   });
 
   it("merges defaults and overrides", () => {

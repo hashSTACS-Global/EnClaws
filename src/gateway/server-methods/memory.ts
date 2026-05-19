@@ -3,7 +3,13 @@ import path from "node:path";
 import { resolveAgentWorkspaceDir } from "../../agents/agent-scope.js";
 import { movePathToTrash } from "../../browser/trash.js";
 import { loadConfig } from "../../config/config.js";
+import {
+  resolveTenantAgentKnowledgeDir,
+  resolveTenantAgentMemoryIndexPath,
+} from "../../config/sessions/tenant-paths.js";
 import { isNotFoundPathError } from "../../infra/path-guards.js";
+import { getMemorySearchManager } from "../../memory/index.js";
+import { buildFileEntry, listMemoryFiles } from "../../memory/internal.js";
 import { DEFAULT_AGENT_ID, normalizeAgentId } from "../../routing/session-key.js";
 import {
   ErrorCodes,
@@ -15,29 +21,44 @@ import {
   validateAgentsMemorySetParams,
   validateAgentsMemoryStatusParams,
 } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
-import { buildFileEntry, listMemoryFiles } from "../../memory/internal.js";
-import { getMemorySearchManager } from "../../memory/index.js";
+import { resolveRequestConfig } from "../tenant-session-utils.js";
+import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./types.js";
 
-function resolveAgentId(agentIdRaw: string, cfg: ReturnType<typeof loadConfig>) {
+function resolveAgentId(agentIdRaw: string) {
   if (agentIdRaw === "default") {
     return normalizeAgentId(DEFAULT_AGENT_ID) || DEFAULT_AGENT_ID;
   }
   return normalizeAgentId(agentIdRaw);
 }
 
-function resolveAgentContext(rawAgentId: unknown) {
-  const cfg = loadConfig();
+async function resolveAgentContext(
+  rawAgentId: unknown,
+  client?: GatewayRequestHandlerOptions["client"],
+) {
+  const tenant = client?.tenant;
+  const cfg = tenant ? await resolveRequestConfig(tenant) : loadConfig();
   const idStr = typeof rawAgentId === "string" ? rawAgentId : "";
-  const agentId = resolveAgentId(idStr, cfg);
-  if (!agentId) {return null;}
+  const agentId = resolveAgentId(idStr);
+  if (!agentId) {
+    return null;
+  }
+  if (tenant?.tenantId) {
+    const workspaceDir = resolveTenantAgentKnowledgeDir(tenant.tenantId, agentId);
+    const defaultStorePath = resolveTenantAgentMemoryIndexPath(tenant.tenantId, agentId);
+    return { cfg, agentId, workspaceDir, defaultStorePath, tenantId: tenant.tenantId };
+  }
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
-  return { cfg, agentId, workspaceDir };
+  return { cfg, agentId, workspaceDir, defaultStorePath: undefined, tenantId: undefined };
 }
 
-function resolveMemoryIoPath(workspaceDir: string, reqPath: string): { target: string; rel: string } | null {
+function resolveMemoryIoPath(
+  workspaceDir: string,
+  reqPath: string,
+): { target: string; rel: string } | null {
   const target = path.resolve(workspaceDir, reqPath);
-  if (!target.endsWith(".md")) {return null;}
+  if (!target.endsWith(".md")) {
+    return null;
+  }
   // Ensure it's inside the workspace
   const rel = path.relative(workspaceDir, target).replace(/\\/g, "/");
   if (rel.startsWith("../") || path.isAbsolute(rel)) {
@@ -50,7 +71,7 @@ function resolveMemoryIoPath(workspaceDir: string, reqPath: string): { target: s
 }
 
 export const memoryHandlers: GatewayRequestHandlers = {
-  "agents.memory.list": async ({ params, respond }) => {
+  "agents.memory.list": async ({ params, client, respond }) => {
     if (!validateAgentsMemoryListParams(params)) {
       respond(
         false,
@@ -63,7 +84,7 @@ export const memoryHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const context = resolveAgentContext(params.agentId);
+    const context = await resolveAgentContext(params.agentId, client);
     if (!context) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
       return;
@@ -93,17 +114,20 @@ export const memoryHandlers: GatewayRequestHandlers = {
     });
   },
 
-  "agents.memory.get": async ({ params, respond }) => {
+  "agents.memory.get": async ({ params, client, respond }) => {
     if (!validateAgentsMemoryGetParams(params)) {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, formatValidationErrors(validateAgentsMemoryGetParams.errors)),
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          formatValidationErrors(validateAgentsMemoryGetParams.errors),
+        ),
       );
       return;
     }
 
-    const context = resolveAgentContext(params.agentId);
+    const context = await resolveAgentContext(params.agentId, client);
     if (!context) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
       return;
@@ -155,17 +179,20 @@ export const memoryHandlers: GatewayRequestHandlers = {
     });
   },
 
-  "agents.memory.set": async ({ params, respond }) => {
+  "agents.memory.set": async ({ params, client, respond }) => {
     if (!validateAgentsMemorySetParams(params)) {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, formatValidationErrors(validateAgentsMemorySetParams.errors)),
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          formatValidationErrors(validateAgentsMemorySetParams.errors),
+        ),
       );
       return;
     }
 
-    const context = resolveAgentContext(params.agentId);
+    const context = await resolveAgentContext(params.agentId, client);
     if (!context) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
       return;
@@ -178,9 +205,7 @@ export const memoryHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    if (resolved.rel.startsWith("memory/")) {
-      await fs.mkdir(path.join(workspaceDir, "memory"), { recursive: true });
-    }
+    await fs.mkdir(path.dirname(resolved.target), { recursive: true });
 
     await fs.writeFile(resolved.target, params.content, "utf-8");
 
@@ -205,17 +230,20 @@ export const memoryHandlers: GatewayRequestHandlers = {
     });
   },
 
-  "agents.memory.delete": async ({ params, respond }) => {
+  "agents.memory.delete": async ({ params, client, respond }) => {
     if (!validateAgentsMemoryDeleteParams(params)) {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, formatValidationErrors(validateAgentsMemoryDeleteParams.errors)),
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          formatValidationErrors(validateAgentsMemoryDeleteParams.errors),
+        ),
       );
       return;
     }
 
-    const context = resolveAgentContext(params.agentId);
+    const context = await resolveAgentContext(params.agentId, client);
     if (!context) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
       return;
@@ -244,32 +272,39 @@ export const memoryHandlers: GatewayRequestHandlers = {
     });
   },
 
-  "agents.memory.status": async ({ params, respond }) => {
+  "agents.memory.status": async ({ params, client, respond }) => {
     if (!validateAgentsMemoryStatusParams(params)) {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, formatValidationErrors(validateAgentsMemoryStatusParams.errors)),
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          formatValidationErrors(validateAgentsMemoryStatusParams.errors),
+        ),
       );
       return;
     }
 
-    const context = resolveAgentContext(params.agentId);
+    const context = await resolveAgentContext(params.agentId, client);
     if (!context) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
       return;
     }
 
-    const { cfg, agentId } = context;
-    
-    // Get memory status
-    const { manager } = await getMemorySearchManager({ cfg, agentId });
+    const { cfg, agentId, workspaceDir, defaultStorePath } = context;
+
+    const { manager } = await getMemorySearchManager({
+      cfg,
+      agentId,
+      workspaceDir,
+      defaultStorePath,
+    });
     let totalChunks = 0;
     let totalVectors = 0;
-    
+
     if (manager) {
       try {
-        const status = await manager.status();
+        const status = manager.status();
         totalChunks = status.chunks ?? 0;
         totalVectors = status.chunks ?? 0;
       } catch (err) {

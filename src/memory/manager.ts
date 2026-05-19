@@ -111,9 +111,13 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     purpose?: "default" | "status";
     /** Override workspace dir (multi-tenant: tenants/{tid}/users/{uid}/workspace/). */
     workspaceDir?: string;
+    /** Override the default SQLite index path when memorySearch.store.path is not configured. */
+    defaultStorePath?: string;
   }): Promise<MemoryIndexManager | null> {
     const { cfg, agentId } = params;
-    const settings = resolveMemorySearchConfig(cfg, agentId);
+    const settings = resolveMemorySearchConfig(cfg, agentId, {
+      defaultStorePath: params.defaultStorePath,
+    });
     if (!settings) {
       return null;
     }

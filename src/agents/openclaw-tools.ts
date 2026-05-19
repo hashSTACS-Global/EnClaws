@@ -1,4 +1,10 @@
 import type { OpenClawConfig } from "../config/config.js";
+import {
+  resolveTenantAgentKnowledgeDir,
+  resolveTenantAgentMemoryIndexPath,
+  resolveTenantDir,
+  resolveTenantMemoryIndexPath,
+} from "../config/sessions/tenant-paths.js";
 import { resolvePluginTools } from "../plugins/tools.js";
 import type { GatewayMessageChannel } from "../utils/message-channel.js";
 import { resolveSessionAgentId } from "./agent-scope.js";
@@ -11,6 +17,7 @@ import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
+import { createMemoryGetTool, createMemorySearchTool } from "./tools/memory-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
@@ -22,8 +29,8 @@ import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";
 import { createTaskPlannerTool } from "./tools/task-planner-tool.js";
 import { createTenantMemoryTool } from "./tools/tenant-memory-tool.js";
-import { createUserMemoryTool } from "./tools/user-memory-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
+import { createUserMemoryTool } from "./tools/user-memory-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
 import { resolveWorkspaceRoot } from "./workspace-dir.js";
 
@@ -79,8 +86,32 @@ export function createOpenClawTools(options?: {
   tenantId?: string;
   /** Tenant user ID for multi-tenant scoped operations. */
   tenantUserId?: string;
+  /** Override the Markdown memory root used by memory_search/memory_get. */
+  memoryWorkspaceDir?: string;
+  /** Override the default SQLite memory index path used by memory_search/memory_get. */
+  memoryDefaultStorePath?: string;
+  /** Override the tenant enterprise memory root used by memory_search/memory_get. */
+  tenantMemoryWorkspaceDir?: string;
+  /** Override the tenant enterprise memory index path used by memory_search/memory_get. */
+  tenantMemoryDefaultStorePath?: string;
 }): AnyAgentTool[] {
   const workspaceDir = resolveWorkspaceRoot(options?.workspaceDir);
+  const agentId = resolveSessionAgentId({
+    sessionKey: options?.agentSessionKey,
+    config: options?.config,
+  });
+  const memoryWorkspaceDir =
+    options?.memoryWorkspaceDir ??
+    (options?.tenantId ? resolveTenantAgentKnowledgeDir(options.tenantId, agentId) : workspaceDir);
+  const memoryDefaultStorePath =
+    options?.memoryDefaultStorePath ??
+    (options?.tenantId ? resolveTenantAgentMemoryIndexPath(options.tenantId, agentId) : undefined);
+  const tenantMemoryWorkspaceDir =
+    options?.tenantMemoryWorkspaceDir ??
+    (options?.tenantId ? resolveTenantDir(options.tenantId) : undefined);
+  const tenantMemoryDefaultStorePath =
+    options?.tenantMemoryDefaultStorePath ??
+    (options?.tenantId ? resolveTenantMemoryIndexPath(options.tenantId) : undefined);
   const imageTool = options?.agentDir?.trim()
     ? createImageTool({
         config: options?.config,
@@ -101,6 +132,22 @@ export function createOpenClawTools(options?: {
   const webFetchTool = createWebFetchTool({
     config: options?.config,
     sandboxed: options?.sandboxed,
+  });
+  const memorySearchTool = createMemorySearchTool({
+    config: options?.config,
+    agentSessionKey: options?.agentSessionKey,
+    workspaceDir: memoryWorkspaceDir,
+    defaultStorePath: memoryDefaultStorePath,
+    tenantWorkspaceDir: tenantMemoryWorkspaceDir,
+    tenantDefaultStorePath: tenantMemoryDefaultStorePath,
+  });
+  const memoryGetTool = createMemoryGetTool({
+    config: options?.config,
+    agentSessionKey: options?.agentSessionKey,
+    workspaceDir: memoryWorkspaceDir,
+    defaultStorePath: memoryDefaultStorePath,
+    tenantWorkspaceDir: tenantMemoryWorkspaceDir,
+    tenantDefaultStorePath: tenantMemoryDefaultStorePath,
   });
   const messageTool = options?.disableMessageTool
     ? null
@@ -206,6 +253,8 @@ export function createOpenClawTools(options?: {
     }),
     ...(webSearchTool ? [webSearchTool] : []),
     ...(webFetchTool ? [webFetchTool] : []),
+    ...(memorySearchTool ? [memorySearchTool] : []),
+    ...(memoryGetTool ? [memoryGetTool] : []),
     ...(imageTool ? [imageTool] : []),
   ];
 
@@ -229,10 +278,7 @@ export function createOpenClawTools(options?: {
       config: options?.config,
       workspaceDir,
       agentDir: options?.agentDir,
-      agentId: resolveSessionAgentId({
-        sessionKey: options?.agentSessionKey,
-        config: options?.config,
-      }),
+      agentId,
       sessionKey: options?.agentSessionKey,
       messageChannel: options?.agentChannel,
       agentAccountId: options?.agentAccountId,

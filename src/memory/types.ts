@@ -7,6 +7,8 @@ export type MemorySearchResult = {
   score: number;
   snippet: string;
   source: MemorySource;
+  scope?: "tenant" | "agent";
+  sourceLabel?: string;
   citation?: string;
 };
 

@@ -3,7 +3,7 @@ import type { OpenClawConfig } from "../../config/config.js";
 import type { MemoryCitationsMode } from "../../config/types.memory.js";
 import { resolveMemoryBackendConfig } from "../../memory/backend-config.js";
 import { getMemorySearchManager } from "../../memory/index.js";
-import type { MemorySearchResult } from "../../memory/types.js";
+import type { MemorySearchManager, MemorySearchResult } from "../../memory/types.js";
 import { parseAgentSessionKey } from "../../routing/session-key.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { resolveMemorySearchConfig } from "../memory-search.js";
@@ -37,17 +37,141 @@ function resolveMemoryToolContext(options: { config?: OpenClawConfig; agentSessi
   return { cfg, agentId };
 }
 
+type ScopedMemoryManager = {
+  scope: "tenant" | "agent";
+  manager: MemorySearchManager;
+};
+
+async function resolveScopedMemoryManagers(options: {
+  cfg: OpenClawConfig;
+  agentId: string;
+  agentWorkspaceDir?: string;
+  agentDefaultStorePath?: string;
+  tenantWorkspaceDir?: string;
+  tenantDefaultStorePath?: string;
+}): Promise<{ managers: ScopedMemoryManager[]; error?: string }> {
+  const managers: ScopedMemoryManager[] = [];
+  const errors: string[] = [];
+
+  if (options.tenantWorkspaceDir && options.tenantDefaultStorePath) {
+    const { manager, error } = await getMemorySearchManager({
+      cfg: options.cfg,
+      agentId: options.agentId,
+      workspaceDir: options.tenantWorkspaceDir,
+      defaultStorePath: options.tenantDefaultStorePath,
+    });
+    if (manager) {
+      managers.push({ scope: "tenant", manager });
+    } else if (error) {
+      errors.push(`tenant: ${error}`);
+    }
+  }
+
+  const { manager, error } = await getMemorySearchManager({
+    cfg: options.cfg,
+    agentId: options.agentId,
+    workspaceDir: options.agentWorkspaceDir,
+    defaultStorePath: options.agentDefaultStorePath,
+  });
+  if (manager) {
+    managers.push({ scope: "agent", manager });
+  } else if (error) {
+    errors.push(`agent: ${error}`);
+  }
+
+  return { managers, error: errors.length > 0 ? errors.join("; ") : undefined };
+}
+
+function decorateScope(
+  results: MemorySearchResult[],
+  scope: "tenant" | "agent",
+  prefixPath: boolean,
+): MemorySearchResult[] {
+  const prefix = scope === "tenant" ? "tenant/" : "knowledge/";
+  const sourceLabel = scope === "tenant" ? "Enterprise Memory" : "Agent Knowledge";
+  return results.map((entry) => ({
+    ...entry,
+    path: prefixPath && !entry.path.startsWith(prefix) ? `${prefix}${entry.path}` : entry.path,
+    ...(prefixPath ? { scope, sourceLabel } : {}),
+  }));
+}
+
+async function searchScopedMemory(params: {
+  managers: ScopedMemoryManager[];
+  query: string;
+  maxResults?: number;
+  defaultMaxResults: number;
+  minScore?: number;
+  sessionKey?: string;
+}): Promise<MemorySearchResult[]> {
+  const maxResults = Math.max(1, Math.floor(params.maxResults ?? params.defaultMaxResults));
+  const tenant = params.managers.find((entry) => entry.scope === "tenant");
+  const agent = params.managers.find((entry) => entry.scope === "agent");
+  const scopedTenantSearch = Boolean(tenant);
+  const results: MemorySearchResult[] = [];
+
+  if (tenant) {
+    const tenantLimit = Math.min(2, maxResults);
+    const tenantResults = await tenant.manager.search(params.query, {
+      maxResults: tenantLimit,
+      minScore: params.minScore,
+      sessionKey: params.sessionKey,
+    });
+    results.push(...decorateScope(tenantResults, "tenant", true));
+  }
+
+  if (agent && results.length < maxResults) {
+    const agentResults = await agent.manager.search(params.query, {
+      maxResults: maxResults - results.length,
+      minScore: params.minScore,
+      sessionKey: params.sessionKey,
+    });
+    results.push(...decorateScope(agentResults, "agent", scopedTenantSearch));
+  }
+
+  return results.slice(0, maxResults);
+}
+
+function resolveScopedRead(params: {
+  managers: ScopedMemoryManager[];
+  relPath: string;
+}): { manager: MemorySearchManager; relPath: string; scope: "tenant" | "agent" } | null {
+  const tenant = params.managers.find((entry) => entry.scope === "tenant");
+  const agent = params.managers.find((entry) => entry.scope === "agent");
+  const rawPath = params.relPath.trim().replace(/\\/g, "/");
+  if (rawPath.startsWith("tenant/")) {
+    return tenant
+      ? { manager: tenant.manager, relPath: rawPath.slice("tenant/".length), scope: "tenant" }
+      : null;
+  }
+  if (rawPath.startsWith("knowledge/")) {
+    return agent
+      ? { manager: agent.manager, relPath: rawPath.slice("knowledge/".length), scope: "agent" }
+      : null;
+  }
+  return agent ? { manager: agent.manager, relPath: rawPath, scope: "agent" } : null;
+}
+
 export function createMemorySearchTool(options: {
   config?: OpenClawConfig;
   agentSessionKey?: string;
-  /** Override workspace dir (multi-tenant: tenants/{tid}/users/{uid}/workspace/). */
+  /** Override Markdown memory root (multi-tenant: tenants/{tid}/agents/{agentId}/knowledge/). */
   workspaceDir?: string;
+  /** Override the default SQLite index path when memorySearch.store.path is not configured. */
+  defaultStorePath?: string;
+  /** Tenant-level enterprise memory root for scoped tenant-first retrieval. */
+  tenantWorkspaceDir?: string;
+  /** Tenant-level enterprise memory SQLite index path for scoped tenant-first retrieval. */
+  tenantDefaultStorePath?: string;
 }): AnyAgentTool | null {
   const ctx = resolveMemoryToolContext(options);
   if (!ctx) {
     return null;
   }
   const { cfg, agentId } = ctx;
+  const settings = resolveMemorySearchConfig(cfg, agentId, {
+    defaultStorePath: options.defaultStorePath,
+  });
   return {
     label: "Memory Search",
     name: "memory_search",
@@ -58,12 +182,15 @@ export function createMemorySearchTool(options: {
       const query = readStringParam(params, "query", { required: true });
       const maxResults = readNumberParam(params, "maxResults");
       const minScore = readNumberParam(params, "minScore");
-      const { manager, error } = await getMemorySearchManager({
+      const { managers, error } = await resolveScopedMemoryManagers({
         cfg,
         agentId,
-        workspaceDir: options.workspaceDir,
+        agentWorkspaceDir: options.workspaceDir,
+        agentDefaultStorePath: options.defaultStorePath,
+        tenantWorkspaceDir: options.tenantWorkspaceDir,
+        tenantDefaultStorePath: options.tenantDefaultStorePath,
       });
-      if (!manager) {
+      if (managers.length === 0) {
         return jsonResult(buildMemorySearchUnavailableResult(error));
       }
       try {
@@ -72,14 +199,21 @@ export function createMemorySearchTool(options: {
           mode: citationsMode,
           sessionKey: options.agentSessionKey,
         });
-        const rawResults = await manager.search(query, {
+        const rawResults = await searchScopedMemory({
+          managers,
+          query,
           maxResults,
           minScore,
           sessionKey: options.agentSessionKey,
+          defaultMaxResults: settings?.query.maxResults ?? 6,
         });
-        const status = manager.status();
+        const status = managers[managers.length - 1].manager.status();
         const decorated = decorateCitations(rawResults, includeCitations);
-        const resolved = resolveMemoryBackendConfig({ cfg, agentId });
+        const resolved = resolveMemoryBackendConfig({
+          cfg,
+          agentId,
+          workspaceDir: options.workspaceDir,
+        });
         const results =
           status.backend === "qmd"
             ? clampResultsByInjectedChars(decorated, resolved.qmd?.limits.maxInjectedChars)
@@ -104,8 +238,14 @@ export function createMemorySearchTool(options: {
 export function createMemoryGetTool(options: {
   config?: OpenClawConfig;
   agentSessionKey?: string;
-  /** Override workspace dir (multi-tenant: tenants/{tid}/users/{uid}/workspace/). */
+  /** Override Markdown memory root (multi-tenant: tenants/{tid}/agents/{agentId}/knowledge/). */
   workspaceDir?: string;
+  /** Override the default SQLite index path when memorySearch.store.path is not configured. */
+  defaultStorePath?: string;
+  /** Tenant-level enterprise memory root for scoped reads. */
+  tenantWorkspaceDir?: string;
+  /** Tenant-level enterprise memory SQLite index path for scoped reads. */
+  tenantDefaultStorePath?: string;
 }): AnyAgentTool | null {
   const ctx = resolveMemoryToolContext(options);
   if (!ctx) {
@@ -122,21 +262,43 @@ export function createMemoryGetTool(options: {
       const relPath = readStringParam(params, "path", { required: true });
       const from = readNumberParam(params, "from", { integer: true });
       const lines = readNumberParam(params, "lines", { integer: true });
-      const { manager, error } = await getMemorySearchManager({
+      const { managers, error } = await resolveScopedMemoryManagers({
         cfg,
         agentId,
-        workspaceDir: options.workspaceDir,
+        agentWorkspaceDir: options.workspaceDir,
+        agentDefaultStorePath: options.defaultStorePath,
+        tenantWorkspaceDir: options.tenantWorkspaceDir,
+        tenantDefaultStorePath: options.tenantDefaultStorePath,
       });
-      if (!manager) {
+      if (managers.length === 0) {
         return jsonResult({ path: relPath, text: "", disabled: true, error });
       }
       try {
-        const result = await manager.readFile({
-          relPath,
+        const scoped = resolveScopedRead({ managers, relPath });
+        if (!scoped) {
+          return jsonResult({ path: relPath, text: "", disabled: true, error: "path required" });
+        }
+        const result = await scoped.manager.readFile({
+          relPath: scoped.relPath,
           from: from ?? undefined,
           lines: lines ?? undefined,
         });
-        return jsonResult(result);
+        const scopedTenantRead = managers.some((entry) => entry.scope === "tenant");
+        const prefix = scoped.scope === "tenant" ? "tenant/" : "knowledge/";
+        const shouldPrefix = scoped.scope === "tenant" || scopedTenantRead;
+        return jsonResult({
+          ...result,
+          path:
+            shouldPrefix && !result.path.startsWith(prefix)
+              ? `${prefix}${result.path}`
+              : result.path,
+          ...(shouldPrefix
+            ? {
+                scope: scoped.scope,
+                sourceLabel: scoped.scope === "tenant" ? "Enterprise Memory" : "Agent Knowledge",
+              }
+            : {}),
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return jsonResult({ path: relPath, text: "", disabled: true, error: message });
