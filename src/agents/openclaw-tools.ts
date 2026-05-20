@@ -17,7 +17,12 @@ import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
-import { createMemoryGetTool, createMemorySearchTool } from "./tools/memory-tool.js";
+import {
+  createMemoryGetTool,
+  createMemoryOutlineTool,
+  createMemoryRouteTool,
+  createMemorySearchTool,
+} from "./tools/memory-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
@@ -149,6 +154,22 @@ export function createOpenClawTools(options?: {
     tenantWorkspaceDir: tenantMemoryWorkspaceDir,
     tenantDefaultStorePath: tenantMemoryDefaultStorePath,
   });
+  const memoryOutlineTool = createMemoryOutlineTool({
+    config: options?.config,
+    agentSessionKey: options?.agentSessionKey,
+    workspaceDir: memoryWorkspaceDir,
+    defaultStorePath: memoryDefaultStorePath,
+    tenantWorkspaceDir: tenantMemoryWorkspaceDir,
+    tenantDefaultStorePath: tenantMemoryDefaultStorePath,
+  });
+  const memoryRouteTool = createMemoryRouteTool({
+    config: options?.config,
+    agentSessionKey: options?.agentSessionKey,
+    workspaceDir: memoryWorkspaceDir,
+    defaultStorePath: memoryDefaultStorePath,
+    tenantWorkspaceDir: tenantMemoryWorkspaceDir,
+    tenantDefaultStorePath: tenantMemoryDefaultStorePath,
+  });
   const messageTool = options?.disableMessageTool
     ? null
     : createMessageTool({
@@ -251,10 +272,12 @@ export function createOpenClawTools(options?: {
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,
     }),
+    ...(memorySearchTool ? [memorySearchTool] : []),
+    ...(memoryRouteTool ? [memoryRouteTool] : []),
+    ...(memoryOutlineTool ? [memoryOutlineTool] : []),
+    ...(memoryGetTool ? [memoryGetTool] : []),
     ...(webSearchTool ? [webSearchTool] : []),
     ...(webFetchTool ? [webFetchTool] : []),
-    ...(memorySearchTool ? [memorySearchTool] : []),
-    ...(memoryGetTool ? [memoryGetTool] : []),
     ...(imageTool ? [imageTool] : []),
   ];
 

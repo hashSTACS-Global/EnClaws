@@ -304,6 +304,16 @@
       "title": "Memory Get",
       "detailKeys": ["path", "from", "lines"]
     },
+    "memory_outline": {
+      "emoji": "🗂️",
+      "title": "Memory Outline",
+      "detailKeys": ["path", "maxSections"]
+    },
+    "memory_route": {
+      "emoji": "🧭",
+      "title": "Memory Route",
+      "detailKeys": ["query", "path"]
+    },
     "web_search": {
       "emoji": "🔎",
       "title": "Web Search",

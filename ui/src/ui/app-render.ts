@@ -95,6 +95,7 @@ import { renderSkills } from "./views/skills.ts";
 import "./views/login.ts";
 import "./views/tenant/tenant-overview.ts";
 import "./views/tenant/tenant-settings.ts";
+import "./views/tenant/tenant-knowledge.ts";
 import "./views/tenant/tenant-users.ts";
 import "./views/tenant/tenant-agents.ts";
 import "./views/tenant/tenant-channels.ts";
@@ -495,7 +496,7 @@ export function renderApp(state: AppViewState) {
                   const userRole = authState?.user?.role;
                   const isPlatformAdmin = userRole === "platform-admin";
                   const isTenantAdmin = userRole === "owner" || userRole === "admin";
-                  const tenantOnlyTabs = new Set(["tenant-settings", "tenant-users", "tenant-agents", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage", "tenant-cron", "cs-setup", "cs-knowledge", "cs-sessions"]);
+                  const tenantOnlyTabs = new Set(["tenant-settings", "tenant-knowledge", "tenant-users", "tenant-agents", "tenant-channels", "tenant-models", "tenant-skills", "tenant-traces", "tenant-usage", "tenant-cron", "cs-setup", "cs-knowledge", "cs-sessions"]);
                   const platformOnlyTabs = new Set(["overview", "platform-models","platform-tools","platform-tenants","logs"]);
                   const visibleTabs = group.tabs.filter((tab) => {
                     if (platformOnlyTabs.has(tab)) {return isPlatformAdmin;}
@@ -1591,7 +1592,7 @@ export function renderApp(state: AppViewState) {
                   }
 
                   ${
-                          !isComingSoon && (state.tab === "tenant-overview" || state.tab === "tenant-settings" || state.tab === "tenant-users" || state.tab === "tenant-agents" || state.tab === "tenant-channels" || state.tab === "tenant-models" || state.tab === "tenant-skills" || state.tab === "tenant-traces" || state.tab === "tenant-usage" || state.tab === "tenant-cron" || state.tab === "cs-setup" || state.tab === "cs-knowledge" || state.tab === "cs-sessions")
+                          !isComingSoon && (state.tab === "tenant-overview" || state.tab === "tenant-settings" || state.tab === "tenant-knowledge" || state.tab === "tenant-users" || state.tab === "tenant-agents" || state.tab === "tenant-channels" || state.tab === "tenant-models" || state.tab === "tenant-skills" || state.tab === "tenant-traces" || state.tab === "tenant-usage" || state.tab === "tenant-cron" || state.tab === "cs-setup" || state.tab === "cs-knowledge" || state.tab === "cs-sessions")
                                   ? html`
                                       <section class="card">
                                           ${state.tab === "tenant-overview" ? html`
@@ -1600,6 +1601,8 @@ export function renderApp(state: AppViewState) {
                                           ${state.tab === "tenant-settings" ? html`
                                               <tenant-settings-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}></tenant-settings-view>` : nothing}
+                                          ${state.tab === "tenant-knowledge" ? html`
+                                              <tenant-knowledge-view></tenant-knowledge-view>` : nothing}
                                           ${state.tab === "tenant-users" ? html`
                                               <tenant-users-view
                                                       .gatewayUrl=${state.settings.gatewayUrl}></tenant-users-view>` : nothing}

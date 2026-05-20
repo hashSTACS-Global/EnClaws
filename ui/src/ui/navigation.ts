@@ -20,7 +20,7 @@ export const TAB_GROUPS = [
     },
     {
         label: "enterprise",
-        tabs: ["tenant-settings", "tenant-users", "tenant-traces", "tenant-usage", "tenant-cron"],
+        tabs: ["tenant-settings", "tenant-knowledge", "tenant-users", "tenant-traces", "tenant-usage", "tenant-cron"],
     },
     {
         label: "cs",
@@ -53,6 +53,7 @@ export type Tab =
     | "sandbox"
     | "logs"
     | "tenant-settings"
+    | "tenant-knowledge"
     | "tenant-users"
     | "tenant-models"
     | "tenant-agents"
@@ -86,6 +87,7 @@ const TAB_PATHS: Record<Tab, string> = {
     logs: "/logs",
     "tenant-overview": "/tenant-overview",
     "tenant-settings": "/tenant-settings",
+    "tenant-knowledge": "/tenant-knowledge",
     "tenant-users": "/tenant-users",
     "tenant-models": "/tenant-models",
     "tenant-agents": "/tenant-agents",
@@ -218,6 +220,8 @@ export function iconForTab(tab: Tab): IconName {
             return "barChart";
         case "tenant-settings":
             return "settings";
+        case "tenant-knowledge":
+            return "fileText";
         case "tenant-users":
             return "folder";
         case "tenant-agents":

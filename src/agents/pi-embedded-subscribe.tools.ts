@@ -143,6 +143,8 @@ const TRUSTED_TOOL_RESULT_MEDIA = new Set([
   "gateway",
   "image",
   "memory_get",
+  "memory_outline",
+  "memory_route",
   "memory_search",
   "message",
   "nodes",

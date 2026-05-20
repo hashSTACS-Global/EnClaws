@@ -158,6 +158,9 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "agents.memory.list",
     "agents.memory.get",
     "agents.memory.status",
+    "tenant.memory.get",
+    "tenant.memory.list",
+    "tenant.memory.file.get",
   ],
   [WRITE_SCOPE]: [
     "send",
@@ -202,6 +205,9 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "agents.files.set",
     "agents.memory.set",
     "agents.memory.delete",
+    "tenant.memory.update",
+    "tenant.memory.file.set",
+    "tenant.memory.delete",
     "sys.tools.update",
   ],
 };

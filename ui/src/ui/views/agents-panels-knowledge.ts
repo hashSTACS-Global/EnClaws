@@ -19,6 +19,8 @@ export function renderAgentKnowledge(params: {
   onFileReset: (name: string) => void;
   onFileSave: (name: string) => void;
   onFileDelete: (name: string) => void;
+  onFileUpload: (files: FileList | File[]) => void;
+  onFileDownload: (name: string) => void;
 }) {
   const list = params.agentKnowledgeList?.agentId === params.agentId ? params.agentKnowledgeList : null;
   const files = list?.files ?? [];
@@ -43,6 +45,29 @@ export function renderAgentKnowledge(params: {
         >
           ${params.agentKnowledgeLoading ? t("agents.knowledge.loading") : t("agents.knowledge.refresh")}
         </button>
+        <button
+          class="btn btn--sm btn--primary"
+          ?disabled=${params.agentKnowledgeSaving}
+          @click=${(e: Event) => {
+            const input = (e.currentTarget as HTMLElement).nextElementSibling as HTMLInputElement | null;
+            input?.click();
+          }}
+        >
+          上传文件
+        </button>
+        <input
+          type="file"
+          accept=".md,text/markdown"
+          multiple
+          style="display: none;"
+          @change=${(e: Event) => {
+            const input = e.target as HTMLInputElement;
+            if (input.files?.length) {
+              params.onFileUpload(input.files);
+              input.value = "";
+            }
+          }}
+        />
       </div>
       ${
         status
@@ -134,6 +159,17 @@ export function renderAgentKnowledge(params: {
             ${
               active
                 ? html`
+                    <button
+                      class="btn btn--icon"
+                      title="下载"
+                      @click=${() => params.onFileDownload(active)}
+                    >
+                      <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                      </svg>
+                    </button>
                     <button
                       class="btn btn--icon danger"
                       title=${t("agents.knowledge.deleteFileHint")}

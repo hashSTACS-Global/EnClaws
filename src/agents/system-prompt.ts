@@ -87,7 +87,12 @@ function buildMemorySection(params: {
   if (params.isMinimal) {
     return [];
   }
-  if (!params.availableTools.has("memory_search") && !params.availableTools.has("memory_get")) {
+  if (
+    !params.availableTools.has("memory_search") &&
+    !params.availableTools.has("memory_route") &&
+    !params.availableTools.has("memory_outline") &&
+    !params.availableTools.has("memory_get")
+  ) {
     return [];
   }
   const lines = isOptEnabled("P1")
@@ -100,13 +105,17 @@ function buildMemorySection(params: {
         "- You need to check existing notes before creating new ones",
         "",
         "Do NOT search memory for simple greetings, confirmations, or self-contained questions.",
-        "Use `memory_get` to pull specific lines. State explicitly if you found no relevant records.",
+        "For large memory files, use `memory_route` or `memory_outline` first to inspect section line ranges, then `memory_get` to pull specific lines. State explicitly if you found no relevant records.",
+        "After memory returns relevant results, do not repeat the same memory query. Use at most one focused `memory_get`, then answer.",
+        "For internal company/product/project questions, if memory returns relevant enterprise or agent knowledge, do not call `web_search` or `web_fetch` for the same question.",
       ]
     : [
         "## Memory & Deep Context Retrieval (Act as a Human Employee)",
         "You are an active employee. Before starting ANY new task, answering questions about prior work, decisions, or preferences, you MUST run `memory_search` on MEMORY.md + memory/*.md.",
         "Do not hallucinate past context. If you encounter a new domain, search memory first to see if you have 'learned' about it previously.",
-        "Use `memory_get` to pull specific lines. If you have low confidence after searching, explicitly state that you checked your memory but found no relevant records.",
+        "For large memory files, use `memory_route` or `memory_outline` first to inspect section line ranges, then `memory_get` to pull specific lines. If you have low confidence after searching, explicitly state that you checked your memory but found no relevant records.",
+        "After memory returns relevant results, do not repeat the same memory query. Use at most one focused `memory_get`, then answer.",
+        "For internal company/product/project questions, if memory returns relevant enterprise or agent knowledge, do not call `web_search` or `web_fetch` for the same question.",
       ];
   if (params.citationsMode === "off") {
     lines.push(
@@ -339,6 +348,13 @@ export function buildAgentSystemPrompt(params: {
     ls: "List directory contents",
     exec: "Run shell commands (pty available for TTY-required CLIs)",
     process: "Manage background exec sessions",
+    memory_search:
+      "Search enterprise and agent Markdown knowledge first for internal company, product, project, prior work, decisions, people, preferences, or todos.",
+    memory_route:
+      "Route a question through large knowledge documents to find relevant sections before reading exact lines.",
+    memory_outline:
+      "Inspect knowledge document outlines and line ranges before focused reads.",
+    memory_get: "Read focused lines from enterprise or agent knowledge files.",
     web_search: "Search the web (Brave API)",
     web_fetch: "Fetch and extract readable content from a URL",
     // Channel docking: add login tools here when a channel needs interactive linking.
@@ -373,6 +389,10 @@ export function buildAgentSystemPrompt(params: {
     "ls",
     "exec",
     "process",
+    "memory_search",
+    "memory_route",
+    "memory_outline",
+    "memory_get",
     "web_search",
     "web_fetch",
     "browser",

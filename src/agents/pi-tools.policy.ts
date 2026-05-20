@@ -54,6 +54,8 @@ const SUBAGENT_TOOL_DENY_ALWAYS = [
   "cron",
   // Memory - pass relevant info in spawn prompt instead
   "memory_search",
+  "memory_route",
+  "memory_outline",
   "memory_get",
   // Direct session sends - subagents communicate through announce chain
   "sessions_send",

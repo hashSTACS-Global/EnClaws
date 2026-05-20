@@ -12,6 +12,47 @@ export type MemorySearchResult = {
   citation?: string;
 };
 
+export type MemoryProgressiveSection = {
+  id: string;
+  title: string;
+  level: number;
+  startLine: number;
+  endLine: number;
+  preview: string;
+  summary: string;
+  keywords: string[];
+  titlePath: string[];
+  parentId?: string;
+};
+
+export type MemoryOutlineNode = MemoryProgressiveSection;
+
+export type MemoryProgressiveBlock = {
+  id: string;
+  sectionId: string;
+  titlePath: string[];
+  startLine: number;
+  endLine: number;
+  preview: string;
+  keywords: string[];
+};
+
+export type MemoryProgressiveRouteMatch = {
+  section: MemoryProgressiveSection;
+  blocks: MemoryProgressiveBlock[];
+  score: number;
+};
+
+export type MemoryOutlineFile = {
+  path: string;
+  sections: MemoryProgressiveSection[];
+};
+
+export type MemoryRouteFile = {
+  path: string;
+  matches: MemoryProgressiveRouteMatch[];
+};
+
 export type MemoryEmbeddingProbeResult = {
   ok: boolean;
   error?: string;
@@ -70,6 +111,18 @@ export interface MemorySearchManager {
     from?: number;
     lines?: number;
   }): Promise<{ text: string; path: string }>;
+  outline?(params?: {
+    relPath?: string;
+    maxSections?: number;
+    previewChars?: number;
+  }): Promise<{ files: MemoryOutlineFile[] }>;
+  route?(params: {
+    query: string;
+    relPath?: string;
+    maxResults?: number;
+    maxBlocksPerSection?: number;
+    previewChars?: number;
+  }): Promise<{ files: MemoryRouteFile[] }>;
   status(): MemoryProviderStatus;
   sync?(params?: {
     reason?: string;

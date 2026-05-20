@@ -18,13 +18,26 @@ import {
 } from "./embeddings.js";
 import { isFileMissingError, statRegularFile } from "./fs-utils.js";
 import { bm25RankToScore, buildFtsQuery, mergeHybridResults } from "./hybrid.js";
-import { isMemoryPath, normalizeExtraMemoryPaths } from "./internal.js";
+import {
+  isMemoryPath,
+  listMemoryFiles,
+  normalizeExtraMemoryPaths,
+} from "./internal.js";
 import { MemoryManagerEmbeddingOps } from "./manager-embedding-ops.js";
+import {
+  outlineMarkdown,
+  routeMarkdownProgressive,
+  routeProgressiveIndex,
+} from "./progressive-retrieval.js";
 import { searchKeyword, searchVector } from "./manager-search.js";
 import { extractKeywords } from "./query-expansion.js";
 import type {
   MemoryEmbeddingProbeResult,
+  MemoryOutlineFile,
   MemoryProviderStatus,
+  MemoryProgressiveBlock,
+  MemoryProgressiveSection,
+  MemoryRouteFile,
   MemorySearchManager,
   MemorySearchResult,
   MemorySource,
@@ -34,12 +47,38 @@ const SNIPPET_MAX_CHARS = 700;
 const VECTOR_TABLE = "chunks_vec";
 const FTS_TABLE = "chunks_fts";
 const EMBEDDING_CACHE_TABLE = "embedding_cache";
+const PROGRESSIVE_SECTIONS_TABLE = "progressive_sections";
+const PROGRESSIVE_BLOCKS_TABLE = "progressive_blocks";
 const BATCH_FAILURE_LIMIT = 2;
 
 const log = createSubsystemLogger("memory");
 
 const INDEX_CACHE = new Map<string, MemoryIndexManager>();
 const INDEX_CACHE_PENDING = new Map<string, Promise<MemoryIndexManager>>();
+
+type ProgressiveSectionRow = {
+  path: string;
+  section_id: string;
+  parent_id: string | null;
+  title: string;
+  level: number;
+  start_line: number;
+  end_line: number;
+  preview: string;
+  summary: string;
+  keywords: string;
+  title_path: string;
+};
+
+type ProgressiveBlockRow = {
+  path: string;
+  section_id: string;
+  start_line: number;
+  end_line: number;
+  preview: string;
+  keywords: string;
+  title_path: string;
+};
 
 export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements MemorySearchManager {
   private readonly cacheKey: string;
@@ -243,7 +282,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
   ): Promise<MemorySearchResult[]> {
     void this.warmSession(opts?.sessionKey);
     if (this.settings.sync.onSearch && (this.dirty || this.sessionsDirty)) {
-      void this.sync({ reason: "search" }).catch((err) => {
+      await this.sync({ reason: "search" }).catch((err) => {
         log.warn(`memory sync failed (search): ${String(err)}`);
       });
     }
@@ -263,7 +302,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     if (!this.provider) {
       if (!this.fts.enabled || !this.fts.available) {
         log.warn("memory search: no provider and FTS unavailable");
-        return [];
+        return this.searchProgressiveFallback(cleaned, maxResults);
       }
 
       // Extract keywords for better FTS matching on conversational queries
@@ -389,6 +428,51 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       bm25RankToScore,
     });
     return results.map((entry) => entry as MemorySearchResult & { id: string; textScore: number });
+  }
+
+  private async searchProgressiveFallback(
+    query: string,
+    maxResults: number,
+  ): Promise<MemorySearchResult[]> {
+    const indexed = this.loadRouteFromIndex({
+      query,
+      maxResults,
+      maxBlocksPerSection: 1,
+    });
+    if (indexed && indexed.length > 0) {
+      return indexed.flatMap((file) =>
+        file.matches.map((match) => {
+          const block = match.blocks[0];
+          return {
+            path: file.path,
+            startLine: block?.startLine ?? match.section.startLine,
+            endLine: block?.endLine ?? match.section.endLine,
+            score: Math.min(1, Math.max(0.01, match.score / 20)),
+            snippet: block?.preview || match.section.summary || match.section.preview,
+            source: "memory" as MemorySource,
+          };
+        }),
+      ).slice(0, maxResults);
+    }
+
+    const routed = await this.route({
+      query,
+      maxResults,
+      maxBlocksPerSection: 1,
+    });
+    return routed.files.flatMap((file) =>
+      file.matches.map((match) => {
+        const block = match.blocks[0];
+        return {
+          path: file.path,
+          startLine: block?.startLine ?? match.section.startLine,
+          endLine: block?.endLine ?? match.section.endLine,
+          score: Math.min(1, Math.max(0.01, match.score / 20)),
+          snippet: block?.preview || match.section.summary || match.section.preview,
+          source: "memory" as MemorySource,
+        };
+      }),
+    ).slice(0, maxResults);
   }
 
   private mergeHybridResults(params: {
@@ -599,6 +683,256 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     const count = Math.max(1, params.lines ?? lines.length);
     const slice = lines.slice(start - 1, start - 1 + count);
     return { text: slice.join("\n"), path: relPath };
+  }
+
+  private normalizeIndexRelPath(relPath: string): string {
+    const rawPath = relPath.trim();
+    const absPath = path.isAbsolute(rawPath)
+      ? path.resolve(rawPath)
+      : path.resolve(this.workspaceDir, rawPath);
+    return path.relative(this.workspaceDir, absPath).replace(/\\/g, "/");
+  }
+
+  private parseProgressiveJsonArray(value: string): string[] {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === "string");
+      }
+    } catch {}
+    return [];
+  }
+
+  private sectionFromRow(row: ProgressiveSectionRow): MemoryProgressiveSection {
+    return {
+      id: row.section_id,
+      title: row.title,
+      level: row.level,
+      startLine: row.start_line,
+      endLine: row.end_line,
+      preview: row.preview,
+      summary: row.summary,
+      keywords: this.parseProgressiveJsonArray(row.keywords),
+      titlePath: this.parseProgressiveJsonArray(row.title_path),
+      ...(row.parent_id ? { parentId: row.parent_id } : {}),
+    };
+  }
+
+  private blockFromRow(row: ProgressiveBlockRow): MemoryProgressiveBlock {
+    return {
+      id: `${row.section_id}:${row.start_line}:${row.end_line}`,
+      sectionId: row.section_id,
+      titlePath: this.parseProgressiveJsonArray(row.title_path),
+      startLine: row.start_line,
+      endLine: row.end_line,
+      preview: row.preview,
+      keywords: this.parseProgressiveJsonArray(row.keywords),
+    };
+  }
+
+  private loadOutlineFromIndex(params: {
+    relPath?: string;
+    maxSections: number;
+  }): MemoryOutlineFile[] {
+    const rows = params.relPath
+      ? (this.db
+          .prepare(
+            `SELECT path, section_id, parent_id, title, level, start_line, end_line, preview, summary, keywords, title_path
+             FROM ${PROGRESSIVE_SECTIONS_TABLE}
+             WHERE path = ?
+             ORDER BY start_line ASC`,
+          )
+          .all(this.normalizeIndexRelPath(params.relPath)) as ProgressiveSectionRow[])
+      : (this.db
+          .prepare(
+            `SELECT path, section_id, parent_id, title, level, start_line, end_line, preview, summary, keywords, title_path
+             FROM ${PROGRESSIVE_SECTIONS_TABLE}
+             ORDER BY path ASC, start_line ASC`,
+          )
+          .all() as ProgressiveSectionRow[]);
+    if (rows.length === 0) {
+      return [];
+    }
+    const byPath = new Map<string, MemoryProgressiveSection[]>();
+    for (const row of rows) {
+      const sections = byPath.get(row.path) ?? [];
+      if (sections.length < params.maxSections) {
+        sections.push(this.sectionFromRow(row));
+      }
+      byPath.set(row.path, sections);
+    }
+    return Array.from(byPath.entries()).map(([filePath, sections]) => ({
+      path: filePath,
+      sections,
+    }));
+  }
+
+  private loadBlocksFromIndex(paths: string[]): Map<string, MemoryProgressiveBlock[]> {
+    const byPath = new Map<string, MemoryProgressiveBlock[]>();
+    const uniquePaths = Array.from(new Set(paths)).filter(Boolean);
+    if (uniquePaths.length === 0) {
+      return byPath;
+    }
+    const batchSize = 400;
+    for (let start = 0; start < uniquePaths.length; start += batchSize) {
+      const batch = uniquePaths.slice(start, start + batchSize);
+      const placeholders = batch.map(() => "?").join(", ");
+      const rows = this.db
+        .prepare(
+          `SELECT path, section_id, start_line, end_line, preview, keywords, title_path
+           FROM ${PROGRESSIVE_BLOCKS_TABLE}
+           WHERE path IN (${placeholders})
+           ORDER BY path ASC, start_line ASC`,
+        )
+        .all(...batch) as ProgressiveBlockRow[];
+      for (const row of rows) {
+        const blocks = byPath.get(row.path) ?? [];
+        blocks.push(this.blockFromRow(row));
+        byPath.set(row.path, blocks);
+      }
+    }
+    return byPath;
+  }
+
+  private loadRouteFromIndex(params: {
+    query: string;
+    relPath?: string;
+    maxResults: number;
+    maxBlocksPerSection: number;
+  }): MemoryRouteFile[] | null {
+    const outlineFiles = this.loadOutlineFromIndex({
+      relPath: params.relPath,
+      maxSections: Number.MAX_SAFE_INTEGER,
+    });
+    if (outlineFiles.length === 0) {
+      return null;
+    }
+    const blocksByPath = this.loadBlocksFromIndex(outlineFiles.map((file) => file.path));
+    const files: MemoryRouteFile[] = [];
+    for (const file of outlineFiles) {
+      const matches = routeProgressiveIndex(
+        {
+          sections: file.sections,
+          blocks: blocksByPath.get(file.path) ?? [],
+        },
+        params.query,
+        {
+          maxResults: params.maxResults,
+          maxBlocksPerSection: params.maxBlocksPerSection,
+        },
+      );
+      if (matches.length > 0) {
+        files.push({ path: file.path, matches });
+      }
+    }
+    return files;
+  }
+
+  async outline(params?: {
+    relPath?: string;
+    maxSections?: number;
+    previewChars?: number;
+  }): Promise<{ files: MemoryOutlineFile[] }> {
+    const maxSections = Math.max(1, Math.floor(params?.maxSections ?? 80));
+    const previewChars = Math.max(40, Math.floor(params?.previewChars ?? 240));
+    const indexedFiles = this.loadOutlineFromIndex({
+      relPath: params?.relPath,
+      maxSections,
+    });
+    if (indexedFiles.length > 0) {
+      return { files: indexedFiles };
+    }
+    if (params?.relPath?.trim()) {
+      const file = await this.readFile({ relPath: params.relPath });
+      return {
+        files: [
+          {
+            path: file.path,
+            sections: outlineMarkdown(file.text, { maxSections, previewChars }),
+          },
+        ],
+      };
+    }
+
+    const files = await listMemoryFiles(this.workspaceDir, this.settings.extraPaths);
+    const result: MemoryOutlineFile[] = [];
+    for (const absPath of files) {
+      const relPath = path.relative(this.workspaceDir, absPath).replace(/\\/g, "/");
+      let content = "";
+      try {
+        content = await fs.readFile(absPath, "utf-8");
+      } catch (err) {
+        if (!isFileMissingError(err)) {
+          throw err;
+        }
+        continue;
+      }
+      result.push({
+        path: relPath,
+        sections: outlineMarkdown(content, { maxSections, previewChars }),
+      });
+    }
+    return { files: result };
+  }
+
+  async route(params: {
+    query: string;
+    relPath?: string;
+    maxResults?: number;
+    maxBlocksPerSection?: number;
+    previewChars?: number;
+  }): Promise<{ files: MemoryRouteFile[] }> {
+    const maxResults = Math.max(1, Math.floor(params.maxResults ?? 6));
+    const maxBlocksPerSection = Math.max(0, Math.floor(params.maxBlocksPerSection ?? 3));
+    const previewChars = Math.max(40, Math.floor(params.previewChars ?? 240));
+    const indexedFiles = this.loadRouteFromIndex({
+      query: params.query,
+      relPath: params.relPath,
+      maxResults,
+      maxBlocksPerSection,
+    });
+    if (indexedFiles) {
+      return { files: indexedFiles };
+    }
+    if (params.relPath?.trim()) {
+      const file = await this.readFile({ relPath: params.relPath });
+      return {
+        files: [
+          {
+            path: file.path,
+            matches: routeMarkdownProgressive(file.text, params.query, {
+              maxResults,
+              maxBlocksPerSection,
+              previewChars,
+            }),
+          },
+        ],
+      };
+    }
+
+    const files = await listMemoryFiles(this.workspaceDir, this.settings.extraPaths);
+    const result: MemoryRouteFile[] = [];
+    for (const absPath of files) {
+      const relPath = path.relative(this.workspaceDir, absPath).replace(/\\/g, "/");
+      let content = "";
+      try {
+        content = await fs.readFile(absPath, "utf-8");
+      } catch (err) {
+        if (!isFileMissingError(err)) {
+          throw err;
+        }
+        continue;
+      }
+      const matches = routeMarkdownProgressive(content, params.query, {
+        maxResults,
+        maxBlocksPerSection,
+        previewChars,
+      });
+      if (matches.length > 0) {
+        result.push({ path: relPath, matches });
+      }
+    }
+    return { files: result };
   }
 
   status(): MemoryProviderStatus {

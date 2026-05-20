@@ -18,12 +18,15 @@ import {
   type MemoryFileEntry,
 } from "./internal.js";
 import { MemoryManagerSyncOps } from "./manager-sync-ops.js";
+import { parseMarkdownProgressive } from "./progressive-retrieval.js";
 import type { SessionFileEntry } from "./session-files.js";
 import type { MemorySource } from "./types.js";
 
 const VECTOR_TABLE = "chunks_vec";
 const FTS_TABLE = "chunks_fts";
 const EMBEDDING_CACHE_TABLE = "embedding_cache";
+const PROGRESSIVE_SECTIONS_TABLE = "progressive_sections";
+const PROGRESSIVE_BLOCKS_TABLE = "progressive_blocks";
 const EMBEDDING_BATCH_MAX_TOKENS = 8000;
 const EMBEDDING_INDEX_CONCURRENCY = 4;
 const EMBEDDING_RETRY_MAX_ATTEMPTS = 3;
@@ -34,6 +37,7 @@ const EMBEDDING_QUERY_TIMEOUT_REMOTE_MS = 60_000;
 const EMBEDDING_QUERY_TIMEOUT_LOCAL_MS = 5 * 60_000;
 const EMBEDDING_BATCH_TIMEOUT_REMOTE_MS = 2 * 60_000;
 const EMBEDDING_BATCH_TIMEOUT_LOCAL_MS = 10 * 60_000;
+const FTS_ONLY_MODEL = "__fts__";
 
 const vectorToBlob = (embedding: number[]): Buffer =>
   Buffer.from(new Float32Array(embedding).buffer);
@@ -694,32 +698,25 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
     entry: MemoryFileEntry | SessionFileEntry,
     options: { source: MemorySource; content?: string },
   ) {
-    // FTS-only mode: skip indexing if no provider
-    if (!this.provider) {
-      log.debug("Skipping embedding indexing in FTS-only mode", {
-        path: entry.path,
-        source: options.source,
-      });
-      return;
-    }
-
     const content = options.content ?? (await fs.readFile(entry.absPath, "utf-8"));
-    const chunks = enforceEmbeddingMaxInputTokens(
-      this.provider,
-      chunkMarkdown(content, this.settings.chunking).filter(
-        (chunk) => chunk.text.trim().length > 0,
-      ),
-      EMBEDDING_BATCH_MAX_TOKENS,
+    const rawChunks = chunkMarkdown(content, this.settings.chunking).filter(
+      (chunk) => chunk.text.trim().length > 0,
     );
+    const chunks = this.provider
+      ? enforceEmbeddingMaxInputTokens(this.provider, rawChunks, EMBEDDING_BATCH_MAX_TOKENS)
+      : rawChunks;
     if (options.source === "sessions" && "lineMap" in entry) {
       remapChunkLines(chunks, entry.lineMap);
     }
-    const embeddings = this.batch.enabled
-      ? await this.embedChunksWithBatch(chunks, entry, options.source)
-      : await this.embedChunksInBatches(chunks);
+    const embeddings = this.provider
+      ? this.batch.enabled
+        ? await this.embedChunksWithBatch(chunks, entry, options.source)
+        : await this.embedChunksInBatches(chunks)
+      : chunks.map(() => []);
     const sample = embeddings.find((embedding) => embedding.length > 0);
     const vectorReady = sample ? await this.ensureVectorReady(sample.length) : false;
     const now = Date.now();
+    const providerModel = this.provider?.model ?? FTS_ONLY_MODEL;
     if (vectorReady) {
       try {
         this.db
@@ -733,17 +730,23 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
       try {
         this.db
           .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-          .run(entry.path, options.source, this.provider.model);
+          .run(entry.path, options.source, providerModel);
       } catch {}
     }
     this.db
       .prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`)
       .run(entry.path, options.source);
+    this.db
+      .prepare(`DELETE FROM ${PROGRESSIVE_SECTIONS_TABLE} WHERE path = ? AND source = ?`)
+      .run(entry.path, options.source);
+    this.db
+      .prepare(`DELETE FROM ${PROGRESSIVE_BLOCKS_TABLE} WHERE path = ? AND source = ?`)
+      .run(entry.path, options.source);
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const embedding = embeddings[i] ?? [];
       const id = hashText(
-        `${options.source}:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.hash}:${this.provider.model}`,
+        `${options.source}:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.hash}:${providerModel}`,
       );
       this.db
         .prepare(
@@ -763,7 +766,7 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
           chunk.startLine,
           chunk.endLine,
           chunk.hash,
-          this.provider.model,
+          providerModel,
           chunk.text,
           JSON.stringify(embedding),
           now,
@@ -787,12 +790,13 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
             id,
             entry.path,
             options.source,
-            this.provider.model,
+            providerModel,
             chunk.startLine,
             chunk.endLine,
           );
       }
     }
+    this.indexProgressiveDocument(entry, options.source, content, now);
     this.db
       .prepare(
         `INSERT INTO files (path, source, hash, mtime, size) VALUES (?, ?, ?, ?, ?)
@@ -803,5 +807,79 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
            size=excluded.size`,
       )
       .run(entry.path, options.source, entry.hash, entry.mtimeMs, entry.size);
+  }
+
+  private indexProgressiveDocument(
+    entry: MemoryFileEntry | SessionFileEntry,
+    source: MemorySource,
+    content: string,
+    updatedAt: number,
+  ): void {
+    const parsed = parseMarkdownProgressive(content);
+    const insertSection = this.db.prepare(
+      `INSERT INTO ${PROGRESSIVE_SECTIONS_TABLE}
+       (id, path, source, section_id, parent_id, title, level, start_line, end_line, preview, summary, keywords, title_path, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         parent_id=excluded.parent_id,
+         title=excluded.title,
+         level=excluded.level,
+         start_line=excluded.start_line,
+         end_line=excluded.end_line,
+         preview=excluded.preview,
+         summary=excluded.summary,
+         keywords=excluded.keywords,
+         title_path=excluded.title_path,
+         updated_at=excluded.updated_at`,
+    );
+    for (const section of parsed.sections) {
+      const id = hashText(`${source}:${entry.path}:section:${section.id}`);
+      insertSection.run(
+        id,
+        entry.path,
+        source,
+        section.id,
+        section.parentId ?? null,
+        section.title,
+        section.level,
+        section.startLine,
+        section.endLine,
+        section.preview,
+        section.summary,
+        JSON.stringify(section.keywords),
+        JSON.stringify(section.titlePath),
+        updatedAt,
+      );
+    }
+
+    const insertBlock = this.db.prepare(
+      `INSERT INTO ${PROGRESSIVE_BLOCKS_TABLE}
+       (id, path, source, section_id, start_line, end_line, preview, keywords, title_path, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         start_line=excluded.start_line,
+         end_line=excluded.end_line,
+         preview=excluded.preview,
+         keywords=excluded.keywords,
+         title_path=excluded.title_path,
+         updated_at=excluded.updated_at`,
+    );
+    for (const block of parsed.blocks) {
+      const id = hashText(
+        `${source}:${entry.path}:block:${block.id}:${block.startLine}:${block.endLine}`,
+      );
+      insertBlock.run(
+        id,
+        entry.path,
+        source,
+        block.sectionId,
+        block.startLine,
+        block.endLine,
+        block.preview,
+        JSON.stringify(block.keywords),
+        JSON.stringify(block.titlePath),
+        updatedAt,
+      );
+    }
   }
 }

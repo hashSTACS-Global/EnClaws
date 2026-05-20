@@ -1345,7 +1345,7 @@ export function createWebSearchTool(options?: {
   const geminiConfig = resolveGeminiConfig(search);
   const kimiConfig = resolveKimiConfig(search);
 
-  const description =
+  const providerDescription =
     provider === "perplexity"
       ? "Search the web using Perplexity Sonar (direct or via OpenRouter). Returns AI-synthesized answers with citations from real-time web search."
       : provider === "grok"
@@ -1355,6 +1355,7 @@ export function createWebSearchTool(options?: {
           : provider === "gemini"
             ? "Search the web using Gemini with Google Search grounding. Returns AI-synthesized answers with citations from Google Search."
             : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
+  const description = `${providerDescription} Do not use for internal company/product/project knowledge before trying memory_search/memory_route when those tools are available.`;
 
   return {
     label: "Web Search",

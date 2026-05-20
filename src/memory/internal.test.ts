@@ -9,6 +9,7 @@ import {
   normalizeExtraMemoryPaths,
   remapChunkLines,
 } from "./internal.js";
+import { outlineMarkdown, routeMarkdownProgressive } from "./progressive-retrieval.js";
 
 function setupTempDirLifecycle(prefix: string): () => string {
   let tmpDir = "";
@@ -166,6 +167,99 @@ describe("chunkMarkdown", () => {
     for (const chunk of chunks) {
       expect(chunk.text.length).toBeLessThanOrEqual(maxChars);
     }
+  });
+});
+
+describe("outlineMarkdown", () => {
+  it("extracts heading line ranges and previews", () => {
+    const content = [
+      "# Install",
+      "Use the installer.",
+      "Follow the prompts.",
+      "## Windows",
+      "Run install.ps1.",
+      "## macOS",
+      "Open the app.",
+    ].join("\n");
+
+    const outline = outlineMarkdown(content, { previewChars: 80 });
+
+    expect(outline).toMatchObject([
+      {
+        id: "s1",
+        title: "Install",
+        level: 1,
+        startLine: 1,
+        endLine: 3,
+        preview: "Use the installer. Follow the prompts.",
+        summary: "Use the installer. Follow the prompts.",
+        titlePath: ["Install"],
+      },
+      {
+        id: "s2",
+        title: "Windows",
+        level: 2,
+        startLine: 4,
+        endLine: 5,
+        preview: "Run install.ps1.",
+        summary: "Run install.ps1.",
+        titlePath: ["Install", "Windows"],
+        parentId: "s1",
+      },
+      {
+        id: "s3",
+        title: "macOS",
+        level: 2,
+        startLine: 6,
+        endLine: 7,
+        preview: "Open the app.",
+        summary: "Open the app.",
+        titlePath: ["Install", "macOS"],
+        parentId: "s1",
+      },
+    ]);
+  });
+
+  it("falls back to a document preview when there are no headings", () => {
+    const outline = outlineMarkdown("First line.\nSecond line.", { previewChars: 20 });
+
+    expect(outline).toMatchObject([
+      {
+        id: "s1",
+        title: "Document",
+        level: 1,
+        startLine: 1,
+        endLine: 2,
+        preview: "First line. Second l",
+        summary: "First line. Second l",
+        titlePath: ["Document"],
+      },
+    ]);
+  });
+});
+
+describe("routeMarkdownProgressive", () => {
+  it("routes queries to matching sections and blocks", () => {
+    const content = [
+      "# Accounts",
+      "Create users and assign roles.",
+      "",
+      "## Reset Password",
+      "Open account settings.",
+      "Click reset password and confirm the email code.",
+      "",
+      "# Billing",
+      "Manage invoices and payment methods.",
+    ].join("\n");
+
+    const matches = routeMarkdownProgressive(content, "how to reset password", {
+      maxResults: 2,
+    });
+
+    expect(matches[0]?.section.title).toBe("Reset Password");
+    expect(matches[0]?.section.startLine).toBe(4);
+    expect(matches[0]?.blocks[0]?.startLine).toBe(5);
+    expect(matches[0]?.blocks[0]?.preview).toContain("reset password");
   });
 });
 

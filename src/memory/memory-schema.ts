@@ -78,6 +78,41 @@ export function ensureMemoryIndexSchema(params: {
   ensureColumn(params.db, "chunks", "source", "TEXT NOT NULL DEFAULT 'memory'");
   params.db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);`);
   params.db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);`);
+  params.db.exec(`
+    CREATE TABLE IF NOT EXISTS progressive_sections (
+      id TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'memory',
+      section_id TEXT NOT NULL,
+      parent_id TEXT,
+      title TEXT NOT NULL,
+      level INTEGER NOT NULL,
+      start_line INTEGER NOT NULL,
+      end_line INTEGER NOT NULL,
+      preview TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      keywords TEXT NOT NULL,
+      title_path TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+  params.db.exec(`
+    CREATE TABLE IF NOT EXISTS progressive_blocks (
+      id TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'memory',
+      section_id TEXT NOT NULL,
+      start_line INTEGER NOT NULL,
+      end_line INTEGER NOT NULL,
+      preview TEXT NOT NULL,
+      keywords TEXT NOT NULL,
+      title_path TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+  params.db.exec(`CREATE INDEX IF NOT EXISTS idx_progressive_sections_path ON progressive_sections(path, source);`);
+  params.db.exec(`CREATE INDEX IF NOT EXISTS idx_progressive_blocks_path ON progressive_blocks(path, source);`);
+  params.db.exec(`CREATE INDEX IF NOT EXISTS idx_progressive_blocks_section ON progressive_blocks(section_id, path, source);`);
 
   return { ftsAvailable, ...(ftsError ? { ftsError } : {}) };
 }

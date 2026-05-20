@@ -64,6 +64,9 @@ const META_KEY = "memory_index_meta_v1";
 const VECTOR_TABLE = "chunks_vec";
 const FTS_TABLE = "chunks_fts";
 const EMBEDDING_CACHE_TABLE = "embedding_cache";
+const PROGRESSIVE_SECTIONS_TABLE = "progressive_sections";
+const PROGRESSIVE_BLOCKS_TABLE = "progressive_blocks";
+const FTS_ONLY_MODEL = "__fts__";
 const SESSION_DIRTY_DEBOUNCE_MS = 5000;
 const SESSION_DELTA_READ_CHUNK_BYTES = 64 * 1024;
 const VECTOR_LOAD_TIMEOUT_MS = 30_000;
@@ -631,12 +634,6 @@ export abstract class MemoryManagerSyncOps {
     needsFullReindex: boolean;
     progress?: MemorySyncProgressState;
   }) {
-    // FTS-only mode: skip embedding sync (no provider)
-    if (!this.provider) {
-      log.debug("Skipping memory file sync in FTS-only mode (no embedding provider)");
-      return;
-    }
-
     const files = await listMemoryFiles(this.workspaceDir, this.settings.extraPaths);
     const fileEntries = (
       await Promise.all(files.map(async (file) => buildFileEntry(file, this.workspaceDir)))
@@ -698,11 +695,17 @@ export abstract class MemoryManagerSyncOps {
           .run(stale.path, "memory");
       } catch {}
       this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, "memory");
+      this.db
+        .prepare(`DELETE FROM ${PROGRESSIVE_SECTIONS_TABLE} WHERE path = ? AND source = ?`)
+        .run(stale.path, "memory");
+      this.db
+        .prepare(`DELETE FROM ${PROGRESSIVE_BLOCKS_TABLE} WHERE path = ? AND source = ?`)
+        .run(stale.path, "memory");
       if (this.fts.enabled && this.fts.available) {
         try {
           this.db
             .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-            .run(stale.path, "memory", this.provider.model);
+            .run(stale.path, "memory", this.provider?.model ?? FTS_ONLY_MODEL);
         } catch {}
       }
     }
@@ -712,12 +715,6 @@ export abstract class MemoryManagerSyncOps {
     needsFullReindex: boolean;
     progress?: MemorySyncProgressState;
   }) {
-    // FTS-only mode: skip embedding sync (no provider)
-    if (!this.provider) {
-      log.debug("Skipping session file sync in FTS-only mode (no embedding provider)");
-      return;
-    }
-
     const files = await listSessionFilesForAgent(this.agentId);
     const activePaths = new Set(files.map((file) => sessionPathForFile(file)));
     const indexAll = params.needsFullReindex || this.sessionsDirtyFiles.size === 0;
@@ -805,11 +802,17 @@ export abstract class MemoryManagerSyncOps {
       this.db
         .prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`)
         .run(stale.path, "sessions");
+      this.db
+        .prepare(`DELETE FROM ${PROGRESSIVE_SECTIONS_TABLE} WHERE path = ? AND source = ?`)
+        .run(stale.path, "sessions");
+      this.db
+        .prepare(`DELETE FROM ${PROGRESSIVE_BLOCKS_TABLE} WHERE path = ? AND source = ?`)
+        .run(stale.path, "sessions");
       if (this.fts.enabled && this.fts.available) {
         try {
           this.db
             .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-            .run(stale.path, "sessions", this.provider.model);
+            .run(stale.path, "sessions", this.provider?.model ?? FTS_ONLY_MODEL);
         } catch {}
       }
     }
@@ -1151,6 +1154,8 @@ export abstract class MemoryManagerSyncOps {
   private resetIndex() {
     this.db.exec(`DELETE FROM files`);
     this.db.exec(`DELETE FROM chunks`);
+    this.db.exec(`DELETE FROM ${PROGRESSIVE_SECTIONS_TABLE}`);
+    this.db.exec(`DELETE FROM ${PROGRESSIVE_BLOCKS_TABLE}`);
     if (this.fts.enabled && this.fts.available) {
       try {
         this.db.exec(`DELETE FROM ${FTS_TABLE}`);

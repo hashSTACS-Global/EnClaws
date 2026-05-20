@@ -942,6 +942,64 @@ export class TenantAgentsView extends LitElement {
     }
   }
 
+  private async uploadAgentKnowledgeFiles(agentId: string, fileList: FileList | File[]) {
+    const files = Array.from(fileList).filter((file) => file.name.endsWith(".md"));
+    if (files.length === 0) {
+      this.agentKnowledgeError = "Only .md Markdown files are supported";
+      return;
+    }
+    this.agentKnowledgeSaving = true;
+    this.agentKnowledgeError = null;
+    try {
+      for (const file of files) {
+        const normalized = this.normalizeKnowledgeFileName(file.name);
+        if (!normalized) {
+          continue;
+        }
+        const content = await file.text();
+        const result = await this.rpc("agents.memory.set", {
+          agentId,
+          name: normalized,
+          content,
+        }) as AgentsMemorySetResult | null;
+        if (result?.file) {
+          this.mergeKnowledgeFileEntry(result.file);
+          this.agentKnowledgeFileContents = {
+            ...this.agentKnowledgeFileContents,
+            [normalized]: content,
+          };
+          this.agentKnowledgeFileDrafts = {
+            ...this.agentKnowledgeFileDrafts,
+            [normalized]: content,
+          };
+        }
+      }
+      void this.loadAgentKnowledgeStatus(agentId);
+    } catch (err) {
+      this.agentKnowledgeError = String(err);
+    } finally {
+      this.agentKnowledgeSaving = false;
+    }
+  }
+
+  private async downloadAgentKnowledgeFile(agentId: string, name: string) {
+    try {
+      if (!Object.hasOwn(this.agentKnowledgeFileContents, name)) {
+        await this.loadAgentKnowledgeFileContent(agentId, name);
+      }
+      const content = this.agentKnowledgeFileDrafts[name] ?? this.agentKnowledgeFileContents[name] ?? "";
+      const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name.split("/").pop() || "knowledge.md";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err) {
+      this.agentKnowledgeError = String(err);
+    }
+  }
+
   private async loadPersonaFileContent(agentId: string, name: string) {
     if (Object.hasOwn(this.personaFileContents, name)) { return; }
     this.personaFilesLoading = true;
@@ -2223,6 +2281,8 @@ export class TenantAgentsView extends LitElement {
       },
       onFileSave: (name) => void this.saveAgentKnowledgeFile(agent.agentId, name),
       onFileDelete: (name) => void this.deleteAgentKnowledgeFile(agent.agentId, name),
+      onFileUpload: (files) => void this.uploadAgentKnowledgeFiles(agent.agentId, files),
+      onFileDownload: (name) => void this.downloadAgentKnowledgeFile(agent.agentId, name),
     });
   }
 
