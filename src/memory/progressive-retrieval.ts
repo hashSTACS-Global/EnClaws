@@ -168,8 +168,9 @@ export function routeProgressiveIndex(
   }
   const scored = parsed.sections
     .map((section) => {
+      const sectionText = `${section.title} ${section.summary} ${section.keywords.join(" ")}`;
       const sectionScore = scoreText(
-        `${section.title} ${section.summary} ${section.keywords.join(" ")}`,
+        sectionText,
         queryTerms,
         {
           title: section.title,
@@ -180,6 +181,7 @@ export function routeProgressiveIndex(
         .filter((block) => block.sectionId === section.id)
         .map((block) => ({
           block,
+          text: `${block.preview} ${block.keywords.join(" ")}`,
           score: scoreText(`${block.preview} ${block.keywords.join(" ")}`, queryTerms, {
             keywords: block.keywords,
           }),
@@ -188,10 +190,15 @@ export function routeProgressiveIndex(
         .toSorted((a, b) => b.score - a.score)
         .slice(0, maxBlocksPerSection);
       const blockScore = blocks.reduce((sum, entry) => sum + entry.score, 0);
+      const matchedTerms = collectMatchedTerms(
+        `${sectionText} ${blocks.map((entry) => entry.text).join(" ")}`,
+        queryTerms,
+      );
       return {
         section,
         blocks: blocks.map((entry) => entry.block),
         score: sectionScore + blockScore,
+        matchedTerms,
       };
     })
     .filter((entry) => entry.score > 0)
@@ -202,7 +209,31 @@ export function routeProgressiveIndex(
     section: entry.section,
     blocks: entry.blocks,
     score: entry.score,
+    matchedTerms: entry.matchedTerms,
+    why: formatRouteReason(entry.matchedTerms, entry.section),
+    recommendedRead: buildRecommendedRead(entry.section, entry.blocks),
   }));
+}
+
+function buildRecommendedRead(
+  section: MemoryProgressiveSection,
+  blocks: MemoryProgressiveBlock[],
+): { from: number; lines: number } {
+  const firstBlock = blocks[0];
+  const startLine = firstBlock?.startLine ?? section.startLine;
+  const endLine = firstBlock?.endLine ?? Math.min(section.endLine, startLine + 79);
+  return {
+    from: Math.max(1, startLine),
+    lines: Math.max(1, Math.min(120, endLine - startLine + 1)),
+  };
+}
+
+function formatRouteReason(terms: string[], section: MemoryProgressiveSection): string {
+  const title = section.titlePath.join(" > ") || section.title;
+  if (terms.length === 0) {
+    return `Matched section: ${title}`;
+  }
+  return `Matched section: ${title}; terms: ${terms.slice(0, 8).join(", ")}`;
 }
 
 function buildBlocks(params: {
@@ -328,6 +359,17 @@ function scoreText(
     }
   }
   return score;
+}
+
+function collectMatchedTerms(text: string, terms: string[]): string[] {
+  const haystack = text.toLowerCase();
+  const matched: string[] = [];
+  for (const term of terms) {
+    if (haystack.includes(term) && !matched.includes(term)) {
+      matched.push(term);
+    }
+  }
+  return matched;
 }
 
 const STOP_WORDS = new Set([

@@ -41,6 +41,12 @@ export type MemoryProgressiveRouteMatch = {
   section: MemoryProgressiveSection;
   blocks: MemoryProgressiveBlock[];
   score: number;
+  matchedTerms?: string[];
+  why?: string;
+  recommendedRead?: {
+    from: number;
+    lines: number;
+  };
 };
 
 export type MemoryOutlineFile = {

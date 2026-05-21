@@ -841,7 +841,23 @@ export class TenantAgentsView extends LitElement {
       .filter(Boolean)
       .join("/");
     if (!safeName) {return null;}
-    return `memory/${safeName.endsWith(".md") ? safeName : `${safeName}.md`}`;
+    const supported = [".md", ".txt", ".csv", ".docx", ".xlsx", ".pdf"];
+    const hasSupportedExt = supported.some((ext) => safeName.toLowerCase().endsWith(ext));
+    return `memory/${hasSupportedExt ? safeName : `${safeName}.md`}`;
+  }
+
+  private isEditableKnowledgeFile(name: string): boolean {
+    const lower = name.toLowerCase();
+    return lower.endsWith(".md") || lower.endsWith(".txt") || lower.endsWith(".csv");
+  }
+
+  private async fileToBase64(file: File): Promise<string> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) {
+      binary += String.fromCharCode(bytes[i] ?? 0);
+    }
+    return btoa(binary);
   }
 
   private mergeKnowledgeFileEntry(entry: AgentFileEntry) {
@@ -943,9 +959,13 @@ export class TenantAgentsView extends LitElement {
   }
 
   private async uploadAgentKnowledgeFiles(agentId: string, fileList: FileList | File[]) {
-    const files = Array.from(fileList).filter((file) => file.name.endsWith(".md"));
+    const files = Array.from(fileList).filter((file) =>
+      [".md", ".txt", ".csv", ".docx", ".xlsx", ".pdf"].some((ext) =>
+        file.name.toLowerCase().endsWith(ext),
+      ),
+    );
     if (files.length === 0) {
-      this.agentKnowledgeError = "Only .md Markdown files are supported";
+      this.agentKnowledgeError = "Only .md, .txt, .csv, .docx, .xlsx, and .pdf files are supported";
       return;
     }
     this.agentKnowledgeSaving = true;
@@ -956,11 +976,14 @@ export class TenantAgentsView extends LitElement {
         if (!normalized) {
           continue;
         }
-        const content = await file.text();
+        const content = this.isEditableKnowledgeFile(normalized) ? await file.text() : "";
         const result = await this.rpc("agents.memory.set", {
           agentId,
           name: normalized,
           content,
+          ...(this.isEditableKnowledgeFile(normalized)
+            ? {}
+            : { contentBase64: await this.fileToBase64(file) }),
         }) as AgentsMemorySetResult | null;
         if (result?.file) {
           this.mergeKnowledgeFileEntry(result.file);

@@ -9,6 +9,7 @@ import {
 import { type VoyageBatchRequest, runVoyageEmbeddingBatches } from "./batch-voyage.js";
 import { enforceEmbeddingMaxInputTokens } from "./embedding-chunk-limits.js";
 import { estimateUtf8Bytes } from "./embedding-input-limits.js";
+import { extractKnowledgeText } from "./document-ingest.js";
 import {
   chunkMarkdown,
   hashText,
@@ -698,7 +699,7 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
     entry: MemoryFileEntry | SessionFileEntry,
     options: { source: MemorySource; content?: string },
   ) {
-    const content = options.content ?? (await fs.readFile(entry.absPath, "utf-8"));
+    const content = options.content ?? (await extractKnowledgeText(entry.absPath)).text;
     const rawChunks = chunkMarkdown(content, this.settings.chunking).filter(
       (chunk) => chunk.text.trim().length > 0,
     );

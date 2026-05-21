@@ -47,14 +47,16 @@ describe("listMemoryFiles", () => {
     await fs.mkdir(extraDir, { recursive: true });
     await fs.writeFile(path.join(extraDir, "note1.md"), "# Note 1");
     await fs.writeFile(path.join(extraDir, "note2.md"), "# Note 2");
-    await fs.writeFile(path.join(extraDir, "ignore.txt"), "Not a markdown file");
+    await fs.writeFile(path.join(extraDir, "note3.txt"), "Plain text note");
+    await fs.writeFile(path.join(extraDir, "ignore.json"), "Not a knowledge file");
 
     const files = await listMemoryFiles(tmpDir, [extraDir]);
-    expect(files).toHaveLength(3);
+    expect(files).toHaveLength(4);
     expect(files.some((file) => file.endsWith("MEMORY.md"))).toBe(true);
     expect(files.some((file) => file.endsWith("note1.md"))).toBe(true);
     expect(files.some((file) => file.endsWith("note2.md"))).toBe(true);
-    expect(files.some((file) => file.endsWith("ignore.txt"))).toBe(false);
+    expect(files.some((file) => file.endsWith("note3.txt"))).toBe(true);
+    expect(files.some((file) => file.endsWith("ignore.json"))).toBe(false);
   });
 
   it("includes files from additional paths (single file)", async () => {
@@ -260,6 +262,9 @@ describe("routeMarkdownProgressive", () => {
     expect(matches[0]?.section.startLine).toBe(4);
     expect(matches[0]?.blocks[0]?.startLine).toBe(5);
     expect(matches[0]?.blocks[0]?.preview).toContain("reset password");
+    expect(matches[0]?.matchedTerms).toContain("reset");
+    expect(matches[0]?.why).toContain("Reset Password");
+    expect(matches[0]?.recommendedRead).toEqual({ from: 5, lines: 2 });
   });
 });
 

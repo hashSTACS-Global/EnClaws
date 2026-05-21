@@ -342,6 +342,14 @@ export abstract class MemoryManagerSyncOps {
     await Promise.all(suffixes.map((suffix) => fs.rm(`${basePath}${suffix}`, { force: true })));
   }
 
+  private isIndexSwapBusyError(err: unknown): boolean {
+    if (!err || typeof err !== "object") {
+      return false;
+    }
+    const record = err as NodeJS.ErrnoException;
+    return record.code === "EBUSY" || record.code === "EPERM";
+  }
+
   protected ensureSchema() {
     const result = ensureMemoryIndexSchema({
       db: this.db,
@@ -881,11 +889,25 @@ export abstract class MemoryManagerSyncOps {
             progress: progress ?? undefined,
           });
         } else {
-          await this.runSafeReindex({
-            reason: params?.reason,
-            force: params?.force,
-            progress: progress ?? undefined,
-          });
+          try {
+            await this.runSafeReindex({
+              reason: params?.reason,
+              force: params?.force,
+              progress: progress ?? undefined,
+            });
+          } catch (err) {
+            if (!this.isIndexSwapBusyError(err)) {
+              throw err;
+            }
+            log.warn("memory safe reindex hit a locked sqlite file; falling back to in-place reindex", {
+              reason: err instanceof Error ? err.message : String(err),
+            });
+            await this.runUnsafeReindex({
+              reason: params?.reason,
+              force: params?.force,
+              progress: progress ?? undefined,
+            });
+          }
         }
         return;
       }
@@ -913,11 +935,25 @@ export abstract class MemoryManagerSyncOps {
       const activated =
         this.shouldFallbackOnError(reason) && (await this.activateFallbackProvider(reason));
       if (activated) {
-        await this.runSafeReindex({
-          reason: params?.reason ?? "fallback",
-          force: true,
-          progress: progress ?? undefined,
-        });
+        try {
+          await this.runSafeReindex({
+            reason: params?.reason ?? "fallback",
+            force: true,
+            progress: progress ?? undefined,
+          });
+        } catch (reindexErr) {
+          if (!this.isIndexSwapBusyError(reindexErr)) {
+            throw reindexErr;
+          }
+          log.warn("memory fallback reindex hit a locked sqlite file; falling back to in-place reindex", {
+            reason: reindexErr instanceof Error ? reindexErr.message : String(reindexErr),
+          });
+          await this.runUnsafeReindex({
+            reason: params?.reason ?? "fallback",
+            force: true,
+            progress: progress ?? undefined,
+          });
+        }
         return;
       }
       throw err;

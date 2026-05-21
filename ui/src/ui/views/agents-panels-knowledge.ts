@@ -29,6 +29,9 @@ export function renderAgentKnowledge(params: {
   const baseContent = active ? (params.agentKnowledgeFileContents[active] ?? "") : "";
   const draft = active ? (params.agentKnowledgeFileDrafts[active] ?? baseContent) : "";
   const isDirty = active ? draft !== baseContent : false;
+  const editable = active
+    ? [".md", ".txt", ".csv"].some((ext) => active.toLowerCase().endsWith(ext))
+    : false;
   const status = params.agentKnowledgeStatus?.agentId === params.agentId ? params.agentKnowledgeStatus.status : null;
 
   return html`
@@ -57,7 +60,7 @@ export function renderAgentKnowledge(params: {
         </button>
         <input
           type="file"
-          accept=".md,text/markdown"
+          accept=".md,.txt,.csv,.docx,.xlsx,.pdf,text/markdown,text/plain,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           multiple
           style="display: none;"
           @change=${(e: Event) => {
@@ -203,19 +206,19 @@ export function renderAgentKnowledge(params: {
                       const val = (e.target as HTMLTextAreaElement).value;
                       params.onFileDraftChange(active, val);
                     }}
-                    ?disabled=${params.agentKnowledgeLoading || params.agentKnowledgeSaving}
+                    ?disabled=${params.agentKnowledgeLoading || params.agentKnowledgeSaving || !editable}
                   ></textarea>
                   <div class="row" style="justify-content: flex-end; margin-top: 12px; gap: 8px;">
                     <button
                       class="btn"
-                      ?disabled=${!isDirty || params.agentKnowledgeSaving || params.agentKnowledgeLoading}
+                      ?disabled=${!editable || !isDirty || params.agentKnowledgeSaving || params.agentKnowledgeLoading}
                       @click=${() => params.onFileReset(active)}
                     >
                       ${t("agents.knowledge.reset")}
                     </button>
                     <button
                       class="btn btn--primary"
-                      ?disabled=${!isDirty || params.agentKnowledgeSaving || params.agentKnowledgeLoading}
+                      ?disabled=${!editable || !isDirty || params.agentKnowledgeSaving || params.agentKnowledgeLoading}
                       @click=${() => params.onFileSave(active)}
                     >
                       ${params.agentKnowledgeSaving ? t("agents.knowledge.saving") : t("agents.knowledge.saveChanges")}

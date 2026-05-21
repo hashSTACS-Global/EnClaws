@@ -348,13 +348,13 @@ export function buildAgentSystemPrompt(params: {
     ls: "List directory contents",
     exec: "Run shell commands (pty available for TTY-required CLIs)",
     process: "Manage background exec sessions",
-    memory_search:
-      "Search enterprise and agent Markdown knowledge first for internal company, product, project, prior work, decisions, people, preferences, or todos.",
     memory_route:
       "Route a question through large knowledge documents to find relevant sections before reading exact lines.",
     memory_outline:
       "Inspect knowledge document outlines and line ranges before focused reads.",
     memory_get: "Read focused lines from enterprise or agent knowledge files.",
+    memory_search:
+      "Search enterprise and agent knowledge files for compact snippets when route/get is not needed.",
     web_search: "Search the web (Brave API)",
     web_fetch: "Fetch and extract readable content from a URL",
     // Channel docking: add login tools here when a channel needs interactive linking.
@@ -389,10 +389,10 @@ export function buildAgentSystemPrompt(params: {
     "ls",
     "exec",
     "process",
-    "memory_search",
     "memory_route",
     "memory_outline",
     "memory_get",
+    "memory_search",
     "web_search",
     "web_fetch",
     "browser",

@@ -1,6 +1,6 @@
 import type { ErrorObject } from "ajv";
 import { describe, expect, it } from "vitest";
-import { formatValidationErrors } from "./index.js";
+import { formatValidationErrors, validateAgentsMemorySetParams } from "./index.js";
 
 const makeError = (overrides: Partial<ErrorObject>): ErrorObject => ({
   keyword: "type",
@@ -9,6 +9,19 @@ const makeError = (overrides: Partial<ErrorObject>): ErrorObject => ({
   params: {},
   message: "validation error",
   ...overrides,
+});
+
+describe("agents.memory.set validation", () => {
+  it("accepts base64 payloads for binary knowledge uploads", () => {
+    const valid = validateAgentsMemorySetParams({
+      agentId: "main",
+      name: "memory/manual.xlsx",
+      content: "",
+      contentBase64: "UEsDBAo=",
+    });
+
+    expect(valid).toBe(true);
+  });
 });
 
 describe("formatValidationErrors", () => {

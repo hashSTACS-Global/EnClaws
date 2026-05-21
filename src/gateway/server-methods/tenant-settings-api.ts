@@ -19,10 +19,21 @@ import { getTenantById, updateTenant } from "../../db/models/tenant.js";
 import { createAuditLog } from "../../db/models/audit-log.js";
 import { assertPermission, RbacError } from "../../auth/rbac.js";
 import type { TenantContext } from "../../auth/middleware.js";
-import { resolveTenantDir } from "../../config/sessions/tenant-paths.js";
+import {
+  resolveTenantDir,
+  resolveTenantMemoryIndexPath,
+} from "../../config/sessions/tenant-paths.js";
+import {
+  extractKnowledgeText,
+  isEditableKnowledgeTextFile,
+  isKnowledgeFilePath,
+} from "../../memory/document-ingest.js";
+import { getMemorySearchManager } from "../../memory/index.js";
 import { buildFileEntry, listMemoryFiles } from "../../memory/internal.js";
 import { movePathToTrash } from "../../browser/trash.js";
 import { isNotFoundPathError } from "../../infra/path-guards.js";
+import { DEFAULT_AGENT_ID } from "../../routing/session-key.js";
+import { resolveRequestConfig } from "../tenant-session-utils.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -34,7 +45,7 @@ function resolveTenantMemoryIoPath(
   reqPath: string,
 ): { target: string; rel: string } | null {
   const target = path.resolve(tenantDir, reqPath);
-  if (!target.endsWith(".md")) {
+  if (!isKnowledgeFilePath(target)) {
     return null;
   }
   const rel = path.relative(tenantDir, target).replace(/\\/g, "/");
@@ -83,6 +94,26 @@ async function syncTenantIdentityFile(tenantId: string, identityPrompt: string):
     } catch {
       // File may not exist, ignore
     }
+  }
+}
+
+async function syncTenantKnowledgeIndex(ctx: TenantContext, reason: string): Promise<void> {
+  try {
+    const cfg = await resolveRequestConfig(ctx);
+    const { manager, error } = await getMemorySearchManager({
+      cfg,
+      agentId: DEFAULT_AGENT_ID,
+      workspaceDir: resolveTenantDir(ctx.tenantId),
+      defaultStorePath: resolveTenantMemoryIndexPath(ctx.tenantId),
+    });
+    if (!manager) {
+      console.warn(`[memory] tenant index sync skipped for ${ctx.tenantId}: ${error ?? "manager unavailable"}`);
+      return;
+    }
+    await manager.sync?.({ reason, force: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[memory] tenant index sync failed for ${ctx.tenantId}: ${message}`);
   }
 }
 
@@ -234,6 +265,8 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
       detail: { contentLength: content.length },
     });
 
+    await syncTenantKnowledgeIndex(ctx, "tenant-memory-update");
+
     respond(true, { content });
   },
 
@@ -312,7 +345,9 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
 
     let content = "";
     try {
-      content = await fs.readFile(resolved.target, "utf-8");
+      content = isEditableKnowledgeTextFile(resolved.target)
+        ? await fs.readFile(resolved.target, "utf-8")
+        : (await extractKnowledgeText(resolved.target)).text;
     } catch (err) {
       if (!isNotFoundPathError(err)) {
         respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "failed to read file"));
@@ -329,6 +364,7 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
         size: entry.size,
         updatedAtMs: entry.mtimeMs,
         content,
+        editable: isEditableKnowledgeTextFile(resolved.target),
       },
     });
   },
@@ -347,9 +383,9 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
       throw err;
     }
 
-    const raw = params as { name?: unknown; content?: unknown };
+    const raw = params as { name?: unknown; content?: unknown; contentBase64?: unknown };
     const name = readTenantMemoryFileName(params);
-    if (!name || typeof raw.content !== "string") {
+    if (!name || (typeof raw.content !== "string" && typeof raw.contentBase64 !== "string")) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_PARAMS, "name and content are required"));
       return;
     }
@@ -362,7 +398,11 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
     }
 
     await fs.mkdir(path.dirname(resolved.target), { recursive: true });
-    await fs.writeFile(resolved.target, raw.content, "utf-8");
+    if (typeof raw.contentBase64 === "string") {
+      await fs.writeFile(resolved.target, Buffer.from(raw.contentBase64, "base64"));
+    } else {
+      await fs.writeFile(resolved.target, String(raw.content ?? ""), "utf-8");
+    }
 
     const entry = await buildFileEntry(resolved.target, tenantDir);
     if (!entry) {
@@ -375,8 +415,13 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
       userId: ctx.userId,
       action: "tenant.memory.file.set",
       resource: `tenant:${ctx.tenantId}:memory:${resolved.rel}`,
-      detail: { contentLength: raw.content.length },
+      detail: {
+        contentLength:
+          typeof raw.content === "string" ? raw.content.length : String(raw.contentBase64 ?? "").length,
+      },
     });
+
+    await syncTenantKnowledgeIndex(ctx, "tenant-memory-file-set");
 
     respond(true, {
       ok: true,
@@ -387,7 +432,10 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
         missing: false,
         size: entry.size,
         updatedAtMs: entry.mtimeMs,
-        content: raw.content,
+        content: isEditableKnowledgeTextFile(resolved.target)
+          ? String(raw.content ?? "")
+          : (await extractKnowledgeText(resolved.target)).text,
+        editable: isEditableKnowledgeTextFile(resolved.target),
       },
     });
   },
@@ -434,6 +482,8 @@ export const tenantSettingsHandlers: GatewayRequestHandlers = {
       resource: `tenant:${ctx.tenantId}:memory:${resolved.rel}`,
       detail: {},
     });
+
+    await syncTenantKnowledgeIndex(ctx, "tenant-memory-delete");
 
     respond(true, { ok: true, name: resolved.rel });
   },

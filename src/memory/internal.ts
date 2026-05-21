@@ -3,6 +3,7 @@ import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runTasksWithConcurrency } from "../utils/run-with-concurrency.js";
+import { isKnowledgeFilePath } from "./document-ingest.js";
 import { isFileMissingError } from "./fs-utils.js";
 
 export type MemoryFileEntry = {
@@ -70,7 +71,7 @@ async function walkDir(dir: string, files: string[]) {
     if (!entry.isFile()) {
       continue;
     }
-    if (!entry.name.endsWith(".md")) {
+    if (!isKnowledgeFilePath(entry.name)) {
       continue;
     }
     files.push(full);
@@ -86,21 +87,21 @@ export async function listMemoryFiles(
   const altMemoryFile = path.join(workspaceDir, "memory.md");
   const memoryDir = path.join(workspaceDir, "memory");
 
-  const addMarkdownFile = async (absPath: string) => {
+  const addKnowledgeFile = async (absPath: string) => {
     try {
       const stat = await fs.lstat(absPath);
       if (stat.isSymbolicLink() || !stat.isFile()) {
         return;
       }
-      if (!absPath.endsWith(".md")) {
+      if (!isKnowledgeFilePath(absPath)) {
         return;
       }
       result.push(absPath);
     } catch {}
   };
 
-  await addMarkdownFile(memoryFile);
-  await addMarkdownFile(altMemoryFile);
+  await addKnowledgeFile(memoryFile);
+  await addKnowledgeFile(altMemoryFile);
   try {
     const dirStat = await fs.lstat(memoryDir);
     if (!dirStat.isSymbolicLink() && dirStat.isDirectory()) {
@@ -120,7 +121,7 @@ export async function listMemoryFiles(
           await walkDir(inputPath, result);
           continue;
         }
-        if (stat.isFile() && inputPath.endsWith(".md")) {
+        if (stat.isFile() && isKnowledgeFilePath(inputPath)) {
           result.push(inputPath);
         }
       } catch {}
@@ -162,16 +163,16 @@ export async function buildFileEntry(
     }
     throw err;
   }
-  let content: string;
+  let content: Buffer;
   try {
-    content = await fs.readFile(absPath, "utf-8");
+    content = await fs.readFile(absPath);
   } catch (err) {
     if (isFileMissingError(err)) {
       return null;
     }
     throw err;
   }
-  const hash = hashText(content);
+  const hash = crypto.createHash("sha256").update(content).digest("hex");
   return {
     path: path.relative(workspaceDir, absPath).replace(/\\/g, "/"),
     absPath,

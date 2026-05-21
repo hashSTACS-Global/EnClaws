@@ -108,6 +108,7 @@ export const AgentsFileEntrySchema = Type.Object(
     size: Type.Optional(Type.Integer({ minimum: 0 })),
     updatedAtMs: Type.Optional(Type.Integer({ minimum: 0 })),
     content: Type.Optional(Type.String()),
+    editable: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );
@@ -151,6 +152,7 @@ export const AgentsFilesSetParamsSchema = Type.Object(
     agentId: NonEmptyString,
     name: NonEmptyString,
     content: Type.String(),
+    contentBase64: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );
@@ -203,6 +205,7 @@ export const AgentsMemorySetParamsSchema = Type.Object(
     agentId: NonEmptyString,
     name: NonEmptyString,
     content: Type.String(),
+    contentBase64: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );

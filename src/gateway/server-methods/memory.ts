@@ -8,6 +8,11 @@ import {
   resolveTenantAgentMemoryIndexPath,
 } from "../../config/sessions/tenant-paths.js";
 import { isNotFoundPathError } from "../../infra/path-guards.js";
+import {
+  extractKnowledgeText,
+  isEditableKnowledgeTextFile,
+  isKnowledgeFilePath,
+} from "../../memory/document-ingest.js";
 import { getMemorySearchManager } from "../../memory/index.js";
 import { buildFileEntry, listMemoryFiles } from "../../memory/internal.js";
 import { DEFAULT_AGENT_ID, normalizeAgentId } from "../../routing/session-key.js";
@@ -51,12 +56,34 @@ async function resolveAgentContext(
   return { cfg, agentId, workspaceDir, defaultStorePath: undefined, tenantId: undefined };
 }
 
+async function syncAgentKnowledgeIndex(
+  context: NonNullable<Awaited<ReturnType<typeof resolveAgentContext>>>,
+  reason: string,
+): Promise<void> {
+  try {
+    const { manager, error } = await getMemorySearchManager({
+      cfg: context.cfg,
+      agentId: context.agentId,
+      workspaceDir: context.workspaceDir,
+      defaultStorePath: context.defaultStorePath,
+    });
+    if (!manager) {
+      console.warn(`[memory] index sync skipped for agent ${context.agentId}: ${error ?? "manager unavailable"}`);
+      return;
+    }
+    await manager.sync?.({ reason, force: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[memory] index sync failed for agent ${context.agentId}: ${message}`);
+  }
+}
+
 function resolveMemoryIoPath(
   workspaceDir: string,
   reqPath: string,
 ): { target: string; rel: string } | null {
   const target = path.resolve(workspaceDir, reqPath);
-  if (!target.endsWith(".md")) {
+  if (!isKnowledgeFilePath(target)) {
     return null;
   }
   // Ensure it's inside the workspace
@@ -157,7 +184,9 @@ export const memoryHandlers: GatewayRequestHandlers = {
 
     let content = "";
     try {
-      content = await fs.readFile(resolved.target, "utf-8");
+      content = isEditableKnowledgeTextFile(resolved.target)
+        ? await fs.readFile(resolved.target, "utf-8")
+        : (await extractKnowledgeText(resolved.target)).text;
     } catch (err) {
       if (!isNotFoundPathError(err)) {
         respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "failed to read file"));
@@ -175,6 +204,7 @@ export const memoryHandlers: GatewayRequestHandlers = {
         size: entry.size,
         updatedAtMs: entry.mtimeMs,
         content,
+        editable: isEditableKnowledgeTextFile(resolved.target),
       },
     });
   },
@@ -207,13 +237,20 @@ export const memoryHandlers: GatewayRequestHandlers = {
 
     await fs.mkdir(path.dirname(resolved.target), { recursive: true });
 
-    await fs.writeFile(resolved.target, params.content, "utf-8");
+    const rawParams = params as typeof params & { contentBase64?: string };
+    if (rawParams.contentBase64) {
+      await fs.writeFile(resolved.target, Buffer.from(rawParams.contentBase64, "base64"));
+    } else {
+      await fs.writeFile(resolved.target, params.content, "utf-8");
+    }
 
     const entry = await buildFileEntry(resolved.target, workspaceDir);
     if (!entry) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "failed to stat written file"));
       return;
     }
+
+    await syncAgentKnowledgeIndex(context, "agent-memory-file-set");
 
     respond(true, {
       ok: true,
@@ -225,7 +262,10 @@ export const memoryHandlers: GatewayRequestHandlers = {
         missing: false,
         size: entry.size,
         updatedAtMs: entry.mtimeMs,
-        content: params.content,
+        content: isEditableKnowledgeTextFile(resolved.target)
+          ? params.content
+          : (await extractKnowledgeText(resolved.target)).text,
+        editable: isEditableKnowledgeTextFile(resolved.target),
       },
     });
   },
@@ -264,6 +304,8 @@ export const memoryHandlers: GatewayRequestHandlers = {
         return;
       }
     }
+
+    await syncAgentKnowledgeIndex(context, "agent-memory-delete");
 
     respond(true, {
       ok: true,

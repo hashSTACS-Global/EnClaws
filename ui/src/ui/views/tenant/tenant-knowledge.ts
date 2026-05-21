@@ -10,6 +10,7 @@ type KnowledgeFile = {
   size?: number;
   updatedAtMs?: number;
   content?: string;
+  editable?: boolean;
 };
 
 type KnowledgeListResult = {
@@ -135,6 +136,7 @@ export class TenantKnowledgeView extends LitElement {
   @state() private saving = false;
   @state() private dragover = false;
   @state() private error: string | null = null;
+  private readonly supportedExtensions = [".md", ".txt", ".csv", ".docx", ".xlsx", ".pdf"];
 
   connectedCallback() {
     super.connectedCallback();
@@ -153,7 +155,24 @@ export class TenantKnowledgeView extends LitElement {
       .filter(Boolean)
       .join("/");
     if (!safeName) return null;
-    return `memory/${safeName.endsWith(".md") ? safeName : `${safeName}.md`}`;
+    const hasSupportedExt = this.supportedExtensions.some((ext) =>
+      safeName.toLowerCase().endsWith(ext),
+    );
+    return `memory/${hasSupportedExt ? safeName : `${safeName}.md`}`;
+  }
+
+  private isEditable(name: string): boolean {
+    const lower = name.toLowerCase();
+    return lower.endsWith(".md") || lower.endsWith(".txt") || lower.endsWith(".csv");
+  }
+
+  private async fileToBase64(file: File): Promise<string> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) {
+      binary += String.fromCharCode(bytes[i] ?? 0);
+    }
+    return btoa(binary);
   }
 
   private formatSize(bytes?: number): string {
@@ -241,11 +260,11 @@ export class TenantKnowledgeView extends LitElement {
 
   private downloadFile(name: string) {
     const content = this.drafts[name] ?? this.contents[name] ?? "";
-    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = name.split("/").pop() || "knowledge.md";
+    a.download = name.split("/").pop() || "knowledge.txt";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
@@ -255,7 +274,9 @@ export class TenantKnowledgeView extends LitElement {
   }
 
   private async uploadFiles(fileList: FileList | File[]) {
-    const files = Array.from(fileList).filter((file) => file.name.endsWith(".md"));
+    const files = Array.from(fileList).filter((file) =>
+      this.supportedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext)),
+    );
     if (files.length === 0) {
       this.error = "仅支持 .md Markdown 文件";
       return;
@@ -266,7 +287,15 @@ export class TenantKnowledgeView extends LitElement {
       for (const file of files) {
         const name = this.normalizeName(file.name);
         if (!name) continue;
-        await tenantRpc("tenant.memory.file.set", { name, content: await file.text() });
+        if (this.isEditable(name)) {
+          await tenantRpc("tenant.memory.file.set", { name, content: await file.text() });
+        } else {
+          await tenantRpc("tenant.memory.file.set", {
+            name,
+            content: "",
+            contentBase64: await this.fileToBase64(file),
+          });
+        }
       }
       await this.loadFiles();
     } catch (err) {
@@ -283,6 +312,7 @@ export class TenantKnowledgeView extends LitElement {
     const active = this.active;
     const draft = active ? (this.drafts[active] ?? this.contents[active] ?? "") : "";
     const isDirty = active ? draft !== (this.contents[active] ?? "") : false;
+    const editable = active ? this.isEditable(active) : false;
     return html`
       <div class="toolbar">
         <div>
@@ -292,7 +322,7 @@ export class TenantKnowledgeView extends LitElement {
         <div class="actions">
           <button class="btn" ?disabled=${this.loading} @click=${() => void this.loadFiles()}>刷新</button>
           <button class="btn primary" ?disabled=${this.saving} @click=${this.triggerUpload}>上传文件</button>
-          <input id="tenant-kb-upload" type="file" accept=".md,text/markdown" multiple
+          <input id="tenant-kb-upload" type="file" accept=".md,.txt,.csv,.docx,.xlsx,.pdf,text/markdown,text/plain,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple
             @change=${(e: Event) => {
               const input = e.target as HTMLInputElement;
               if (input.files?.length) void this.uploadFiles(input.files);
@@ -351,16 +381,16 @@ export class TenantKnowledgeView extends LitElement {
             ? html`
                 <textarea
                   .value=${draft}
-                  ?disabled=${this.loading || this.saving}
+                  ?disabled=${this.loading || this.saving || !editable}
                   @input=${(e: Event) => {
                     this.drafts = { ...this.drafts, [active]: (e.target as HTMLTextAreaElement).value };
                   }}
                 ></textarea>
                 <div class="editor-actions">
-                  <button class="btn" ?disabled=${!isDirty || this.saving} @click=${() => {
+                  <button class="btn" ?disabled=${!editable || !isDirty || this.saving} @click=${() => {
                     this.drafts = { ...this.drafts, [active]: this.contents[active] ?? "" };
                   }}>重置</button>
-                  <button class="btn primary" ?disabled=${!isDirty || this.saving} @click=${() => void this.saveFile(active)}>
+                  <button class="btn primary" ?disabled=${!editable || !isDirty || this.saving} @click=${() => void this.saveFile(active)}>
                     ${this.saving ? "保存中..." : "保存"}
                   </button>
                 </div>

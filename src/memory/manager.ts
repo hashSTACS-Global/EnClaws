@@ -18,6 +18,7 @@ import {
 } from "./embeddings.js";
 import { isFileMissingError, statRegularFile } from "./fs-utils.js";
 import { bm25RankToScore, buildFtsQuery, mergeHybridResults } from "./hybrid.js";
+import { extractKnowledgeText, isKnowledgeFilePath } from "./document-ingest.js";
 import {
   isMemoryPath,
   listMemoryFiles,
@@ -648,7 +649,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
             continue;
           }
           if (stat.isFile()) {
-            if (absPath === additionalPath && absPath.endsWith(".md")) {
+            if (absPath === additionalPath && isKnowledgeFilePath(absPath)) {
               allowedAdditional = true;
               break;
             }
@@ -659,7 +660,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     if (!allowedWorkspace && !allowedAdditional) {
       throw new Error("path required");
     }
-    if (!absPath.endsWith(".md")) {
+    if (!isKnowledgeFilePath(absPath)) {
       throw new Error("path required");
     }
     const statResult = await statRegularFile(absPath);
@@ -668,7 +669,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     }
     let content: string;
     try {
-      content = await fs.readFile(absPath, "utf-8");
+      content = (await extractKnowledgeText(absPath)).text;
     } catch (err) {
       if (isFileMissingError(err)) {
         return { text: "", path: relPath };
@@ -860,7 +861,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       const relPath = path.relative(this.workspaceDir, absPath).replace(/\\/g, "/");
       let content = "";
       try {
-        content = await fs.readFile(absPath, "utf-8");
+        content = (await extractKnowledgeText(absPath)).text;
       } catch (err) {
         if (!isFileMissingError(err)) {
           throw err;
@@ -916,7 +917,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       const relPath = path.relative(this.workspaceDir, absPath).replace(/\\/g, "/");
       let content = "";
       try {
-        content = await fs.readFile(absPath, "utf-8");
+        content = (await extractKnowledgeText(absPath)).text;
       } catch (err) {
         if (!isFileMissingError(err)) {
           throw err;

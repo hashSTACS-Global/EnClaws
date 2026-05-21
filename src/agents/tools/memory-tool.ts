@@ -11,7 +11,7 @@ import type {
   MemorySearchManager,
   MemorySearchResult,
 } from "../../memory/types.js";
-import { parseAgentSessionKey } from "../../routing/session-key.js";
+import { DEFAULT_AGENT_ID, parseAgentSessionKey } from "../../routing/session-key.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { resolveMemorySearchConfig } from "../memory-search.js";
 import type { AnyAgentTool } from "./common.js";
@@ -95,7 +95,7 @@ async function resolveScopedMemoryManagers(options: {
   if (options.tenantWorkspaceDir && options.tenantDefaultStorePath) {
     const { manager, error } = await getMemorySearchManager({
       cfg: options.cfg,
-      agentId: options.agentId,
+      agentId: DEFAULT_AGENT_ID,
       workspaceDir: options.tenantWorkspaceDir,
       defaultStorePath: options.tenantDefaultStorePath,
     });
@@ -355,7 +355,7 @@ async function routeScopedMemory(params: {
 export function createMemorySearchTool(options: {
   config?: OpenClawConfig;
   agentSessionKey?: string;
-  /** Override Markdown memory root (multi-tenant: tenants/{tid}/agents/{agentId}/knowledge/). */
+  /** Override knowledge root (multi-tenant: tenants/{tid}/agents/{agentId}/knowledge/). */
   workspaceDir?: string;
   /** Override the default SQLite index path when memorySearch.store.path is not configured. */
   defaultStorePath?: string;
@@ -376,7 +376,7 @@ export function createMemorySearchTool(options: {
     label: "Memory Search",
     name: "memory_search",
     description:
-      "Mandatory recall step: semantically search MEMORY.md + memory/*.md (and optional session transcripts) before answering questions about prior work, decisions, dates, people, preferences, or todos; returns top snippets with path + lines. If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user.",
+      "Mandatory recall step: search enterprise and agent knowledge files before answering questions about prior work, decisions, dates, people, preferences, products, or todos; returns top snippets with path + lines. If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user.",
     parameters: MemorySearchSchema,
     execute: async (_toolCallId, params) => {
       const query = readStringParam(params, "query", { required: true });
@@ -439,7 +439,7 @@ export function createMemorySearchTool(options: {
 export function createMemoryOutlineTool(options: {
   config?: OpenClawConfig;
   agentSessionKey?: string;
-  /** Override Markdown memory root (multi-tenant: tenants/{tid}/agents/{agentId}/knowledge/). */
+  /** Override knowledge root (multi-tenant: tenants/{tid}/agents/{agentId}/knowledge/). */
   workspaceDir?: string;
   /** Override the default SQLite index path when memorySearch.store.path is not configured. */
   defaultStorePath?: string;
@@ -457,7 +457,7 @@ export function createMemoryOutlineTool(options: {
     label: "Memory Outline",
     name: "memory_outline",
     description:
-      "Progressive retrieval step: inspect Markdown memory/knowledge file outlines with section line ranges and short previews before deciding which exact lines to read with memory_get.",
+      "Progressive retrieval step: inspect knowledge file outlines with section line ranges and short previews before deciding which exact lines to read with memory_get.",
     parameters: MemoryOutlineSchema,
     execute: async (_toolCallId, params) => {
       const relPath = readStringParam(params, "path");
@@ -496,7 +496,7 @@ export function createMemoryOutlineTool(options: {
 export function createMemoryRouteTool(options: {
   config?: OpenClawConfig;
   agentSessionKey?: string;
-  /** Override Markdown memory root (multi-tenant: tenants/{tid}/agents/{agentId}/knowledge/). */
+  /** Override knowledge root (multi-tenant: tenants/{tid}/agents/{agentId}/knowledge/). */
   workspaceDir?: string;
   /** Override the default SQLite index path when memorySearch.store.path is not configured. */
   defaultStorePath?: string;
@@ -514,7 +514,7 @@ export function createMemoryRouteTool(options: {
     label: "Memory Route",
     name: "memory_route",
     description:
-      "Progressive retrieval router: route a question through memory/knowledge document sections, summaries, keywords, and local blocks before reading exact lines with memory_get.",
+      "Progressive retrieval router: route a question through knowledge document sections, summaries, keywords, and local blocks before reading exact lines with memory_get.",
     parameters: MemoryRouteSchema,
     execute: async (_toolCallId, params) => {
       const query = readStringParam(params, "query", { required: true });
@@ -559,7 +559,7 @@ export function createMemoryRouteTool(options: {
 export function createMemoryGetTool(options: {
   config?: OpenClawConfig;
   agentSessionKey?: string;
-  /** Override Markdown memory root (multi-tenant: tenants/{tid}/agents/{agentId}/knowledge/). */
+  /** Override knowledge root (multi-tenant: tenants/{tid}/agents/{agentId}/knowledge/). */
   workspaceDir?: string;
   /** Override the default SQLite index path when memorySearch.store.path is not configured. */
   defaultStorePath?: string;
@@ -577,7 +577,7 @@ export function createMemoryGetTool(options: {
     label: "Memory Get",
     name: "memory_get",
     description:
-      "Safe snippet read from MEMORY.md or memory/*.md with optional from/lines; use after memory_search to pull only the needed lines and keep context small.",
+      "Safe snippet read from enterprise or agent knowledge files with optional from/lines; use after memory_search/memory_route to pull only the needed lines and keep context small.",
     parameters: MemoryGetSchema,
     execute: async (_toolCallId, params) => {
       const relPath = readStringParam(params, "path", { required: true });
